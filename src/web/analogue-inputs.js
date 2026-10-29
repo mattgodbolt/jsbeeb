@@ -12,7 +12,17 @@ const AdcChannelCount = 4;
  * routed to whichever of them wants it.
  */
 export class AnalogueInputs {
-    constructor({ processor, screenCanvas, getGamepads, settings, audioHandler }) {
+    /**
+     * @param {object} options
+     * @param {object} options.processor - the machine whose ADC and touchscreen the inputs feed
+     * @param {HTMLCanvasElement} options.screenCanvas - the screen, which mouse positions are measured across
+     * @param {() => Gamepad[]} options.getGamepads
+     * @param {import("./settings.js").Settings} options.settings
+     * @param {object} options.audioHandler - woken by any mouse event on the monitor
+     * @param {(x: number, y: number) => boolean} options.takeScreenClick - offered each left click on the screen,
+     *     at 0 to 1 across and down it, before the machine; true when it took the click
+     */
+    constructor({ processor, screenCanvas, getGamepads, settings, audioHandler, takeScreenClick }) {
         this.processor = processor;
         this.settings = settings;
 
@@ -32,6 +42,8 @@ export class AnalogueInputs {
             if (document.activeElement !== document.body) document.activeElement.blur();
             const screenRect = screenCanvas.getBoundingClientRect();
             const { x, y } = calculateMouseCoordinates(evt, screenRect);
+            evt.preventDefault();
+            if (evt.type === "mousedown" && evt.button === 0 && takeScreenClick(x, y)) return;
 
             // Handle touchscreen
             if (processor.touchScreen) processor.touchScreen.onMouse(x, y, evt.buttons);
@@ -48,8 +60,6 @@ export class AnalogueInputs {
                     this.mouseJoystickSource.onMouseUp(0);
                 }
             }
-
-            evt.preventDefault();
         };
         for (const eventType of ["mousemove", "mousedown", "mouseup"]) {
             cubMonitor.addEventListener(eventType, onCubMouseEvent);

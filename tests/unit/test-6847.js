@@ -157,6 +157,18 @@ describe("Video6847 logical pixel grid", () => {
 
 const FieldSyncLine = 240;
 
+describe("Video6847 beam position", () => {
+    it("counts the lines and CPU cycles since field sync began", () => {
+        const { video, vblanks } = makeAtomVideo();
+        while (!vblanks.includes(true)) video.polltime(1);
+        expect(video.beamPosition()).toEqual({ line: 0, frameCycle: 0, inVSync: true, crtc: null });
+        const run = Math.round(10.5 * CpuCyclesPerLine);
+        video.polltime(run);
+        expect(video.beamPosition().line).toBe(10);
+        expect(Math.abs(video.beamPosition().frameCycle - run)).toBeLessThanOrEqual(1);
+    });
+});
+
 describe("Video6847 and the clear between frames", () => {
     it("blacks out everything a part-drawn field drew", () => {
         const { video } = makeAtomVideo();

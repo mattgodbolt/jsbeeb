@@ -1,4 +1,4 @@
-import { Teletext } from "./teletext.js";
+import { PipelineLag, PipelineLength, Teletext } from "./teletext.js";
 import { BbcDefaultPalette as NulaDefaultPalette } from "./bbc-palette.js";
 import { Video6847 } from "./6847.js";
 import { encodeLineGrid, texelsPerPixel } from "./video-filters/pixel-grid.js";
@@ -43,6 +43,22 @@ export const HwScrollSubtract = [8, 4, 10, 5];
 
 // The shader takes a line's parity from the hsync count; the modulus only keeps it bounded.
 export const LineCountPeriod = 2500;
+
+const BitmapXPerClock = 8;
+
+/**
+ * @typedef {object} BeamPosition
+ * @property {number} line - the TV line, counted from the frame's start
+ * @property {number} frameCycle - the cycles run since the frame started
+ * @property {boolean} inVSync - whether vsync is asserted
+ * @property {{row: number, scanline: number, column: number} | null} crtc - the 6845's counters, on a machine with one
+ */
+
+// Three vsyncs finish the field under way and paint both of an interlaced picture's after it.
+const TracedVSyncs = 3;
+const TraceStepClocks = 1024;
+// The TV flies back after 384 lines with or without a vsync, and a line is at most 256 1MHz characters of two clocks.
+const MostTracedClocks = TracedVSyncs * 384 * 256 * 2;
 
 ////////////////////
 // VideoNULA - programmable 12-bit RGB palette extension (RobC hardware mod).
@@ -394,6 +410,8 @@ export class Video {
         this.regs = new Uint8Array(32);
         this.bitmapX = 0;
         this.bitmapY = 0;
+        // The bitmapX the beam would be at had no hsync since the last flyback sent it back.
+        this.frameStartX = 0;
         this.oddClock = false;
         this.frameCount = 0;
         this.hsyncCount = 0;
@@ -524,6 +542,7 @@ export class Video {
             regs: this.regs.slice(),
             bitmapX: this.bitmapX,
             bitmapY: this.bitmapY,
+            frameStartX: this.frameStartX,
             oddClock: this.oddClock,
             frameCount: this.frameCount,
             hsyncCount: this.hsyncCount,
@@ -587,6 +606,7 @@ export class Video {
         this.regs.set(state.regs);
         this.bitmapX = state.bitmapX;
         this.bitmapY = state.bitmapY;
+        this.frameStartX = state.frameStartX ?? state.bitmapX;
         this.oddClock = state.oddClock;
         this.frameCount = state.frameCount;
         this.hsyncCount = state.hsyncCount ?? 0;
@@ -687,6 +707,8 @@ export class Video {
         this.renderPending();
         const painting = this.bitmapY >= MinPaintedFrameRows && this.dispEnabled & FRAMESKIPENABLE;
         if (painting) this.paint();
+        // The clock that brought the flyback is the frame's first.
+        this.frameStartX = this.bitmapX - BitmapXPerClock;
         // Decided per field, before the clear: the CRTC frames of one field can
         // alternate parity.
         this.lastRenderWasEven = this.isEvenRender;
@@ -732,6 +754,21 @@ export class Video {
         return y * 1024 + x;
     }
 
+    /**
+     * Where the beam is in the TV's frame, which starts at vsync (or where the TV gives up waiting for one).
+     * @returns {BeamPosition}
+     */
+    beamPosition() {
+        if (this.video6847) return this.video6847.beamPosition();
+        return {
+            // Each line moves the beam two framebuffer rows, and the odd interlace field starts a row up.
+            line: (this.bitmapY + 1) >> 1,
+            frameCycle: (this.bitmapX - this.frameStartX) / BitmapXPerClock,
+            inVSync: this.inVSync,
+            crtc: { row: this.vertCounter, scanline: this.scanlineCounter, column: this.horizCounter },
+        };
+    }
+
     // Hands over the rows down to the beam only, so the canvas keeps the previous
     // frame below it: this frame above the beam, the last one under it, as a
     // camera would see.
@@ -758,6 +795,49 @@ export class Video {
         const paintedTo = Math.max(top, Math.min(bottom, beam.bitmapY + beamRows + dotSize));
         this.paint_ext(this.leftBorder, top, 1024 - this.rightBorder, bottom, paintedTo);
         debugCopyFb(this.fb32, this.debugPrevScreen);
+    }
+
+    /**
+     * The address of the screen memory byte drawn at a point of the picture, or null off it or in the border. It
+     * runs a copy of this chip on from where it is, so the answer follows the CRTC, the IC32 wrap, the ULA and
+     * teletext's pipeline exactly as drawing does; a split the program makes part way down the picture is not
+     * replayed.
+     * @param {number} x across the painted picture, 0 to 1
+     * @param {number} y down it, 0 to 1
+     * @returns {number | null}
+     */
+    addressShownAt(x, y) {
+        if (this.video6847 || !(x >= 0 && x < 1 && y >= 0 && y < 1)) return null;
+        const pixelX = Math.floor(this.leftBorder + x * (1024 - this.leftBorder - this.rightBorder));
+        const pixelY = Math.floor(this.topBorder + y * (625 - this.topBorder - this.bottomBorder));
+        const tracer = new Video(this.isMaster, this.fb32.length, noop, { hasVideoNula: this.ula.hasVideoNula });
+        tracer.restoreState(this.snapshotState());
+        // The SAA5050 shows each byte PipelineLag reads after it is fetched.
+        const reads = new Int32Array(PipelineLength);
+        let readCount = 0;
+        let found = null;
+        let fieldsTraced = 0;
+        const videoRead = (address) => {
+            reads[readCount++ % PipelineLength] = address;
+            if ((tracer.dispEnabled & EVERYTHINGENABLED) !== EVERYTHINGENABLED) return 0;
+            const { bitmapX, bitmapY } = tracer;
+            if (bitmapX < 0 || bitmapX >= 1024 || bitmapY >= 625) return 0;
+            const doubled = tracer.doublesLines();
+            const row = doubled ? bitmapY & ~1 : bitmapY;
+            const inRows = pixelY === row || (doubled && pixelY === row + 1);
+            if (inRows && pixelX >= bitmapX && pixelX < bitmapX + tracer.pixelsPerChar) {
+                const shown = tracer.teletextMode ? readCount - 1 - PipelineLag : readCount - 1;
+                found = shown >= 0 ? reads[shown % PipelineLength] : null;
+            }
+            return 0;
+        };
+        const countField = (vsync) => {
+            if (vsync) fieldsTraced++;
+        };
+        tracer.reset({ videoRead }, { setVBlankInt: countField }, false);
+        for (let clocks = 0; fieldsTraced < TracedVSyncs && clocks < MostTracedClocks; clocks += TraceStepClocks)
+            tracer.polltime(TraceStepClocks);
+        return found;
     }
 
     /**
@@ -1079,6 +1159,7 @@ export class Video {
     handleHSync() {
         this.hpulseCounter = (this.hpulseCounter + 1) & 0x0f;
         if (this.hpulseCounter === this.hpulseWidth >>> 1) {
+            const lineEndX = this.bitmapX;
             // Start at -8 because the +8 is added before the pixel render.
             this.bitmapX = -8;
 
@@ -1086,6 +1167,7 @@ export class Video {
             if (this.hpulseWidth & 1) {
                 this.bitmapX -= 4;
             }
+            this.frameStartX += this.bitmapX - lineEndX;
 
             // The CRT vertical beam speed is constant, so this is actually
             // an approximation that works if hsyncs are spaced evenly.
@@ -1138,7 +1220,7 @@ export class Video {
         while (clocks--) {
             this.oddClock = !this.oddClock;
             // Advance CRT beam.
-            this.bitmapX += 8;
+            this.bitmapX += BitmapXPerClock;
 
             if (this.halfClock && !this.oddClock) {
                 continue;
@@ -1332,6 +1414,7 @@ export class FakeVideo {
         this.regs = new Uint8Array(32);
         this.fieldCycles = BbcFieldCycles;
         this.syncCycles = BbcVSyncCycles;
+        this.lineCycles = BbcLineCycles;
         this.cycles = 0;
         this.inSync = false;
     }
@@ -1359,6 +1442,17 @@ export class FakeVideo {
 
     setScreenHwScroll() {}
 
+    /** @returns {BeamPosition} */
+    beamPosition() {
+        const sinceSync = this.cycles - (this.fieldCycles - this.syncCycles);
+        const frameCycle = sinceSync < 0 ? sinceSync + this.fieldCycles : sinceSync;
+        return { line: Math.floor(frameCycle / this.lineCycles), frameCycle, inVSync: this.inSync, crtc: null };
+    }
+
+    addressShownAt() {
+        return null;
+    }
+
     snapshotState() {
         return { cycles: this.cycles, inSync: this.inSync };
     }
@@ -1372,7 +1466,8 @@ export class FakeVideo {
 // The 6847's field as the PPIA sees it: 262 lines at 60Hz, with field sync low
 // for the 32 lines of flyback (see 6847.js).
 const AtomFieldCycles = 16667;
-const AtomFlybackCycles = Math.round((AtomFieldCycles * 32) / 262);
+const AtomFieldLines = 262;
+const AtomFlybackCycles = Math.round((AtomFieldCycles * 32) / AtomFieldLines);
 
 /** No picture, but the field sync the Atom ROM waits on before each keyboard scan. */
 export class FakeAtomVideo extends FakeVideo {
@@ -1380,6 +1475,7 @@ export class FakeAtomVideo extends FakeVideo {
         super();
         this.fieldCycles = AtomFieldCycles;
         this.syncCycles = AtomFlybackCycles;
+        this.lineCycles = AtomFieldCycles / AtomFieldLines;
     }
 
     reset(cpu) {
