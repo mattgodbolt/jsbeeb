@@ -182,6 +182,7 @@ jobs:
     concurrency:
       group: ${{ github.ref == 'refs/heads/main' && 'deploy-web' || format('update-web-{0}', github.run_id) }}
       cancel-in-progress: false
+      queue: max
     steps:
       - uses: actions/checkout@v7
       - name: Use Node.js
