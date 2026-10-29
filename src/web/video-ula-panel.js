@@ -9,6 +9,7 @@ const PaletteFlashBit = 8;
 const ClockRates = ["1 MHz", "2 MHz"];
 const CharactersPerLine = ["10 chars", "20 chars", "40 chars", "80 chars"];
 const PixelRatesMhz = [2, 4, 8, 16];
+const ClockRatesMhz = [1, 2];
 const FirstFlashColour = 8;
 const FlashFlagsPerRegister = 4;
 
@@ -53,7 +54,7 @@ function flashFlagsRegister(number, firstFlag) {
     const names = [];
     for (let flag = FlashFlagsPerRegister - 1; flag >= 0; --flag) {
         const colour = FirstFlashColour + firstFlag + flag;
-        names.push({ name: colour.toString(16), title: `NuLA's colour ${colour} flashes` });
+        names.push({ name: colour.toString(16), title: `NuLA's colour ${colour.toString(16)} flashes` });
     }
     return register(`R${number}`, `Register ${number}: which of NuLA's colours flash`, 8, value, namedBits(names));
 }
@@ -113,7 +114,7 @@ const NulaColumn = `
 
 /** How many colours the control register's clock and pixel rate make: 2, 4 or 16. */
 function coloursOf(ctrl) {
-    const clockMhz = ctrl & 0x10 ? 2 : 1;
+    const clockMhz = ClockRatesMhz[(ctrl >>> 4) & 1];
     const pixelsPerByte = PixelRatesMhz[(ctrl >>> 2) & 3] / clockMhz;
     if (pixelsPerByte >= TwoColourPixelsPerByte) return 2;
     if (pixelsPerByte === FourColourPixelsPerByte) return 4;
@@ -186,31 +187,36 @@ class Swatches {
 /** Each palette entry: its colour now, a short label, and what it is in words. */
 function ulaPaletteEntries(video, hasNula) {
     return [...video.actualPal].map((entry, index) => {
-        const colour = physicalColour(entry);
-        const flashes = entry & PaletteFlashBit && video.ula.flash[colour];
-        const swatch = cssColour(video.ulaPal[index]);
-        if (hasNula) {
-            // NuLA's colours 8 to 15 need not duplicate 0 to 7, so an entry is named by the NuLA colour it draws.
-            const steady = (entry ^ PhysicalColourMask).toString(16);
-            const other = entry.toString(16);
-            return {
-                index,
-                colour: swatch,
-                label: flashes ? `NuLA ${steady}/${other}` : `NuLA ${steady}`,
-                entries: "",
-                title: `Entry ${index}: NuLA's colour ${steady}${flashes ? `, flashing with ${other}` : ""}`,
-            };
-        }
-        const steady = ColourNames[colour];
-        const other = ColourNames[colour ^ PhysicalColourMask];
+        const described = describeEntry(video, hasNula, entry, index);
+        return { ...described, title: `Entry ${index.toString(16)}: ${described.what}` };
+    });
+}
+
+function describeEntry(video, hasNula, entry, index) {
+    const colour = physicalColour(entry);
+    const flashes = entry & PaletteFlashBit && video.ula.flash[colour];
+    const swatch = cssColour(video.ulaPal[index]);
+    if (hasNula) {
+        // NuLA's colours 8 to 15 need not duplicate 0 to 7, so an entry is named by the NuLA colour it draws.
+        const steady = (entry ^ PhysicalColourMask).toString(16);
+        const other = entry.toString(16);
         return {
             index,
             colour: swatch,
-            label: flashes ? `${steady}/${other}` : steady,
+            label: flashes ? `NuLA ${steady}/${other}` : `NuLA ${steady}`,
             entries: "",
-            title: `Entry ${index}: colour ${colour}, ${steady}${flashes ? `, flashing with ${other}` : ""}`,
+            what: `NuLA's colour ${steady}${flashes ? `, flashing with ${other}` : ""}`,
         };
-    });
+    }
+    const steady = ColourNames[colour];
+    const other = ColourNames[colour ^ PhysicalColourMask];
+    return {
+        index,
+        colour: swatch,
+        label: flashes ? `${steady}/${other}` : steady,
+        entries: "",
+        what: `colour ${colour}, ${steady}${flashes ? `, flashing with ${other}` : ""}`,
+    };
 }
 
 /** The palette by the mode's logical colours, each from the entries that draw it, marked mixed if they disagree. */
@@ -227,7 +233,7 @@ function logicalColours(video, entries, colours) {
         const list = colours === PaletteEntries ? "" : entryList(drawnBy);
         const title = mixed
             ? `Logical colour ${logical}: its entries disagree. ${drawnBy.map((entry) => entries[entry].title).join("; ")}`
-            : `Logical colour ${logical}, in entries ${entryList(drawnBy)}: ${entries[first].title.replace(/^Entry \d+: /, "")}`;
+            : `Logical colour ${logical}${list ? `, in entries ${list}` : ""}: ${entries[first].what}`;
         slots.push({
             index: logical,
             colour: entries[first].colour,
@@ -248,7 +254,7 @@ function nulaPaletteEntries(ula) {
             colour: cssColour(abgr),
             label: flashes ? `${rgb} flash` : rgb,
             entries: "",
-            title: `NuLA's colour ${index}: red ${rgb[0]}, green ${rgb[1]}, blue ${rgb[2]}${flashes ? ", flashing" : ""}`,
+            title: `NuLA's colour ${index.toString(16)}: red ${rgb[0]}, green ${rgb[1]}, blue ${rgb[2]}${flashes ? ", flashing" : ""}`,
         };
     });
 }
@@ -293,7 +299,7 @@ export class VideoUlaPanel {
                 <div class="videoula-control"></div>
                 <div class="decoded-heading">
                     <span class="videoula-ula-heading"></span>
-                    <button type="button" class="txt-btn videoula-palette-view" tabindex="-1"></button>
+                    <button type="button" class="txt-btn videoula-palette-view"></button>
                 </div>
                 <div class="videoula-palette videoula-ula-palette"></div>
             </div>

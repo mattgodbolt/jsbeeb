@@ -15,6 +15,8 @@ const Mode2Control = 0xf4;
 const Mode7Control = 0x4b;
 const Mode0Control = 0x9c;
 const Mode1Control = 0xd8;
+const Mode4Control = 0x88;
+const Mode5Control = 0xc4;
 const FramebufferPixels = 1024 * 768;
 
 function makePanel(hasVideoNula) {
@@ -133,6 +135,14 @@ describe("VideoUlaPanel", () => {
         view.click();
         write(Control, Mode0Control);
         expect(logicalSlots().slice(0, 3)).toEqual(["0 mixed 0-7", "1 mixed 8-f", null]);
+
+        expect(paletteCells()[1].title).toContain("Entry a: colour 7, white");
+        write(Control, Mode4Control);
+        expect(heading.textContent).toBe("Palette: 2 colours");
+        write(Control, Mode5Control);
+        expect(heading.textContent).toBe("Palette: 4 colours");
+        write(Control, Mode2Control);
+        expect(paletteCells()[6].title).toBe("Logical colour 6: colour 4, blue");
 
         write(Control, Mode7Control);
         expect(heading.textContent).toBe("Palette: unused by teletext");

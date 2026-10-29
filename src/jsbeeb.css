@@ -1027,9 +1027,11 @@ small {
   align-items: center;
   gap: 4px;
   line-height: 20px;
+  height: 20px;
 }
 
 .videoula-palette-index {
+  width: 1ch;
   color: #f0d080;
 }
 
