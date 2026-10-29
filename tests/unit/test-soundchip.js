@@ -117,6 +117,28 @@ describe("SoundChip DC restoration", () => {
     });
 });
 
+describe("SoundChip tone period 0", () => {
+    // A square wave lasts four samples per unit of period; periodic noise repeats every 15 of tone 2's waves.
+    const SamplesPerWave = 4 * 1024;
+
+    function risingEdgeSpacings(chip, samples) {
+        const out = new Float32Array(samples);
+        chip.generate(out, 0, samples);
+        const edges = [];
+        for (let i = 1; i < samples; ++i) if (out[i] - out[i - 1] > 0.1) edges.push(i);
+        return new Set(edges.slice(1).map((edge, i) => edge - edges[i]));
+    }
+
+    it.each([
+        ["tone 2", [0xd0, 0xff], SamplesPerWave],
+        ["periodic noise following tone 2", [0xdf, 0xe3, 0xf0], 15 * SamplesPerWave],
+    ])("should count 1024 for %s", (_, pokes, spacing) => {
+        const { chip } = makeSoundChip();
+        for (const value of [0xc0, 0x00, ...pokes]) chip.poke(value);
+        expect(risingEdgeSpacings(chip, 5 * spacing)).toEqual(new Set([spacing]));
+    });
+});
+
 describe("SoundChip snapshotState / restoreState", () => {
     it("round-trips a chip part way through playing three tones, periodic noise and a cassette tone", async () => {
         const scheduler = new Scheduler();

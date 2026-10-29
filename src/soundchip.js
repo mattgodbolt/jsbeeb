@@ -159,8 +159,13 @@ export class SoundChip {
         }
     }
 
+    // The 10-bit counter wraps, so a period of 0 counts 1024 steps.
+    tonePeriod(channel) {
+        return this.registers[channel] === 0 ? 1024 : this.registers[channel];
+    }
+
     toneChannel(channel, out, offset, length) {
-        const reg = this.registers[channel] === 0 ? 1024 : this.registers[channel];
+        const reg = this.tonePeriod(channel);
         const vol = this.volume[channel];
         for (let i = 0; i < length; ++i) {
             this._doChannelStep(channel, reg);
@@ -194,7 +199,7 @@ export class SoundChip {
             case 2:
                 return 0x40;
             case 3:
-                return this.registers[channel - 1];
+                return this.tonePeriod(2);
         }
     }
 
