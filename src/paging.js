@@ -126,7 +126,7 @@ function zeroAt(peek, from, to) {
  * @param {(address: number) => number} peek
  * @returns {{title: string, version: string} | undefined}
  */
-export function romHeader(peek) {
+function romHeader(peek) {
     const copyright = SidewaysStart + peek(SidewaysStart + CopyrightPointerOffset);
     const titleStart = SidewaysStart + TitleOffset;
     if (copyright <= titleStart || peek(copyright) !== 0) return undefined;

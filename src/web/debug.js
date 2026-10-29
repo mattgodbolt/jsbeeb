@@ -425,7 +425,9 @@ export class Debugger {
             const byte = e.target.closest("[data-addr]");
             if (!byte) return;
             const address = Number(byte.dataset.addr);
-            this._offerWatch(e, address, this._namesIn(this._paging.memory).address(address, this.cpu.pc)?.name);
+            // A watch reads memory as paged, so it takes a name only where the panel shows that too.
+            const named = this._paging.memory.differs(address) ? undefined : this._names.address(address, this.cpu.pc);
+            this._offerWatch(e, address, named?.name);
         });
     }
 
@@ -645,11 +647,13 @@ export class Debugger {
      * already highlighted, which stays in its row.
      */
     updateDisassembly(address) {
+        this._paging.disassembly.relabel();
         if (address === this._disassembly.cursor && !this._loop?.isRunning()) this._disassembly.redraw();
         else this._disassembly.update(address);
     }
 
     updateMemory() {
+        this._paging.memory.relabel();
         this._memoryView.update();
     }
 

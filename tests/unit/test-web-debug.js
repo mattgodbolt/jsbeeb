@@ -582,13 +582,16 @@ describe("Debugger", () => {
             dbgr.debug(cpu.pc);
         });
 
-        it.each(["$8100`4", "4:8100"])("shows the bank %s names in memory until paged is picked again", (text) => {
-            goTo("goto-mem-addr-form", text);
+        it("shows the bank a Go to names in memory, as it holds now, until paged is picked again", () => {
+            goTo("goto-mem-addr-form", "$8100`4");
             expect(memTarget().textContent).toBe("44");
             expect(picker("memory-panel").textContent).toBe("bank 4: TOOLKIT 1.2");
             expect(picker("memory-panel").classList.contains("overridden")).toBe(true);
             goTo("goto-mem-addr-form", "$8101");
             expect(picker("memory-panel").textContent).toBe("bank 4: TOOLKIT 1.2");
+            fitRomHeader(cpu, 4, "EDITOR");
+            dbgr.debug(cpu.pc);
+            expect(picker("memory-panel").textContent).toBe("bank 4: EDITOR");
             pick("memory-panel", "paged");
             goTo("goto-mem-addr-form", "$8100");
             expect(memTarget().textContent).toBe("ff");
@@ -617,6 +620,16 @@ describe("Debugger", () => {
             expect(picker("memory-panel").textContent).toBe("paged");
         });
 
+        it("walks back through the bank shown without steering by a program counter in another", () => {
+            cpu.ramRomOs.fill(0xa9, bankOffset(cpu, 4, 0x8000), bankOffset(cpu, 4, 0x802f));
+            cpu.ramRomOs[bankOffset(cpu, 4, 0x802f)] = 0xea;
+            cpu.pc = 0x802f;
+            dbgr.debug(cpu.pc);
+            goTo("goto-dis-addr-form", "4:8030");
+            keyPress("k");
+            expect(addrOf(currentRow())).toBe("802e");
+        });
+
         it("marks changes only against a snapshot taken in the view shown", () => {
             const changed = () => memTarget().classList.contains("changed");
             dbgr.hide();
@@ -639,6 +652,9 @@ describe("Debugger", () => {
             expect(menu()).toBeNull();
             picker("memory-panel").click();
             document.getElementById("memory").dispatchEvent(new Event("pointerdown", { bubbles: true }));
+            expect(menu()).toBeNull();
+            picker("memory-panel").click();
+            dbgr.hide();
             expect(menu()).toBeNull();
             picker("memory-panel").click();
             dbgr.panels.memory.close();
@@ -1363,6 +1379,10 @@ describe("Debugger", () => {
                 expect(addrOf(currentRow())).toBe("8000 toolkit_entry");
             });
             expect(symbolsLine().textContent).toBe("names from Test MOS (source)");
+            goTo("goto-mem-addr-form", "toolkit_entry`4");
+            rightClick(memByte(0x8000));
+            pickFromMenu("Watch hex");
+            expect(watchRows().map(([name]) => name)).toEqual(["$8000"]);
         });
 
         it("keeps a program's own name for a SHEILA register, over the register's", async () => {

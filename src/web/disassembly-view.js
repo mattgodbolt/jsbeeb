@@ -251,7 +251,9 @@ export class DisassemblyView {
     }
 
     _prevInstruction(address) {
-        return this._paging.disassembler.prevInstruction(address, this._cpu.pc);
+        // The program counter steers the walk back only where the view shows the code it is running.
+        const { pc } = this._cpu;
+        return this._paging.disassembler.prevInstruction(address, this._paging.differs(pc) ? undefined : pc);
     }
 
     _nextInstruction(address) {

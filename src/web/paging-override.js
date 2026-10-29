@@ -107,9 +107,16 @@ export class PagingOverride {
         };
     }
 
+    /** Shows the view's label again, for what its bank holds now. */
+    relabel() {
+        if (viewedBank(this._view) !== undefined) this._label();
+    }
+
     _label() {
         const { label, contents, title } = this._describe(this._view);
-        this._picker.textContent = contents ? `${label}: ${contents}` : label;
+        const text = contents ? `${label}: ${contents}` : label;
+        if (this._picker.textContent === text) return;
+        this._picker.textContent = text;
         this._picker.title = `${title}\nClick to show another, or name one in Go to: 8000\`4 or 4:8000`;
         this._picker.classList.toggle("overridden", this._view !== PagedView);
     }
