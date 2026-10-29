@@ -468,7 +468,7 @@ export class Debugger {
         this.breakpoints = new BreakpointsPanel({
             arrangement,
             resolve: (text) => this._resolveBreakpoint(text),
-            nameOf: (address) => this._names.address(address, this.cpu.pc)?.name,
+            nameOf: (address) => this._breakpointNames().address(address, this.cpu.pc)?.name,
             showCode: (address) => {
                 this.panels.disassembly.open();
                 this._disassembly.update(address);
@@ -999,6 +999,15 @@ export class Debugger {
         }
         this._arrangement.keepAttached();
         this.cpu.video.debugPaint();
+    }
+
+    /**
+     * The names, matched again as often as the debugger's own panels match them while the machine runs, so the
+     * Breakpoints panel, refreshed each frame, keeps up with memory when it is the only panel open.
+     */
+    _breakpointNames() {
+        if (performance.now() - this._matchedAt >= RunningNameMatchMs) this._matchSymbols();
+        return this._names;
     }
 
     _matchSymbols() {

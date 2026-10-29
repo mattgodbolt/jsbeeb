@@ -106,6 +106,7 @@ describe("BreakpointsPanel", () => {
     it.each([
         ["nowhere", 'No address called "nowhere"'],
         ["3000-2000", "Breakpoint end $2000 is before its start $3000"],
+        ["3000-30ff-4000", '"3000-30ff-4000" is not an address or a range of two'],
     ])("marks %j as not an address, keeping it", (text, message) => {
         addTyped(text);
         expect(input().classList.contains("is-invalid")).toBe(true);

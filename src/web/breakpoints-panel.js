@@ -146,7 +146,12 @@ export class BreakpointsPanel {
     _addTyped() {
         const text = this._input.value.trim();
         if (!text) return;
-        const [from, to] = text.split(RangeSeparator, 2);
+        const parts = text.split(RangeSeparator);
+        if (parts.length > 2) {
+            this._invalid(this._input, `"${text}" is not an address or a range of two`);
+            return;
+        }
+        const [from, to] = parts;
         const start = this._resolve(from);
         const end = to === undefined ? start : this._resolve(to);
         if (!start || !end) {

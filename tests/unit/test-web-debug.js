@@ -1898,6 +1898,15 @@ describe("Debugger", () => {
             expect(watchRows().map(([name]) => name)).toEqual(["$8000", "$8000"]);
         });
 
+        it("names a breakpoint's address in the Breakpoints panel with only that panel open", async () => {
+            dbgr.hidePanels();
+            cpu.breakpoints.add({ kind: "execute", start: OswrchAt });
+            dbgr.breakpoints.floating.open();
+            await vi.waitFor(() =>
+                expect(document.querySelector("#breakpoints-panel .bp-name").textContent).toBe("oswrch"),
+            );
+        });
+
         it("keeps a program's own name for a SHEILA register, over the register's", async () => {
             withMos((mos) => (mos.system = false));
             [0x8d, 0x40, 0xfe].forEach((byte, i) => cpu.writemem(OswrchAt + 6 + i, byte));
