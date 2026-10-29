@@ -226,6 +226,11 @@ export class PanelArrangement extends EventTarget {
         return refresh;
     }
 
+    /** Draws every shown panel that keeps up with the machine, for a change to it that took no cycles. */
+    drawAllNow() {
+        for (const refresh of this._refreshes) if (refresh.isShown()) refresh.drawNow();
+    }
+
     keepRefreshing() {
         if (this._frameHandle === null) this._frameHandle = requestAnimationFrame(() => this._refreshFrame());
     }
