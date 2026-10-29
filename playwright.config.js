@@ -1,13 +1,23 @@
+import { createHash } from "node:crypto";
+import { fileURLToPath } from "node:url";
+
 import { defineConfig } from "@playwright/test";
 
 import { checkGl, chromeArgs, hasGpu } from "./tools/chrome-gl.js";
 import { workersFor } from "./tools/test-workers.js";
 
-// The preview of dist/ the tests drive, on a port of its own so a dev server
-// can run alongside. BASE_URL points the suite at a server that is already
-// up instead, e.g. BASE_URL=http://localhost:5173/ playwright test --project chrome
+// The preview of dist/ the tests drive, on a port derived from this checkout's
+// path so parallel worktrees each test their own build. BASE_URL points the
+// suite at a server that is already up instead, e.g.
+// BASE_URL=http://localhost:5173/ playwright test --project chrome
 const PreviewHost = "127.0.0.1";
-const PreviewPort = 5198;
+// Below the ephemeral ranges, so the OS will not hand the port to a client.
+const FirstPreviewPort = 20000;
+const PreviewPortCount = 10000;
+const CheckoutHash = createHash("sha256")
+    .update(fileURLToPath(new URL(".", import.meta.url)))
+    .digest();
+const PreviewPort = FirstPreviewPort + (CheckoutHash.readUInt32BE(0) % PreviewPortCount);
 const PreviewUrl = `http://${PreviewHost}:${PreviewPort}/`;
 const BaseUrl = process.env.BASE_URL;
 
@@ -58,6 +68,8 @@ export default defineConfig({
               // vite's own entry point, not npx, so the kill reaches the server itself.
               command: `node node_modules/vite/bin/vite.js preview --host ${PreviewHost} --port ${PreviewPort} --strictPort`,
               url: PreviewUrl,
-              reuseExistingServer: !process.env.CI,
+              // Nothing already listening is known to serve this checkout's dist/,
+              // so a clash fails rather than testing some other build.
+              reuseExistingServer: false,
           },
 });
