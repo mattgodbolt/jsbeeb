@@ -998,6 +998,8 @@ small {
 }
 
 .fdc-log {
+  /* Anchoring would scroll the log back by every line dropped from its top, as if the reader had. */
+  overflow-anchor: none;
   height: 192px;
   line-height: 16px;
   overflow: auto;

@@ -16,6 +16,9 @@ const IntelSelect0 = 0x40;
 const IntelReadData = (0x04 << 2) | IntelSelect0 | 3;
 const IntelSeek = (0x0a << 2) | IntelSelect0 | 1;
 const IntelUnwiredAddr = 3;
+const IntelWriteSpecialRegister = 0x3a;
+const IntelDriveOutRegister = 0x23;
+const IntelLoadHeadOnDrive1 = 0x80 | 0x08;
 const MaxLogLines = 500;
 const OneSectorOf256 = 0x21;
 
@@ -149,6 +152,36 @@ describe("FdcPanel", () => {
         panelFor(IntelFdc, { logFdcCommands: true, logFdcStateChanges: true });
         expect(part("fdc-log-commands").textContent).toBe("stop");
         expect(part("fdc-log-states").getAttribute("aria-checked")).toBe("true");
+    });
+
+    it("counts an 8271's drive as selected only while load head lets its select through", () => {
+        const { fdc, panel } = panelFor(IntelFdc, {});
+        fdc.write(IntelCommandAddr, IntelWriteSpecialRegister);
+        fdc.write(IntelParamAddr, IntelDriveOutRegister);
+        fdc.write(IntelParamAddr, IntelLoadHeadOnDrive1);
+        panel.update();
+        expect(meanings("HEAD")).toEqual(["drive 1 side 0 track 0", "+selected", "+spinning"]);
+    });
+
+    it.each([
+        {
+            Fdc: IntelFdc,
+            select: (fdc) => {
+                fdc.write(IntelCommandAddr, IntelWriteSpecialRegister);
+                fdc.write(IntelParamAddr, IntelDriveOutRegister);
+                fdc.write(IntelParamAddr, IntelLoadHeadOnDrive1);
+            },
+        },
+        { Fdc: WdFdc, select: (fdc) => fdc.write(WdControlAddr, WdResetOff | WdDrive1) },
+    ])("shows the drive selected in a state the $Fdc.name restores", async ({ Fdc, select }) => {
+        const { fdc: saved } = panelFor(Fdc, {});
+        select(saved);
+        const state = saved.snapshotState();
+        await teardownDom();
+        const { fdc, panel } = panelFor(Fdc, {});
+        fdc.restoreState(state);
+        panel.update();
+        expect(meanings("HEAD")[0]).toMatch(/^drive 1 /);
     });
 
     it("shows the head on the disc of the drive last selected, even if it came and went while the panel was not drawn", () => {

@@ -688,26 +688,36 @@ for (const [model, writes] of Object.entries(FdcModeWrites)) {
     });
 }
 
-test("the disc controller panel's log keeps the newest line in view as lines come while the machine runs", async ({
+test("the disc controller panel's log keeps the newest line in view as lines come while the machine runs, past its cap, until scrolled back up", async ({
     beeb,
     page,
 }) => {
     await beeb.open();
     await beeb.expectScreenText(">");
     await beeb.togglePanel("fdc");
-    const lastInView = await page.evaluate(async () => {
+    const views = await page.evaluate(async () => {
         const log = document.querySelector("#fdc-panel .fdc-log");
         const frame = () => new Promise((resolve) => requestAnimationFrame(resolve));
-        // Writes to an address the 8271 does not decode, each of which it logs as a warning.
-        for (let value = 0; value < 64; ++value) {
-            for (let line = 0; line < 4; ++line) window.processor.fdc.write(3, value);
+        const atBottom = () => log.scrollTop + log.clientHeight >= log.scrollHeight - 1;
+        // Writes to an address the 8271 does not decode, each of which it logs as a warning, from timers as the
+        // machine's own ticks are, between the frames the panel draws in.
+        const lines = async (frames) => {
+            for (let value = 0; value < frames; ++value) {
+                await new Promise((resolve) => setTimeout(resolve));
+                for (let line = 0; line < 4; ++line) window.processor.fdc.write(3, value & 0xff);
+                await frame();
+            }
             await frame();
-        }
+            await frame();
+        };
+        await lines(160);
+        const followed = { lines: log.childElementCount, atBottom: atBottom() };
+        log.scrollTop = 0;
         await frame();
-        await frame();
-        return log.scrollTop + log.clientHeight >= log.scrollHeight - 1;
+        await lines(8);
+        return { followed, scrolledUp: { top: log.scrollTop, atBottom: atBottom() } };
     });
-    expect(lastInView).toBe(true);
+    expect(views).toEqual({ followed: { lines: 500, atBottom: true }, scrolledUp: { top: 0, atBottom: false } });
 });
 
 test("a state saved at a breakpoint loads paused there in the debugger, on this machine or another, and one continue runs past it", async ({

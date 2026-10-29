@@ -207,7 +207,8 @@ function wdCommandMeaning(value, { commandType: typeInForce, isVerify, isMulti, 
         );
     if (commandType === 2) meanings.push(lit("multi", "Go on to the next sector", isMulti));
     if (commandType !== 1) meanings.push(lit("settle", "Wait for the head to settle first", isSettle));
-    if (isDeleted) meanings.push(lit("deleted", "Write a deleted data mark", isDeleted));
+    if (value === WdCommand.writeSector || value === WdCommand.writeSectorMulti)
+        meanings.push(lit("deleted", "Write a deleted data mark", isDeleted));
     return meanings;
 }
 
