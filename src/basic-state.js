@@ -14,7 +14,7 @@ const LastVariableInitial = 0x7a;
 const ProcedureChain = 0x4f6;
 const FunctionChain = 0x4f8;
 /** Where the OS notes the language ROM's number, in the Advanced User Guide's map of page &02. */
-const LanguageRomNumber = 0x28c;
+export const LanguageRomNumber = 0x28c;
 
 const RomTitle = 9;
 const RomBase = 0x8000;
@@ -23,6 +23,9 @@ const LineNumberToken = 0x8d;
 const Return = 0x0d;
 const Quote = 0x22;
 const Colon = 0x3a;
+const Star = 0x2a;
+const RemToken = 0xf4;
+const DataToken = 0xdc;
 const Space = 0x20;
 const LastPrintable = 0x7e;
 const EndOfProgram = 0x80;
@@ -86,9 +89,6 @@ export function romTitle(rom) {
     const end = rom.indexOf(0, RomTitle);
     return String.fromCharCode(...rom.subarray(RomTitle, end < 0 ? RomTitle : end)).replace(/[^ -~]/g, "");
 }
-
-/** The ROM number of the current language, as the OS noted it on starting it. */
-export const languageRomNumber = (peek) => peek(LanguageRomNumber);
 
 const word = (peek, address) => peek(address) | (peek(address + 1) << 8);
 const int32 = (peek, address) => word(peek, address) | (word(peek, address + 2) << 16);
@@ -276,6 +276,7 @@ function lineNumberAfterToken(peek, at) {
 
 /**
  * A line listed as LIST shows it, in statements, each with the addresses it spans up to the colon or return ending it.
+ * REM, DATA and a star command take the rest of the line, colons and all.
  * @param {(address: number) => number} peek
  * @param {ProgramLine} line
  * @param {Map<number, string>} keywords
@@ -286,9 +287,12 @@ export function listStatements(peek, line, keywords) {
     let text = "";
     let from = line.start + LineHeaderBytes;
     let quoted = false;
+    let restOfLine = false;
     for (let at = from; at < line.end; ++at) {
         const code = peek(at);
-        if (code === Colon && !quoted) {
+        if (!quoted && (code === RemToken || code === DataToken || (code === Star && text.trim() === "")))
+            restOfLine = true;
+        if (code === Colon && !quoted && !restOfLine) {
             statements.push({ text, from, to: at });
             text = "";
             from = at + 1;

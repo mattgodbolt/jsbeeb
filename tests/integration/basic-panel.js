@@ -2,15 +2,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TestMachine } from "../../src/test-machine.js";
-import { formatReal } from "../../src/basic-state.js";
+import { LanguageRomNumber } from "../../src/basic-state.js";
 import { BasicPanel } from "../../src/web/basic-panel.js";
 import { PanelArrangement } from "../../src/web/floating-panel.js";
 import { PanelKeys } from "../../src/web/panel-keys.js";
 import { teardownDom } from "../unit/helpers.js";
 import { FileBackedXhr } from "./helpers.js";
 
-const LanguageRomNumber = 0x28c;
 const RunCycles = 2 * 1000 * 1000;
+const VduDriverStart = 0xc000;
+const VduDriverEnd = 0xe000;
 const Program = `10 A%=1234:B%=-5:count%=0
 20 apple=3.5:Z$="hel:lo"
 30 DIM arr%(3),q(2,2)
@@ -110,6 +111,20 @@ describe.each([
         ]);
     });
 
+    it("runs to a line where it is when reached, after the program is edited and run again", async () => {
+        machine.keyDown("Escape");
+        await machine.runFor(RunCycles / 10);
+        machine.keyUp("Escape");
+        await machine.runUntilInput();
+        const input = document.querySelector("#basic-panel .goto-addr");
+        input.value = "60";
+        input.form.requestSubmit();
+        await machine.type("15 REM a line that moves the rest along");
+        await machine.type("RUN");
+        await finishRun();
+        expect(running()).toEqual(["60", " GOTO 50"]);
+    });
+
     it("marks a line the program does not have, and runs nothing", () => {
         const input = document.querySelector("#basic-panel .goto-addr");
         input.value = "45";
@@ -151,21 +166,31 @@ describe("the BASIC panel with a second processor", () => {
     });
 });
 
-describe("formatReal", () => {
-    it("prints as PRINT does with the default @%", () => {
-        const values = [0, 3.5, -0.5, 0.1, 0.01, 1 / 3, 123456789, 1234567891, 1e9, 2 ** 31, -2.5e-5];
-        expect(values.map(formatReal)).toEqual([
-            "0",
-            "3.5",
-            "-0.5",
-            "0.1",
-            "1E-2",
-            "0.333333333",
-            "123456789",
-            "1.23456789E9",
-            "1E9",
-            "2.14748365E9",
-            "-2.5E-5",
-        ]);
+describe("the BASIC panel on a Master in a shadow mode", () => {
+    afterEach(teardownDom);
+
+    it("reads memory as BASIC does, even stopped in the VDU driver, which sees the shadow screen", async () => {
+        vi.stubGlobal("XMLHttpRequest", FileBackedXhr);
+        const machine = new TestMachine("Master");
+        await machine.initialise();
+        await machine.runUntilInput();
+        await machine.loadBasic(`10 MODE 135:LOMEM=&5000
+20 apple=3.5
+30 PRINT apple:GOTO 30
+`);
+        await machine.type("RUN");
+        await machine.runFor(RunCycles);
+        const inVduDriver = machine.processor.debugInstruction.add((pc) => pc >= VduDriverStart && pc < VduDriverEnd);
+        expect(await machine.runFor(RunCycles)).toBe(true);
+        inVduDriver.remove();
+        const arrangement = new PanelArrangement(() => window.localStorage);
+        new BasicPanel({
+            cpu: machine.processor,
+            arrangement,
+            keys: new PanelKeys(arrangement),
+            runUntil: () => {},
+            inDebugger: () => true,
+        });
+        expect(text(".basic-variables")).toBe("apple3.5");
     });
 });

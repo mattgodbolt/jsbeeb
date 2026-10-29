@@ -1008,7 +1008,7 @@ small {
   color: #777777;
 }
 
-/* Its own size, not its variables', so that it keeps it as they come and go; they scroll within it. */
+/* Sized here, not by its variables, so that it stays still as they come and go; they scroll within it. */
 #basic-panel {
   width: min(52ch, 90vw);
   height: min(48em, 80vh);

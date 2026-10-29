@@ -3,7 +3,7 @@ import {
     findLine,
     firstStatement,
     holds,
-    languageRomNumber,
+    LanguageRomNumber,
     lineHolding,
     listStatements,
     readPointers,
@@ -64,7 +64,7 @@ export class BasicPanel {
      */
     constructor({ cpu, arrangement, keys, runUntil, inDebugger }) {
         this._cpu = cpu;
-        this._peek = (address) => cpu.peekmem(address);
+        this._peek = (address) => cpu.peekmemAsLanguage(address);
         this._runUntil = runUntil;
         /** @type {{bank: number, title: string, basic: ReturnType<typeof basicRom>} | null} */
         this._language = null;
@@ -129,7 +129,7 @@ export class BasicPanel {
         bindGotoForm(
             form,
             (text) => this._lineNumbered(text),
-            (line) => this.runToLine(line),
+            (line) => this.runToLine(line.number),
         );
         const step = element("button", "btn btn-sm btn-outline-light basic-step", "Step");
         step.type = "button";
@@ -140,7 +140,7 @@ export class BasicPanel {
 
     /** The language ROM, read again only when another is the language. */
     _currentLanguage() {
-        const bank = this._cpu.bankPagedBy(languageRomNumber(this._peek));
+        const bank = this._cpu.bankPagedBy(this._peek(LanguageRomNumber));
         const rom = this._cpu.romBank(bank);
         const title = romTitle(rom);
         if (this._language?.bank !== bank || this._language.title !== title)
@@ -174,19 +174,22 @@ export class BasicPanel {
     }
 
     /**
-     * Runs the machine until BASIC comes to `line`: to its first statement, or to any of its statements from elsewhere,
-     * as a procedure defined on it is called.
-     * @param {import("../basic-state.js").ProgramLine} line
+     * Runs the machine until BASIC comes to line `number`: to its first statement, or to any of its statements from
+     * elsewhere, as a procedure defined on it is called. The line is looked for at each statement, as the program can
+     * be edited while it runs.
      */
-    runToLine(line) {
-        const first = firstStatement(this._peek, line);
-        let wasInLine = holds(line, readPointers(this._peek).reading);
+    runToLine(number) {
+        const peek = this._peek;
+        const lineNow = () => findLine(peek, readPointers(peek).page, number);
+        const isIn = (line, address) => line !== null && holds(line, address);
+        let wasInLine = isIn(lineNow(), readPointers(peek).reading);
         this._runUntil(() => {
             if (!this._atProgramStatement()) return false;
-            const { reading } = readPointers(this._peek);
+            const line = lineNow();
+            const { reading } = readPointers(peek);
             const cameFromElsewhere = !wasInLine;
-            wasInLine = holds(line, reading);
-            return wasInLine && (cameFromElsewhere || reading === first);
+            wasInLine = isIn(line, reading);
+            return wasInLine && (cameFromElsewhere || reading === firstStatement(peek, line));
         });
     }
 
