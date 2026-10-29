@@ -46,6 +46,7 @@ import { DiscVisualiser } from "./web/disc-visualiser.js";
 import { MediaWindow } from "./web/media-window.js";
 import { PanelArrangement } from "./web/floating-panel.js";
 import { SysViaPanel } from "./web/sysvia-panel.js";
+import { CrtcPanel } from "./web/crtc-panel.js";
 import { UserViaPanel } from "./web/uservia-panel.js";
 import { BasicPanel } from "./web/basic-panel.js";
 import { cycleCount } from "./lockstep.js";
@@ -338,7 +339,7 @@ const layout = new Layout({
 });
 dbgr.placeBesideScreen(() => layout.screenBounds());
 dbgr.keepOffTouchKeyboard(() => layout.touchKeyboardRoom !== null);
-for (const DevicePanel of [SysViaPanel, UserViaPanel])
+for (const DevicePanel of [SysViaPanel, UserViaPanel, CrtcPanel])
     if (DevicePanel.fits(processor)) new DevicePanel({ cpu: processor, arrangement: panelArrangement });
 if (BasicPanel.fits(processor)) {
     new BasicPanel({
