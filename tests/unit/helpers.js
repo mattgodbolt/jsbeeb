@@ -182,15 +182,14 @@ export async function teardownDom() {
 export function bareFloatingPanel(arrangement, id, title) {
     document.body.insertAdjacentHTML(
         "beforeend",
-        `<div id="${id}" hidden><div class="header"><button class="close"></button></div></div>`,
+        `<div id="${id}" hidden><div class="panel-header"><button class="panel-close"></button></div></div>`,
     );
     const element = document.getElementById(id);
     return new FloatingPanel({
         panel: element,
-        header: element.querySelector(".header"),
-        closeButton: element.querySelector(".close"),
         id,
         title,
+        group: null,
         place: () => ({ x: StartEdge, y: StartEdge }),
         minSize: { w: 100, h: 50 },
         reopens: false,

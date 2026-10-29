@@ -49,9 +49,10 @@ function saveReport(session) {
 
 /**
  * @param {import("./url-state.js").UrlState} urlState
+ * @param {import("./floating-panel.js").PanelArrangement} arrangement what places the session's pane
  * @returns {SessionPage}
  */
-export function sessionPage(urlState) {
+export function sessionPage(urlState, arrangement) {
     return {
         notify,
         hidden: () => document.hidden,
@@ -67,6 +68,7 @@ export function sessionPage(urlState) {
                 copyLink: () => copyJoinLink(session.room),
                 requestControl: () => session.requestControl(null),
                 setTakeOnKey,
+                arrangement,
             }),
     };
 }

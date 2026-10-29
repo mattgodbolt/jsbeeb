@@ -12,6 +12,8 @@ import { hexbyte, hexword } from "../../src/hex.js";
 import { SymbolSets } from "../../src/symbol-sets.js";
 import { PanelKeys } from "../../src/web/panel-keys.js";
 import { PanelArrangement } from "../../src/web/floating-panel.js";
+import { SysViaPanel } from "../../src/web/sysvia-panel.js";
+import { cycleCount } from "../../src/lockstep.js";
 import { domFromIndexHtml, sentEvents, stubResizeObserver, teardownDom } from "./helpers.js";
 
 const PanelElements = [
@@ -22,7 +24,6 @@ const PanelElements = [
     "peripherals-panel",
     "watch-panel",
     "watch-menu",
-    "sysvia-panel",
 ];
 
 const MachineSecond = 2000000;
@@ -71,6 +72,7 @@ describe("Debugger", () => {
     /** A debugger on a fresh page, with a loop that puts the machine in it when stopped. */
     const makeDebugger = (symbolSets) => {
         arrangement = new PanelArrangement(() => window.localStorage);
+        arrangement.followMachine(() => cycleCount(cpu));
         keys = new PanelKeys(arrangement);
         const made = new Debugger({ symbolSets, keys, arrangement });
         made.setCpu(cpu);
@@ -213,7 +215,7 @@ describe("Debugger", () => {
             expect(stoppedLoop.mode).toBe(RunMode.running);
         });
 
-        it("are listed for a menu of panels by their titles, with the watches and the decoded system VIA", () => {
+        it("are listed for a menu of panels by their titles, with the watches", () => {
             expect(arrangement.listed().map((floating) => floating.title)).toEqual([
                 "Watches",
                 "Debugger toolbar",
@@ -221,7 +223,6 @@ describe("Debugger", () => {
                 "Memory",
                 "Registers",
                 "Peripherals",
-                "System VIA",
             ]);
         });
 
@@ -235,14 +236,37 @@ describe("Debugger", () => {
             expect(shown()).toEqual(["toolbar-panel", "registers-panel"]);
         });
 
-        it("count the decoded system VIA among them, hiding it and showing it again with the rest", () => {
+        it("count every panel made in the debug group among them, such as a decoded device's, hiding it and showing it again with the rest", () => {
+            const sysvia = new SysViaPanel({ cpu, arrangement });
             dbgr.togglePanels();
-            dbgr.sysViaPanel.floating.open();
+            sysvia.floating.open();
             dbgr.togglePanels();
             expect(visible("sysvia-panel")).toBe(false);
             dbgr.togglePanels();
             expect(visible("sysvia-panel")).toBe(true);
             expect(shown()).toEqual(NarrowSet);
+        });
+
+        it("leave out a panel that was open last but this machine has none of, as a system VIA on an Atom", () => {
+            const sysvia = new SysViaPanel({ cpu, arrangement });
+            dbgr.togglePanels();
+            sysvia.floating.open();
+            dbgr.togglePanels();
+            dbgr.hidePanels();
+            document.body.innerHTML = "";
+            domFromIndexHtml(...PanelElements);
+            dbgr = makeDebugger(null);
+            dbgr.togglePanels();
+            expect(shown()).toEqual(NarrowSet);
+        });
+
+        it("remember which were open only as one of them opens or closes, not as another panel does", () => {
+            dbgr.togglePanels();
+            dbgr.panels.peripherals.open();
+            dbgr.hidePanels();
+            dbgr.watches.floating.open();
+            dbgr.togglePanels();
+            expect(shown()).toEqual([...NarrowSet, "peripherals-panel"]);
         });
 
         describe("in their default places", () => {
@@ -392,31 +416,6 @@ describe("Debugger", () => {
                 button("step").dispatchEvent(press);
                 expect(press.defaultPrevented).toBe(true);
             });
-        });
-
-        it("give the decoded system VIA the machine's VIA on a BBC, and close it and read nothing on an Atom", () => {
-            const panel = dbgr.sysViaPanel;
-            const awaiting = () =>
-                document.querySelector("#sysvia-panel .panel-body").classList.contains("awaiting-machine");
-            panel.floating.open();
-            expect(awaiting()).toBe(false);
-            cpu.model = findModel("Atom");
-            dbgr.setCpu(cpu);
-            expect(panel.floating.isOpen).toBe(false);
-            expect(arrangement.listed()).not.toContain(panel.floating);
-            panel.update();
-            expect(awaiting()).toBe(true);
-        });
-
-        it("leave the decoded system VIA out of the panels shown on an Atom, though it was open last on a BBC", () => {
-            dbgr.togglePanels();
-            dbgr.sysViaPanel.floating.open();
-            dbgr.togglePanels();
-            cpu.model = findModel("Atom");
-            dbgr.setCpu(cpu);
-            dbgr.togglePanels();
-            expect(visible("sysvia-panel")).toBe(false);
-            expect(shown()).toEqual(NarrowSet);
         });
 
         it("note the debugger opening each time it is entered, not each time it stops, and each panel as it opens", () => {
@@ -958,7 +957,7 @@ describe("Debugger", () => {
             expect(pageSaw).not.toHaveBeenCalled();
         });
 
-        it("reads its watches once a frame, without side effects, while open, and not at all while closed", () => {
+        it("reads its watches once a frame as the machine moves on, without side effects, while open, and not at all while closed", () => {
             dbgr.debug(cpu.pc);
             addWatch("$70");
             dbgr.toggleDebugger();
@@ -968,6 +967,9 @@ describe("Debugger", () => {
             expect(panelOpen()).toBe(true);
             peek.mockClear();
             cpu.writemem(0x70, 0x06);
+            stoppedLoop.tick(2);
+            read.mockClear();
+            runFrame();
             runFrame();
             expect(watchRows()[0][1]).toBe("6");
             expect(peek).toHaveBeenCalledTimes(1);
@@ -977,6 +979,8 @@ describe("Debugger", () => {
             expect(frames.size).toBe(0);
             peek.mockClear();
             cpu.writemem(0x70, 0x07);
+            stoppedLoop.tick(2);
+            read.mockClear();
             runFrame();
             expect(peek).not.toHaveBeenCalled();
             expect(read).not.toHaveBeenCalled();
@@ -1613,7 +1617,7 @@ describe("Debugger", () => {
         });
 
         it("fetches nothing for the decoded system VIA open on its own, even reopened before the machine starts", async () => {
-            dbgr.sysViaPanel.floating.open();
+            new SysViaPanel({ cpu, arrangement }).floating.open();
             await new Promise((resolve) => setTimeout(resolve, 0));
             expect(load).not.toHaveBeenCalled();
             dbgr.setCpu(cpu);

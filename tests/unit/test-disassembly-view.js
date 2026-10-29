@@ -45,10 +45,9 @@ describe("DisassemblyView", () => {
         const panel = document.getElementById("disassembly-panel");
         const floating = new FloatingPanel({
             panel,
-            header: panel.querySelector(".debug-panel-header"),
-            closeButton: panel.querySelector(".panel-close"),
             id: "disassembly",
             title: "Disassembly",
+            group: null,
             place: () => ({ x: StartEdge, y: StartEdge }),
             minSize: { w: 100, h: 50 },
             reopens: false,
@@ -67,6 +66,7 @@ describe("DisassemblyView", () => {
             showMemory,
             offerWatch,
             runToCursor,
+            redraw: () => {},
         });
         video = new FakeVideo();
         await useCpu(null);
@@ -146,6 +146,16 @@ describe("DisassemblyView", () => {
         expect(addrOf(currentRow())).toBe("2002");
         keys.press("b");
         expect(addrOf(currentRow())).toBe("2002");
+    });
+
+    it("reads an instruction straddling $ffff on from $0000, and wraps the rows below it there", () => {
+        cpu.writemem(0x0000, 0x5a);
+        view.update(0xfffe);
+        const row = currentRow();
+        const [opcode, operand] = [0xfffe, 0xffff].map((at) => hexbyte(cpu.peekmem(at)));
+        expect(row.querySelector(".instr_bytes").textContent).toBe(`${opcode} ${operand} 5a`);
+        expect(row.querySelector(".disassembly").textContent).toContain(`$5a${operand}`);
+        expect(Number(row.nextElementSibling.dataset.addr)).toBe(0x0001);
     });
 
     it("toggles a breakpoint from the gutter, keeping it across a re-render", () => {

@@ -78,8 +78,9 @@ export class DisassemblyView {
      * @param {(event: MouseEvent, address: number, name: string | undefined) => void} options.offerWatch - offers a
      * right-clicked address as a watch
      * @param {() => void} options.runToCursor
+     * @param {() => void} options.redraw - redraws it, once its rows have changed in number
      */
-    constructor({ floating, keys, names, dump, resolve, showing, showMemory, offerWatch, runToCursor }) {
+    constructor({ floating, keys, names, dump, resolve, showing, showMemory, offerWatch, runToCursor, redraw }) {
         this._names = names;
         this._dump = dump;
         this._showing = showing;
@@ -90,9 +91,7 @@ export class DisassemblyView {
         this._backStack = [];
         this._breakpoints = new Map();
         this._widget = floating.panel.querySelector("#disassembly");
-        this._rows = new FittedRows(this._widget, InitialRows, () => {
-            if (this._cpu) this.update(this._cursor);
-        });
+        this._rows = new FittedRows(this._widget, InitialRows, redraw);
 
         bindGotoForm(floating.panel.querySelector(".goto-form"), resolve, (address) => this.update(address));
 
@@ -230,7 +229,7 @@ export class DisassemblyView {
         } else {
             delete row.dataset.ref;
         }
-        return end;
+        return end & 0xffff;
     }
 
     _prevInstruction(address) {

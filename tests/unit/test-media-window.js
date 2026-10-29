@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { MediaWindow, bootDecision, shortName } from "../../src/web/media-window.js";
+import { PanelArrangement } from "../../src/web/floating-panel.js";
 import { MachineRequirements, describeRef, describeSessionFile } from "../../src/web/media-catalogue.js";
 import { MachineSwitch } from "../../src/web/machine-switch.js";
 import { MediaSlots } from "../../src/web/media-slots.js";
@@ -102,7 +103,8 @@ describe("MediaWindow", () => {
             processor,
             model,
             loop,
-            visualiser: { openOn: vi.fn() },
+            visualiser: { openOn: vi.fn(), redraw: vi.fn() },
+            arrangement: new PanelArrangement(() => window.localStorage),
             autoboot: vi.fn(),
             driveSource: {
                 connect: vi.fn().mockResolvedValue(true),
@@ -541,6 +543,14 @@ describe("MediaWindow", () => {
             putDiscIn(1, ssd("b.ssd"));
             expect(bay(1).classList.contains("folded")).toBe(false);
             expect(text(bay(1).querySelector(".bay-bar-name"))).toBe("b.ssd");
+        });
+
+        it("has the disc surface drawn again for a disc put in, which a paused machine would not prompt, but not for a tape", () => {
+            make();
+            putTapeIn({ name: "chuckie.uef", position: 0 });
+            expect(deps.visualiser.redraw).not.toHaveBeenCalled();
+            putDiscIn(1, ssd("b.ssd"));
+            expect(deps.visualiser.redraw).toHaveBeenCalledTimes(1);
         });
 
         it("opens with the list whichever way it is opened, and the list folds and unfolds on request", () => {

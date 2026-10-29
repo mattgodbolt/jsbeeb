@@ -3,10 +3,9 @@ import { hexbyte, hexword, parseAddr } from "../hex.js";
 import { NoNames } from "../symbol-names.js";
 import { isHttps } from "../symbol-sets.js";
 import { noteFeature } from "./analytics.js";
-import { SysViaPanel } from "./sysvia-panel.js";
 import { WatchPanel } from "./watch-panel.js";
 import { RunMode } from "./emulation-loop.js";
-import { FloatingPanel } from "./floating-panel.js";
+import { DebugGroup, FloatingPanel } from "./floating-panel.js";
 import { EndEdge, Gap, StartEdge } from "./panel-layout.js";
 import { helpRows, keyLine } from "./panel-keys.js";
 import { cycleCount } from "../lockstep.js";
@@ -56,18 +55,16 @@ class MemoryView {
      * @param {(address: number) => number} peekMem
      * @param {() => {names: import("../symbol-names.js").SymbolNames, pc: number}} naming
      * @param {(sets: Set<import("../symbol-names.js").SymbolSet>) => void} showing - the sets whose names it shows
+     * @param {() => void} redraw - redraws it, once its rows have changed in number
      */
-    constructor(widget, peekMem, naming, showing) {
+    constructor(widget, peekMem, naming, showing, redraw) {
         this._widget = widget;
         this._peekMem = peekMem;
         this._naming = naming;
         this._showing = showing;
         this._addr = 0;
         this._prevSnapshot = new Uint8Array(65536);
-        this._drawn = false;
-        this._rows = new FittedRows(widget, InitialMemoryRows, () => {
-            if (this._drawn) this.update();
-        });
+        this._rows = new FittedRows(widget, InitialMemoryRows, redraw);
 
         widget.addEventListener("wheel", (evt) => {
             const deltaY = evt.deltaY;
@@ -80,7 +77,6 @@ class MemoryView {
 
     update(maybeNewAddr) {
         if (maybeNewAddr !== undefined) this._addr = maybeNewAddr;
-        this._drawn = true;
         let addr = this._addr - 8 * this._rows.anchor;
         if (addr < 0) addr = 0;
         const { names, pc } = this._naming();
@@ -247,13 +243,11 @@ const OwnPanels = [
         show: (dbgr) => dbgr.updatePeripherals(),
     },
 ];
-/** Every panel Alt-D and Alt-S show and hide: the debugger's own, and the decoded system VIA. */
-const DebugPanelIds = [...OwnPanels.map(({ id }) => id), "sysvia"];
-
-function rememberedPanels() {
+/** Of the panels `ids`, those that were open when the debugger's were last seen. */
+function rememberedPanels(ids) {
     try {
-        const ids = JSON.parse(window.localStorage.getItem(RememberedPanelsKey));
-        return Array.isArray(ids) ? DebugPanelIds.filter((id) => ids.includes(id)) : [];
+        const remembered = JSON.parse(window.localStorage.getItem(RememberedPanelsKey));
+        return Array.isArray(remembered) ? ids.filter((id) => remembered.includes(id)) : [];
     } catch (error) {
         console.warn(`Could not read which debug panels were open: ${error}`);
         return [];
@@ -288,9 +282,6 @@ export class Debugger {
         this._runningTo = null;
         this._inDebugger = false;
         this._hidingPanels = false;
-        this._frameHandle = null;
-        /** The machine's cycle count when the open panels were last drawn. */
-        this._shownAt = null;
         this._matchedAt = 0;
         this._screenBounds = () => null;
         this._touchKeyboardShown = () => false;
@@ -305,13 +296,9 @@ export class Debugger {
             peek,
             () => ({ names: this._names, pc: this.cpu.pc }),
             (sets) => this._credit(this._credits.memory, sets),
+            () => this._redraw("memory"),
         );
         this.watches = new WatchPanel({ peek, resolve: (text) => this._resolveWatch(text), arrangement });
-        // The Atom's CPU carries a system VIA it never wires up.
-        this.sysViaPanel = new SysViaPanel({
-            via: () => (this.cpu?.model.isAtom ? undefined : this.cpu?.sysvia),
-            arrangement,
-        });
         // Fetches the index, and the sets matching memory now, so names typed while the machine runs can resolve.
         this.watches.floating.addEventListener("open", () => this._namesNow());
         this.uservia = this.sysvia = this.crtc = noop;
@@ -323,15 +310,17 @@ export class Debugger {
             if (this.watches.floating.isOpen) this._namesNow();
             if (!this.cpu || (!this._inDebugger && !this._ownPanelsShown())) return;
             this._matchSymbols();
-            this._showOpenPanels();
+            this._refresh.drawNow();
         });
 
         this.panels = Object.fromEntries(OwnPanels.map((own) => [own.id, this._makePanel(own)]));
-        this.panels.sysvia = this.sysViaPanel.floating;
-        for (const floating of Object.values(this.panels)) {
-            floating.addEventListener("open", () => this._rememberOpenPanels());
-            floating.addEventListener("close", () => this._rememberOpenPanels());
-        }
+        this._refresh = arrangement.refreshing(
+            () => this._ownPanelsShown(),
+            () => this._showOpenPanels(),
+        );
+        arrangement.addEventListener("change", (e) => {
+            if (e.detail.floating.group === DebugGroup) this._rememberOpenPanels();
+        });
         this._actions = {
             go: () => this._loop.go(),
             stop: () => this._loop.stop(true),
@@ -352,6 +341,7 @@ export class Debugger {
             showMemory: (address) => this._memoryView.update(address),
             offerWatch: (e, address, name) => this._offerWatch(e, address, name),
             runToCursor: this._actions.runToCursor,
+            redraw: () => this._redraw("disassembly"),
         });
         this._bindToolbar();
         this._bindKeys(keys);
@@ -377,26 +367,19 @@ export class Debugger {
         if (own.naturalWidth) panel.style.setProperty("--natural-width", `${own.naturalWidth}px`);
         const floating = new FloatingPanel({
             panel,
-            header: panel.querySelector(".debug-panel-header"),
-            closeButton: panel.querySelector(".panel-close"),
             id: own.id,
             title: own.title,
+            group: DebugGroup,
             place: () => ({ ...own.place, w: this._columnWidth(own.side) }),
             minSize: own.minSize,
             reopens: true,
             arrangement: this._arrangement,
         });
         floating.addEventListener("open", () => {
-            if (this._frameHandle === null) this._tick();
             if (!this.cpu) return;
             this._matchSymbols();
             own.show(this, this._disassemblyAt());
             this._arrangement.keepAttached();
-        });
-        floating.addEventListener("close", () => {
-            if (this._ownPanelsShown()) return;
-            cancelAnimationFrame(this._frameHandle);
-            this._frameHandle = null;
         });
         return floating;
     }
@@ -468,8 +451,13 @@ export class Debugger {
         act();
     }
 
+    /** Every panel Alt-S and Alt-D show and hide, the debugger's own first. */
+    _debugPanels() {
+        return this._arrangement.panelsIn(DebugGroup);
+    }
+
     panelsShown() {
-        return Object.values(this.panels).some((floating) => floating.isOpen);
+        return this._debugPanels().some((floating) => floating.isOpen);
     }
 
     /**
@@ -477,24 +465,25 @@ export class Debugger {
      * toolbar always comes with them, for its buttons.
      */
     showPanels() {
-        const remembered = rememberedPanels();
+        const panels = this._debugPanels();
+        const remembered = rememberedPanels(panels.map(({ id }) => id));
         const wide = window.innerWidth >= PeripheralsWindowWidth;
         const defaults = OwnPanels.filter((own) => wide || own.narrow).map(({ id }) => id);
         const chosen = remembered.length ? remembered : defaults;
-        const ids = DebugPanelIds.filter((id) => (id === "toolbar" || chosen.includes(id)) && this.panels[id].listed);
+        const shown = panels.filter(({ id }) => id === "toolbar" || chosen.includes(id));
         // Filled first, so that they are laid out at the size they will be.
         if (this.cpu) {
             this._matchSymbols();
-            for (const own of OwnPanels) if (ids.includes(own.id)) own.show(this, this._disassemblyAt());
-            this._shownAt = cycleCount(this.cpu);
+            for (const own of OwnPanels) if (shown.includes(this.panels[own.id])) own.show(this, this._disassemblyAt());
+            this._refresh.drawn();
         }
-        for (const id of ids) this.panels[id].open();
+        for (const floating of shown) floating.open();
     }
 
     /** Closes the debugger's panels, remembering which were open for the next showPanels. */
     hidePanels() {
         this._hidingPanels = true;
-        for (const floating of Object.values(this.panels)) floating.close();
+        for (const floating of this._debugPanels()) floating.close();
         this._hidingPanels = false;
     }
 
@@ -512,27 +501,23 @@ export class Debugger {
 
     _rememberOpenPanels() {
         if (this._hidingPanels) return;
-        rememberPanels(DebugPanelIds.filter((id) => this.panels[id].isOpen));
+        rememberPanels(this._debugPanels().flatMap(({ id, isOpen }) => (isOpen ? [id] : [])));
     }
 
     /**
-     * Redraws the open panels once a frame, but only when the machine has moved on since they were drawn: while
-     * it runs, and once after it stops or has its state replaced. Left alone while nothing moves, a click on an
-     * operand lands on what was under the pointer when it went down.
+     * Redraws one of its own panels, for a resize that changed how many rows it shows. Not through the refresh, whose
+     * draw lays the panels out again, which part way through a drag would undo it.
      */
-    _tick() {
-        this._frameHandle = null;
-        if (!this._ownPanelsShown()) return;
-        if (this.cpu && cycleCount(this.cpu) !== this._shownAt) this._showOpenPanels();
-        this._frameHandle = requestAnimationFrame(() => this._tick());
+    _redraw(id) {
+        if (this.cpu) OwnPanels.find((own) => own.id === id).show(this, this._disassemblyAt());
     }
 
     _showOpenPanels() {
+        if (!this.cpu) return;
         const now = performance.now();
         // Names are matched to what is in memory now; while it runs, not every frame, as matching peeks at it.
         if (!this._loop?.isRunning() || now - this._matchedAt >= RunningNameMatchMs) this._matchSymbols();
         for (const own of OwnPanels) if (this.panels[own.id].isOpen) own.show(this, this._disassemblyAt());
-        this._shownAt = cycleCount(this.cpu);
         // Not while it runs, when the names in view, and so the credit's height, can change every frame.
         if (!this._loop?.isRunning()) this._arrangement.keepAttached();
     }
@@ -558,15 +543,11 @@ export class Debugger {
 
     setCpu(cpu) {
         this.cpu = cpu;
-        if (cpu.model.isAtom) {
-            this.sysViaPanel.floating.close();
-            this._arrangement.unlist(this.sysViaPanel.floating);
-        }
         this.sysvia = this.setupVia(document.getElementById("sysvia"), cpu.sysvia);
         this.uservia = this.setupVia(document.getElementById("uservia"), cpu.uservia);
         this.crtc = this.setupCrtc(document.getElementById("crtc"), cpu.video);
         this._disassembly.setCpu(cpu);
-        if (this._ownPanelsShown()) this._showOpenPanels();
+        if (this._ownPanelsShown()) this._refresh.drawNow();
     }
     disassemble(addr) {
         return this.cpu.disassembler.disassemble(addr);
@@ -744,7 +725,7 @@ export class Debugger {
         this.cancelRun();
         this._matchSymbols();
         for (const own of OwnPanels) own.show(this, where);
-        this._shownAt = cycleCount(this.cpu);
+        this._refresh.drawn();
         if (!this._inDebugger) {
             noteFeature("debugger", "open");
             this._inDebugger = true;
@@ -811,7 +792,7 @@ export class Debugger {
         this._inDebugger = false;
         // Focus left in a goto box would keep the keyboard from the machine.
         const focused = document.activeElement;
-        if (Object.values(this.panels).some((floating) => floating.panel.contains(focused))) focused.blur();
+        if (this._debugPanels().some((floating) => floating.panel.contains(focused))) focused.blur();
     }
 
     /** The loop that runs the machine for the steps that need running. */
