@@ -1,10 +1,9 @@
-import { readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { UrlState } from "../../src/web/url-state.js";
 import { FloatingPanel } from "../../src/web/floating-panel.js";
 import { StartEdge } from "../../src/web/panel-layout.js";
+import { stitchHtml } from "../../tools/html-includes.js";
 
 let indexHtmlDoc = null;
 
@@ -14,8 +13,7 @@ let indexHtmlDoc = null;
  */
 export function domFromIndexHtml(...ids) {
     if (!indexHtmlDoc) {
-        const indexHtml = resolve(dirname(expect.getState().testPath), "../../index.html");
-        indexHtmlDoc = new DOMParser().parseFromString(readFileSync(indexHtml, "utf8"), "text/html");
+        indexHtmlDoc = new DOMParser().parseFromString(stitchHtml("index.html"), "text/html");
     }
     for (const id of ids) {
         const el = indexHtmlDoc.getElementById(id);

@@ -3,10 +3,11 @@ import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { labelPageShortcuts, shortcutLabel, Shortcuts } from "../../src/web/shortcuts.js";
+import { stitchHtml } from "../../tools/html-includes.js";
 import { domFromIndexHtml, teardownDom } from "./helpers.js";
 
 const readme = readFileSync("README.md", "utf8");
-const indexHtml = readFileSync("index.html", "utf8");
+const indexHtml = stitchHtml("index.html");
 
 /** Every `Alt-...` the two lists of documentation claim jsbeeb answers. */
 function documentedCombos(text, pattern) {
