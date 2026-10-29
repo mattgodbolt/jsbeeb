@@ -98,9 +98,8 @@ checkouts (taken as for the Node runner) or paths to pages already built (a `dis
 worktree included, is built with its own `vite` into a folder of its own in `--work-dir`, without analytics, and
 removed afterwards; a built page is used as it is. Both sides are then served by the runner's own Vite `preview()`,
 without either side's config, on two loopback ports with the same headers and no caching, so the only difference
-between them is the build. Nothing else is
-fetched: requests off the loopback address are refused. `npm run benchmark:browser-ab -- --help` lists the
-options.
+between them is the build. Nothing else is fetched: requests off the loopback address are refused.
+`npm run benchmark:browser-ab -- --help` lists the options.
 
 Each sample is a fresh page in a fresh browser context, so no side inherits the other's compiled JavaScript or
 page caches (the GPU process, and its compiled shaders, outlive a context); `--fresh browser` launches a whole

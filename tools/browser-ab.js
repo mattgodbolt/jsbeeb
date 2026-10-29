@@ -199,7 +199,7 @@ async function serve(dir) {
         appType: "mpa",
         logLevel: "warn",
         build: { outDir: dir },
-        preview: { host: "127.0.0.1", port: 0, strictPort: true, headers: { "Cache-Control": "no-store" } },
+        preview: { host: "127.0.0.1", port: 0, headers: { "Cache-Control": "no-store" } },
     });
     const { address, port } = server.httpServer.address();
     return { url: `http://${address}:${port}/`, close: () => server.close() };
