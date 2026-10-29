@@ -205,7 +205,7 @@ jobs:
           if [ "$tip" = "$GITHUB_SHA" ]; then
             echo deploy=true >> "$GITHUB_OUTPUT"
           else
-            echo "::notice::Not deploying: main has moved on to $tip, whose own run deploys it"
+            echo "::notice::Not deploying: main has moved on to $tip, whose own run deploys it if its tests pass"
           fi
       - name: Deploy the rendezvous function
         if: steps.newest.outputs.deploy == 'true'
