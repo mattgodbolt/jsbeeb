@@ -1,7 +1,7 @@
-import { hexbyte, hexword } from "../hex.js";
+import { byteChar, hexbyte, hexword } from "../hex.js";
 import { nameUrl } from "../symbol-sets.js";
 import { sheilaBlocks, sheilaName } from "../sheila.js";
-import { bindGotoForm, byteChar, externalLink, FittedRows, labelHtml } from "./debug-dom.js";
+import { bindGotoForm, externalLink, FittedRows, labelHtml } from "./debug-dom.js";
 import { keyLine } from "./panel-keys.js";
 
 const InitialRows = 16;

@@ -6,7 +6,7 @@ import { DisassemblyKeys } from "../../src/web/disassembly-view.js";
 import { Gap } from "../../src/web/panel-layout.js";
 import { RunMode } from "../../src/web/emulation-loop.js";
 import { fake6502 } from "../../src/fake6502.js";
-import { findModel, TEST_65C12 } from "../../src/models.js";
+import { TEST_65C12 } from "../../src/models.js";
 import { FakeVideo } from "../../src/video.js";
 import { hexbyte, hexword } from "../../src/hex.js";
 import { SymbolSets } from "../../src/symbol-sets.js";
@@ -19,6 +19,7 @@ import {
     domFromIndexHtml,
     fakeAnimationFrames,
     fitRomHeader,
+    romless,
     sentEvents,
     stubResizeObserver,
     teardownDom,
@@ -536,9 +537,8 @@ describe("Debugger", () => {
             const SysViaOra = 0xfe41;
             const SysViaIfr = 0xfe4d;
             const Ca1Flag = 0x02;
-            // The test CPU has no I/O, so a BBC B, without the ROMs jsdom cannot fetch.
-            const beeb = findModel("B-DFS1.2");
-            cpu = fake6502(Object.assign(Object.create(Object.getPrototypeOf(beeb)), beeb, { os: [] }), { video });
+            // The test CPU has no I/O, so a BBC B.
+            cpu = fake6502(romless("B-DFS1.2"), { video });
             await cpu.initialise();
             dbgr.setCpu(cpu);
             cpu.sysvia.setVBlankInt(true);
@@ -615,6 +615,34 @@ describe("Debugger", () => {
             expect(currentRow().querySelector(".disassembly").textContent).toBe("LDA #$ff");
             expect(currentRow().classList.contains("current")).toBe(true);
             expect(picker("memory-panel").textContent).toBe("paged");
+        });
+
+        it("marks changes only against a snapshot taken in the view shown", () => {
+            const changed = () => memTarget().classList.contains("changed");
+            dbgr.hide();
+            dbgr.debug(cpu.pc);
+            goTo("goto-mem-addr-form", "4:8100");
+            expect(changed()).toBe(false);
+            dbgr.hide();
+            cpu.ramRomOs[bankOffset(cpu, 4, 0x8100)] = 0x45;
+            dbgr.debug(cpu.pc);
+            expect(changed()).toBe(true);
+        });
+
+        it("keeps its menu from focus, closing it on Escape, a press elsewhere, or its panel closing", () => {
+            const menu = () => document.querySelector(".paging-menu:not([hidden])");
+            picker("memory-panel").click();
+            const press = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
+            menu().querySelector("button").dispatchEvent(press);
+            expect(press.defaultPrevented).toBe(true);
+            document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+            expect(menu()).toBeNull();
+            picker("memory-panel").click();
+            document.getElementById("memory").dispatchEvent(new Event("pointerdown", { bubbles: true }));
+            expect(menu()).toBeNull();
+            picker("memory-panel").click();
+            dbgr.panels.memory.close();
+            expect(menu()).toBeNull();
         });
 
         it("shows a bank from its start, as code while stopped and as bytes while running", () => {
@@ -1314,6 +1342,27 @@ describe("Debugger", () => {
             expect(symbolsLine().querySelector(".symbol-set").title).toBe("MIT\n\nCopyright the test");
             expect(symbolsLine().title).toBe("names from Test MOS (source)");
             expect(symbolsLine().querySelector("a").href).toBe("https://example.com/mos.lst");
+        });
+
+        it("resolves a name in the bank a Go to names, and credits the set matched to it", async () => {
+            const romRegion = { start: "0x8000", end: "0x8100", anchors: [{ at: "0x8000", bytes: "a94460" }] };
+            load.mockImplementation(async (url) => {
+                const json = structuredClone(files.get(url));
+                if (url.endsWith("index.json")) json.sets[0].regions = { rom: romRegion };
+                else json.regions = { rom: { ...romRegion, symbols: { toolkit_entry: "0x8000" } } };
+                return json;
+            });
+            cpu.romSelect(15);
+            cpu.ramRomOs.set([0xa9, 0x44, 0x60], bankOffset(cpu, 4, 0x8000));
+            dbgr.debug(cpu.pc);
+            const box = document.querySelector("#goto-dis-addr-form .goto-addr");
+            goTo("goto-dis-addr-form", "toolkit_entry");
+            expect(box.classList.contains("is-invalid")).toBe(true);
+            await vi.waitFor(() => {
+                goTo("goto-dis-addr-form", "toolkit_entry`4");
+                expect(addrOf(currentRow())).toBe("8000 toolkit_entry");
+            });
+            expect(symbolsLine().textContent).toBe("names from Test MOS (source)");
         });
 
         it("keeps a program's own name for a SHEILA register, over the register's", async () => {

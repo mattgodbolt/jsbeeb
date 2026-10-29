@@ -6,6 +6,14 @@ export function parseAddr(s) {
     return digits === undefined ? undefined : parseInt(digits, 16);
 }
 
+const FirstPrintable = 0x20;
+const PastPrintable = 0x80;
+
+/** A byte as text: its character if printable, a dot if not. */
+export function byteChar(byte) {
+    return byte >= FirstPrintable && byte < PastPrintable ? String.fromCharCode(byte) : ".";
+}
+
 export function hexbyte(value) {
     return ((value >>> 4) & 0xf).toString(16) + (value & 0xf).toString(16);
 }

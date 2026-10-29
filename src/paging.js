@@ -1,4 +1,5 @@
 import { NumRomBanks, RomBankBytes } from "./6502.js";
+import { byteChar } from "./hex.js";
 
 /**
  * A view of memory the debugger can show instead of what the CPU has paged in: one sideways bank at &8000 to
@@ -12,7 +13,7 @@ export const AndyView = "n";
 export const ShadowView = "s";
 export const MainView = "m";
 
-const SidewaysStart = 0x8000;
+export const SidewaysStart = 0x8000;
 const SidewaysEnd = 0xc000;
 const AndyEnd = 0x9000;
 const ShadowStart = 0x3000;
@@ -24,8 +25,6 @@ const LynneOffset = 0x8000;
 const CopyrightPointerOffset = 7;
 const TitleOffset = 9;
 const Copyright = "(C)";
-const FirstPrintable = 0x20;
-const LastPrintable = 0x7e;
 
 const ViewChar = "[0-9a-fA-FnNsSmM]";
 const SuffixForm = new RegExp(`^(.+)\`(${ViewChar})$`);
@@ -107,18 +106,13 @@ export function viewDiffers(cpu, view, address) {
     address &= 0xffff;
     const offset = viewedOffset(cpu, view, address);
     if (offset === undefined) return false;
-    const page = cpu.memStatOffset + (address >>> 8);
-    return !cpu.memStat[page] || cpu.memLook[page] + address !== offset;
+    return cpu.memLook[cpu.memStatOffset + (address >>> 8)] + address !== offset;
 }
 
-function printable(peek, from, to) {
-    let text = "";
-    for (let address = from; address < to; ++address) {
-        const byte = peek(address);
-        if (byte < FirstPrintable || byte > LastPrintable) return undefined;
-        text += String.fromCharCode(byte);
-    }
-    return text;
+function text(peek, from, to) {
+    let read = "";
+    for (let address = from; address < to; ++address) read += byteChar(peek(address));
+    return read;
 }
 
 function zeroAt(peek, from, to) {
@@ -127,8 +121,8 @@ function zeroAt(peek, from, to) {
 }
 
 /**
- * The title and version string in the header of the sideways ROM `peek` reads at &8000, or undefined if there is
- * no ROM there: no copyright string where the header points to one.
+ * The title and version string in the header of the sideways ROM `peek` reads at &8000, unprintable bytes shown as
+ * dots, or undefined if there is no ROM there: no copyright string where the header points to one.
  * @param {(address: number) => number} peek
  * @returns {{title: string, version: string} | undefined}
  */
@@ -136,12 +130,10 @@ export function romHeader(peek) {
     const copyright = SidewaysStart + peek(SidewaysStart + CopyrightPointerOffset);
     const titleStart = SidewaysStart + TitleOffset;
     if (copyright <= titleStart || peek(copyright) !== 0) return undefined;
-    if (printable(peek, copyright + 1, copyright + 1 + Copyright.length) !== Copyright) return undefined;
+    if (text(peek, copyright + 1, copyright + 1 + Copyright.length) !== Copyright) return undefined;
     const titleEnd = zeroAt(peek, titleStart, copyright) ?? copyright;
-    const title = printable(peek, titleStart, titleEnd);
-    const version = titleEnd < copyright ? printable(peek, titleEnd + 1, copyright) : "";
-    if (title === undefined || version === undefined) return undefined;
-    return { title, version };
+    const version = titleEnd < copyright ? text(peek, titleEnd + 1, copyright) : "";
+    return { title: text(peek, titleStart, titleEnd), version };
 }
 
 /** What is in sideways `bank`: its ROM's title and version, or what it is with no ROM there. */

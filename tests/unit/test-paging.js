@@ -10,7 +10,6 @@ import {
     PagedView,
     parseViewedAddress,
     peekViewed,
-    requireBank,
     ShadowView,
     viewDiffers,
     viewsFor,
@@ -58,13 +57,6 @@ describe("paging views", () => {
         expect(viewsFor(Master).slice(-3)).toEqual([AndyView, MainView, ShadowView]);
     });
 
-    it("checks a bank is one the model's sockets reach", () => {
-        expect(() => requireBank(12, FourSocketB)).not.toThrow();
-        expect(() => requireBank(undefined, FourSocketB)).not.toThrow();
-        expect(() => requireBank(4, FourSocketB)).toThrow("Bank 4 is not 12 to 15");
-        expect(() => requireBank(1.5, ModelB)).toThrow("Bank 1.5 is not 0 to 15");
-    });
-
     it("reads each view where it applies and as paged elsewhere, leaving the paging alone", async () => {
         const cpu = await machine(Master);
         cpu.romSelect(15);
@@ -103,15 +95,10 @@ describe("paging views", () => {
         expect(viewDiffers(cpu, AndyView, 0x8000)).toBe(false);
     });
 
-    it("describes a bank by its ROM's title and version, or by what it is with no ROM", async () => {
+    it("describes a bank by its ROM's header, dotting unprintable bytes in it", async () => {
         const cpu = await machine(ModelB);
-        fitRomHeader(cpu, 3, "BASIC");
-        fitRomHeader(cpu, 5, "DFS", "2.26");
-        cpu.ramRomOs.fill(0xff, bankOffset(cpu, 6, 0x8000), bankOffset(cpu, 7, 0x8000));
-        expect(describeBank(cpu, 3)).toBe("BASIC");
-        expect(describeBank(cpu, 5)).toBe("DFS 2.26");
-        expect(describeBank(cpu, 6)).toBe("sideways RAM");
         expect(describeBank(cpu, 15)).toMatch(/^BASIC/);
-        expect(describeBank(await machine(Master), 0)).toBe("empty");
+        fitRomHeader(cpu, 3, "A\u0001B", "1.0");
+        expect(describeBank(cpu, 3)).toBe("A.B 1.0");
     });
 });

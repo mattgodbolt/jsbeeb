@@ -55,3 +55,40 @@ export function textButton(className, text, title) {
     button.tabIndex = -1;
     return button;
 }
+
+/**
+ * Makes `popup`, fixed on the page outside any panel, a popup: its buttons kept from focus as a panel's are, and
+ * `dismiss` called on a pointerdown outside the elements `inside()` lists while it is open (null while closed), or on
+ * Escape, which goes on to the page as well, as if nothing had been open.
+ * @param {HTMLElement} popup
+ * @param {() => (HTMLElement | null)[] | null} inside
+ * @param {() => void} dismiss
+ */
+export function popupBehaviour(popup, inside, dismiss) {
+    popup.addEventListener("mousedown", (e) => {
+        if (e.target.closest("button")) e.preventDefault();
+    });
+    popup.addEventListener("contextmenu", (e) => e.preventDefault());
+    // pointerdown, as a panel's drag handle cancels the mousedown that would follow.
+    document.addEventListener(
+        "pointerdown",
+        (e) => {
+            const open = inside();
+            if (open && !open.some((element) => element?.contains(e.target))) dismiss();
+        },
+        true,
+    );
+    document.addEventListener(
+        "keydown",
+        (e) => {
+            if (e.key === "Escape") dismiss();
+        },
+        true,
+    );
+}
+
+/** Puts a fixed `popup` at `x`, `y` in the window, moved in to fit if it would cross an edge. */
+export function placePopup(popup, x, y) {
+    popup.style.left = `${Math.max(0, Math.min(x, window.innerWidth - popup.offsetWidth))}px`;
+    popup.style.top = `${Math.max(0, Math.min(y, window.innerHeight - popup.offsetHeight))}px`;
+}

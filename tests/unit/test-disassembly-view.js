@@ -11,7 +11,7 @@ import { fake6502 } from "../../src/fake6502.js";
 import { findModel, TEST_65C12 } from "../../src/models.js";
 import { FakeVideo } from "../../src/video.js";
 import { hexbyte, parseAddr } from "../../src/hex.js";
-import { domFromIndexHtml, stubResizeObserver, teardownDom } from "./helpers.js";
+import { domFromIndexHtml, romless, stubResizeObserver, teardownDom } from "./helpers.js";
 
 describe("DisassemblyView", () => {
     let cpu;
@@ -53,7 +53,7 @@ describe("DisassemblyView", () => {
         showMemory = vi.fn();
         offerWatch = vi.fn();
         runToCursor = vi.fn();
-        paging = new PagingOverride({ panel, changed: () => view.redraw() });
+        paging = new PagingOverride({ floating, changed: () => view.redraw() });
         view = new DisassemblyView({
             floating,
             keys,
@@ -236,9 +236,15 @@ describe("DisassemblyView", () => {
             expect(codeAt(0x2002).textContent).toBe("JSR $fe40");
         });
 
+        it("offers no other view of memory on a machine without paging", () => {
+            const picker = document.querySelector("#disassembly-panel .paging-picker");
+            expect(picker.hidden).toBe(false);
+            paging.setCpu({ model: findModel("Atom") });
+            expect(picker.hidden).toBe(true);
+        });
+
         it("names the registers the model has where it has them", async () => {
-            const master = findModel("Master");
-            await useCpu(Object.assign(Object.create(Object.getPrototypeOf(master)), master, { os: [] }));
+            await useCpu(romless("Master"));
             program([0x8d, 0x34, 0xfe, 0x8d, 0x28, 0xfe, 0xad, 0x80, 0xfe]);
             view.update(cpu.pc);
             expect(codeAt(0x2002).textContent).toBe("STA $fe34 ; Paging.ACCCON");

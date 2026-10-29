@@ -5,13 +5,7 @@ import { fake6502 } from "../../src/fake6502.js";
 import { findModel } from "../../src/models.js";
 import { PagingPanel } from "../../src/web/paging-panel.js";
 import { PanelArrangement } from "../../src/web/floating-panel.js";
-import { decodedMeanings, fitRomHeader, teardownDom } from "./helpers.js";
-
-/** `name`'s model without its ROMs, which jsdom cannot fetch. */
-function romless(name) {
-    const model = findModel(name);
-    return Object.assign(Object.create(Object.getPrototypeOf(model)), model, { os: [] });
-}
+import { decodedMeanings, fitRomHeader, romless, teardownDom } from "./helpers.js";
 
 describe("PagingPanel", () => {
     let cpu;

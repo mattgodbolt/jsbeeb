@@ -10,7 +10,7 @@ import {
     viewedBank,
     viewsFor,
 } from "../paging.js";
-import { textButton } from "./dom-utils.js";
+import { placePopup, popupBehaviour, textButton } from "./dom-utils.js";
 
 const FixedViews = {
     [PagedView]: { label: "paged", title: "Memory as the CPU has it paged now" },
@@ -27,10 +27,10 @@ const FixedViews = {
 export class PagingOverride {
     /**
      * @param {object} options
-     * @param {HTMLElement} options.panel
+     * @param {import("./floating-panel.js").FloatingPanel} options.floating - its panel
      * @param {() => void} options.changed - called once the view has changed
      */
-    constructor({ panel, changed }) {
+    constructor({ floating, changed }) {
         this._changed = changed;
         this._cpu = null;
         this._view = PagedView;
@@ -42,25 +42,19 @@ export class PagingOverride {
         this._menu.className = "paging-menu";
         this._menu.setAttribute("role", "menu");
         this._menu.hidden = true;
-        panel.querySelector(".panel-title").after(this._picker);
+        floating.panel.querySelector(".panel-title").after(this._picker);
         document.body.append(this._menu);
-        // Outside the panel, so its buttons are kept from focus here rather than by the panel.
-        this._menu.addEventListener("mousedown", (e) => e.preventDefault());
         this._picker.addEventListener("click", () => this._showMenu(this._menu.hidden));
-        document.addEventListener(
-            "pointerdown",
-            (e) => {
-                if (!this._picker.contains(e.target) && !this._menu.contains(e.target)) this._showMenu(false);
-            },
-            true,
+        popupBehaviour(
+            this._menu,
+            () => (this._menu.hidden ? null : [this._picker, this._menu]),
+            () => this.dismissMenu(),
         );
-        document.addEventListener(
-            "keydown",
-            (e) => {
-                if (e.key === "Escape") this._showMenu(false);
-            },
-            true,
-        );
+        floating.addEventListener("close", () => this.dismissMenu());
+    }
+
+    dismissMenu() {
+        this._showMenu(false);
     }
 
     setCpu(cpu) {
@@ -143,7 +137,6 @@ export class PagingOverride {
             }),
         );
         const { left, bottom } = this._picker.getBoundingClientRect();
-        this._menu.style.left = `${Math.max(0, Math.min(left, window.innerWidth - this._menu.offsetWidth))}px`;
-        this._menu.style.top = `${Math.max(0, Math.min(bottom, window.innerHeight - this._menu.offsetHeight))}px`;
+        placePopup(this._menu, left, bottom);
     }
 }

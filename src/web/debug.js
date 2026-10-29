@@ -1,5 +1,5 @@
 import { toggle } from "./dom-utils.js";
-import { hexbyte, hexword, parseAddr } from "../hex.js";
+import { byteChar, hexbyte, hexword, parseAddr } from "../hex.js";
 import { NoNames } from "../symbol-names.js";
 import { isHttps } from "../symbol-sets.js";
 import { noteFeature } from "./analytics.js";
@@ -11,7 +11,6 @@ import { helpRows, keyLine } from "./panel-keys.js";
 import { cycleCount } from "../lockstep.js";
 import {
     bindGotoForm,
-    byteChar,
     cloneTemplate,
     externalLink,
     FittedRows,
@@ -20,7 +19,7 @@ import {
 } from "./debug-dom.js";
 import { DisassemblyKeys, DisassemblyView } from "./disassembly-view.js";
 import { PagingOverride } from "./paging-override.js";
-import { bankView, PagedView, parseViewedAddress, peekViewed } from "../paging.js";
+import { bankView, PagedView, parseViewedAddress, peekViewed, SidewaysStart } from "../paging.js";
 
 const noop = () => {};
 
@@ -33,7 +32,6 @@ const UnconditionalJump = /^(JMP|RTS|RTI|BRK)\b/;
 const Branch = /^(B(CC|CS|EQ|NE|MI|PL|VC|VS|RA)|BB[RS][0-7])\b/;
 const Call = /^JSR\b/;
 const ReturnOpcodes = new Set([0x60, 0x40]); // RTS, RTI
-const SidewaysStart = 0x8000;
 
 // S counts down and wraps, so "not deeper" is a difference of under half the page, either way round $00.
 function notDeeper(s, startS) {
@@ -164,7 +162,7 @@ class MemoryView {
         const hex = [];
         const asc = [];
         const changed = [];
-        // Bytes of another view were never snapshotted, so none of them can be shown as changed.
+        // Changes are marked only against a snapshot taken in the view shown.
         const comparable = this._snapshotView === this._paging.view;
         for (let i = from; i < to; ++i) {
             const b = this._paging.peek(i);
@@ -351,11 +349,11 @@ export class Debugger {
         this._viewNames = new Map();
         this._paging = {
             memory: new PagingOverride({
-                panel: this.panels.memory.panel,
+                floating: this.panels.memory,
                 changed: () => this._viewChanged(() => this._memoryView.update()),
             }),
             disassembly: new PagingOverride({
-                panel: this.panels.disassembly.panel,
+                floating: this.panels.disassembly,
                 changed: () => this._viewChanged(() => this._disassembly.redraw()),
             }),
         };
@@ -919,6 +917,7 @@ export class Debugger {
         // A run handed to the loop keeps the memory it started from, to show what it changed.
         if (!this._runningTo) this.updatePrevMem();
         this.watches.dismissMenu();
+        for (const paging of Object.values(this._paging)) paging.dismissMenu();
         this._inDebugger = false;
         // Focus left in a goto box would keep the keyboard from the machine.
         const focused = document.activeElement;

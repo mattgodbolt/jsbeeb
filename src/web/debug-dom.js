@@ -2,14 +2,6 @@ import { hexword } from "../hex.js";
 
 // The DOM pieces the debugger's views share.
 
-const FirstPrintable = 0x20;
-const PastPrintable = 0x80;
-
-/** A byte as the views show it as text: its character if printable, a dot if not. */
-export function byteChar(byte) {
-    return byte >= FirstPrintable && byte < PastPrintable ? String.fromCharCode(byte) : ".";
-}
-
 export function labelHtml(addr) {
     return '<span class="addr">' + hexword(addr) + "</span>";
 }

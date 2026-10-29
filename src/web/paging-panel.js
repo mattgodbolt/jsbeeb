@@ -1,4 +1,4 @@
-import { describeBank, sidewaysBanks } from "../paging.js";
+import { bankView, describeBank, sidewaysBanks } from "../paging.js";
 import { decodedPanel, DecodedRegisters, fixed, lit, namedBits, register } from "./decoded-registers.js";
 import { Centred, StartEdge } from "./panel-layout.js";
 
@@ -18,7 +18,7 @@ const AccconBits = [
 
 /** @typedef {{romsel: number, acccon: number, bank: number}} PagingState */
 
-const bankName = (bank) => bank.toString(16).toUpperCase();
+const bankName = (bank) => bankView(bank).toUpperCase();
 
 function decodeRomsel(romsel, { bank }, isMaster) {
     const meanings = [fixed(`bank ${bankName(bank)}`, `Sideways bank ${bank} is paged in at &8000 to &BFFF`)];
@@ -57,7 +57,7 @@ function sections(isMaster) {
  * each sideways socket, the paged one lit. A socket's row shows that bank from its start (Debugger.showBank).
  */
 export class PagingPanel {
-    /** Whether the machine has paging to show: the Atom has none. */
+    /** Whether the machine has a BBC's paging to show: the Atom's own banks at &A000 are left out. */
     static fits(cpu) {
         return !cpu.model.isAtom;
     }
