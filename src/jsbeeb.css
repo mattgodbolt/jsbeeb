@@ -146,6 +146,7 @@ body {
 
 .debug-symbols,
 .panel-keys {
+  flex: none;
   padding-top: 3px;
   color: #aaaaaa;
 }

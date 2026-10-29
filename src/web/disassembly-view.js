@@ -230,7 +230,7 @@ export class DisassemblyView {
         } else {
             delete row.dataset.ref;
         }
-        return end;
+        return end & 0xffff;
     }
 
     _prevInstruction(address) {

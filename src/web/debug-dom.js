@@ -26,9 +26,10 @@ export function cloneTemplate(container) {
 }
 
 /**
- * A view's rows, cloned from its template, as many as fit its height. Its stylesheet sizes it from `--rows`, set here
- * to `initial`, and not from the rows it holds, so that their number never changes its panel's size: the panel being
- * stretched or squeezed changes their number. `refit` redraws them after it has changed.
+ * The rows of a view's container, cloned from its template, as many as fit the container's height. The stylesheet
+ * sizes the container from `--rows`, set here to `initial`, and not from the rows in it, so that their number never
+ * changes the panel's size: the panel being stretched or squeezed changes their number. `refit` redraws them after
+ * it has changed.
  */
 export class FittedRows {
     /**

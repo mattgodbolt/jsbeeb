@@ -270,8 +270,10 @@ test("the disassembly and memory views fill their panels' height as they are res
                 first: rows[0].querySelector(".addr").textContent,
                 highlight: highlight.querySelector(".addr").textContent,
                 highlightTop: highlight.getBoundingClientRect().top,
+                highlightRow: rows.indexOf(highlight),
                 fits: last.bottom <= box.bottom,
                 full: box.bottom - last.bottom < last.height,
+                creditHeight: container.parentElement.querySelector(".debug-symbols").offsetHeight,
             };
         });
     const dragBottom = async (view, dy) => {
@@ -288,7 +290,7 @@ test("the disassembly and memory views fill their panels' height as they are res
     for (const view of views) await expect(page.locator(`${view}-panel`)).toBeVisible();
     await page.fill("#goto-mem-addr-form .goto-addr", "1000");
     await page.press("#goto-mem-addr-form .goto-addr", "Enter");
-    const initialCounts = await Promise.all(views.map(async (view) => (await rowsOf(view)).count));
+    const initial = await Promise.all(views.map(rowsOf));
 
     for (const view of views) {
         const panel = page.locator(`${view}-panel`);
@@ -312,8 +314,15 @@ test("the disassembly and memory views fill their panels' height as they are res
     for (const view of views) expect(await rowsOf(view)).toMatchObject({ fits: true, full: true });
 
     await dragBottom("#memory", -400);
-    await expect.poll(async () => (await rowsOf("#memory")).count).toBeLessThan(initialCounts[1]);
-    expect(await rowsOf("#memory")).toMatchObject({ highlight: "1000", fits: true, full: true });
+    await expect.poll(async () => (await rowsOf("#memory")).count).toBeLessThan(initial[1].count);
+    const squeezed = await rowsOf("#memory");
+    expect(squeezed).toMatchObject({
+        highlight: "1000",
+        highlightRow: Math.floor(squeezed.count / 2),
+        fits: true,
+        full: true,
+        creditHeight: initial[1].creditHeight,
+    });
 
     const counts = await Promise.all(views.map(async (view) => (await rowsOf(view)).count));
     await beeb.open();
@@ -323,7 +332,8 @@ test("the disassembly and memory views fill their panels' height as they are res
 
     await page.setViewportSize({ width: 1920, height: 400 });
     await expect.poll(async () => (await rowsOf("#disassembly")).count).toBeLessThan(counts[0]);
-    for (const view of views) expect(await rowsOf(view)).toMatchObject({ fits: true, full: true });
+    for (const [index, view] of views.entries())
+        expect(await rowsOf(view)).toMatchObject({ fits: true, full: true, creditHeight: initial[index].creditHeight });
     await page.setViewportSize({ width: 1920, height: 1080 });
     await expect.poll(async () => (await rowsOf("#disassembly")).count).toBe(counts[0]);
 });
