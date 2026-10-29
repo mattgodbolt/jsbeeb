@@ -110,14 +110,16 @@ class MemoryView {
 
     /** Gives `row` a span per byte in each column, unless it has them for the current width. */
     _shapeRow(row) {
-        const columns = [row.querySelector(".mem_bytes"), row.querySelector(".mem_asc")];
-        if (columns[0].childElementCount === this._bytesPerRow) return;
-        for (const column of columns)
-            column.replaceChildren(...Array.from({ length: this._bytesPerRow }, () => document.createElement("span")));
+        const [hex, text] = [row.querySelector(".mem_bytes"), row.querySelector(".mem_asc")];
+        if (hex.childElementCount === this._bytesPerRow) return;
+        const spans = () => Array.from({ length: this._bytesPerRow }, () => document.createElement("span"));
+        // Spaced with text, not margins, so that a copied row keeps its bytes apart.
+        hex.replaceChildren(...spans().flatMap((span, i) => (i ? [" ", span] : [span])));
+        text.replaceChildren(...spans());
     }
 
     update(maybeNewAddr) {
-        if (maybeNewAddr !== undefined) this._addr = maybeNewAddr;
+        if (maybeNewAddr !== undefined) this._addr = maybeNewAddr & 0xffff;
         const perRow = this._bytesPerRow;
         const targetRow = this._addr & -perRow;
         let addr = targetRow - perRow * this._rows.anchor;

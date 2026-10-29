@@ -636,10 +636,6 @@ div.modal-body > div:not(:first-child) {
   color: #80d0d0;
 }
 
-.mem_bytes span + span {
-  margin-left: 1ch;
-}
-
 .mem_asc {
   display: inline-block;
   width: calc(var(--bytes) * 1ch);

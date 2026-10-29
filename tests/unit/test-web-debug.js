@@ -554,6 +554,9 @@ describe("Debugger", () => {
             expect(addrOf(memHighlight())).toBe("1010");
             keyPress("I");
             expect(addrOf(memHighlight())).toBe("0fd0");
+            goTo("goto-mem-addr-form", "$0004");
+            keyPress("i");
+            expect(memTarget().dataset.addr).toBe(`${0xfffc}`);
         });
     });
 
