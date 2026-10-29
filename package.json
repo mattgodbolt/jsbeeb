@@ -114,7 +114,7 @@
     "test:benchmark-workloads": "node tools/make-benchmark-workloads.js --check",
     "test:same-answer": "node tools/same-answer.js",
     "coverage:unit": "vitest run tests/unit --coverage",
-    "dom-unit-tests": "vitest run --silent=true --project unit $(grep -rl domFromIndexHtml tests/unit)",
+    "dom-unit-tests": "vitest run --silent=true --project unit $(grep -rlE 'domFromIndexHtml|stitchHtml' tests/unit)",
     "coverage:all-tests": "vitest run --coverage",
     "benchmark": "vitest bench --config vitest.bench.config.js --silent=true --reporter=verbose",
     "benchmark:workloads": "node tools/make-benchmark-workloads.js",
@@ -144,7 +144,7 @@
       "eslint --cache --fix",
       "prettier --write"
     ],
-    "index.html": "npm run dom-unit-tests --",
+    "{index.html,html/**/*.html}": "npm run dom-unit-tests --",
     "*.{md,json,yml,yaml,css,html}": "prettier --write"
   },
   "allowScripts": {

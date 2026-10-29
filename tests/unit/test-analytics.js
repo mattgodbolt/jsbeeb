@@ -1,14 +1,13 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { readFileSync } from "node:fs";
-
 import { analyticsLocation } from "../../src/web/analytics.js";
 import { Parameters } from "../../src/web/parameters.js";
+import { stitchHtml } from "../../tools/html-includes.js";
 
 describe("analytics", () => {
     describe("the features index.html declares", () => {
-        const page = new DOMParser().parseFromString(readFileSync("index.html", "utf8"), "text/html");
+        const page = new DOMParser().parseFromString(stitchHtml("index.html"), "text/html");
         const features = [...page.querySelectorAll("[data-feature]")].map((el) => el.dataset.feature);
 
         it("are each declared once", () => {
