@@ -1054,7 +1054,8 @@ small {
   white-space: nowrap;
 }
 
-.txt-btn[data-opens] {
+.txt-btn[data-opens],
+#registers .txt-btn {
   color: #aaaaff;
   font-family: inherit;
   font-size: inherit;

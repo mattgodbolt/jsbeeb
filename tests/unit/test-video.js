@@ -1795,6 +1795,51 @@ describe("Video", () => {
         });
     });
 
+    describe("the beam's position", () => {
+        const toVSyncStart = () => {
+            while (video.inVSync) rig.run(1);
+            while (!video.inVSync) rig.run(1);
+        };
+
+        beforeEach(() => {
+            programStandardFrame(rig);
+            toVSyncStart();
+        });
+
+        it("counts the lines and clocks since vsync began, through lines of any length", () => {
+            expect(video.beamPosition()).toEqual({
+                line: 0,
+                frameCycle: 1,
+                inVSync: true,
+                crtc: { row: 34, scanline: 0, column: 1 },
+            });
+            rig.run(10 * ClocksPerScanline);
+            expect(video.beamPosition()).toMatchObject({ line: 10, frameCycle: 10 * ClocksPerScanline + 1 });
+            const shortLine = 112;
+            rig.writeCrtc(0, shortLine - 1);
+            rig.run(5 * shortLine);
+            expect(video.beamPosition()).toMatchObject({
+                line: 15,
+                frameCycle: 10 * ClocksPerScanline + 5 * shortLine + 1,
+            });
+            const restored = makeVideo().video;
+            restored.restoreState(video.snapshotState());
+            expect(restored.beamPosition()).toEqual(video.beamPosition());
+            rig.writeCrtc(0, 127);
+            toVSyncStart();
+            expect(video.beamPosition()).toMatchObject({ line: 0, frameCycle: 1 });
+        });
+
+        it("counts the odd interlace field's lines from 0 too", () => {
+            rig.writeCrtc(8, 1);
+            for (let field = 0; field < 2; field++) {
+                toVSyncStart();
+                rig.run(ClocksPerScanline);
+                expect(video.beamPosition().line).toBe(1);
+            }
+        });
+    });
+
     describe("debugPaint", () => {
         beforeEach(() => rig.resetPaints());
 

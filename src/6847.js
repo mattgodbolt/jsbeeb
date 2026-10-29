@@ -116,6 +116,14 @@ const MODE_AG = 0x10; // graphics mode
 // TODO(#1067) revisit once full integration is testable.
 const VdgClockMhz = 3.638004;
 
+// The counters run up to and including these, so a line is one cycle more and a field one line more.
+const LastLineCycle = 228; // not 227.5
+const LastFieldLine = 262; // NTSC; the standard Atom has no PAL
+const VertBlankLines = 13;
+const TopBorderLines = 25;
+const DisplayLines = 192;
+const FieldSyncLine = VertBlankLines + TopBorderLines + DisplayLines;
+
 export class Video6847 {
     constructor(video) {
         this.video = video;
@@ -337,6 +345,22 @@ export class Video6847 {
         this.charLinesreg9 = linesPerRow - 1; //2  - scanlines per char
     }
 
+    /**
+     * Where the beam is in the field, counted from the start of field sync.
+     * @returns {import("./video.js").BeamPosition}
+     */
+    beamPosition() {
+        const lines = LastFieldLine + 1;
+        const line = (this.vertCounter - FieldSyncLine + lines) % lines;
+        const vdgCycles = line * (LastLineCycle + 1) + this.horizCounter;
+        return {
+            line,
+            frameCycle: Math.floor(vdgCycles / this.vdgCyclesPerCpuCycle),
+            inVSync: this.inVSync,
+            crtc: null,
+        };
+    }
+
     snapshotState() {
         return {
             horizCounter: this.horizCounter,
@@ -403,9 +427,6 @@ export class Video6847 {
         const vdgcharclock = this.pixelsPerChar / 2; // 4 or 8
         this.vdg_cycles += clocks * this.vdgCyclesPerCpuCycle;
 
-        const vdgframelines = 262; //  312 PAL (but no pal on standard atom)  262; // NTSC
-        const vdglinetime = 228; // vdg cycles to do a line; not 227.5
-
         // full bordered width is 185.5 cycles
         // (185.5+42 = 227.5)
         const HBNK = 42; // left border start (16.5+25.5)
@@ -415,9 +436,6 @@ export class Video6847 {
 
         // total = 29+29+128+42 = 228
 
-        const vertblank = 13; //13
-        const topborder = 25; //25
-        const displayV = 192;
         // let bottomborder = 26; // 26 + 6 = 32 =  time in vsync
         // let vertretrace = 6;
         // ALL ADDS UP TO 262
@@ -466,14 +484,14 @@ export class Video6847 {
 
             // vertcounter runs from 0 to 262
             // got to the end, start again
-            if (this.vertCounter === vertblank + topborder) {
+            if (this.vertCounter === VertBlankLines + TopBorderLines) {
                 this.scanlineCounter = 0;
                 this.nextLineStartAddr = 0;
                 this.lineStartAddr = this.nextLineStartAddr;
                 this.dispEnableSet(VDISPENABLE);
             }
 
-            if (this.vertCounter === vertblank + topborder + displayV) {
+            if (this.vertCounter === FieldSyncLine) {
                 this.dispEnableClear(VDISPENABLE);
             }
 
@@ -490,7 +508,7 @@ export class Video6847 {
             let vSyncEnding = false;
             let vSyncStarting = false;
 
-            if (this.vertCounter === vertblank + topborder + displayV && !this.inVSync) {
+            if (this.vertCounter === FieldSyncLine && !this.inVSync) {
                 vSyncStarting = true;
                 this.inVSync = true;
                 // Frame Sync is high normally and
@@ -562,7 +580,7 @@ export class Video6847 {
             }
 
             // end of horizontal line
-            if (this.horizCounter === vdglinetime) {
+            if (this.horizCounter === LastLineCycle) {
                 let completedCharVertical = this.scanlineCounter === this.charLinesreg9; // regs9  - scanlines per char    // 9	Maximum Raster Address
 
                 //keep drawing same memory addresses until end of scanlines
@@ -578,7 +596,7 @@ export class Video6847 {
                 }
 
                 // end of vertical frame was detected
-                if (this.vertCounter >= vdgframelines) {
+                if (this.vertCounter >= LastFieldLine) {
                     this.vertCounter = 0;
                 } else {
                     this.vertCounter = (this.vertCounter + 1) & 0x1ff;

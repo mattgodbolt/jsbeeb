@@ -44,6 +44,16 @@ export const HwScrollSubtract = [8, 4, 10, 5];
 // The shader takes a line's parity from the hsync count; the modulus only keeps it bounded.
 export const LineCountPeriod = 2500;
 
+const BitmapXPerClock = 8;
+
+/**
+ * @typedef {object} BeamPosition
+ * @property {number} line - the TV line, counted from the frame's start
+ * @property {number} frameCycle - the cycles run since the frame started
+ * @property {boolean} inVSync - whether vsync is asserted
+ * @property {{row: number, scanline: number, column: number} | null} crtc - the 6845's counters, on a machine with one
+ */
+
 ////////////////////
 // VideoNULA - programmable 12-bit RGB palette extension (RobC hardware mod).
 // Reference: b-em src/video.c (stardot/b-em).
@@ -394,6 +404,8 @@ export class Video {
         this.regs = new Uint8Array(32);
         this.bitmapX = 0;
         this.bitmapY = 0;
+        // The bitmapX the beam would be at had no hsync since the last flyback sent it back.
+        this.frameStartX = 0;
         this.oddClock = false;
         this.frameCount = 0;
         this.hsyncCount = 0;
@@ -524,6 +536,7 @@ export class Video {
             regs: this.regs.slice(),
             bitmapX: this.bitmapX,
             bitmapY: this.bitmapY,
+            frameStartX: this.frameStartX,
             oddClock: this.oddClock,
             frameCount: this.frameCount,
             hsyncCount: this.hsyncCount,
@@ -587,6 +600,7 @@ export class Video {
         this.regs.set(state.regs);
         this.bitmapX = state.bitmapX;
         this.bitmapY = state.bitmapY;
+        this.frameStartX = state.frameStartX ?? state.bitmapX;
         this.oddClock = state.oddClock;
         this.frameCount = state.frameCount;
         this.hsyncCount = state.hsyncCount ?? 0;
@@ -687,6 +701,8 @@ export class Video {
         this.renderPending();
         const painting = this.bitmapY >= MinPaintedFrameRows && this.dispEnabled & FRAMESKIPENABLE;
         if (painting) this.paint();
+        // The clock that brought the flyback is the frame's first.
+        this.frameStartX = this.bitmapX - BitmapXPerClock;
         // Decided per field, before the clear: the CRTC frames of one field can
         // alternate parity.
         this.lastRenderWasEven = this.isEvenRender;
@@ -730,6 +746,21 @@ export class Video {
         if (x < 0 || x >= 1024) return -1;
         if (y < 0 || y >= 768) return -1;
         return y * 1024 + x;
+    }
+
+    /**
+     * Where the beam is in the TV's frame, which starts at vsync (or where the TV gives up waiting for one).
+     * @returns {BeamPosition}
+     */
+    beamPosition() {
+        if (this.video6847) return this.video6847.beamPosition();
+        return {
+            // Each line moves the beam two framebuffer rows, and the odd interlace field starts a row up.
+            line: (this.bitmapY + 1) >> 1,
+            frameCycle: (this.bitmapX - this.frameStartX) / BitmapXPerClock,
+            inVSync: this.inVSync,
+            crtc: { row: this.vertCounter, scanline: this.scanlineCounter, column: this.horizCounter },
+        };
     }
 
     // Hands over the rows down to the beam only, so the canvas keeps the previous
@@ -1079,6 +1110,7 @@ export class Video {
     handleHSync() {
         this.hpulseCounter = (this.hpulseCounter + 1) & 0x0f;
         if (this.hpulseCounter === this.hpulseWidth >>> 1) {
+            const lineEndX = this.bitmapX;
             // Start at -8 because the +8 is added before the pixel render.
             this.bitmapX = -8;
 
@@ -1086,6 +1118,7 @@ export class Video {
             if (this.hpulseWidth & 1) {
                 this.bitmapX -= 4;
             }
+            this.frameStartX += this.bitmapX - lineEndX;
 
             // The CRT vertical beam speed is constant, so this is actually
             // an approximation that works if hsyncs are spaced evenly.
@@ -1138,7 +1171,7 @@ export class Video {
         while (clocks--) {
             this.oddClock = !this.oddClock;
             // Advance CRT beam.
-            this.bitmapX += 8;
+            this.bitmapX += BitmapXPerClock;
 
             if (this.halfClock && !this.oddClock) {
                 continue;
@@ -1332,6 +1365,7 @@ export class FakeVideo {
         this.regs = new Uint8Array(32);
         this.fieldCycles = BbcFieldCycles;
         this.syncCycles = BbcVSyncCycles;
+        this.lineCycles = BbcLineCycles;
         this.cycles = 0;
         this.inSync = false;
     }
@@ -1359,6 +1393,13 @@ export class FakeVideo {
 
     setScreenHwScroll() {}
 
+    /** @returns {BeamPosition} */
+    beamPosition() {
+        const sinceSync = this.cycles - (this.fieldCycles - this.syncCycles);
+        const frameCycle = sinceSync < 0 ? sinceSync + this.fieldCycles : sinceSync;
+        return { line: Math.floor(frameCycle / this.lineCycles), frameCycle, inVSync: this.inSync, crtc: null };
+    }
+
     snapshotState() {
         return { cycles: this.cycles, inSync: this.inSync };
     }
@@ -1372,7 +1413,8 @@ export class FakeVideo {
 // The 6847's field as the PPIA sees it: 262 lines at 60Hz, with field sync low
 // for the 32 lines of flyback (see 6847.js).
 const AtomFieldCycles = 16667;
-const AtomFlybackCycles = Math.round((AtomFieldCycles * 32) / 262);
+const AtomFieldLines = 262;
+const AtomFlybackCycles = Math.round((AtomFieldCycles * 32) / AtomFieldLines);
 
 /** No picture, but the field sync the Atom ROM waits on before each keyboard scan. */
 export class FakeAtomVideo extends FakeVideo {
@@ -1380,6 +1422,7 @@ export class FakeAtomVideo extends FakeVideo {
         super();
         this.fieldCycles = AtomFieldCycles;
         this.syncCycles = AtomFlybackCycles;
+        this.lineCycles = AtomFieldCycles / AtomFieldLines;
     }
 
     reset(cpu) {
