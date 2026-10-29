@@ -89,6 +89,8 @@ describe.each([
         expect(running()).toEqual(["60", " GOTO 50"]);
         await runToLine("40");
         expect(running()).toEqual(["40", "count%=count%+1"]);
+        await runToLine("40");
+        expect(running()).toEqual(["40", "count%=count%+1"]);
         expect(document.querySelector("#basic-panel .basic-line").textContent).toBe(
             "40 DEF PROCtick:count%=count%+1:ENDPROC",
         );
