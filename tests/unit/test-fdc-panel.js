@@ -48,7 +48,10 @@ describe("FdcPanel", () => {
     function panelFor(Fdc, debugFlags) {
         const cpu = fake6502();
         const drives = [0, 1].map((id) => new DiscDrive(id, scheduler, cpu.peripheralCyclesPerSecond));
-        const fdc = new Fdc(cpu, scheduler, drives, debugFlags, WdFdcVariant.wd1770);
+        const fdc =
+            Fdc === WdFdc
+                ? new WdFdc(cpu, scheduler, drives, debugFlags, WdFdcVariant.wd1770)
+                : new IntelFdc(cpu, scheduler, drives, debugFlags);
         const panel = new FdcPanel({
             cpu: { fdc },
             arrangement: new PanelArrangement(() => window.localStorage),
@@ -76,7 +79,7 @@ describe("FdcPanel", () => {
         panel.update();
         expect(meanings("P3")).toEqual(["1 × 256 bytes"]);
         expect(meanings("OUT")).toContain("+sel 0");
-        expect(meanings("HEAD")).toEqual(["drive 0 side 0 track 0", "+selected", "-spinning"]);
+        expect(meanings("HEAD")).toEqual(["drive 0 side 0 track 0", "-selected", "-spinning"]);
     });
 
     it("shows the 1770's registers, with the status bits named for the kind of command in force", () => {

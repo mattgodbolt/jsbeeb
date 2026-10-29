@@ -1263,10 +1263,10 @@ export class IntelFdc {
         let drive = null;
         if (selectBits === DriveOut.select_0) drive = this._drives[0];
         else if (selectBits === DriveOut.select_1) drive = this._drives[1];
-        if (drive) this._lastSelectedDrive = drive;
 
         // LOAD HEAD gates each drive select (a 7438, IC79 on the Model B), so with it low no drive is selected
         this._currentDrive = driveOut & DriveOut.loadHead ? drive : null;
+        if (this._currentDrive) this._lastSelectedDrive = this._currentDrive;
 
         if (selectBits !== (this._driveOut & DriveOut.selectFlags)) {
             this._ready = false;
@@ -1849,7 +1849,6 @@ export class IntelFdc {
     /** The registers the debugger shows, read without disturbing anything. */
     inspect() {
         const regs = this._regs;
-        const selectBits = this._driveOut & DriveOut.selectFlags;
         return {
             chip: "8271",
             command: this._internalCommand,
@@ -1867,7 +1866,7 @@ export class IntelFdc {
             awaitingParams: this._paramCallback !== ParamAccept.none,
             driveOut: this._driveOut,
             trackRegisters: [regs[Registers.trackDrive_0], regs[Registers.trackDrive_1]],
-            selectedDrive: selectBits === DriveOut.select_0 ? 0 : selectBits === DriveOut.select_1 ? 1 : null,
+            selectedDrive: this._currentDrive ? this._drives.indexOf(this._currentDrive) : null,
             lastSelectedDrive: this._drives.indexOf(this._lastSelectedDrive),
         };
     }

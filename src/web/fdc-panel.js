@@ -380,9 +380,12 @@ export class FdcPanel {
 
         this._log = part("fdc-log");
         this._followingLog = true;
+        this._followedTo = 0;
         this._log.addEventListener("scroll", () => {
             const log = this._log;
-            this._followingLog = log.scrollTop + log.clientHeight >= log.scrollHeight - 1;
+            // Lines may have come between following them and this event, so only a scroll back up stops following.
+            this._followingLog =
+                log.scrollTop >= this._followedTo || log.scrollTop + log.clientHeight >= log.scrollHeight - 1;
         });
         this._commandsButton = part("fdc-log-commands");
         this._statesButton = part("fdc-log-states");
@@ -427,6 +430,9 @@ export class FdcPanel {
         };
         for (const registers of this._registers) registers.update(state);
         // Scrolled here, once a frame, rather than as each line comes, which would lay the page out for every one.
-        if (this._followingLog) this._log.scrollTop = this._log.scrollHeight;
+        if (this._followingLog) {
+            this._log.scrollTop = this._log.scrollHeight;
+            this._followedTo = this._log.scrollTop;
+        }
     }
 }
