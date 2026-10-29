@@ -19,12 +19,12 @@ const fakeCanvasFor = (filterClass, overrides = {}) => ({
 });
 
 describe("Display", () => {
-    let frames;
+    let animationFrames;
     let fakeCanvas;
 
     beforeEach(() => {
         domFromIndexHtml("cub-monitor");
-        frames = fakeAnimationFrames();
+        animationFrames = fakeAnimationFrames();
     });
 
     afterEach(teardownDom);
@@ -43,7 +43,7 @@ describe("Display", () => {
         });
         // The video chip paints once as it is built; the tests care about what
         // happens after that.
-        frames.run();
+        animationFrames.run();
         display.presentScheduled = false;
         display.frames = 0;
         fakeCanvas?.paint.mockClear();
@@ -80,8 +80,8 @@ describe("Display", () => {
         display.onPaint(painted, 0, 10, FbWidth, 20);
         display.onPaint(painted, 0, 30, FbWidth, 40);
         expect(fakeCanvas.paint).not.toHaveBeenCalled();
-        expect(frames.pending).toBe(1);
-        frames.run();
+        expect(animationFrames.pending).toBe(1);
+        animationFrames.run();
         expect(fakeCanvas.paint).toHaveBeenCalledTimes(1);
         expect(fakeCanvas.paint.mock.calls[0].slice(0, 4)).toEqual([0, 30, FbWidth, 40]);
         expect(fakeCanvas.paint.mock.calls[0][4]).toMatchObject({ lineBaseEven: 1, lineBaseOdd: 2 });
@@ -150,12 +150,12 @@ describe("Display", () => {
         earlier.fb32.fill(3);
         earlier.lineGrid = new Uint8Array(LineGridRows).fill(5);
         display.onPaint(earlier, 0, 10, FbWidth, 100);
-        frames.run();
+        animationFrames.run();
         const partial = paintedFrom();
         partial.fb32.fill(7);
         partial.lineGrid = new Uint8Array(LineGridRows).fill(9);
         display.onPaint(partial, 0, 10, FbWidth, 100, 40);
-        frames.run();
+        animationFrames.run();
         expect(fakeCanvas.fb32[39 * FbWidth]).toBe(7);
         expect(fakeCanvas.fb32[40 * FbWidth]).toBe(3);
         expect(lastPainted().lineGrid[39]).toBe(9);
@@ -166,52 +166,52 @@ describe("Display", () => {
     it("tells the canvas how many fields have passed since the frame it last showed", () => {
         const display = make();
         display.onPaint(paintedFrom(0, 10), 0, 0, FbWidth, 8);
-        frames.run();
+        animationFrames.run();
         display.onPaint(paintedFrom(0, 11), 0, 0, FbWidth, 8);
-        frames.run();
+        animationFrames.run();
         expect(lastPainted().fields).toBe(1);
         display.onPaint(paintedFrom(0, 21), 0, 0, FbWidth, 8);
-        frames.run();
+        animationFrames.run();
         expect(lastPainted().fields).toBe(10);
         display.onPaint(paintedFrom(0, 21), 0, 0, FbWidth, 8, 4);
-        frames.run();
+        animationFrames.run();
         expect(lastPainted().fields).toBe(250);
         display.onPaint(paintedFrom(0, 5000), 0, 0, FbWidth, 8);
-        frames.run();
+        animationFrames.run();
         expect(lastPainted().fields).toBe(250);
     });
 
     it("adds up the fields of paints that arrive before one animation frame", () => {
         const display = make();
         display.onPaint(paintedFrom(0, 10), 0, 0, FbWidth, 8);
-        frames.run();
+        animationFrames.run();
         display.onPaint(paintedFrom(0, 11), 0, 0, FbWidth, 8);
         display.onPaint(paintedFrom(0, 12), 0, 0, FbWidth, 8);
-        frames.run();
+        animationFrames.run();
         expect(lastPainted().fields).toBe(2);
     });
 
     it("owes the old picture nothing after a restore", () => {
         const display = make();
         display.onPaint(paintedFrom(0, 100), 0, 0, FbWidth, 8);
-        frames.run();
+        animationFrames.run();
         const restored = paintedFrom(0, 3);
         restored.paintsAfresh = true;
         display.onPaint(restored, 0, 0, FbWidth, 8);
-        frames.run();
+        animationFrames.run();
         expect(lastPainted().fields).toBe(250);
         expect(restored.paintsAfresh).toBe(false);
         display.onPaint(paintedFrom(0, 4), 0, 0, FbWidth, 8);
-        frames.run();
+        animationFrames.run();
         expect(lastPainted().fields).toBe(1);
     });
 
     it("replaces the picture on a mode change rather than glowing the old mode through it", () => {
         const display = make({ mode: "pal" });
         display.onPaint(paintedFrom(0, 10), 0, 0, FbWidth, 8);
-        frames.run();
+        animationFrames.run();
         display.setMode("rgb");
-        frames.run();
+        animationFrames.run();
         expect(lastPainted().fields).toBe(250);
     });
 
@@ -229,20 +229,20 @@ describe("Display", () => {
         const atom = paintedFrom(0, 0);
         atom.video6847 = { frameCount: 7 };
         display.onPaint(atom, 0, 0, FbWidth, 8);
-        frames.run();
+        animationFrames.run();
         atom.video6847.frameCount = 10;
         display.onPaint(atom, 0, 0, FbWidth, 8);
-        frames.run();
+        animationFrames.run();
         expect(lastPainted().fields).toBe(3);
     });
 
     it("schedules another present once the first has run", () => {
         const display = make();
         display.onPaint(paintedFrom(), 0, 0, FbWidth, 8);
-        frames.run();
+        animationFrames.run();
         display.onPaint(paintedFrom(), 0, 0, FbWidth, 8);
-        expect(frames.pending).toBe(1);
-        frames.run();
+        expect(animationFrames.pending).toBe(1);
+        animationFrames.run();
         expect(fakeCanvas.paint).toHaveBeenCalledTimes(2);
     });
 
@@ -250,21 +250,21 @@ describe("Display", () => {
         const display = make({ frameSkip: 3 });
         display.onPaint(paintedFrom(), 0, 0, FbWidth, 8);
         display.onPaint(paintedFrom(), 0, 0, FbWidth, 8);
-        expect(frames.pending).toBe(0);
+        expect(animationFrames.pending).toBe(0);
         display.onPaint(paintedFrom(), 0, 0, FbWidth, 8);
-        expect(frames.pending).toBe(1);
+        expect(animationFrames.pending).toBe(1);
     });
 
     it("never skips a debug paint, and does not count it against the cycle", () => {
         const display = make({ frameSkip: 3 });
         display.onPaint(paintedFrom(), 0, 0, FbWidth, 8);
         display.onPaint(paintedFrom(), 0, 0, FbWidth, 8, 4);
-        expect(frames.pending).toBe(1);
-        frames.run();
+        expect(animationFrames.pending).toBe(1);
+        animationFrames.run();
         display.onPaint(paintedFrom(), 0, 0, FbWidth, 8);
-        expect(frames.pending).toBe(0);
+        expect(animationFrames.pending).toBe(0);
         display.onPaint(paintedFrom(), 0, 0, FbWidth, 8);
-        expect(frames.pending).toBe(1);
+        expect(animationFrames.pending).toBe(1);
     });
 
     describe("running fast", () => {
@@ -286,7 +286,7 @@ describe("Display", () => {
             const display = make({ frameSkip: 3 });
             display.setSpeedy(true);
             display.onPaint(paintedFrom(display.video.frameSkipCount), 0, 0, FbWidth, 8);
-            expect(frames.pending).toBe(1);
+            expect(animationFrames.pending).toBe(1);
         });
     });
 
@@ -308,7 +308,7 @@ describe("Display", () => {
             phaseBaseEven: 0,
             phaseBaseOdd: 0,
         });
-        frames.run();
+        animationFrames.run();
         expect(lastPainted()).toMatchObject({
             lineBaseEven: 5,
             lineBaseOdd: 6,
@@ -321,7 +321,7 @@ describe("Display", () => {
     it("hands over the timing counters and starts them afresh", () => {
         const display = make();
         display.onPaint(paintedFrom(), 0, 0, FbWidth, 8);
-        frames.run();
+        animationFrames.run();
         expect(display.takePaintMs()).toBeGreaterThanOrEqual(0);
         expect(display.takePaintMs()).toBe(0);
         expect(display.takePresentMs()).toBeGreaterThanOrEqual(0);

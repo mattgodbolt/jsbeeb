@@ -144,6 +144,7 @@ describe("EmulationLoop", () => {
             loop.toggleFastAsPossible();
             vi.advanceTimersByTime(TickMs);
             const executed = cyclesExecuted().length;
+            expect(vsyncs.pending).toBe(1);
             vsync(performance.now() + 5);
             expect(cyclesExecuted().length).toBe(executed);
         });
