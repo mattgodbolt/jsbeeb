@@ -669,6 +669,29 @@ test.describe("on a phone", () => {
         await expect(page.locator('#touch-keyboard .tk-layer[data-name="more"]')).toBeVisible();
     });
 
+    test("the on-screen keyboard's legends load Open Gorton, which carries the function keys' f and the cursor keys' arrows", async ({
+        beeb,
+        page,
+    }) => {
+        await beeb.open();
+        await beeb.expectScreenText(">");
+        const gortonStatus = () =>
+            page.evaluate(
+                () => [...document.fonts].find((face) => face.family.replaceAll('"', "") === "Open Gorton")?.status,
+            );
+        await expect.poll(gortonStatus).toBe("loaded");
+        // The advances tools/make-touch-keyboard-font.py gives them, in thousandths of an em; a fallback font's differ.
+        const advances = await page.evaluate(() => {
+            const context = document.createElement("canvas").getContext("2d");
+            context.font = '1000px "Open Gorton"';
+            return [..."f←↑→↓"].map((legend) => Math.round(context.measureText(legend).width));
+        });
+        expect(advances).toEqual([376, 1100, 550, 1100, 550]);
+        await expect(page.locator("#touch-keyboard .tk-key.fkey .tk-digit")).toHaveText(
+            [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(String),
+        );
+    });
+
     test("an embedded page has no on-screen keyboard", async ({ beeb, page }) => {
         await beeb.open("?embed");
         await beeb.expectScreenText(">");
