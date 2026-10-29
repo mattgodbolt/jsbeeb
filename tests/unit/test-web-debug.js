@@ -21,7 +21,6 @@ const PanelElements = [
     "disassembly-panel",
     "memory-panel",
     "registers-panel",
-    "peripherals-panel",
     "watch-panel",
     "watch-menu",
     "cub-monitor",
@@ -177,24 +176,17 @@ describe("Debugger", () => {
             expect([addrOf(currentRow()), highlightRow()]).toEqual([hexword(cpu.pc), 15]);
         });
 
-        const DebugPanels = [
-            "toolbar-panel",
-            "disassembly-panel",
-            "registers-panel",
-            "memory-panel",
-            "peripherals-panel",
-        ];
+        const DebugPanels = ["toolbar-panel", "disassembly-panel", "registers-panel", "memory-panel"];
         const shown = () => DebugPanels.filter(visible);
-        const NarrowSet = ["toolbar-panel", "disassembly-panel", "registers-panel", "memory-panel"];
 
         it("open on entering the debugger, and stay open once the machine goes on", () => {
             expect(shown()).toEqual([]);
             dbgr.debug(cpu.pc);
             expect(dbgr.inDebugger()).toBe(true);
-            expect(shown()).toEqual(NarrowSet);
+            expect(shown()).toEqual(DebugPanels);
             stoppedLoop.go();
             expect(dbgr.inDebugger()).toBe(false);
-            expect(shown()).toEqual(NarrowSet);
+            expect(shown()).toEqual(DebugPanels);
         });
 
         it("stay shut on entering the debugger while the on-screen keyboard shows, at any width, but show when asked", () => {
@@ -204,29 +196,22 @@ describe("Debugger", () => {
             expect(dbgr.inDebugger()).toBe(true);
             expect(shown()).toEqual([]);
             dbgr.togglePanels();
-            expect(shown()).toEqual(NarrowSet);
+            expect(shown()).toEqual(DebugPanels);
             dbgr.toggleDebugger();
             keyboardShown = false;
             dbgr.toggleDebugger();
-            expect(shown()).toEqual(NarrowSet);
-        });
-
-        it("include the peripherals by default only on a wide window", () => {
-            vi.spyOn(window, "innerWidth", "get").mockReturnValue(1920);
-            dbgr.debug(cpu.pc);
             expect(shown()).toEqual(DebugPanels);
         });
 
         it("close on leaving the debugger by its toggle, and the same ones open on entering it again", () => {
             dbgr.debug(cpu.pc);
-            dbgr.panels.peripherals.open();
             dbgr.panels.memory.close();
             dbgr.toggleDebugger();
             expect(stoppedLoop.mode).toBe(RunMode.running);
             expect(shown()).toEqual([]);
             dbgr.toggleDebugger();
             expect(stoppedLoop.mode).toBe(RunMode.debugging);
-            expect(shown()).toEqual(["toolbar-panel", "disassembly-panel", "registers-panel", "peripherals-panel"]);
+            expect(shown()).toEqual(["toolbar-panel", "disassembly-panel", "registers-panel"]);
         });
 
         it("open the defaults again once every one has been closed by hand", () => {
@@ -234,13 +219,13 @@ describe("Debugger", () => {
             for (const floating of Object.values(dbgr.panels)) floating.close();
             dbgr.toggleDebugger();
             dbgr.toggleDebugger();
-            expect(shown()).toEqual(NarrowSet);
+            expect(shown()).toEqual(DebugPanels);
         });
 
         it("show and hide on their own toggle, leaving the machine running or stopped as it was", () => {
             stoppedLoop.mode = RunMode.running;
             dbgr.togglePanels();
-            expect(shown()).toEqual(NarrowSet);
+            expect(shown()).toEqual(DebugPanels);
             expect(stoppedLoop.mode).toBe(RunMode.running);
             expect(dbgr.inDebugger()).toBe(false);
             expect(addrOf(currentRow())).toBe("2000");
@@ -256,7 +241,6 @@ describe("Debugger", () => {
                 "Disassembly",
                 "Memory",
                 "Registers",
-                "Peripherals",
             ]);
         });
 
@@ -278,7 +262,7 @@ describe("Debugger", () => {
             expect(visible("sysvia-panel")).toBe(false);
             dbgr.togglePanels();
             expect(visible("sysvia-panel")).toBe(true);
-            expect(shown()).toEqual(NarrowSet);
+            expect(shown()).toEqual(DebugPanels);
         });
 
         it("leave out a panel that was open last but this machine has none of, as a system VIA on an Atom", () => {
@@ -291,16 +275,16 @@ describe("Debugger", () => {
             domFromIndexHtml(...PanelElements);
             dbgr = makeDebugger(null);
             dbgr.togglePanels();
-            expect(shown()).toEqual(NarrowSet);
+            expect(shown()).toEqual(DebugPanels);
         });
 
         it("remember which were open only as one of them opens or closes, not as another panel does", () => {
             dbgr.togglePanels();
-            dbgr.panels.peripherals.open();
+            dbgr.panels.memory.close();
             dbgr.hidePanels();
             dbgr.watches.floating.open();
             dbgr.togglePanels();
-            expect(shown()).toEqual([...NarrowSet, "peripherals-panel"]);
+            expect(shown()).toEqual(["toolbar-panel", "disassembly-panel", "registers-panel"]);
         });
 
         describe("in their default places", () => {
@@ -325,7 +309,6 @@ describe("Debugger", () => {
             it("stack under one another down each side", () => {
                 expect(dbgr.panels.registers.place().y.attach).toEqual({ to: "disassembly", side: "after" });
                 expect(dbgr.panels.disassembly.place().y.attach).toEqual({ to: "toolbar", side: "after" });
-                expect(dbgr.panels.peripherals.place().y.attach).toEqual({ to: "memory", side: "after" });
             });
         });
 
@@ -1157,46 +1140,6 @@ describe("Debugger", () => {
                 expect(press.defaultPrevented).toBe(true);
                 expect(button.tabIndex).toBe(-1);
             }
-        });
-    });
-
-    describe("the hardware panels", () => {
-        it("lists the VIA registers with their values", () => {
-            const rows = [...document.querySelectorAll("#sysvia tr:not(.template)")];
-            const named = Object.fromEntries(
-                rows.map((row) => [row.querySelector(".register").textContent, row.querySelector(".value")]),
-            );
-            expect(Object.keys(named)).toContain("ORA");
-            expect(Object.keys(named)).toContain("IC32");
-            expect(named.ORA.textContent).toBe("00");
-        });
-
-        it("shows the VIA timers as a program reads them, without clearing the interrupt", () => {
-            const [T1CL, T1CH, IFR] = [0x4, 0x5, 0xd];
-            const Timer1Int = 0x40;
-            const via = cpu.sysvia;
-            via.write(T1CL, 0x1e);
-            via.write(T1CH, 0x4e);
-            cpu.scheduler.polltime(0x4e1e * 2 + 100);
-            dbgr.debug(cpu.pc);
-            const shown = Object.fromEntries(
-                [...document.querySelectorAll("#sysvia tr:not(.template)")].map((row) => [
-                    row.querySelector(".register").textContent,
-                    row.querySelector(".value").textContent,
-                ]),
-            );
-            expect(shown.T1L).toBe("4e1e");
-            expect(via.peek(IFR) & Timer1Int).toBe(Timer1Int);
-            expect(shown.T1C).toBe(hexword(via.read(T1CL) | (via.read(T1CH) << 8)));
-        });
-
-        it("lists the CRTC registers and state", () => {
-            const regRows = [...document.querySelectorAll("#crtc .crtc_regs tr:not(.template)")];
-            expect(regRows.map((row) => row.querySelector(".register").textContent)).toHaveLength(16);
-            expect(regRows[0].querySelector(".register").textContent).toBe("R0");
-            expect(regRows[0].querySelector(".value").textContent).toBe("00");
-            const stateRows = [...document.querySelectorAll("#crtc .crtc_state tr:not(.template)")];
-            expect(stateRows.map((row) => row.querySelector(".register").textContent)).toContain("vertCounter");
         });
     });
 

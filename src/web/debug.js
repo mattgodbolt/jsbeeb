@@ -9,14 +9,7 @@ import { DebugGroup, FloatingPanel } from "./floating-panel.js";
 import { EndEdge, Gap, StartEdge } from "./panel-layout.js";
 import { helpRows, keyLine } from "./panel-keys.js";
 import { cycleCount } from "../lockstep.js";
-import {
-    bindGotoForm,
-    cloneTemplate,
-    externalLink,
-    FittedRows,
-    labelHtml,
-    powerOfTwoColumnsThatFit,
-} from "./debug-dom.js";
+import { bindGotoForm, externalLink, FittedRows, labelHtml, powerOfTwoColumnsThatFit } from "./debug-dom.js";
 import { DisassemblyKeys, DisassemblyView } from "./disassembly-view.js";
 
 const noop = () => {};
@@ -226,8 +219,6 @@ export const MemoryKeys = [
 export const debuggerHelpRows = () => helpRows([ToolbarKeys, DisassemblyKeys, MemoryKeys]);
 
 const RememberedPanelsKey = "debugPanels";
-/** Narrower than this, peripherals would cover the screen, so they wait to be asked for. */
-const PeripheralsWindowWidth = 1600;
 const MinPanelWidth = 220;
 const DisassemblyWidth = 400;
 /**
@@ -243,8 +234,7 @@ const below = (id) => ({ ...StartEdge, attach: { to: id, side: "after" } });
 /**
  * The debugger's own panels, each `#<id>-panel` in the page, in the order they open, so that each opens after the
  * panel it sits under. `side` and `place` are where it goes until the user arranges it: down the right of the
- * screen, or down its left. `narrow` says whether it opens by default on a window too narrow for peripherals, and
- * `show` brings it up to date with the machine, the disassembly at `at`.
+ * screen, or down its left. `show` brings it up to date with the machine, the disassembly at `at`.
  */
 const OwnPanels = [
     {
@@ -253,7 +243,6 @@ const OwnPanels = [
         minSize: { w: 200, h: 30 },
         side: "right",
         place: { x: EndEdge, y: StartEdge },
-        narrow: true,
         show: noop,
     },
     {
@@ -262,7 +251,6 @@ const OwnPanels = [
         minSize: { w: MinPanelWidth, h: 120 },
         side: "right",
         place: { x: EndEdge, y: below("toolbar") },
-        narrow: true,
         naturalWidth: DisassemblyWidth,
         show: (dbgr, at) => dbgr.updateDisassembly(at),
     },
@@ -272,7 +260,6 @@ const OwnPanels = [
         minSize: { w: 150, h: 60 },
         side: "right",
         place: { x: EndEdge, y: below("disassembly") },
-        narrow: true,
         show: (dbgr) => dbgr.updateRegisters(),
     },
     {
@@ -281,17 +268,7 @@ const OwnPanels = [
         minSize: { w: MinPanelWidth, h: 100 },
         side: "left",
         place: { x: StartEdge, y: StartEdge },
-        narrow: true,
         show: (dbgr) => dbgr.updateMemory(),
-    },
-    {
-        id: "peripherals",
-        title: "Peripherals",
-        minSize: { w: MinPanelWidth, h: 120 },
-        side: "left",
-        place: { x: StartEdge, y: below("memory") },
-        narrow: false,
-        show: (dbgr) => dbgr.updatePeripherals(),
     },
 ];
 /** Of the panels `ids`, those that were open when the debugger's were last seen. */
@@ -314,7 +291,7 @@ function rememberPanels(ids) {
 }
 
 /**
- * The debugger: its panels (a toolbar, disassembly, memory, registers and peripherals), their
+ * The debugger: its panels (a toolbar, disassembly, memory and registers), their
  * keys, and running the machine to a stop. The panels open on entering the debugger, stay open
  * and keep up with the machine once it runs again, and close on leaving it with Alt-S. They read
  * the machine once a frame while it runs, and only while open, and nothing they read changes it.
@@ -354,7 +331,6 @@ export class Debugger {
         this.watches = new WatchPanel({ peek, resolve: (text) => this._resolveWatch(text), arrangement });
         // Fetches the index, and the sets matching memory now, so names typed while the machine runs can resolve.
         this.watches.floating.addEventListener("open", () => this._namesNow());
-        this.uservia = this.sysvia = this.crtc = noop;
         this._symbolSets = symbolSets;
         this._names = NoNames;
         for (const credit of Object.values(this._credits)) toggle(credit.line, symbolSets !== null);
@@ -523,9 +499,7 @@ export class Debugger {
     showPanels() {
         const panels = this._debugPanels();
         const remembered = rememberedPanels(panels.map(({ id }) => id));
-        const wide = window.innerWidth >= PeripheralsWindowWidth;
-        const defaults = OwnPanels.filter((own) => wide || own.narrow).map(({ id }) => id);
-        const chosen = remembered.length ? remembered : defaults;
+        const chosen = remembered.length ? remembered : OwnPanels.map(({ id }) => id);
         const shown = panels.filter(({ id }) => id === "toolbar" || chosen.includes(id));
         // Filled first, so that they are laid out at the size they will be.
         if (this.cpu) {
@@ -596,123 +570,13 @@ export class Debugger {
         this._memoryView.update();
     }
 
-    updatePeripherals() {
-        this.sysvia();
-        this.uservia();
-        this.crtc();
-    }
-
     setCpu(cpu) {
         this.cpu = cpu;
-        this.sysvia = this.setupVia(document.getElementById("sysvia"), cpu.sysvia);
-        this.uservia = this.setupVia(document.getElementById("uservia"), cpu.uservia);
-        this.crtc = this.setupCrtc(document.getElementById("crtc"), cpu.video);
         this._disassembly.setCpu(cpu);
         if (this._ownPanelsShown()) this._refresh.drawNow();
     }
     disassemble(addr) {
         return this.cpu.disassembler.disassemble(addr);
-    }
-
-    setupCrtc(node, video) {
-        if (!video) return noop;
-        const updates = [];
-        for (const row of node.querySelectorAll("tr:not(.template)")) row.remove();
-
-        const regNode = node.querySelector(".crtc_regs");
-
-        function makeRow(container, text) {
-            const row = cloneTemplate(container);
-            row.querySelector(".register").textContent = text;
-            return row.querySelector(".value");
-        }
-
-        for (let i = 0; i < 16; ++i) {
-            const value = makeRow(regNode, "R" + i);
-            updates.push(() => {
-                this.updateElem(value, hexbyte(video.regs[i]));
-            });
-        }
-
-        const stateNode = node.querySelector(".crtc_state");
-        const others = [
-            "bitmapX",
-            "bitmapY",
-            "dispEnabled",
-            "horizCounter",
-            "inHSync",
-            "scanlineCounter",
-            "vertAdjustCounter",
-            "vertCounter",
-            "inVSync",
-            "endOfMainLatched",
-            "endOfVertAdjustLatched",
-            "inVertAdjust",
-            "inDummyRaster",
-            "addr",
-            "lineStartAddr",
-            "nextLineStartAddr",
-        ];
-        for (const elem of others) {
-            const value = makeRow(stateNode, elem);
-            if (typeof video[elem] === "boolean") {
-                updates.push(() => this.updateElem(value, video[elem] ? "true" : "false"));
-            } else {
-                updates.push(() => this.updateElem(value, hexword(video[elem])));
-            }
-        }
-
-        const update = () => {
-            for (const update of updates) update();
-        };
-        update();
-        return update;
-    }
-
-    setupVia(node, via) {
-        const updates = [];
-        if (!via) return noop;
-        const regs = [
-            "ora",
-            "orb",
-            "ira",
-            "irb",
-            "ddra",
-            "ddrb",
-            "acr",
-            "pcr",
-            "ifr",
-            "ier",
-            "t1c",
-            "t1l",
-            "t2c",
-            "t2l",
-            "t2High",
-            "portapins",
-            "portbpins",
-            "IC32",
-        ];
-        for (const row of node.querySelectorAll("tr:not(.template)")) row.remove();
-        let timers;
-        for (const elem of regs) {
-            if (via[elem] === undefined) continue;
-            const row = cloneTemplate(node);
-            row.querySelector(".register").textContent = elem.toUpperCase();
-            const value = row.querySelector(".value");
-            if (elem.match(/t[12][cl]/)) {
-                updates.push(() => this.updateElem(value, hexword(timers[elem])));
-            } else {
-                updates.push(() => {
-                    this.updateElem(value, hexbyte(via[elem]));
-                });
-            }
-        }
-        const update = () => {
-            timers = via.peekTimers();
-            for (const update of updates) update();
-        };
-        update();
-        return update;
     }
 
     updateElem(elem, val) {
