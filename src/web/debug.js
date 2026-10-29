@@ -505,8 +505,8 @@ export class Debugger {
     }
 
     /**
-     * Has a view redraw where it is, for a resize that changed how many rows it shows. Not through the refresh, whose
-     * draw lays the panels out again, which part way through a drag would undo it.
+     * Has a view redraw where it is, for a resize that changed how many rows it shows. Not through the refresh, which
+     * outside the debugger draws the disassembly at the program counter rather than where it was put.
      */
     _redraw(redraw) {
         if (this.cpu) redraw();
