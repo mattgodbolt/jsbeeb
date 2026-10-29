@@ -201,6 +201,7 @@ export const ToolbarKeys = [
         label: "step out",
         description: "Run until this subroutine or interrupt handler returns",
     },
+    { combo: "v", key: "v", run: "runToVsync", label: "vsync", description: "Run to the start of the next vsync" },
 ];
 
 export const MemoryKeys = [
@@ -225,6 +226,7 @@ const DisassemblyWidth = 400;
  */
 const ColumnWidthNeeded = { left: 280, right: DisassemblyWidth };
 const StackBytesShown = 8;
+const WholeNumber = /^\d+$/;
 const RunningNameMatchMs = 1000;
 const below = (id) => ({ ...StartEdge, attach: { to: id, side: "after" } });
 
@@ -307,6 +309,9 @@ export class Debugger {
         this.patchInstructions = new Map();
         this._loop = null;
         this._runningTo = null;
+        // On the scheduler's clock, which a power-on reset leaves running. Null once the state it started in is
+        // replaced, until it is reset.
+        this._stopwatchFrom = 0;
         this._inDebugger = false;
         this._hidingPanels = false;
         this._matchedAt = 0;
@@ -355,6 +360,7 @@ export class Debugger {
             stepOver: () => this._fromDebugger(() => this.stepOver()),
             stepOut: () => this._fromDebugger(() => this.stepOut()),
             runToCursor: () => this._fromDebugger(() => this.runToCursor()),
+            runToVsync: () => this._fromDebugger(() => this.runToVsync()),
         };
         const resolve = (text) => addressFor(this._names, text, this.cpu.pc);
         this._disassembly = new DisassemblyView({
@@ -378,6 +384,16 @@ export class Debugger {
         bindGotoForm(document.getElementById("goto-mem-addr-form"), resolve, (address) =>
             this._memoryView.update(address),
         );
+        bindGotoForm(
+            document.getElementById("run-to-line-form"),
+            (text) => (WholeNumber.test(text) ? Number(text) : undefined),
+            (line) => this._fromDebugger(() => this.runToLine(line)),
+        );
+        document.getElementById("debug-stopwatch-reset").addEventListener("click", () => {
+            if (!this.cpu) return;
+            this._stopwatchFrom = this.cpu.scheduler.epoch;
+            this.updateRegisters();
+        });
         document.getElementById("memory").addEventListener("contextmenu", (e) => {
             const byte = e.target.closest("[data-addr]");
             if (!byte) return;
@@ -592,6 +608,17 @@ export class Debugger {
             stack.push(hexbyte(cpu.peekmem(0x100 + at)));
         this.updateElem(document.getElementById("cpu6502_stack"), stack.join(" "));
         this.updateElem(document.getElementById("cpu6502_cycles"), String(cycleCount(cpu)));
+        const stopwatch = this._stopwatchFrom === null ? "" : String(cpu.scheduler.epoch - this._stopwatchFrom);
+        this.updateElem(document.getElementById("debug-stopwatch"), stopwatch);
+        const beam = cpu.video.beamPosition();
+        this.updateElem(document.getElementById("beam-line"), String(beam.line));
+        this.updateElem(document.getElementById("beam-cycle"), String(beam.frameCycle));
+        document.getElementById("beam-crtc").hidden = !beam.crtc;
+        if (beam.crtc) {
+            this.updateElem(document.getElementById("crtc-row"), String(beam.crtc.row));
+            this.updateElem(document.getElementById("crtc-scanline"), String(beam.crtc.scanline));
+            this.updateElem(document.getElementById("crtc-column"), String(beam.crtc.column));
+        }
         this.updateElem(document.getElementById("cpu6502_a"), hexbyte(this.cpu.a));
         this.updateElem(document.getElementById("cpu6502_x"), hexbyte(this.cpu.x));
         this.updateElem(document.getElementById("cpu6502_y"), hexbyte(this.cpu.y));
@@ -801,6 +828,12 @@ export class Debugger {
         this._runningTo = null;
     }
 
+    /** The machine's state is being replaced, so neither a run to a stop nor the stopwatch's start applies. */
+    replacingState() {
+        this.cancelRun();
+        this._stopwatchFrom = null;
+    }
+
     /**
      * Moves the CPU's cycle target on by one, running each instruction that starts before it. Straight after a
      * breakpoint the target is still at the end of the interrupted time slice, so this runs on to there (#1062).
@@ -846,5 +879,24 @@ export class Debugger {
     runToCursor() {
         const target = this._disassembly.cursor;
         this.runTo(() => this.cpu.pc === target, target === this.resetEntry());
+    }
+
+    /** Runs until `holds()` turns true: at an instruction it holds at, having not held at the one before. */
+    _runUntilTurns(holds) {
+        let held = holds();
+        this.runTo(() => {
+            const had = held;
+            held = holds();
+            return held && !had;
+        }, false);
+    }
+
+    runToVsync() {
+        this._runUntilTurns(() => this.cpu.video.beamPosition().inVSync);
+    }
+
+    /** Runs to the start of TV line `line` of a frame, the next frame's if the beam is on it now. */
+    runToLine(line) {
+        this._runUntilTurns(() => this.cpu.video.beamPosition().line === line);
     }
 }
