@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { MachineSession } from "../../src/machine-session.js";
+import { MachineSession, MaxLoggedHits } from "../../src/machine-session.js";
 import { BBC, keyCodes } from "../../src/keymap.js";
 import { ATOM } from "../../src/keymap-atom.js";
 import { RepoRoot } from "./helpers.js";
@@ -212,6 +212,31 @@ describe("MachineSession watching execution", () => {
         await session.runFor(CyclesPerInterlacedFrame);
 
         expect(session.hitBreakpoint()).toEqual({ id, type: "write", address: Counter, value: 0x42 });
+    });
+
+    it("keeps the first hits a log breakpoint logs between drains, counting the rest", async () => {
+        const id = session.addBreakpoint("execute", 0x0000, { end: 0xffff, action: "log" });
+        await session.runFor(CyclesPerInterlacedFrame);
+        session.removeBreakpoint(id);
+
+        const { hits, dropped } = session.drainBreakpointLog();
+
+        expect(hits).toHaveLength(MaxLoggedHits);
+        expect(dropped).toBeGreaterThan(0);
+    });
+
+    it("keeps a breakpoint's hit count across resetBreakpointHits, so it stops again at the next hit", async () => {
+        const handler = irqHandler();
+        const id = session.addBreakpoint("execute", handler, { hitCount: 2 });
+        const runToHit = async () => {
+            while (!session.hitBreakpoint()) await session.runFor(CyclesPerInterlacedFrame);
+            session.resetBreakpointHits();
+        };
+
+        await runToHit();
+        await runToHit();
+
+        expect(session.listBreakpoints()[0]).toMatchObject({ id, hits: 3 });
     });
 
     it("keeps running whatever the watcher returns", async () => {

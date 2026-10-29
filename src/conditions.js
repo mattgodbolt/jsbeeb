@@ -29,7 +29,6 @@ const Variables = new Map([
     ["OLD", (cpu, pc, value, old) => old],
 ]);
 
-// Loosest first.
 const BinaryLevels = [
     new Map([["||", (a, b) => truth(a || b)]]),
     new Map([["&&", (a, b) => truth(a && b)]]),

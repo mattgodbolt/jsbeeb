@@ -159,6 +159,7 @@ describe("Breakpoints", () => {
     ])("refuses %j", (spec, message) => {
         expect(() => breakpoints.add(spec)).toThrow(message);
         expect(breakpoints.list()).toEqual([]);
+        expect(breakpoints.add({ kind: "read", start: 0 })).toBe(1);
     });
 
     it("is not called once another hook in the same dispatch removes the last breakpoint", () => {

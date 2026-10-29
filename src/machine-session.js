@@ -31,7 +31,7 @@ import { setNodeBasePath } from "./loader.js";
 const FB_WIDTH = 1024;
 const FB_HEIGHT = 625;
 
-const MaxLoggedHits = 10000;
+export const MaxLoggedHits = 10000;
 const BreakpointUpdateFields = ["bank", "end", "condition", "hitCount", "action", "enabled"];
 
 // Bit X of ACCCON: shadow RAM in place of main at &3000 to &7FFF.
