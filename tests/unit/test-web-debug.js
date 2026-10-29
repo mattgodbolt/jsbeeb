@@ -159,6 +159,15 @@ describe("Debugger", () => {
             expect(shown()).toEqual(NarrowSet);
         });
 
+        it("stay shut on entering the debugger in a phone's window, where they would cover its keyboard, but show when asked", () => {
+            vi.spyOn(window, "innerWidth", "get").mockReturnValue(390);
+            dbgr.debug(cpu.pc);
+            expect(dbgr.enabled()).toBe(true);
+            expect(shown()).toEqual([]);
+            dbgr.togglePanels();
+            expect(shown()).toEqual(NarrowSet);
+        });
+
         it("include the peripherals by default only on a wide window", () => {
             vi.spyOn(window, "innerWidth", "get").mockReturnValue(1920);
             dbgr.debug(cpu.pc);

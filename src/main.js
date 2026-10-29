@@ -27,6 +27,7 @@ import { EmulationLoop, RunMode } from "./web/emulation-loop.js";
 import { RunControls } from "./web/run-controls.js";
 import { exposeConsoleSurface } from "./web/console-surface.js";
 import { KeyboardSetup } from "./web/keyboard-setup.js";
+import { TouchKeyboard } from "./web/touch-keyboard.js";
 import { labelPageShortcuts } from "./web/shortcuts.js";
 import { AccessibilitySwitches } from "./web/accessibility-switches.js";
 import { AnalogueInputs } from "./web/analogue-inputs.js";
@@ -228,6 +229,10 @@ dbgr.attachLoop(loop);
 
 new RunControls({ loop });
 
+const onAnyKeyDown = () => {
+    audioHandler.tryResume();
+    inputs.ensureMicrophoneRunning();
+};
 const { keyboard } = new KeyboardSetup({
     actions: {
         toggleFast: () => loop.toggleFastAsPossible(),
@@ -235,10 +240,7 @@ const { keyboard } = new KeyboardSetup({
         openPrinter: () => frontPanel.checkPrinterWindow(),
         openMedia: (target) => mediaWindow.openFor(target),
         paste: (text) => keyboard.sendRawKeyboard(autoBoot.stringToMachineKeys(text), true),
-        onAnyKeyDown: () => {
-            audioHandler.tryResume();
-            inputs.ensureMicrophoneRunning();
-        },
+        onAnyKeyDown,
     },
     accessibilitySwitches,
     processor,
@@ -328,6 +330,20 @@ const layout = new Layout({
 });
 dbgr.placeBesideScreen(() => layout.screenBounds());
 new DebugMenu({ arrangement: panelArrangement, dbgr, inDebugger: () => loop.mode === RunMode.debugging });
+
+if (!parsedQuery.embed && !model.isAtom) {
+    new TouchKeyboard({
+        processor,
+        model,
+        keyboard,
+        layout,
+        loop,
+        forced: !!parsedQuery.touchkeys,
+        openMedia: () => mediaWindow.openFor(0),
+        onAnyKeyDown,
+    });
+}
+
 panelArrangement.reopen();
 
 // Everything a setting can reach now exists.

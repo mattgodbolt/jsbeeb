@@ -84,6 +84,7 @@ export class Layout {
         this.cubMonitorPic = document.getElementById("cub-monitor-pic");
         this.borderReservedSize = embed ? 0 : 100;
         this.bottomReservedSize = embed ? 0 : 68;
+        this.touchKeyboardRoom = null;
         if (embed) {
             for (const el of document.querySelectorAll(".embed-hide")) el.style.display = "none";
             document.body.style.backgroundColor = "transparent";
@@ -122,10 +123,17 @@ export class Layout {
         }
     }
 
-    /** What the LED panel needs below the monitor: its own height, which its layout decides. */
-    ledPanelRoom() {
+    /** What the LED panel, or the on-screen keyboard in its place, needs below the monitor. */
+    bottomRoom() {
+        if (this.touchKeyboardRoom !== null) return this.touchKeyboardRoom;
         const panel = document.getElementById("leds");
         return Math.max(this.bottomReservedSize, (panel?.offsetHeight ?? 0) + LedPanelGap);
+    }
+
+    /** The on-screen keyboard hides the LED panel and needs `room` below the monitor instead, or null when closed. */
+    reserveForTouchKeyboard(room) {
+        this.touchKeyboardRoom = room;
+        this.resize();
     }
 
     /**
@@ -148,7 +156,7 @@ export class Layout {
                 innerHeight: window.innerHeight,
                 navbarHeight: navbarHeightOf(document.getElementById("header-bar")),
                 borderReservedSize: window.innerWidth <= NarrowWindow ? 0 : this.borderReservedSize,
-                bottomReservedSize: this.bottomReservedSize && this.ledPanelRoom(),
+                bottomReservedSize: this.bottomReservedSize && this.bottomRoom(),
                 devicePixelRatio: window.devicePixelRatio || 1,
             },
             { width: this.screenCanvas.getAttribute("width"), height: this.screenCanvas.getAttribute("height") },

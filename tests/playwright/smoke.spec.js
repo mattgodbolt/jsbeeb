@@ -153,6 +153,46 @@ test("the debugger keeps its width whatever the line crediting the names says", 
     expect(await panelWidth()).toBe(creditedWidth);
 });
 
+test("the no-audio-worklet warning fits a phone and a desktop, closes without taking the keyboard, and is back on reload", async ({
+    beeb,
+    page,
+}) => {
+    await page.addInitScript(() => delete BaseAudioContext.prototype.audioWorklet);
+    const warning = page.locator("#audio-warning");
+    const close = warning.locator(".btn-close");
+    await beeb.open();
+    await expect(warning).toContainText("No audio worklet API");
+    for (const viewport of [
+        { width: 390, height: 844 },
+        { width: 1400, height: 900 },
+    ]) {
+        await page.setViewportSize(viewport);
+        const layout = await page.evaluate(() => {
+            const box = document.querySelector("#audio-warning .btn-close").getBoundingClientRect();
+            return {
+                closeOnScreen: box.left >= 0 && box.right <= innerWidth && box.top >= 0,
+                scrollsSideways: document.documentElement.scrollWidth > innerWidth,
+            };
+        });
+        expect(layout, `at ${viewport.width}x${viewport.height}`).toEqual({
+            closeOnScreen: true,
+            scrollsSideways: false,
+        });
+    }
+    await page.evaluate(() => {
+        window.focusedInWarning = false;
+        document.addEventListener("focusin", (event) => {
+            if (event.target.closest("#audio-warning")) window.focusedInWarning = true;
+        });
+    });
+    await close.click();
+    await expect(warning).toBeHidden();
+    expect(await page.evaluate(() => window.focusedInWarning)).toBe(false);
+    await page.reload();
+    await expect(warning).toBeVisible();
+    await expect(warning).toContainText("No audio worklet API");
+});
+
 const DebugPanels = ["#debug-toolbar", "#disassembly-panel", "#registers-panel", "#memory-panel", "#peripherals-panel"];
 const boxesOf = (page, selectors) => Promise.all(selectors.map((selector) => page.locator(selector).boundingBox()));
 const overlap = (a, b) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
@@ -397,8 +437,8 @@ test("the media window fills a phone's screen without scrolling sideways, and it
     await page.setViewportSize({ width: 600, height: 800 });
     await beeb.open("?disc=elite.ssd");
     await beeb.expectDrive0("elite.ssd");
-    // The top bar is folded into its hamburger at this width; the LED panel's line still opens it.
-    await page.click('#leds .slot-readout[data-slot="0"]');
+    // The top bar is folded into its hamburger at this width; the touch keyboard's media button still opens it.
+    await page.click("#touch-keyboard .tk-media");
     await expect(page.locator("#media-panel")).toBeVisible();
     await page.click('#media-into [data-target="1"]');
     const fit = await page.evaluate(() => {
@@ -410,12 +450,14 @@ test("the media window fills a phone's screen without scrolling sideways, and it
             innerWidth: window.innerWidth,
             pageScrollsSideways: document.documentElement.scrollWidth > window.innerWidth,
             panelScrollsSideways: panel.scrollWidth > panel.clientWidth,
+            onTopAtTheBottom: panel.contains(document.elementFromPoint(window.innerWidth / 2, window.innerHeight - 5)),
         };
     });
     expect(fit.rightEdge).toBeLessThanOrEqual(fit.innerWidth);
     expect(fit.width).toBe(fit.innerWidth);
     expect(fit.pageScrollsSideways).toBe(false);
     expect(fit.panelScrollsSideways).toBe(false);
+    expect(fit.onTopAtTheBottom).toBe(true);
 
     // The archives' listing arriving redraws the bays from the drives, undoing a state forced on one before it.
     await expect(page.locator("#media-count")).not.toBeEmpty();
@@ -430,6 +472,91 @@ test("the media window fills a phone's screen without scrolling sideways, and it
     expect(await shown(1)).toEqual({ note: true, jacket: false });
     await bay(1).evaluate((element) => (element.dataset.state = "busy"));
     expect(await shown(1)).toEqual({ note: false, jacket: true });
+});
+
+test.describe("on a phone", () => {
+    test.use({ viewport: { width: 412, height: 915 }, hasTouch: true });
+
+    test("SHIFT+BREAK on the on-screen keyboard boots the disc with both thumbs lifted together", async ({
+        beeb,
+        page,
+    }) => {
+        await beeb.open("?disc=Welcome.ssd");
+        await beeb.expectScreenText(">");
+        const cdp = await page.context().newCDPSession(page);
+        const touchPoint = async (label, id) => {
+            const key = page.locator("#touch-keyboard .tk-key:visible", { hasText: new RegExp(`^${label}$`) });
+            const box = await key.first().boundingBox();
+            return { x: box.x + box.width / 2, y: box.y + box.height / 2, id };
+        };
+        const shift = await touchPoint("SHIFT", 1);
+        const breakKey = await touchPoint("BREAK", 2);
+        const touch = (type, touchPoints) => cdp.send("Input.dispatchTouchEvent", { type, touchPoints });
+        await touch("touchStart", [shift]);
+        await touch("touchStart", [shift, breakKey]);
+        await beeb.runFor(50);
+        await touch("touchEnd", [breakKey]);
+        await touch("touchEnd", []);
+        await beeb.expectScreenText("automatically loaded");
+    });
+
+    test("the on-screen keyboard steps aside in landscape for the lights bar, and comes back as it was left, even after a reload", async ({
+        beeb,
+        page,
+    }) => {
+        const keyboard = page.locator("#touch-keyboard");
+        const toggle = page.locator("#touch-keyboard-toggle");
+        const lights = page.locator("#leds");
+        const turn = (width, height) => page.setViewportSize({ width, height });
+        await beeb.open();
+        await expect(keyboard).toBeVisible();
+        await expect(lights).toBeHidden();
+        const monitor = await page.locator("#cub-monitor").boundingBox();
+        expect(monitor.y + monitor.height).toBeLessThanOrEqual((await keyboard.boundingBox()).y);
+
+        await turn(915, 412);
+        await expect(keyboard).toBeHidden();
+        await expect(toggle).toBeHidden();
+        await expect(lights).toBeVisible();
+        await turn(412, 915);
+        await expect(keyboard).toBeVisible();
+
+        await page.locator("#touch-keyboard .tk-hide").tap();
+        await expect(lights).toBeVisible();
+        await turn(915, 412);
+        await expect(toggle).toBeHidden();
+        await turn(412, 915);
+        await expect(keyboard).toBeHidden();
+        await expect(toggle).toBeVisible();
+        await page.reload();
+        await expect(toggle).toBeVisible();
+        await expect(keyboard).toBeHidden();
+    });
+
+    test("a touch in the gap between keys presses the nearer one", async ({ beeb, page }) => {
+        await beeb.open();
+        await beeb.expectScreenText(">");
+        const q = await page.locator("#touch-keyboard .tk-key:visible", { hasText: /^Q$/ }).boundingBox();
+        await page.touchscreen.tap(q.x + q.width + 1, q.y + q.height / 2);
+        await beeb.expectScreenText(">Q");
+    });
+
+    test("the on-screen keyboard presses nothing while the machine is stopped", async ({ beeb, page }) => {
+        await beeb.open();
+        await beeb.expectScreenText(">");
+        await page.evaluate(() => document.getElementById("debug-pause").click());
+        await beeb.expectHeld();
+        await page.locator("#touch-keyboard .tk-key:visible", { hasText: /^A$/ }).tap();
+        expect(await page.evaluate(() => window.processor.sysvia.hasAnyKeyDown())).toBe(false);
+        await page.locator("#touch-keyboard .tk-key", { hasText: /^more$/ }).tap();
+        await expect(page.locator('#touch-keyboard .tk-layer[data-name="more"]')).toBeVisible();
+    });
+
+    test("an embedded page has no on-screen keyboard", async ({ beeb, page }) => {
+        await beeb.open("?embed");
+        await beeb.expectScreenText(">");
+        await expect(page.locator("#touch-keyboard, #touch-keyboard-toggle")).toHaveCount(0);
+    });
 });
 
 test("help fits a desktop browser window whole, and on a phone or tablet scrolls under its own header", async ({

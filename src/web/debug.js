@@ -256,6 +256,11 @@ const DebuggerOwnPanels = ["toolbar", "disassembly", "registers", "memory", "per
 /** Every panel Alt-D and Alt-S show and hide: the debugger's own, and the decoded system VIA. */
 const DebugPanelIds = [...DebuggerOwnPanels, "sysvia"];
 const NarrowWindowPanels = ["toolbar", "disassembly", "registers", "memory"];
+/**
+ * Narrower than this, a phone's window: entering the debugger opens no panels there, as they would cover its
+ * on-screen keyboard, though the Debug menu and Alt-D still show them.
+ */
+const PhoneWindowWidth = 700;
 /** Narrower than this, peripherals would cover the screen, so they wait to be asked for. */
 const PeripheralsWindowWidth = 1600;
 const MinPanelWidth = 220;
@@ -858,7 +863,7 @@ export class Debugger {
         if (!this._inDebugger) {
             noteFeature("debugger", "open");
             this._inDebugger = true;
-            this.showPanels();
+            if (window.innerWidth > PhoneWindowWidth) this.showPanels();
         }
         this._arrangement.keepAttached();
         this.cpu.video.debugPaint();
