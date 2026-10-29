@@ -58,6 +58,10 @@ body {
   height: 600px;
 }
 
+#cub-monitor.finds-bytes {
+  cursor: crosshair;
+}
+
 .debug-panel {
   font-size: 8pt;
   font-family: monospace;
@@ -120,6 +124,32 @@ body {
 
 #memory > div > span {
   vertical-align: top;
+}
+
+#memory-save-form:not([hidden]) {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+
+#memory-save-form .panel-field {
+  flex: 1 1 8em;
+  min-width: 4em;
+}
+
+#memory .mem-edit {
+  width: 2ch;
+  padding: 0;
+  border: none;
+  font: inherit;
+  color: inherit;
+  background-color: #444;
+  outline: 1px solid #80d0d0;
+}
+
+#memory .mem-edit.is-invalid {
+  outline-color: #f06060;
 }
 
 .goto-form {
@@ -208,7 +238,8 @@ a.symbol:hover {
 }
 
 /* Bootstrap's warning icon would hide most of a box this narrow. */
-.goto-addr.is-invalid {
+.goto-addr.is-invalid,
+#memory-save-form .is-invalid {
   padding-right: 0.5rem;
   background-image: none;
 }
@@ -563,6 +594,27 @@ a.symbol:hover {
 
 .key.cursor {
   background-color: #5a5040;
+}
+
+.help-tabs {
+  margin-left: 2rem;
+  border-bottom: 0;
+}
+
+/* Bootstrap's lg breakpoint, below which Help goes fullscreen and its tabs get a row of their own. */
+@media (max-width: 991.98px) {
+  .help-header {
+    flex-wrap: wrap;
+  }
+
+  .help-tabs {
+    order: 1;
+    flex: 0 0 100%;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    margin: 0.5rem 0 0;
+    white-space: nowrap;
+  }
 }
 
 .help td:first-child,
@@ -965,6 +1017,25 @@ small {
   width: 50ch;
 }
 
+.soundchip-registers .decoded-meaning {
+  width: 52ch;
+}
+
+.soundchip-mutes {
+  margin-top: 6px;
+  padding-left: 4px;
+  color: #aaaaaa;
+}
+
+.soundchip-mutes .decoded-bit {
+  margin-left: 6px;
+  font: inherit;
+}
+
+.soundchip-mutes .decoded-bit:not(.lit) {
+  background: transparent;
+}
+
 .decoded-value,
 .decoded-bit {
   display: inline-block;
@@ -993,6 +1064,68 @@ small {
   border-color: #80d0d0;
   color: #000000;
   background: #80d0d0;
+}
+
+.videoula-palette {
+  display: grid;
+  grid-template-rows: repeat(8, auto);
+  grid-auto-flow: column;
+  grid-auto-columns: max-content;
+  column-gap: 12px;
+}
+
+.videoula-palette-entry {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  line-height: 20px;
+  height: 20px;
+}
+
+.videoula-palette-index {
+  width: 1ch;
+  color: #f0d080;
+}
+
+.videoula-palette-swatch {
+  width: 2ch;
+  height: 14px;
+  border: 1px solid #666666;
+}
+
+.videoula-ula-palette .videoula-palette-label {
+  width: 13ch;
+  color: #cccccc;
+}
+
+.videoula-nula-palette .videoula-palette-label {
+  width: 9ch;
+  color: #cccccc;
+}
+
+.videoula-ula-palette .videoula-palette-entries {
+  width: 7ch;
+  color: #888888;
+}
+
+.videoula-palette-entry.unused,
+.videoula-palette-view.unused {
+  visibility: hidden;
+}
+
+.videoula-palette.dimmed {
+  opacity: 0.4;
+}
+
+.txt-btn.videoula-palette-view {
+  color: #aaaaff;
+  font-family: inherit;
+  font-size: inherit;
+  margin-left: 1ch;
+}
+
+.videoula-control .decoded-meaning {
+  width: 38ch;
 }
 
 .key-matrix table {
@@ -1035,7 +1168,8 @@ small {
   white-space: nowrap;
 }
 
-.txt-btn[data-opens] {
+.txt-btn[data-opens],
+#registers .txt-btn {
   color: #aaaaff;
   font-family: inherit;
   font-size: inherit;

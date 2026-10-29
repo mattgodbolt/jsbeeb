@@ -1,16 +1,17 @@
-import { toggle } from "./dom-utils.js";
+import { downloadBlob, toggle } from "./dom-utils.js";
 import { hexbyte, hexword, parseAddr } from "../hex.js";
 import { NoNames } from "../symbol-names.js";
 import { isHttps } from "../symbol-sets.js";
 import { noteFeature } from "./analytics.js";
+import { toast } from "./toast.js";
 import { WatchPanel } from "./watch-panel.js";
 import { RunMode } from "./emulation-loop.js";
 import { DebugGroup, FloatingPanel } from "./floating-panel.js";
 import { EndEdge, Gap, StartEdge } from "./panel-layout.js";
-import { helpRows, keyLine } from "./panel-keys.js";
+import { keyLine } from "./panel-keys.js";
 import { cycleCount } from "../lockstep.js";
 import { bindGotoForm, externalLink, FittedRows, labelHtml, powerOfTwoColumnsThatFit } from "./debug-dom.js";
-import { DisassemblyKeys, DisassemblyView } from "./disassembly-view.js";
+import { DisassemblyView } from "./disassembly-view.js";
 
 const noop = () => {};
 
@@ -20,6 +21,7 @@ const MemoryPageRows = 8;
 const QuickRunsPerSecond = 50;
 const ResetVector = 0xfffc;
 const NeverFallsThrough = new Set(["jump", "return", "interrupt"]);
+const HexByte = /^[0-9a-f]{1,2}$/i;
 
 // S counts down and wraps, so "not deeper" is a difference of under half the page, either way round $00.
 function notDeeper(s, startS) {
@@ -62,6 +64,7 @@ class MemoryView {
         this._naming = naming;
         this._showing = showing;
         this._addr = 0;
+        this._first = 0;
         this._prevSnapshot = new Uint8Array(65536);
         this._rows = new FittedRows(widget, InitialMemoryRows, redraw);
         this._setBytesPerRow(FewestBytesPerRow);
@@ -113,6 +116,7 @@ class MemoryView {
         const targetRow = this._addr & -perRow;
         let addr = targetRow - perRow * this._rows.anchor;
         if (addr < 0) addr = 0;
+        this._first = addr;
         const { names, pc } = this._naming();
         const shown = new Set();
         for (const row of this._rows.rows) {
@@ -172,6 +176,51 @@ class MemoryView {
     step(rows) {
         this.update(this._addr + rows * this._bytesPerRow);
     }
+
+    /** The first and last addresses it shows, the last no further than $ffff. */
+    shown() {
+        return {
+            from: this._first,
+            to: Math.min(0xffff, this._first + this._rows.rows.length * this._bytesPerRow - 1),
+        };
+    }
+
+    _byteAt(address) {
+        return this._widget.querySelector(`.mem_bytes [data-addr="${address}"]`);
+    }
+
+    /**
+     * Puts a field over the byte at `address`, bringing it into view if need be. Tab hands `write` its new value and
+     * moves on to the next byte (Shift-Tab, the one before); Enter hands it over and leaves, and Escape just leaves.
+     * A value left as it was is not handed over, as a write to a register is not the same as leaving it alone.
+     */
+    edit(address, write) {
+        if (!this._byteAt(address)) this.update(address);
+        const byte = this._byteAt(address);
+        const field = document.createElement("input");
+        field.className = "mem-edit panel-field";
+        field.maxLength = 2;
+        field.autocomplete = "off";
+        field.spellcheck = false;
+        field.setAttribute("aria-label", `New value for $${hexword(address)}`);
+        const was = byte.textContent;
+        field.value = was;
+        byte.replaceChildren(field);
+        field.addEventListener("blur", () => this.update(), { once: true });
+        field.addEventListener("input", () => field.classList.remove("is-invalid"));
+        field.addEventListener("keydown", (e) => {
+            if (e.key !== "Enter" && e.key !== "Tab") return;
+            e.preventDefault();
+            const value = HexByte.test(field.value) ? parseInt(field.value, 16) : undefined;
+            field.classList.toggle("is-invalid", value === undefined);
+            if (value === undefined) return;
+            field.blur();
+            if (value !== parseInt(was, 16)) write(address, value);
+            if (e.key === "Tab") this.edit((address + (e.shiftKey ? -1 : 1)) & 0xffff, write);
+        });
+        field.focus();
+        field.select();
+    }
 }
 
 /** The keys of the debugger's toolbar, answering only in the debugger; see panel-keys.js for the shape. */
@@ -198,6 +247,7 @@ export const ToolbarKeys = [
         label: "step out",
         description: "Run until this subroutine or interrupt handler returns",
     },
+    { combo: "v", key: "v", run: "runToVsync", label: "vsync", description: "Run to the start of the next vsync" },
 ];
 
 export const MemoryKeys = [
@@ -212,9 +262,6 @@ export const MemoryKeys = [
     { key: "I", run: "pageBack" },
 ];
 
-/** Help's rows for every key the debugger's panels answer. */
-export const debuggerHelpRows = () => helpRows([ToolbarKeys, DisassemblyKeys, MemoryKeys]);
-
 const RememberedPanelsKey = "debugPanels";
 const MinPanelWidth = 220;
 const DisassemblyWidth = 400;
@@ -225,6 +272,7 @@ const DisassemblyWidth = 400;
  */
 const ColumnWidthNeeded = { left: 280, right: DisassemblyWidth };
 const StackBytesShown = 8;
+const WholeNumber = /^\d+$/;
 const RunningNameMatchMs = 1000;
 const below = (id) => ({ ...StartEdge, attach: { to: id, side: "after" } });
 
@@ -299,12 +347,17 @@ export class Debugger {
      * @param {import("../symbol-sets.js").SymbolSets | null} options.symbolSets - where names for addresses come from
      * @param {import("./panel-keys.js").PanelKeys} options.keys - where the panels' keys are routed from
      * @param {import("./floating-panel.js").PanelArrangement} options.arrangement - what places its panels
+     * @param {HTMLElement} options.monitor - the monitor around the screen, which shows when a click finds a byte
      */
-    constructor({ symbolSets, keys, arrangement }) {
+    constructor({ symbolSets, keys, arrangement, monitor }) {
         this._arrangement = arrangement;
+        this._monitor = monitor;
         this.patchInstructions = new Map();
         this._loop = null;
         this._runningTo = null;
+        // On the scheduler's clock, which a power-on reset leaves running. Null once the state it started in is
+        // replaced, until it is reset.
+        this._stopwatchFrom = 0;
         this._inDebugger = false;
         this._hidingPanels = false;
         this._matchedAt = 0;
@@ -353,6 +406,7 @@ export class Debugger {
             stepOver: () => this._fromDebugger(() => this.stepOver()),
             stepOut: () => this._fromDebugger(() => this.stepOut()),
             runToCursor: () => this._fromDebugger(() => this.runToCursor()),
+            runToVsync: () => this._fromDebugger(() => this.runToVsync()),
         };
         const resolve = (text) => addressFor(this._names, text, this.cpu.pc);
         this._disassembly = new DisassemblyView({
@@ -376,11 +430,69 @@ export class Debugger {
         bindGotoForm(document.getElementById("goto-mem-addr-form"), resolve, (address) =>
             this._memoryView.update(address),
         );
+        bindGotoForm(
+            document.getElementById("run-to-line-form"),
+            (text) => (WholeNumber.test(text) ? Number(text) : undefined),
+            (line) => this._fromDebugger(() => this.runToLine(line)),
+        );
+        document.getElementById("debug-stopwatch-reset").addEventListener("click", () => {
+            if (!this.cpu) return;
+            this._stopwatchFrom = this.cpu.scheduler.epoch;
+            this.updateRegisters();
+        });
         document.getElementById("memory").addEventListener("contextmenu", (e) => {
             const byte = e.target.closest("[data-addr]");
             if (!byte) return;
             const address = Number(byte.dataset.addr);
             this._offerWatch(e, address, this._names.address(address, this.cpu.pc)?.name);
+        });
+        document.getElementById("memory").addEventListener("click", (e) => {
+            if (!e.target.matches(".mem_bytes [data-addr]") || this._loop.mode !== RunMode.debugging) return;
+            this._memoryView.edit(Number(e.target.dataset.addr), (address, value) => this._writeByte(address, value));
+        });
+        this._bindSaveForm(resolve);
+    }
+
+    /** Writes as the CPU would, so that a ROM byte keeps its value and a register's device sees the write. */
+    _writeByte(address, value) {
+        this.cpu.writemem(address, value);
+        const reads = this.cpu.peekmem(address);
+        if (reads !== value && !this.cpu.isDevice(address)) {
+            toast(`$${hexword(address)} is ROM: the write leaves it $${hexbyte(reads)}, as on the machine.`, {
+                title: "Memory",
+            });
+        }
+        this._arrangement.drawAllNow();
+    }
+
+    _bindSaveForm(resolve) {
+        const form = document.getElementById("memory-save-form");
+        const [from, to] = [form.elements.namedItem("from"), form.elements.namedItem("to")];
+        const close = () => {
+            if (form.contains(document.activeElement)) document.activeElement.blur();
+            form.hidden = true;
+        };
+        document.getElementById("memory-save-open").addEventListener("click", () => {
+            if (!form.hidden) return close();
+            const shown = this._memoryView.shown();
+            from.value = `$${hexword(shown.from)}`;
+            to.value = `$${hexword(shown.to)}`;
+            for (const field of [from, to]) field.classList.remove("is-invalid");
+            form.hidden = false;
+        });
+        form.addEventListener("keydown", (e) => {
+            if (e.key === "Escape") close();
+        });
+        form.addEventListener("input", (e) => e.target.classList.remove("is-invalid"));
+        form.addEventListener("submit", (e) => {
+            e.preventDefault();
+            const [start, end] = [from, to].map((field) => resolve(field.value.trim()));
+            from.classList.toggle("is-invalid", start === undefined);
+            to.classList.toggle("is-invalid", end === undefined || end < start);
+            if (start === undefined || end === undefined || end < start) return;
+            const bytes = Uint8Array.from({ length: end - start + 1 }, (_, i) => this._peek(start + i));
+            downloadBlob(new Blob([bytes]), `memory-${hexword(start)}-${hexword(end)}.bin`);
+            close();
         });
     }
 
@@ -586,6 +698,17 @@ export class Debugger {
             stack.push(hexbyte(cpu.peekmem(0x100 + at)));
         this.updateElem(document.getElementById("cpu6502_stack"), stack.join(" "));
         this.updateElem(document.getElementById("cpu6502_cycles"), String(cycleCount(cpu)));
+        const stopwatch = this._stopwatchFrom === null ? "" : String(cpu.scheduler.epoch - this._stopwatchFrom);
+        this.updateElem(document.getElementById("debug-stopwatch"), stopwatch);
+        const beam = cpu.video.beamPosition();
+        this.updateElem(document.getElementById("beam-line"), String(beam.line));
+        this.updateElem(document.getElementById("beam-cycle"), String(beam.frameCycle));
+        document.getElementById("beam-crtc").hidden = !beam.crtc;
+        if (beam.crtc) {
+            this.updateElem(document.getElementById("crtc-row"), String(beam.crtc.row));
+            this.updateElem(document.getElementById("crtc-scanline"), String(beam.crtc.scanline));
+            this.updateElem(document.getElementById("crtc-column"), String(beam.crtc.column));
+        }
         this.updateElem(document.getElementById("cpu6502_a"), hexbyte(this.cpu.a));
         this.updateElem(document.getElementById("cpu6502_x"), hexbyte(this.cpu.x));
         this.updateElem(document.getElementById("cpu6502_y"), hexbyte(this.cpu.y));
@@ -645,6 +768,7 @@ export class Debugger {
         if (!this._inDebugger) {
             noteFeature("debugger", "open");
             this._inDebugger = true;
+            this._monitor.classList.add("finds-bytes");
             if (!this._touchKeyboardShown()) this.showPanels();
         }
         this._arrangement.keepAttached();
@@ -693,6 +817,21 @@ export class Debugger {
         return this._inDebugger;
     }
 
+    /**
+     * While the machine is stopped in the debugger, opens the memory panel at the byte drawn at a point of the
+     * screen, 0 to 1 across and down it, and takes the click; otherwise, or while the on-screen keyboard shows,
+     * the click is the machine's.
+     */
+    showScreenByteAt(x, y) {
+        if (!this._inDebugger || this._touchKeyboardShown()) return false;
+        const address = this.cpu.video.addressShownAt(x, y);
+        if (address !== null) {
+            this._memoryView.update(address);
+            this.panels.memory.open();
+        }
+        return true;
+    }
+
     updatePrevMem() {
         this._memoryView.snapshot();
     }
@@ -706,6 +845,7 @@ export class Debugger {
         if (!this._runningTo) this.updatePrevMem();
         this.watches.dismissMenu();
         this._inDebugger = false;
+        this._monitor.classList.remove("finds-bytes");
         // Focus left in a goto box would keep the keyboard from the machine.
         const focused = document.activeElement;
         if (this._debugPanels().some((floating) => floating.panel.contains(focused))) focused.blur();
@@ -778,6 +918,12 @@ export class Debugger {
         this._runningTo = null;
     }
 
+    /** The machine's state is being replaced, so neither a run to a stop nor the stopwatch's start applies. */
+    replacingState() {
+        this.cancelRun();
+        this._stopwatchFrom = null;
+    }
+
     /**
      * Moves the CPU's cycle target on by one, running each instruction that starts before it. Straight after a
      * breakpoint the target is still at the end of the interrupted time slice, so this runs on to there (#1062).
@@ -825,5 +971,24 @@ export class Debugger {
     runToCursor() {
         const target = this._disassembly.cursor;
         this.runTo(() => this.cpu.pc === target, target === this.resetEntry());
+    }
+
+    /** Runs until `holds()` turns true: at an instruction it holds at, having not held at the one before. */
+    _runUntilTurns(holds) {
+        let held = holds();
+        this.runTo(() => {
+            const had = held;
+            held = holds();
+            return held && !had;
+        }, false);
+    }
+
+    runToVsync() {
+        this._runUntilTurns(() => this.cpu.video.beamPosition().inVSync);
+    }
+
+    /** Runs to the start of TV line `line` of a frame, the next frame's if the beam is on it now. */
+    runToLine(line) {
+        this._runUntilTurns(() => this.cpu.video.beamPosition().line === line);
     }
 }

@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { sessionPage } from "../../src/web/session-page.js";
 import { PanelArrangement } from "../../src/web/floating-panel.js";
-import { domFromIndexHtml, toasts } from "./helpers.js";
+import { captureDownloads, domFromIndexHtml, toasts } from "./helpers.js";
 
 describe("sessionPage", () => {
     const link = () => `${window.location.origin}/?client=room`;
@@ -62,20 +62,13 @@ describe("sessionPage", () => {
     });
 
     it("saves the session's report, and asks for control for this page", async () => {
-        URL.createObjectURL = vi.fn(() => "blob:report");
-        URL.revokeObjectURL = vi.fn();
-        try {
-            vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
-            pageWithPanels().panel(session);
-            click(".session-report");
-            const report = JSON.parse(await URL.createObjectURL.mock.calls[0][0].text());
-            expect(report).toMatchObject({ role: "host", room: "room" });
-            click(".session-take");
-            expect(session.requestControl).toHaveBeenCalledWith(null);
-        } finally {
-            delete URL.createObjectURL;
-            delete URL.revokeObjectURL;
-        }
+        const downloads = captureDownloads();
+        pageWithPanels().panel(session);
+        click(".session-report");
+        const report = JSON.parse(await downloads()[0].blob.text());
+        expect(report).toMatchObject({ role: "host", room: "room" });
+        click(".session-take");
+        expect(session.requestControl).toHaveBeenCalledWith(null);
     });
 
     it("reloads in place as another machine, by the page's own URL builder", () => {
