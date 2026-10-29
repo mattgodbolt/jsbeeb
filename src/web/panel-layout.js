@@ -27,6 +27,7 @@ export const PanelIds = [
     "sysvia",
     "uservia",
     "crtc",
+    "soundchip",
 ];
 export const AllEdges = { left: true, right: true, top: true, bottom: true };
 export const StartEdge = { anchor: "start", offset: 0, fraction: 0 };
