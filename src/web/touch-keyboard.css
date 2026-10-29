@@ -107,8 +107,8 @@ body.touch-keyboard-open #leds {
 }
 
 #touch-keyboard .tk-glyph-f {
-  width: 0.54em;
-  height: 0.88em;
+  width: 0.3em;
+  height: 0.7em;
   vertical-align: baseline;
   fill: none;
   stroke: currentColor;
