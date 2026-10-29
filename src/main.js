@@ -109,6 +109,7 @@ const dbgr = new Debugger({
     symbolSets: new SymbolSets({ baseUrl: new URL(SymbolsBaseUrl) }),
     keys: panelKeys,
     arrangement: panelArrangement,
+    monitor: document.getElementById("cub-monitor"),
 });
 
 if (!window.isSecureContext)
@@ -299,6 +300,7 @@ const inputs = new AnalogueInputs({
     getGamepads: machine.spec.getGamepads,
     settings,
     audioHandler,
+    takeScreenClick: (x, y) => dbgr.showScreenByteAt(x, y),
 });
 if (settings.microphoneChannel !== undefined) {
     // We need to use setTimeout to make sure this runs after the page has loaded

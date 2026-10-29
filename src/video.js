@@ -1,4 +1,4 @@
-import { Teletext } from "./teletext.js";
+import { PipelineLag, PipelineLength, Teletext } from "./teletext.js";
 import { BbcDefaultPalette as NulaDefaultPalette } from "./bbc-palette.js";
 import { Video6847 } from "./6847.js";
 import { encodeLineGrid, texelsPerPixel } from "./video-filters/pixel-grid.js";
@@ -43,6 +43,12 @@ export const HwScrollSubtract = [8, 4, 10, 5];
 
 // The shader takes a line's parity from the hsync count; the modulus only keeps it bounded.
 export const LineCountPeriod = 2500;
+
+// Three vsyncs finish the field under way and paint both of an interlaced picture's after it.
+const TracedVSyncs = 3;
+const TraceStepClocks = 1024;
+// The TV flies back after 384 lines with or without a vsync, and a line is at most 256 1MHz characters of two clocks.
+const MostTracedClocks = TracedVSyncs * 384 * 256 * 2;
 
 ////////////////////
 // VideoNULA - programmable 12-bit RGB palette extension (RobC hardware mod).
@@ -761,6 +767,49 @@ export class Video {
     }
 
     /**
+     * The address of the screen memory byte drawn at a point of the picture, or null off it or in the border. It
+     * runs a copy of this chip on from where it is, so the answer follows the CRTC, the IC32 wrap, the ULA and
+     * teletext's pipeline exactly as drawing does; a split the program makes part way down the picture is not
+     * replayed.
+     * @param {number} x across the painted picture, 0 to 1
+     * @param {number} y down it, 0 to 1
+     * @returns {number | null}
+     */
+    addressShownAt(x, y) {
+        if (this.video6847 || !(x >= 0 && x < 1 && y >= 0 && y < 1)) return null;
+        const pixelX = Math.floor(this.leftBorder + x * (1024 - this.leftBorder - this.rightBorder));
+        const pixelY = Math.floor(this.topBorder + y * (625 - this.topBorder - this.bottomBorder));
+        const tracer = new Video(this.isMaster, this.fb32.length, noop, { hasVideoNula: this.ula.hasVideoNula });
+        tracer.restoreState(this.snapshotState());
+        // The SAA5050 shows each byte PipelineLag reads after it is fetched.
+        const reads = new Int32Array(PipelineLength);
+        let readCount = 0;
+        let found = null;
+        let fieldsTraced = 0;
+        const videoRead = (address) => {
+            reads[readCount++ % PipelineLength] = address;
+            if ((tracer.dispEnabled & EVERYTHINGENABLED) !== EVERYTHINGENABLED) return 0;
+            const { bitmapX, bitmapY } = tracer;
+            if (bitmapX < 0 || bitmapX >= 1024 || bitmapY >= 625) return 0;
+            const doubled = tracer.doublesLines();
+            const row = doubled ? bitmapY & ~1 : bitmapY;
+            const inRows = pixelY === row || (doubled && pixelY === row + 1);
+            if (inRows && pixelX >= bitmapX && pixelX < bitmapX + tracer.pixelsPerChar) {
+                const shown = tracer.teletextMode ? readCount - 1 - PipelineLag : readCount - 1;
+                found = shown >= 0 ? reads[shown % PipelineLength] : null;
+            }
+            return 0;
+        };
+        const countField = (vsync) => {
+            if (vsync) fieldsTraced++;
+        };
+        tracer.reset({ videoRead }, { setVBlankInt: countField }, false);
+        for (let clocks = 0; fieldsTraced < TracedVSyncs && clocks < MostTracedClocks; clocks += TraceStepClocks)
+            tracer.polltime(TraceStepClocks);
+        return found;
+    }
+
+    /**
      * Recompute the ULA-dependent half of the line grid descriptor: everything
      * except whether this particular scanline was doubled. Called whenever the
      * ULA control register changes, so the render loop only has to store it.
@@ -1358,6 +1407,10 @@ export class FakeVideo {
     }
 
     setScreenHwScroll() {}
+
+    addressShownAt() {
+        return null;
+    }
 
     snapshotState() {
         return { cycles: this.cycles, inSync: this.inSync };
