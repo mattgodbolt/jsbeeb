@@ -283,8 +283,8 @@ test("the media window fills a phone's screen without scrolling sideways, and it
     await page.setViewportSize({ width: 600, height: 800 });
     await beeb.open("?disc=elite.ssd");
     await beeb.expectDrive0("elite.ssd");
-    // The top bar is folded into its hamburger at this width; the LED panel's line still opens it.
-    await page.click('#leds .slot-readout[data-slot="0"]');
+    // The top bar is folded into its hamburger at this width; the touch keyboard's disc light still opens it.
+    await page.click('#touch-keyboard [data-slot="0"]');
     await expect(page.locator("#media-panel")).toBeVisible();
     await page.click('#media-into [data-target="1"]');
     const fit = await page.evaluate(() => {

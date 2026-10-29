@@ -189,8 +189,8 @@ export class TouchKeyboard {
         const leds = document.createElement("div");
         leds.className = "tk-leds";
         const lights = [
-            ["motor", "tape"],
-            ["disc", "disc"],
+            ["motor", "tape", "tape"],
+            ["disc", "disc", "0"],
             ...(this.model.isAtom
                 ? []
                 : [
@@ -198,8 +198,14 @@ export class TouchKeyboard {
                       ["shift", "shift"],
                   ]),
         ];
-        for (const [name, label] of lights) {
+        for (const [name, label, slot] of lights) {
             const light = document.createElement("span");
+            if (slot !== undefined) {
+                // The hidden lights bar is what opens the media window on a phone, so these labels do it here.
+                light.dataset.slot = slot;
+                const readout = `#leds .slot-readout[data-slot="${slot}"]`;
+                light.addEventListener("click", () => document.querySelector(readout).click());
+            }
             light.textContent = label;
             const led = document.createElement("i");
             led.dataset.led = name;

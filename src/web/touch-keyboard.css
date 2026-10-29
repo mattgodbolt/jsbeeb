@@ -187,3 +187,8 @@ body.touch-keyboard-open #leds {
   width: 100%;
   transition: width 350ms linear;
 }
+
+#touch-keyboard .tk-leds span[data-slot] {
+  padding: 6px 4px;
+  margin: -6px -4px;
+}
