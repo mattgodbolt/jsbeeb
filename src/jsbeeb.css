@@ -620,7 +620,6 @@ div.modal-body > div:not(:first-child) {
   color: #60f060;
 }
 
-/* Half of any width the panel has beyond its natural one goes to the names. */
 #disassembly .dis_addr {
   width: clamp(12ch, 12ch + (100% - var(--natural-width)) / 2, 32ch);
 }

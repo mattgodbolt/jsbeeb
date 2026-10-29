@@ -169,6 +169,12 @@ test("a wider disassembly panel shows more of each name, in one column", async (
             .locator("#disassembly .instr_bytes")
             .evaluateAll((nodes) => new Set(nodes.map((node) => node.getBoundingClientRect().left)).size);
     expect(await shown()).toBeLessThan(1);
+    const [label, bytes] = await Promise.all(
+        [".dis_addr", ".instr_bytes"].map((column) =>
+            page.locator(`#disassembly .highlight ${column}`).evaluate((node) => node.getBoundingClientRect().width),
+        ),
+    );
+    expect(label / bytes).toBeCloseTo(12 / 9);
 
     const handle = await page.locator("#disassembly-panel .panel-resize-left").boundingBox();
     await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2);
