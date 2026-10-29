@@ -356,12 +356,12 @@ export class FdcPanel {
                     title="Open the disc surface on this side, zoomed in on the head">show the head on the disc</button>
             </div>
             <div class="fdc-log-area">
-                <div class="decoded-heading">
-                    Command log
-                    <button type="button" class="txt-btn fdc-log-commands" tabindex="-1"
-                        title="Log each command the controller is given, with its parameters and result"></button>
-                    <button type="button" class="txt-btn fdc-log-states" role="checkbox" tabindex="-1"
-                        title="Log each change of state too; there are a great many">state changes</button>
+                <div class="decoded-heading fdc-log-heading">
+                    Log
+                    <button type="button" class="decoded-bit fdc-log-commands" tabindex="-1"
+                        title="Log each command the controller is given, with its parameters and result">commands</button>
+                    <button type="button" class="decoded-bit fdc-log-states" tabindex="-1"
+                        title="Log each change of the controller's state; there are a great many">state changes</button>
                     <button type="button" class="txt-btn fdc-log-clear" tabindex="-1">clear</button>
                 </div>
                 <div class="fdc-log"></div>
@@ -388,28 +388,26 @@ export class FdcPanel {
             this._followingLog =
                 log.scrollTop >= this._followedTo || log.scrollTop + log.clientHeight >= log.scrollHeight - 1;
         });
-        this._commandsButton = part("fdc-log-commands");
-        this._statesButton = part("fdc-log-states");
         this._fdc.onLog = (line) => this._appendLog(line);
-        this._commandsButton.addEventListener("click", () => {
-            this._fdc.logCommands = !this._fdc.logCommands;
-            this._showLogging();
-        });
-        this._statesButton.addEventListener("click", () => {
-            this._fdc.logStateChanges = !this._fdc.logStateChanges;
-            this._showLogging();
-        });
+        this._logToggles = [
+            { button: part("fdc-log-commands"), flag: "logCommands" },
+            { button: part("fdc-log-states"), flag: "logStateChanges" },
+        ];
+        for (const { button, flag } of this._logToggles)
+            button.addEventListener("click", () => {
+                this._fdc[flag] = !this._fdc[flag];
+                this._showLogging();
+            });
         part("fdc-log-clear").addEventListener("click", () => this._log.replaceChildren());
         this._showLogging();
         this.update();
     }
 
     _showLogging() {
-        const { logCommands, logStateChanges } = this._fdc;
-        this._commandsButton.textContent = logCommands ? "stop" : "start";
-        this._commandsButton.setAttribute("aria-pressed", String(logCommands));
-        this._statesButton.textContent = `${logStateChanges ? "☑" : "☐"} state changes`;
-        this._statesButton.setAttribute("aria-checked", String(logStateChanges));
+        for (const { button, flag } of this._logToggles) {
+            button.classList.toggle("lit", this._fdc[flag]);
+            button.setAttribute("aria-pressed", String(this._fdc[flag]));
+        }
     }
 
     _appendLog(text) {

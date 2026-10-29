@@ -1001,12 +1001,17 @@ small {
   color: #aaaaaa;
 }
 
-.soundchip-mutes .decoded-bit {
+.soundchip-mutes .decoded-bit,
+.fdc-log-heading .decoded-bit {
   margin-left: 6px;
+}
+
+/* A bit drawn as a button is a toggle the panel offers, lit while on. */
+button.decoded-bit {
   font: inherit;
 }
 
-.soundchip-mutes .decoded-bit:not(.lit) {
+button.decoded-bit:not(.lit) {
   background: transparent;
 }
 

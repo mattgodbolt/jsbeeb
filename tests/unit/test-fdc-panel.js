@@ -119,19 +119,23 @@ describe("FdcPanel", () => {
         expect(meanings("CMD")).toEqual(["write sector", "-multi", "-settle", "+deleted"]);
     });
 
-    it("logs the controller's commands in the panel while asked, and its state changes too when ticked", () => {
+    const toggles = () =>
+        [...part("fdc-log-heading").querySelectorAll(".decoded-bit")].map(
+            (toggle) => `${toggle.getAttribute("aria-pressed") === "true" ? "+" : "-"}${toggle.textContent}`,
+        );
+
+    it("logs the controller's commands and its state changes in the panel while each is toggled on", () => {
         const { fdc } = panelFor(IntelFdc, {});
         const commands = part("fdc-log-commands");
         const states = part("fdc-log-states");
-        expect(commands.textContent).toBe("start");
+        expect(toggles()).toEqual(["-commands", "-state changes"]);
         commands.click();
-        expect(commands.textContent).toBe("stop");
+        expect(toggles()).toEqual(["+commands", "-state changes"]);
         fdc.write(IntelCommandAddr, IntelSeek);
         fdc.write(IntelParamAddr, 3);
         expect(logLines()[0]).toMatch(/^8271: command 29 sel 40 params 03/);
-        expect(states.getAttribute("aria-checked")).toBe("false");
         states.click();
-        expect(states.getAttribute("aria-checked")).toBe("true");
+        expect(toggles()).toEqual(["+commands", "+state changes"]);
         expect(fdc.logStateChanges).toBe(true);
         part("fdc-log-clear").click();
         expect(logLines()).toEqual([]);
@@ -159,8 +163,7 @@ describe("FdcPanel", () => {
 
     it("shows the log as on when the page's flags turned it on", () => {
         panelFor(IntelFdc, { logFdcCommands: true, logFdcStateChanges: true });
-        expect(part("fdc-log-commands").textContent).toBe("stop");
-        expect(part("fdc-log-states").getAttribute("aria-checked")).toBe("true");
+        expect(toggles()).toEqual(["+commands", "+state changes"]);
     });
 
     it("counts an 8271's drive as selected only while load head lets its select through", () => {
