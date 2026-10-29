@@ -142,11 +142,6 @@ nobody asked.
   - Try and modernise the code to use ES6+ features where possible
   - A refactor that moves code into a module should not grow the total much; if it does, the PR body says why
 
-- Prefer helper functions for repetitive operations (like the `appendParam` function)
-- Remove unnecessary type checking where types are expected to be correct
-- Replace complex conditionals with more readable alternatives when possible
-- Ensure simplifications don't break existing behavior or assumptions
-
 - **Constants and Magic Numbers**:
   - Local un-exported properties should be used for shared constants
   - Local constants should be used for temporary values
