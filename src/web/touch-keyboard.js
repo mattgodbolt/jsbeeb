@@ -68,13 +68,13 @@ const BottomRow = (layerLabel, layer) => [
         ["↓", "DOWN", 270],
         ["↑", "UP", 90],
         ["→", "RIGHT", 180],
-    ].map(([label, key, turn]) => k(label, key, { w: 0.9, glyph: "arrow", turn })),
+    ].map(([label, key, turn]) => k(label, key, { w: 0.9, cls: "cursor", glyph: "arrow", turn })),
 ];
 
 export const FunctionRow = [
     ...[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => k("f", `F${n}`, { cls: "fkey", glyph: "f", digit: `${n}` })),
     gap(0.5),
-    k("BREAK", BreakKey, { w: 1.6, cls: "fkey small" }),
+    k("BREAK", BreakKey, { w: 1.6 }, small),
 ];
 
 /**
@@ -115,7 +115,7 @@ export const Layers = {
             k("SHIFT", "SHIFT", { w: 2 }, small),
             gap(4),
             k("DEL", "DELETE", { w: 2 }, small),
-            k("COPY", "COPY", { w: 2 }, small),
+            k("COPY", "COPY", { w: 2, cls: "small cursor" }),
         ],
         BottomRow("ABC", "main"),
     ],

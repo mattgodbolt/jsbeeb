@@ -128,8 +128,13 @@ body.touch-keyboard-open #leds {
 }
 
 #touch-keyboard .tk-key.fkey {
-  background: linear-gradient(#d23a2c, #a52519);
-  border-bottom-color: #5e130c;
+  background: linear-gradient(#d4502c, #a8391b);
+  border-bottom-color: #5e1e0c;
+}
+
+#touch-keyboard .tk-key.cursor {
+  background: linear-gradient(#5a4528, #3f301b);
+  border-bottom-color: #1c150b;
 }
 
 #touch-keyboard .tk-key.layer {
