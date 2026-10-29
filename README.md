@@ -413,7 +413,7 @@ sudo rpm -i out/dist/jsbeeb-<version>.x86_64.rpm
   its names for addresses, ahead of the built-in symbol sets: BeebAsm's `-d` or `-dd` output (with `-labels`), VICE's
   (`al C:1900 .start`, as VICE's `save_labels` and cc65's `-Ln` write them) or b-em's `name=$1900`. May be given
   more than once. `labels.N=X` ties the file's names for &8000 to &BFFF to sideways bank `N`, named as for `rom.N`,
-  so they show only while that bank is paged in. A label file dropped on any debugger panel loads the same way, for
+  so they show only while that bank is paged in. A label file dropped on any debug panel (the debugger's own, the decoded peripheral panels or the watch panel) loads the same way, for
   that page only; the line under the disassembly lists the files loaded, with the bank each is for and a button to
   forget it.
 - `benchmark=X` - measures the emulator's speed on the benchmark workload `X`, one of those in

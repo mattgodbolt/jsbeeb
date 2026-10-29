@@ -1628,14 +1628,17 @@ describe("Debugger", () => {
             const sysvia = new SysViaPanel({ cpu, arrangement }).floating.panel;
             const watches = document.getElementById("watch-panel");
             document.body.dispatchEvent(new Event("dragenter", { bubbles: true }));
-            expect([sysvia, watches].map((panel) => panel.dataset.dropWhat)).toEqual([
-                "Drop a label file",
-                "Drop a label file",
+            expect([sysvia, watches].map((panel) => panel.dataset.dropInto)).toEqual([
+                "BeebAsm, VICE or b-em labels name addresses in the debugger",
+                "BeebAsm, VICE or b-em labels name addresses in the debugger",
             ]);
+            expect(drop(document.body, "game.ssd", "not labels").defaultPrevented).toBe(false);
             drop(sysvia, "game.txt", "service=8003");
             await vi.waitFor(() => expect(code(0x2002).textContent).toBe("JSR service"));
             drop(watches, "more.txt", "start=2000");
             await vi.waitFor(() => expect(addrOf(rowAt(0x2000))).toBe("2000 start"));
+            expect(labelFiles.files.map(({ title }) => title)).toEqual(["game.txt", "more.txt"]);
+            expect(document.querySelector(".toast")?.textContent).not.toContain("game.ssd");
         });
 
         it("ties a file to a bank from its menu, and forgets it from its button", async () => {
