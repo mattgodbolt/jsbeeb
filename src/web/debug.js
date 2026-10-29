@@ -196,10 +196,10 @@ class MemoryView {
 
     /**
      * Puts a field over the byte at `address`, bringing it into view if need be. Tab hands `write` its new value and
-     * moves on to the next byte (Shift-Tab, the one before); Enter hands it over and leaves, and Escape just leaves.
-     * A value left as it was is not handed over, as a write to a register is not the same as leaving it alone.
+     * `editNext` the next byte's address (Shift-Tab, the one before's); Enter hands it over and leaves, and Escape just
+     * leaves. A value left as it was is not handed over, as a write to a register is not the same as leaving it alone.
      */
-    edit(address, write) {
+    edit(address, write, editNext) {
         if (!this._byteAt(address)) this.update(address);
         const byte = this._byteAt(address);
         const field = document.createElement("input");
@@ -221,7 +221,7 @@ class MemoryView {
             if (value === undefined) return;
             field.blur();
             if (value !== parseInt(was, 16)) write(address, value);
-            if (e.key === "Tab") this.edit((address + (e.shiftKey ? -1 : 1)) & 0xffff, write);
+            if (e.key === "Tab") editNext((address + (e.shiftKey ? -1 : 1)) & 0xffff);
         });
         field.focus();
         field.select();
@@ -470,16 +470,24 @@ export class Debugger {
         });
         document.getElementById("memory").addEventListener("click", (e) => {
             if (!e.target.matches(".mem_bytes [data-addr]") || this._loop.mode !== RunMode.debugging) return;
-            const address = Number(e.target.dataset.addr);
-            if (this._paging.memory.differs(address)) {
-                toast(`$${hexword(address)} shows another bank than the CPU's; pick "paged" to edit it.`, {
-                    title: "Memory",
-                });
-                return;
-            }
-            this._memoryView.edit(address, (at, value) => this._writeByte(at, value));
+            this._editMemory(Number(e.target.dataset.addr));
         });
         this._bindSaveForm((text) => addressFor(this._namesIn(this._paging.memory), text, this.cpu.pc));
+    }
+
+    /** Edits the byte at `address`, unless the memory panel shows there other memory than the CPU writes to. */
+    _editMemory(address) {
+        if (this._paging.memory.differs(address)) {
+            toast(`$${hexword(address)} shows other memory than the CPU's; pick "paged" to edit it.`, {
+                title: "Memory",
+            });
+            return;
+        }
+        this._memoryView.edit(
+            address,
+            (at, value) => this._writeByte(at, value),
+            (next) => this._editMemory(next),
+        );
     }
 
     /** Writes as the CPU would, so that a ROM byte keeps its value and a register's device sees the write. */

@@ -789,7 +789,7 @@ describe("Debugger", () => {
             expect(cpu.romsel).toBe(15);
         });
 
-        it("saves the bank the memory panel shows, and leaves its bytes unedited where the CPU reads others", async () => {
+        it("saves the bank the memory panel shows, and edits none of it where the CPU reads other memory, by click or Tab", async () => {
             const downloads = captureDownloads();
             goTo("goto-mem-addr-form", "4:8100");
             document.getElementById("memory-save-open").click();
@@ -799,9 +799,18 @@ describe("Debugger", () => {
             form.dispatchEvent(new Event("submit", { cancelable: true }));
             const [saved] = downloads();
             expect([...new Uint8Array(await saved.blob.arrayBuffer())]).toEqual([0x44]);
+            const field = () => document.querySelector("#memory .mem-edit");
             memByte(0x8100).click();
-            expect(document.querySelector("#memory .mem-edit")).toBeNull();
-            expect(toasts()).toEqual([expect.stringContaining('pick "paged" to edit')]);
+            expect(field()).toBeNull();
+            goTo("goto-mem-addr-form", "$7fff");
+            memByte(0x7fff).click();
+            field().value = "12";
+            field().dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true }));
+            expect([field(), cpu.peekmem(0x7fff)]).toEqual([null, 0x12]);
+            expect(toasts()).toEqual([
+                expect.stringContaining("$8100 shows other memory"),
+                expect.stringContaining("$8000 shows other memory"),
+            ]);
         });
 
         it("refuses a view the machine doesn't have", () => {
