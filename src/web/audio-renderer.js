@@ -61,6 +61,7 @@ class SoundChipProcessor extends AudioWorkletProcessor {
         this.commands = {
             produced: (m) => this.onProduced(m.upTo, m.events),
             setEnabled: (m) => (this.chip.enabled = m.enabled),
+            setChannelMutes: (m) => (this.chip.channelMuted = m.muted),
             setTargetLatency: (m) => this.setTargetLatency(m.targetLatencyMs),
             setAudioOutput: (m) => this.setAudioOutput(m.audioOutput),
             setSpeakerAmount: (m) => this.setSpeakerAmount(m.speakerAmount),

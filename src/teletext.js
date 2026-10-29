@@ -16,8 +16,8 @@ const DataBits = 0x7f;
 const ClockedEntry = 0x80;
 const ShownEntry = 0x100;
 const DoubleHeight = 13;
-const PipelineLength = 4;
-const PipelineLag = PipelineLength - 1;
+export const PipelineLength = 4;
+export const PipelineLag = PipelineLength - 1;
 
 // What `clockCharacter` reads or changes besides the pipeline and the cell it latches.
 class LineState {

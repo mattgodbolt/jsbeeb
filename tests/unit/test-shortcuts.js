@@ -2,23 +2,15 @@
 import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it } from "vitest";
 
+import { fillHelp } from "../../src/web/help.js";
 import { labelPageShortcuts, shortcutLabel, Shortcuts } from "../../src/web/shortcuts.js";
-import { stitchHtml } from "../../tools/html-includes.js";
 import { domFromIndexHtml, teardownDom } from "./helpers.js";
 
 const readme = readFileSync("README.md", "utf8");
-const indexHtml = stitchHtml("index.html");
-
-/** Every `Alt-...` the two lists of documentation claim jsbeeb answers. */
-function documentedCombos(text, pattern) {
-    return new Set([...text.matchAll(pattern)].map((match) => match[1]));
-}
 
 describe("Emulator shortcuts", () => {
-    const combos = Shortcuts.map((shortcut) => shortcut.combo);
-
     it("puts every shortcut on Alt, leaving Ctrl to the emulated machine", () => {
-        for (const combo of combos) expect(combo.startsWith("Alt-")).toBe(true);
+        for (const { combo } of Shortcuts) expect(combo.startsWith("Alt-")).toBe(true);
     });
 
     it("names a handler for every shortcut that is not documentation for another", () => {
@@ -28,11 +20,12 @@ describe("Emulator shortcuts", () => {
         }
     });
 
-    it.each([
-        ["the README", () => documentedCombos(readme, /\| `(Alt-[^`]+)`/g)],
-        ["the page's own help", () => documentedCombos(indexHtml, /<span class="key">(Alt-[^<]+)<\/span>/g)],
-    ])("is listed in %s, exactly", (_where, documented) => {
-        expect([...documented()].sort()).toEqual([...combos].sort());
+    it("is listed in the README, exactly and in the same words", () => {
+        const listed = [...readme.matchAll(/^\| `(Alt-[^`]+)` +\| (.+?) +\|$/gm)].map(([, combo, description]) => ({
+            combo,
+            description,
+        }));
+        expect(listed).toEqual(Shortcuts.map(({ combo, description }) => ({ combo, description })));
     });
 });
 
@@ -60,6 +53,7 @@ describe("Shortcut labels", () => {
 
     it("relabel the help's caps and the tooltips on a Mac, and leave them as they are off one", () => {
         domFromIndexHtml("help", "leds");
+        fillHelp();
         labelPageShortcuts(false);
         const offMac = pageLabels();
         expect(offMac.help).toContain("Alt-S");

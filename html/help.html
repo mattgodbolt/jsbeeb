@@ -1,139 +1,174 @@
 <div class="modal fade" id="help" data-feature="help" tabindex="-1" aria-labelledby="helpModalLabel" aria-hidden="true">
   <div class="modal-dialog modal-xl modal-dialog-scrollable modal-fullscreen-lg-down">
     <div class="modal-content">
-      <div class="modal-header">
+      <div class="modal-header help-header">
         <h5 class="modal-title" id="helpModalLabel">Help</h5>
+        <ul class="nav nav-tabs help-tabs" role="tablist">
+          <li class="nav-item" role="presentation">
+            <button
+              class="nav-link active"
+              data-bs-toggle="tab"
+              data-bs-target="#help-start"
+              type="button"
+              role="tab"
+              aria-controls="help-start"
+              aria-selected="true"
+            >
+              Getting started
+            </button>
+          </li>
+          <li class="nav-item" role="presentation">
+            <button
+              class="nav-link"
+              data-bs-toggle="tab"
+              data-bs-target="#help-keyboard"
+              type="button"
+              role="tab"
+              aria-controls="help-keyboard"
+              aria-selected="false"
+            >
+              Keyboard
+            </button>
+          </li>
+          <li class="nav-item" role="presentation">
+            <button
+              class="nav-link"
+              data-bs-toggle="tab"
+              data-bs-target="#help-shortcuts"
+              type="button"
+              role="tab"
+              aria-controls="help-shortcuts"
+              aria-selected="false"
+            >
+              Shortcuts
+            </button>
+          </li>
+          <li class="nav-item" role="presentation">
+            <button
+              class="nav-link"
+              data-bs-toggle="tab"
+              data-bs-target="#help-debugging"
+              type="button"
+              role="tab"
+              aria-controls="help-debugging"
+              aria-selected="false"
+            >
+              Paused or debugging
+            </button>
+          </li>
+        </ul>
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
-      <div class="modal-body help">
-        <div class="row">
-          <div class="col-lg-6">
-            <p>
-              jsbeeb emulates the <a href="https://en.wikipedia.org/wiki/Bbc_micro">BBC Micro</a> Model B and Master
-              128, and the <a href="https://en.wikipedia.org/wiki/Acorn_Atom">Acorn Atom</a> that came before them.
-              Choose the machine and the keyboard layout in the settings: click the model name on the top bar.
-            </p>
-            <p>
-              Elite, the classic 3D space trading game, is already in drive 0. Press
-              <span class="text-nowrap"><span class="key">SHIFT</span>+<span class="key">BREAK</span></span>
-              (Shift+F12) to boot it. Other discs and tapes load from the media window: click
-              <strong>Media</strong> on the top bar. Pasting text types it into the BBC.
-            </p>
-            <h5>Keyboard</h5>
-            <p>
-              A BBC keyboard has its symbols in different places from yours. The default <em>Physical</em> layout goes
-              by position: most keys press the BBC key in the same place, so the BBC's <span class="key">: *</span> is
-              the key two to the right of your <span class="key">L</span>. <em>Natural</em> goes by character instead,
-              so what you type is what the BBC gets; it suits typing, and games want Physical or Gaming.
-              <em>Gaming</em> puts the BBC's <span class="key">CAPS LOCK</span> and <span class="key">CTRL</span> on
-              your left <span class="key">Ctrl</span> and <span class="key">Alt</span>, for games that steer with them;
-              jsbeeb's Alt shortcuts still come first. Any key can be
-              <a href="https://github.com/mattgodbolt/jsbeeb#remapping-keys">remapped from the URL</a>.
-            </p>
-            <table class="table table-sm caption-top">
-              <caption>
-                BBC and Master keys yours lacks (Physical and Natural layouts)
-              </caption>
-              <thead>
-                <tr>
-                  <th>BBC key</th>
-                  <th>Press</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td><span class="key function">F0</span></td>
-                  <td><span class="key">F10</span></td>
-                </tr>
-                <tr>
-                  <td><span class="key">BREAK</span></td>
-                  <td><span class="key">F12</span></td>
-                </tr>
-                <tr>
-                  <td><span class="key cursor">COPY</span></td>
-                  <td>
-                    <span class="key">End</span> (on a Mac laptop,
-                    <span class="text-nowrap"><span class="key">fn</span>+<span class="key">&rarr;</span></span
-                    >)
-                  </td>
-                </tr>
-                <tr>
-                  <td><span class="key">SHIFT LOCK</span></td>
-                  <td><span class="key">Home</span></td>
-                </tr>
-                <tr>
-                  <td><span class="key">@</span></td>
-                  <td><span class="key">`</span> in Physical</td>
-                </tr>
-                <tr>
-                  <td><span class="key">_ &pound;</span></td>
-                  <td>
-                    <span class="key">Page Up</span> in Physical; in Natural, <span class="key">`</span> gives &pound;
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-            <p>
-              On a Mac, hold <span class="key">fn</span> for the function keys. Games there can't use
-              <span class="key">Caps Lock</span> to move or fire, as browsers never report it being let go; the Gaming
-              layout puts the BBC's <span class="key">CAPS LOCK</span> on <span class="key">Ctrl</span>.
-            </p>
+      <div class="modal-body help tab-content">
+        <div class="tab-pane fade show active" id="help-start" role="tabpanel">
+          <div class="row">
+            <div class="col-lg-6">
+              <p>
+                jsbeeb emulates the <a href="https://en.wikipedia.org/wiki/Bbc_micro">BBC Micro</a> Model B and Master
+                128, and the <a href="https://en.wikipedia.org/wiki/Acorn_Atom">Acorn Atom</a> that came before them.
+                Choose the machine and the keyboard layout in the settings: click the model name on the top bar.
+              </p>
+              <p>
+                Elite, the classic 3D space trading game, is already in drive 0. Press
+                <span class="text-nowrap"><span class="key">SHIFT</span>+<span class="key">BREAK</span></span>
+                (Shift+F12) to boot it. Other discs and tapes load from the media window: click
+                <strong>Media</strong> on the top bar. Pasting text types it into the BBC.
+              </p>
+            </div>
+            <div class="col-lg-6">
+              <h5>On a phone or tablet</h5>
+              <p>
+                Tap <span class="key">&#9000;</span> for an on-screen BBC keyboard; <span class="key">BREAK</span> and
+                the function keys are along its top, and its <strong>more</strong> key brings up the keys that do not
+                fit, such as <span class="key">COPY</span> and <span class="key">TAB</span>.
+              </p>
+              <h5>Playing together</h5>
+              <p>
+                <strong>Shared session</strong>, in the <strong>More</strong> menu, lets friends play on one machine,
+                each in their own browser: host it and send round the link.
+              </p>
+            </div>
           </div>
-          <div class="col-lg-6">
-            <h5>Shortcuts</h5>
-            <table class="table table-sm">
-              <tbody>
-                <tr>
-                  <td><span class="key">Alt-S</span></td>
-                  <td>Stop or start; when stopped, the debugger shows</td>
-                </tr>
-                <tr>
-                  <td><span class="key">Alt-D</span></td>
-                  <td>Show or hide the debug panels, leaving the machine as it is</td>
-                </tr>
-                <tr>
-                  <td><span class="key">Alt-P</span></td>
-                  <td>Pause or resume, no debugger</td>
-                </tr>
-                <tr>
-                  <td><span class="key">Alt-T</span></td>
-                  <td>Turbo, or back to real speed</td>
-                </tr>
-                <tr>
-                  <td><span class="key">Alt-W</span></td>
-                  <td>Rewind: pick an earlier moment to go back to</td>
-                </tr>
-                <tr>
-                  <td><span class="key">Alt-B</span></td>
-                  <td>Open the printer output</td>
-                </tr>
-                <tr>
-                  <td><span class="key">Alt-M</span></td>
-                  <td>Media window for drive 0</td>
-                </tr>
-                <tr>
-                  <td><span class="key">Alt-Shift-M</span></td>
-                  <td>Media window for drive 1</td>
-                </tr>
-                <tr>
-                  <td><span class="key">Alt-C</span></td>
-                  <td>Media window for the cassette</td>
-                </tr>
-                <tr>
-                  <td><span class="key">Alt-1 to Alt-8</span></td>
-                  <td>Hold switch 1 to 8 on the user port (PB0 to PB7)</td>
-                </tr>
-              </tbody>
-            </table>
-            <h5>Paused or debugging</h5>
-            <p>
-              <span class="key">Alt-P</span>: <span class="key">g</span> resumes, <span class="key">n</span> runs a
-              frame. In the debugger:
-            </p>
-            <table class="table table-sm">
-              <tbody id="debug-keys-help"></tbody>
-            </table>
+        </div>
+        <div class="tab-pane fade" id="help-keyboard" role="tabpanel">
+          <div class="row">
+            <div class="col-lg-6">
+              <p>
+                A BBC keyboard has its symbols in different places from yours. The default <em>Physical</em> layout goes
+                by position: most keys press the BBC key in the same place, so the BBC's <span class="key">: *</span> is
+                the key two to the right of your <span class="key">L</span>. <em>Natural</em> goes by character instead,
+                so what you type is what the BBC gets; it suits typing, and games want Physical or Gaming.
+                <em>Gaming</em> puts the BBC's <span class="key">CAPS LOCK</span> and <span class="key">CTRL</span> on
+                your left <span class="key">Ctrl</span> and <span class="key">Alt</span>, for games that steer with
+                them; jsbeeb's Alt shortcuts still come first. Any key can be
+                <a href="https://github.com/mattgodbolt/jsbeeb#remapping-keys">remapped from the URL</a>.
+              </p>
+              <p>
+                On a Mac, hold <span class="key">fn</span> for the function keys. Games there can't use
+                <span class="key">Caps Lock</span> to move or fire, as browsers never report it being let go; the Gaming
+                layout puts the BBC's <span class="key">CAPS LOCK</span> on <span class="key">Ctrl</span>.
+              </p>
+            </div>
+            <div class="col-lg-6">
+              <table class="table table-sm caption-top">
+                <caption>
+                  BBC and Master keys yours lacks (Physical and Natural layouts)
+                </caption>
+                <thead>
+                  <tr>
+                    <th>BBC key</th>
+                    <th>Press</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><span class="key function">F0</span></td>
+                    <td><span class="key">F10</span></td>
+                  </tr>
+                  <tr>
+                    <td><span class="key">BREAK</span></td>
+                    <td><span class="key">F12</span></td>
+                  </tr>
+                  <tr>
+                    <td><span class="key cursor">COPY</span></td>
+                    <td>
+                      <span class="key">End</span> (on a Mac laptop,
+                      <span class="text-nowrap"><span class="key">fn</span>+<span class="key">&rarr;</span></span
+                      >)
+                    </td>
+                  </tr>
+                  <tr>
+                    <td><span class="key">SHIFT LOCK</span></td>
+                    <td><span class="key">Home</span></td>
+                  </tr>
+                  <tr>
+                    <td><span class="key">@</span></td>
+                    <td><span class="key">`</span> in Physical</td>
+                  </tr>
+                  <tr>
+                    <td><span class="key">_ &pound;</span></td>
+                    <td>
+                      <span class="key">Page Up</span> in Physical; in Natural, <span class="key">`</span> gives &pound;
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
+        </div>
+        <div class="tab-pane fade" id="help-shortcuts" role="tabpanel">
+          <p>Every shortcut is on Alt, so Ctrl stays with the BBC. They work whether the machine is running or not.</p>
+          <table class="table table-sm">
+            <tbody id="shortcuts-help"></tbody>
+          </table>
+        </div>
+        <div class="tab-pane fade" id="help-debugging" role="tabpanel">
+          <p>
+            <span class="key">Alt-P</span> pauses the machine and <span class="key">Alt-S</span> stops it in the
+            debugger. While it is stopped, these keys work; where two windows offer the same key, the one in front gets
+            it. Each debug window also lists its keys along its bottom.
+          </p>
+          <div class="row" id="debug-keys-help"></div>
         </div>
       </div>
     </div>
