@@ -505,11 +505,37 @@
               autocomplete="off"
             />
           </form>
+          <button
+            type="button"
+            id="memory-save-open"
+            class="btn btn-sm btn-outline-light"
+            title="Save a range of memory to a file"
+          >
+            Save
+          </button>
           <button type="button" class="btn btn-sm btn-outline-light panel-close" aria-label="Close" title="Close">
             &times;
           </button>
         </div>
         <div class="panel-body">
+          <form id="memory-save-form" role="form" hidden>
+            <input
+              type="text"
+              name="from"
+              class="form-control form-control-sm panel-field"
+              aria-label="First address to save"
+              autocomplete="off"
+            />
+            to
+            <input
+              type="text"
+              name="to"
+              class="form-control form-control-sm panel-field"
+              aria-label="Last address to save"
+              autocomplete="off"
+            />
+            <button type="submit" class="btn btn-sm btn-outline-light">Save</button>
+          </form>
           <div id="memory">
             <div class="template">
               <span class="dis_addr">0000</span><span class="mem_bytes"></span><span class="mem_asc"></span>
