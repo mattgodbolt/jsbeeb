@@ -6,7 +6,7 @@ import { DisassemblyKeys } from "../../src/web/disassembly-view.js";
 import { Gap } from "../../src/web/panel-layout.js";
 import { RunMode } from "../../src/web/emulation-loop.js";
 import { fake6502 } from "../../src/fake6502.js";
-import { TEST_65C12 } from "../../src/models.js";
+import { findModel, TEST_65C12 } from "../../src/models.js";
 import { FakeVideo } from "../../src/video.js";
 import { hexbyte, hexword } from "../../src/hex.js";
 import { SymbolSets } from "../../src/symbol-sets.js";
@@ -139,16 +139,33 @@ describe("Debugger", () => {
         expect(cpu.breakpoints.list()).toEqual([expect.objectContaining({ start: address, label })]);
     });
 
-    it("shows a breakpoint's address from the Breakpoints panel, in the disassembly or the memory view", () => {
+    it.each([
+        ["an execute breakpoint in the disassembly", "execute", undefined, 0x3000, "paged"],
+        ["a write breakpoint in the memory view", "write", undefined, 0x1900, "paged"],
+        ["one pinned to a bank in the disassembly, set to show that bank", "execute", 4, 0x8000, "bank 4"],
+        ["one pinned to a bank in the memory view, set to show that bank", "write", 4, 0x8000, "bank 4"],
+    ])("shows %s from the Breakpoints panel", (_, kind, bank, address, view) => {
         dbgr.debug(cpu.pc);
         dbgr.breakpoints.floating.open();
-        cpu.breakpoints.add({ kind: "execute", start: 0x3000 });
-        cpu.breakpoints.add({ kind: "write", start: 0x1900 });
-        const where = () => [...document.querySelectorAll("#breakpoints-panel .bp-where")];
-        where()[0].click();
-        expect(addrOf(currentRow())).toBe("3000");
-        where()[1].click();
-        expect(memTarget().dataset.addr).toBe(`${0x1900}`);
+        cpu.breakpoints.add({ kind, start: address, bank });
+        document.querySelector("#breakpoints-panel .bp-where").click();
+        const [panel, shown] =
+            kind === "execute"
+                ? ["disassembly-panel", addrOf(currentRow()).slice(0, 4)]
+                : ["memory-panel", hexword(Number(memTarget().dataset.addr))];
+        expect(shown).toBe(hexword(address));
+        expect(document.querySelector(`#${panel} .paging-picker`).textContent).toMatch(new RegExp(`^${view}`));
+    });
+
+    it("leaves the view alone for a breakpoint pinned to a bank on the Atom, which has no bank to show", () => {
+        cpu = fake6502(findModel("Atom"));
+        cpu.video.debugPaint = () => {};
+        dbgr.setCpu(cpu);
+        dbgr.debug(cpu.pc);
+        dbgr.breakpoints.floating.open();
+        cpu.breakpoints.add({ kind: "write", start: 0x8000, bank: 4 });
+        document.querySelector("#breakpoints-panel .bp-where").click();
+        expect(memTarget().textContent).toBe(hexbyte(cpu.peekmem(0x8000)));
     });
 
     it("logs each hit of a log breakpoint to the console", () => {

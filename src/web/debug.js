@@ -26,6 +26,7 @@ import {
     screenView,
     SidewaysStart,
     viewedBank,
+    viewsFor,
 } from "../paging.js";
 import { Dropdown } from "bootstrap";
 import { TightLoopNote } from "./tight-loop-note.js";
@@ -58,9 +59,6 @@ function homeNodes(home) {
     if (!isHttps(home)) return [];
     return [externalLink(home, new URL(home).hostname.replace(/^www\./, "")), ", "];
 }
-
-/** The view showing the code or bytes a breakpoint pinned to `bank`, if it is, acts on. */
-const viewOfBank = (bank) => (bank === undefined ? PagedView : bankView(bank));
 
 function addressFor(names, text, pc) {
     return names.addressOf(text, pc) ?? parseAddr(text);
@@ -475,12 +473,12 @@ export class Debugger {
             resolve: (text) => this._resolveBreakpoint(text),
             nameOf: (address, bank) => this._breakpointNames(bank).address(address, this.cpu.pc)?.name,
             showCode: (address, bank) => {
-                this._paging.disassembly.view = viewOfBank(bank);
+                this._showPinned(this._paging.disassembly, bank);
                 this.panels.disassembly.open();
                 this._disassembly.update(address);
             },
             showMemory: (address, bank) => {
-                this._paging.memory.view = viewOfBank(bank);
+                this._showPinned(this._paging.memory, bank);
                 this.panels.memory.open();
                 this._memoryView.update(address);
             },
@@ -1015,15 +1013,28 @@ export class Debugger {
      */
     _breakpointNames(bank) {
         if (performance.now() - this._matchedAt >= RunningNameMatchMs) this._matchSymbols();
-        if (bank === undefined) return this._names;
+        const view = this._bankViewOf(bank);
+        if (view === undefined) return this._names;
         if (!this._bankNames.has(bank)) {
-            const view = bankView(bank);
             this._bankNames.set(
                 bank,
                 this._namesFor((address) => peekViewed(this.cpu, view, address), bank),
             );
         }
         return this._bankNames.get(bank);
+    }
+
+    /** The view of sideways `bank`, if there is one: none for no bank, nor on a machine without the view (the Atom). */
+    _bankViewOf(bank) {
+        if (bank === undefined) return undefined;
+        const view = bankView(bank);
+        return viewsFor(this.cpu.model).includes(view) ? view : undefined;
+    }
+
+    /** Sets `paging` to show sideways `bank`, a breakpoint's, where a breakpoint is pinned to one it can show. */
+    _showPinned(paging, bank) {
+        const view = this._bankViewOf(bank);
+        if (view !== undefined) paging.view = view;
     }
 
     _matchSymbols() {
