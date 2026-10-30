@@ -4,7 +4,14 @@ import { tightLoopAt } from "../tight-loop.js";
 import { DebugGroup } from "./floating-panel.js";
 
 /** The decoded panel, by id, of each SHEILA device that has one, by its block's `device`. */
-const DevicePanels = { SysVIA: "sysvia", UserVIA: "uservia" };
+const DevicePanels = {
+    CRTC: "crtc",
+    VideoULA: "videoula",
+    FDC: "fdc",
+    Paging: "paging",
+    SysVIA: "sysvia",
+    UserVIA: "uservia",
+};
 
 function loopAddresses({ start, end }) {
     return start === end ? `$${hexword(start)}` : `$${hexword(start)}-$${hexword(end)}`;

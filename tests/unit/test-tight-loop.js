@@ -1,19 +1,28 @@
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 
-import { Cpu6502 } from "../../src/6502.opcodes.js";
+import { fake6502, fake65C02 } from "../../src/fake6502.js";
 import { tightLoopAt } from "../../src/tight-loop.js";
 
 const Base = 0x2000;
+const ClearedBytes = 0x80;
 
-function loopIn(code, pc) {
-    const memory = new Uint8Array(0x10000);
-    memory.set(code, Base);
-    return tightLoopAt(Cpu6502({ peekmem: (address) => memory[address] }).disassembler, pc);
+function loopIn(cpu, code, pc) {
+    const padded = [...code, ...new Array(ClearedBytes - code.length).fill(0)];
+    padded.forEach((byte, i) => cpu.writemem(Base + i, byte));
+    return tightLoopAt(cpu.disassembler, pc);
 }
 
 const loop = (start, end, reads) => ({ start, end, reads });
 
 describe("tightLoopAt", () => {
+    let nmos;
+    let cmos;
+
+    beforeAll(async () => {
+        [nmos, cmos] = [fake6502(), fake65C02()];
+        await Promise.all([nmos.initialise(), cmos.initialise()]);
+    });
+
     it.each([
         [
             "LDA &FE4D : AND #2 : BEQ back, a VIA flag wait",
@@ -40,6 +49,13 @@ describe("tightLoopAt", () => {
             loop(0x2000, 0x2020, []),
         ],
         ["a JMP away part way round", [0xa5, 0x70, 0x4c, 0x00, 0x30, 0xad, 0x4d, 0xfe, 0xf0, 0xf6], 0x2005, undefined],
+        [
+            "LAX &70 : BEQ back, an undocumented load that settles",
+            [0xa7, 0x70, 0xf0, 0xfc],
+            0x2000,
+            loop(0x2000, 0x2002, [0x70]),
+        ],
+        ["EOR &70 : BNE back, which toggles A", [0x45, 0x70, 0xd0, 0xfc], 0x2000, undefined],
         ["a store in it", [0xad, 0x4d, 0xfe, 0x8d, 0x00, 0x30, 0xf0, 0xf8], 0x2000, undefined],
         ["a call in it", [0x20, 0xe0, 0xff, 0xf0, 0xfb], 0x2003, undefined],
         ["DEX : BNE back, a delay that counts down", [0xca, 0xd0, 0xfd], 0x2000, undefined],
@@ -53,6 +69,10 @@ describe("tightLoopAt", () => {
             undefined,
         ],
     ])("%s", (_, code, pc, expected) => {
-        expect(loopIn(code, pc)).toEqual(expected);
+        expect(loopIn(nmos, code, pc)).toEqual(expected);
+    });
+
+    it("admits the 65C02's BBR, which reads its zero page byte and settles", () => {
+        expect(loopIn(cmos, [0x0f, 0x70, 0xfd], 0x2000)).toEqual(loop(0x2000, 0x2000, [0x70]));
     });
 });

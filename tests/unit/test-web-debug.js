@@ -502,8 +502,8 @@ describe("Debugger", () => {
                     ],
                     [
                         "a device with no panel",
-                        [0x2c, 0x80, 0xfe, 0x30, 0xfb],
-                        "$3000-$3003 polling FDC.STATUS ($fe80)",
+                        [0x2c, 0x08, 0xfe, 0x10, 0xfb],
+                        "$3000-$3003 polling ACIA.STATUS ($fe08)",
                     ],
                     ["a loop of one instruction that reads nothing", [0x4c, 0x00, 0x30], "$3000 that reads nothing"],
                 ])("names %s", (_, code, text) => {

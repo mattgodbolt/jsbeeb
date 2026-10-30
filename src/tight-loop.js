@@ -1,8 +1,7 @@
 /** Furthest, in bytes, a tight loop's branch back can be from the instruction it goes back to. */
 const MaxLoopBytes = 32;
 
-const Reading = new Set(["LDA", "LDX", "LDY", "BIT", "CMP", "CPX", "CPY", "AND", "ORA"]);
-const Quiet = new Set(["TAX", "TAY", "TXA", "TYA", "TSX", "CLC", "SEC", "CLI", "SEI", "CLV", "CLD", "SED", "NOP"]);
+const DirectModes = new Set(["implied", "imm", "zp", "abs", "branch", "zp,branch"]);
 
 /**
  * @typedef {object} TightLoop
@@ -13,31 +12,25 @@ const Quiet = new Set(["TAX", "TAY", "TXA", "TYA", "TSX", "CLC", "SEC", "CLI", "
 
 /**
  * The instruction at `address`, as far as a tight loop cares: where it goes next, where it may branch, and what it
- * reads. Undefined for one no tight loop runs: a write, a call, a return, an indexed or indirect read, an unknown
- * opcode, or anything that changes a register other than by loading it, moving another into it or masking A.
+ * reads. Undefined for one no tight loop runs: a write, a call, a return, an indexed or indirect operand, or one
+ * that would change something more if run again at once.
+ * @param {import("./6502.opcodes.js").Disassemble6502} disassembler
  */
 function waitingInstruction(disassembler, address) {
-    const peek = (at) => disassembler.cpu.peekmem(at & 0xffff);
-    const [mnemonic, mode] = (disassembler.opcodes[peek(address)] ?? "").split(" ");
-    const [, next, operand] = disassembler.disassemble(address, true);
-    if (next > 0xffff) return undefined;
-    const step = (target, reads, unconditional) => ({ next, target, reads, unconditional });
-    if (mode === "branch") return step(operand, [], mnemonic === "BRA");
-    if (mnemonic === "JMP" && mode === "abs") return step(operand, [], true);
-    if (Quiet.has(mnemonic)) return step(undefined, [], false);
-    if (!Reading.has(mnemonic)) return undefined;
-    if (mode === "imm") return step(undefined, [], false);
-    if (mode === "zp") return step(undefined, [peek(address + 1)], false);
-    if (mode === "abs") return step(undefined, [operand], false);
-    return undefined;
+    const { mnemonic, mode, accesses, flow, next, address: operand, target } = disassembler.instructionAt(address);
+    if (next > 0xffff || accesses.includes("write")) return undefined;
+    if (flow === "jump" && mode === "abs") return { next, target, reads: [], unconditional: true };
+    if (!(flow === "next" || flow === "branch") || !DirectModes.has(mode)) return undefined;
+    if (!disassembler.isIdempotent(disassembler.cpu.peekmem(address))) return undefined;
+    const reads = accesses.includes("read") ? [operand] : [];
+    return { next, target, reads, unconditional: mnemonic === "BRA" };
 }
 
 /**
  * The tight loop the instruction at `pc` is part of, if it is in one: a short run of instructions closed by a branch
- * back that writes nothing, calls nothing and only loads, moves or masks its registers, so that it waits for what it
- * reads to be changed by a device or an interrupt. Found from the code alone, without running it.
- * @param {{cpu: {peekmem: (address: number) => number}, opcodes: Object<number, string>,
- * disassemble: (address: number, plain: boolean) => any[]}} disassembler the CPU's
+ * back, each of which writes nothing, calls nothing and settles, changing nothing more when run again at once, so
+ * that the loop waits for what it reads to be changed by a device or an interrupt. Found from the code alone.
+ * @param {import("./6502.opcodes.js").Disassemble6502} disassembler the CPU's
  * @param {number} pc
  * @returns {TightLoop | undefined}
  */
