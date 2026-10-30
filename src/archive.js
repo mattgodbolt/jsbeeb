@@ -178,6 +178,21 @@ export async function ungzip(data) {
     return inflateWith(pakoUngzip, data, "Unable to ungzip");
 }
 
+const GzipMagic = [0x1f, 0x8b];
+
+export const isGzip = (bytes) => GzipMagic.every((byte, index) => bytes[index] === byte);
+
+/** Text to gzip bytes and back. */
+export const gzipCodec = Object.freeze({
+    async compress(text) {
+        const stream = new Response(text).body.pipeThrough(new CompressionStream("gzip"));
+        return new Uint8Array(await new Response(stream).arrayBuffer());
+    },
+    async decompress(bytes) {
+        return new TextDecoder().decode(await ungzip(bytes));
+    },
+});
+
 const knownDiscExtensions = {
     uef: true,
     ssd: true,

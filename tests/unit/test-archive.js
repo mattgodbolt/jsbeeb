@@ -6,6 +6,8 @@ import { fileURLToPath } from "url";
 import {
     crc32,
     createZipBlob,
+    gzipCodec,
+    isGzip,
     replaceOrAddExtension,
     ungzip,
     unzip,
@@ -235,5 +237,17 @@ describe("gzip tests", function () {
     it("should reject non-gzip data", async () => {
         const notGzip = new Uint8Array([0, 1, 2, 3, 4, 5, 6, 7]);
         await expect(ungzip(notGzip)).rejects.toThrow();
+    });
+});
+
+describe("gzipCodec", () => {
+    it("gives back what it packed, smaller, and refuses what is not gzip", async () => {
+        const text = JSON.stringify({ ram: "\u0000".repeat(10000) });
+        const packed = await gzipCodec.compress(text);
+        expect(packed.length).toBeLessThan(text.length / 10);
+        expect(isGzip(packed)).toBe(true);
+        expect(await gzipCodec.decompress(packed)).toBe(text);
+        expect(isGzip(new TextEncoder().encode(text))).toBe(false);
+        await expect(gzipCodec.decompress(new Uint8Array([1, 2, 3]))).rejects.toThrow();
     });
 });
