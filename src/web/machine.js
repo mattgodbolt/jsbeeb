@@ -39,10 +39,6 @@ export function buildEmulationConfig({
             // Gamepads are only available in secure contexts. If e.g. loading from http:// urls they aren't there.
             return navigator.getGamepads ? navigator.getGamepads() : [];
         },
-        debugFlags: {
-            logFdcCommands: parsedQuery.logFdcCommands !== undefined,
-            logFdcStateChanges: parsedQuery.logFdcStateChanges !== undefined,
-        },
     });
 }
 

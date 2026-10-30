@@ -268,7 +268,16 @@ export const State = Object.freeze({
     formatGap_4: 24,
 });
 
-const stateName = (state) => Object.keys(State).find((name) => State[name] === state);
+const CommandParams = [
+    Registers.internalParam_1,
+    Registers.internalParam_2,
+    Registers.internalParam_3,
+    Registers.internalParam_4,
+    Registers.internalParam_5,
+];
+
+/** How many parameters a command byte takes, by the logic in the 8271's ROM. */
+const paramCountOf = (command) => (command & 0x18 ? command & 0x3 : 5);
 
 /**
  * Callback state machine.
@@ -300,9 +309,8 @@ export class IntelFdc {
      * @param {Cpu6502} cpu
      * @param {Scheduler} scheduler
      * @param {BaseDiscDrive[] | undefined} drives
-     * @param {*} debugFlags
      */
-    constructor(cpu, scheduler, drives, debugFlags) {
+    constructor(cpu, scheduler, drives) {
         this._cpu = cpu;
         if (drives) this._drives = drives;
         else
@@ -342,9 +350,9 @@ export class IntelFdc {
         this._crc = 0;
         this._onDiscCrc = 0;
 
-        this.logCommands = debugFlags ? !!debugFlags.logFdcCommands : false;
-        this.logStateChanges = debugFlags ? !!debugFlags.logFdcStateChanges : false;
-        /** @type {((line: string) => void) | null} where log lines go besides the console */
+        this.logCommands = false;
+        this.logStateChanges = false;
+        /** @type {((entry: import("./fdc.js").FdcLogEntry) => void) | null} */
         this.onLog = null;
 
         this._timerTask = scheduler.newTask(() => this._timerFired());
@@ -447,14 +455,17 @@ export class IntelFdc {
         }
     }
 
-    _log(message) {
-        const line = `8271: ${message}`;
-        console.log(line);
-        this.onLog?.(line);
+    _log(entry) {
+        this.onLog?.(entry);
     }
 
-    _logCommand(message) {
-        if (this.logCommands) this._log(message);
+    _note(text) {
+        if (this.logCommands) this._log({ kind: "note", text });
+    }
+
+    _warn(text) {
+        console.warn(`8271: ${text}`);
+        this._log({ kind: "warning", text });
     }
 
     /**
@@ -479,16 +490,16 @@ export class IntelFdc {
             case Address.reset:
                 //On a real 8271, crazy things happen if you write 2 or especially 4 to this register.
                 if (val !== 0 && val !== 1) {
-                    this._log("funky reset");
+                    this._warn(`funky reset: ${val} written to the reset register`);
                 }
                 if (val === 1) {
-                    this._logCommand("reset");
+                    this._note("reset");
                     this.reset();
                 }
                 break;
             case 3:
             default:
-                this._log(`Not supported: ${hexword(addr)}=${hexbyte(val)}`);
+                this._warn(`write to unwired register: &${hexword(addr)}=&${hexbyte(val)}`);
         }
     }
 
@@ -518,7 +529,7 @@ export class IntelFdc {
                 break;
             case IndexPulse.spindown:
                 if (--this._regs[Registers.internalIndexPulseCount] === 0) {
-                    this._logCommand("automatic head unload");
+                    this._note("automatic head unload");
                     this._spinDown();
                     this._indexPulseCallback = IndexPulse.none;
                 }
@@ -585,7 +596,7 @@ export class IntelFdc {
             const data = this._mmioData;
             const pulses = IbmDiscFormat.fmTo2usPulses(clocks, data);
             if (clocks !== 0xff && clocks !== IbmDiscFormat.markClockPattern)
-                this._log(`writing unusual clocks=${hexbyte(clocks)} data=${hexbyte(data)}`);
+                this._warn(`writing unusual clocks &${hexbyte(clocks)}, data &${hexbyte(data)}`);
             this._currentDrive.writePulses(pulses);
         }
 
@@ -797,7 +808,7 @@ export class IntelFdc {
                         if (++this._regs[Registers.internalSeekRetryCount] === 3) {
                             this._finishCommand(Result.sectorNotFound);
                         } else {
-                            this._logCommand("stepping due to track mismatch");
+                            this._note("stepping again: the ID read is for another track");
                             this._doSeek(Call.unchanged);
                         }
                     } else if (this._regs[Registers.internalIdSector] === this._regs[Registers.internalParam_2]) {
@@ -1096,7 +1107,7 @@ export class IntelFdc {
     _updateNmi() {
         const level = !!(this.internalStatus & StatusFlag.nmi);
         if (level && this._cpu.nmiAsserted(NmiSource.fdc)) {
-            this._log("edge triggered NMI already high");
+            this._warn("NMI raised while already high, so the CPU sees no new edge");
         }
         this._cpu.setNmi(NmiSource.fdc, level);
     }
@@ -1130,7 +1141,9 @@ export class IntelFdc {
     _commandWritten(command) {
         const status = this.internalStatus;
         if (status & StatusFlag.busy) {
-            this._log(`command ${hexbyte(command)} while busy with ${hexbyte(this._regs[Registers.internalCommand])}`);
+            this._warn(
+                `command &${hexbyte(command)} while busy with &${hexbyte(this._regs[Registers.internalCommand])}`,
+            );
         }
 
         // Set command.
@@ -1145,8 +1158,7 @@ export class IntelFdc {
         this._regs[Registers.internalParam_3] = 1;
         this._regs[Registers.internalParam_4] = 1;
 
-        // Calculate parameters expected. Taken from the logic in the 8271 ROM.
-        const numParams = command & 0x18 ? command & 0x3 : 5;
+        const numParams = paramCountOf(command);
         this._regs[Registers.internalParamCount] = numParams;
 
         // Are we waiting for parameters?
@@ -1180,7 +1192,7 @@ export class IntelFdc {
                 break;
             }
             case ParamAccept.specify: {
-                this._logCommand(`specify param ${hexbyte(param)}`);
+                this._note(`specify parameter &${hexbyte(param)}`);
                 this._writeRegister(this._regs[Registers.internalPointer], param);
                 ++this._regs[Registers.internalPointer];
                 if (--this._regs[Registers.internalParamCount] === 0) {
@@ -1210,7 +1222,7 @@ export class IntelFdc {
             case Registers.mmioData & 0x07:
                 return this._mmioData;
             default:
-                this._log(`direct read from MMIO register ${hexbyte(reg)}`);
+                this._warn(`read of unemulated MMIO register &${hexbyte(reg)}`);
                 break;
         }
         return 0;
@@ -1240,7 +1252,7 @@ export class IntelFdc {
                 this._mmioData = val;
                 break;
             default:
-                this._log(`direct write to MMIO register ${hexbyte(reg)}`);
+                this._warn(`write to unemulated MMIO register &${hexbyte(reg)}`);
                 break;
         }
     }
@@ -1255,14 +1267,23 @@ export class IntelFdc {
 
     /**
      * @param {DriveOut|Number} driveOut
+     * @returns {BaseDiscDrive|null} the drive its select bits pick, or null for both or neither
      */
-    _setDriveOut(driveOut) {
+    _driveSelectedBy(driveOut) {
         // Note: unclear what to do if both drives are selected. We select no drive
         // for now, to avoid shenanigans.
         const selectBits = driveOut & DriveOut.selectFlags;
-        let drive = null;
-        if (selectBits === DriveOut.select_0) drive = this._drives[0];
-        else if (selectBits === DriveOut.select_1) drive = this._drives[1];
+        if (selectBits === DriveOut.select_0) return this._drives[0];
+        if (selectBits === DriveOut.select_1) return this._drives[1];
+        return null;
+    }
+
+    /**
+     * @param {DriveOut|Number} driveOut
+     */
+    _setDriveOut(driveOut) {
+        const selectBits = driveOut & DriveOut.selectFlags;
+        const drive = this._driveSelectedBy(driveOut);
 
         // LOAD HEAD gates each drive select (a 7438, IC79 on the Model B), so with it low no drive is selected
         this._currentDrive = driveOut & DriveOut.loadHead ? drive : null;
@@ -1288,9 +1309,7 @@ export class IntelFdc {
      * @param {State|Number} state
      */
     _setState(state) {
-        if (this._state !== state && this.logStateChanges) {
-            this._log(`State ${stateName(this._state)} -> ${stateName(state)}`);
-        }
+        if (this._state !== state && this.logStateChanges) this._log({ kind: "state", from: this._state, to: state });
         this._state = state;
         this._stateCount = 0;
         if (state === State.syncingForId || state === State.syncingForData) {
@@ -1482,8 +1501,7 @@ export class IntelFdc {
 
         this._paramCallback = ParamAccept.none;
 
-        // Select the drive before logging so that head position is reported.
-        // The MMIO clocks register really is used as a temporary storage for this.
+        // The MMIO clocks register really is used as a temporary storage for the select bits.
         const selectBits = commandReg & DriveOut.selectFlags;
         this._mmioClocks = selectBits;
         if (selectBits !== (this._driveOut & DriveOut.selectFlags)) {
@@ -1497,21 +1515,18 @@ export class IntelFdc {
         // Mask out drive select bits from the command register, and parameter count.
         commandReg &= ~(DriveOut.selectFlags | 0x03);
         this._regs[Registers.internalCommand] = commandReg;
-        this._logCommand(
-            `command ${hexbyte(origCommand & 0x3f)} ` +
-                `sel ${hexbyte(selectBits)} ` +
-                `params ${hexbyte(this._regs[Registers.internalParam_1])} ` +
-                `${hexbyte(this._regs[Registers.internalParam_2])} ` +
-                `${hexbyte(this._regs[Registers.internalParam_3])} ` +
-                `${hexbyte(this._regs[Registers.internalParam_4])} ` +
-                `${hexbyte(this._regs[Registers.internalParam_5])} ` +
-                `ptrk ${this._currentDrive ? this._currentDrive.track : -1} ` +
-                `hpos ${this._currentDrive ? this._currentDrive.headPosition : -1}`,
-        );
-
         const command = this._internalCommand;
+        if (this.logCommands)
+            this._log({
+                kind: "command",
+                byte: origCommand,
+                command,
+                select: selectBits,
+                params: CommandParams.slice(0, paramCountOf(origCommand)).map((reg) => this._regs[reg]),
+                headTrack: this._driveSelectedBy(selectBits)?.logicalTrack ?? null,
+            });
         if (command === Command.scanData || command === Command.scanDataAndDeleted) {
-            this._log("scan sectors doesn't work in a beeb");
+            this._warn("scan commands do not work in a BBC Micro");
         }
         this._doCommandDispatch();
     }
@@ -1703,7 +1718,8 @@ export class IntelFdc {
 
     _lowerBusyAndLog() {
         this._statusLower(StatusFlag.busy);
-        this._logCommand(`status ${hexbyte(this._status)} result ${hexbyte(this._result)}`);
+        if (this.logCommands)
+            this._log({ kind: "result", command: this._internalCommand, status: this._status, result: this._result });
     }
 
     _spinDown() {
@@ -1852,13 +1868,7 @@ export class IntelFdc {
         return {
             chip: "8271",
             command: this._internalCommand,
-            params: [
-                Registers.internalParam_1,
-                Registers.internalParam_2,
-                Registers.internalParam_3,
-                Registers.internalParam_4,
-                Registers.internalParam_5,
-            ].map((reg) => regs[reg]),
+            params: CommandParams.map((reg) => regs[reg]),
             status: this._status,
             result: this._result,
             state: this._state,
@@ -1873,8 +1883,8 @@ export class IntelFdc {
 }
 
 export class NoiseAwareIntelFdc extends IntelFdc {
-    constructor(cpu, ddNoise, scheduler, debugFlags) {
-        super(cpu, scheduler, undefined, debugFlags);
+    constructor(cpu, ddNoise, scheduler) {
+        super(cpu, scheduler, undefined);
         attachDriveNoise(this.drives, ddNoise);
     }
 }

@@ -470,16 +470,12 @@ export class DiscDrive extends BaseDiscDrive {
     _selectTrack(track) {
         this._checkTrackNeedsWrite();
         const lastTrack = IbmDiscFormat.tracksPerDisc - this._tracksPerStep;
-        if (track < 0) {
-            track = 0;
-            console.log("Clang! disc head stopped at track 0");
-        } else if (track > lastTrack) {
-            track = lastTrack;
-            console.log("Clang! disc head stopper at track max");
-        }
+        const isAgainstStop = track < 0 || track > lastTrack;
+        if (isAgainstStop) track = track < 0 ? 0 : lastTrack;
         const fraction = this.positionFraction;
         this._track = track;
         this.positionFraction = fraction;
+        if (isAgainstStop) this.dispatchEvent(new Event("headStop"));
     }
 
     _checkTrackNeedsWrite() {

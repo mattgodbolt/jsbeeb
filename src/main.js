@@ -368,7 +368,12 @@ dbgr.keepOffTouchKeyboard(() => layout.touchKeyboardRoom !== null);
 for (const DevicePanel of [SysViaPanel, UserViaPanel, CrtcPanel, SoundChipPanel, VideoUlaPanel])
     if (DevicePanel.fits(processor))
         new DevicePanel({ cpu: processor, arrangement: panelArrangement, audio: audioHandler });
-new FdcPanel({ cpu: processor, arrangement: panelArrangement, visualiser: discVisualiser });
+new FdcPanel({
+    cpu: processor,
+    arrangement: panelArrangement,
+    visualiser: discVisualiser,
+    storage: benchmarkPage ? null : () => window.localStorage,
+});
 if (PagingPanel.fits(processor))
     new PagingPanel({ cpu: processor, arrangement: panelArrangement, showBank: (bank) => dbgr.showBank(bank) });
 if (BasicPanel.fits(processor)) {
