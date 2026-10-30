@@ -157,15 +157,27 @@ describe("Debugger", () => {
         expect(document.querySelector(`#${panel} .paging-picker`).textContent).toMatch(new RegExp(`^${view}`));
     });
 
-    it("leaves the view alone for a breakpoint pinned to a bank on the Atom, which has no bank to show", () => {
+    it("shows and names a breakpoint pinned to a bank on the Atom, which has no bank to show, as paged", () => {
         cpu = fake6502(findModel("Atom"));
         cpu.video.debugPaint = () => {};
         dbgr.setCpu(cpu);
+        labelFiles.add({ key: "four", title: "four.txt", source: "", text: "four_entry=8000", bank: 4 });
         dbgr.debug(cpu.pc);
         dbgr.breakpoints.floating.open();
         cpu.breakpoints.add({ kind: "write", start: 0x8000, bank: 4 });
+        expect(document.querySelector("#breakpoints-panel .bp-name").textContent).toBe("");
         document.querySelector("#breakpoints-panel .bp-where").click();
         expect(memTarget().textContent).toBe(hexbyte(cpu.peekmem(0x8000)));
+    });
+
+    it("leaves the view a panel is set to for a breakpoint pinned to no bank", () => {
+        dbgr.debug(cpu.pc);
+        goTo("goto-dis-addr-form", "8000`5");
+        dbgr.breakpoints.floating.open();
+        cpu.breakpoints.add({ kind: "execute", start: 0x3000 });
+        document.querySelector("#breakpoints-panel .bp-where").click();
+        expect(addrOf(currentRow()).slice(0, 4)).toBe("3000");
+        expect(document.querySelector("#disassembly-panel .paging-picker").textContent).toMatch(/^bank 5/);
     });
 
     it("logs each hit of a log breakpoint to the console", () => {
