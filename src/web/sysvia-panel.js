@@ -1,6 +1,7 @@
 import { hexword } from "../hex.js";
 import { BBC } from "../keymap.js";
 import { HwScrollSubtract } from "../video.js";
+import { setText } from "./dom-utils.js";
 import { decodedPanel, DecodedRegisters, fixed, lit, register, spelt, widest } from "./decoded-registers.js";
 import { MenuGroup } from "./floating-panel.js";
 import { Centred, StartEdge } from "./panel-layout.js";
@@ -239,7 +240,7 @@ class KeyMatrix {
         const status = autoscan
             ? `Autoscan: column ${scanColumn}${scanColumn >= MatrixColumns ? ", no keys" : ""}`
             : `Port A: column ${selected.column}, row ${selected.row}`;
-        if (this._status.textContent !== status) this._status.textContent = status;
+        setText(this._status, status);
     }
 }
 

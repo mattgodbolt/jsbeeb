@@ -31,6 +31,7 @@ import {
 } from "../paging.js";
 import { Dropdown } from "bootstrap";
 import { TightLoopNote } from "./tight-loop-note.js";
+import { readStored, writeStored } from "./stored-json.js";
 
 const noop = () => {};
 
@@ -287,6 +288,7 @@ export const MemoryKeys = [
 ];
 
 const RememberedPanelsKey = "debugPanels";
+const BrowserStorage = () => window.localStorage;
 const MinPanelWidth = 220;
 const DisassemblyWidth = 400;
 /**
@@ -340,23 +342,15 @@ const OwnPanels = [
         show: (dbgr) => dbgr.updateMemory(),
     },
 ];
+
 /** Of the panels `ids`, those that were open when the debugger's were last seen. */
 function rememberedPanels(ids) {
-    try {
-        const remembered = JSON.parse(window.localStorage.getItem(RememberedPanelsKey));
-        return Array.isArray(remembered) ? ids.filter((id) => remembered.includes(id)) : [];
-    } catch (error) {
-        console.warn(`Could not read which debug panels were open: ${error}`);
-        return [];
-    }
+    const remembered = readStored(BrowserStorage, RememberedPanelsKey, "which debug panels were open");
+    return Array.isArray(remembered) ? ids.filter((id) => remembered.includes(id)) : [];
 }
 
 function rememberPanels(ids) {
-    try {
-        window.localStorage.setItem(RememberedPanelsKey, JSON.stringify(ids));
-    } catch (error) {
-        console.warn(`Could not save which debug panels were open: ${error}`);
-    }
+    writeStored(BrowserStorage, RememberedPanelsKey, ids, "which debug panels were open");
 }
 
 /**

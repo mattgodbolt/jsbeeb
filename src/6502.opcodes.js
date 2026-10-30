@@ -1189,14 +1189,14 @@ class Disassemble6502 {
             case "abs": {
                 const destAddr = this.cpu.peekmem(addr + 1) | (this.cpu.peekmem(addr + 2) << 8);
                 const formatter = flow === "next" ? formatAddr : formatJumpAddr;
-                return [`${name} ${formatter(destAddr)}${suffix}`, next, destAddr];
+                return [`${name} ${formatter(destAddr)}${suffix}`, next];
             }
             case "branch":
-                return [`${name} ${formatJumpAddr(target)}${suffix}`, next, target];
+                return [`${name} ${formatJumpAddr(target)}${suffix}`, next];
             case "zp":
                 return [`${name} ${formatZpAddr(this.cpu.peekmem(addr + 1))}${suffix}`, next];
             case "zp,branch":
-                return [`${name} ${formatZpAddr(address)}, ${formatJumpAddr(target)}`, next, target];
+                return [`${name} ${formatZpAddr(address)}, ${formatJumpAddr(target)}`, next];
             case "(,x)":
                 return [`${name} (${formatZpAddr(this.cpu.peekmem(addr + 1))}, X)${suffix}`, next];
             case "()": {
@@ -1207,16 +1207,11 @@ class Disassemble6502 {
             case "(abs)": {
                 const destAddr = this.cpu.peekmem(addr + 1) | (this.cpu.peekmem(addr + 2) << 8);
                 const indDest = this.cpu.peekmem(destAddr) | (this.cpu.peekmem(destAddr + 1) << 8);
-                return [
-                    `${name} (${formatJumpAddr(destAddr)})${suffix} ; $${hexword(indDest)}${suffix2}`,
-                    next,
-                    indDest,
-                ];
+                return [`${name} (${formatJumpAddr(destAddr)})${suffix} ; $${hexword(indDest)}${suffix2}`, next];
             }
             case "(abs,x)": {
                 const destAddr = this.cpu.peekmem(addr + 1) | (this.cpu.peekmem(addr + 2) << 8);
-                const indDest = this.cpu.peekmem(destAddr) | (this.cpu.peekmem(destAddr + 1) << 8);
-                return [`${name} (${formatJumpAddr(destAddr)},X)${suffix}`, next, indDest];
+                return [`${name} (${formatJumpAddr(destAddr)},X)${suffix}`, next];
             }
         }
         return [`${name} ${mode}`, next];

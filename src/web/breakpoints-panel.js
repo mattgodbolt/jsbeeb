@@ -1,9 +1,10 @@
-import { hexword } from "../hex.js";
 import { SidewaysEnd, SidewaysStart } from "../paging.js";
 import { machineSheilaBlocks } from "../sheila.js";
-import { PopupMenu, textButton } from "./dom-utils.js";
+import { addressRange } from "./debug-dom.js";
+import { PopupMenu, setText, textButton } from "./dom-utils.js";
 import { DebugGroup, FloatingPanel, MenuGroup, panelShell } from "./floating-panel.js";
 import { EndEdge } from "./panel-layout.js";
+import { readStored, writeStored } from "./stored-json.js";
 
 const MinPanelSize = { w: 360, h: 100 };
 const StorageKey = "debugBreakpoints";
@@ -108,10 +109,6 @@ function presetStops(cpu) {
         if (range) presets.push({ name, title, spec: { kind: "write", ...range, condition, label } });
     }
     return presets;
-}
-
-function rangeText({ start, end }) {
-    return start === end ? `$${hexword(start)}` : `$${hexword(start)}-$${hexword(end)}`;
 }
 
 /**
@@ -225,10 +222,10 @@ export class BreakpointsPanel {
         for (const { id, start, bank, hits, hitCount, label } of this._breakpoints.list()) {
             const hitText = hitCount > 1 ? `${hits} of ${hitCount}` : `${hits}`;
             const hitCell = this._hitCells.get(id);
-            if (hitCell && hitCell.textContent !== hitText) hitCell.textContent = hitText;
+            if (hitCell) setText(hitCell, hitText);
             const nameText = label ?? (start === undefined ? undefined : this._nameOf(start, bank)) ?? "";
             const nameCell = this._nameCells.get(id);
-            if (nameCell && nameCell.textContent !== nameText) nameCell.textContent = nameText;
+            if (nameCell) setText(nameCell, nameText);
         }
     }
 
@@ -371,7 +368,7 @@ export class BreakpointsPanel {
                 whereCell.append(" ", this._orEditing(line, id, "line"));
             }
         } else {
-            const where = textButton("bp-where", rangeText(breakpoint), `Show ${rangeText(breakpoint)}`);
+            const where = textButton("bp-where", addressRange(breakpoint), `Show ${addressRange(breakpoint)}`);
             where.addEventListener("click", () =>
                 kind === "execute" ? this._showCode(start, bank) : this._showMemory(start, bank),
             );
@@ -413,7 +410,7 @@ export class BreakpointsPanel {
         cell("", actionButton);
 
         const what =
-            start === undefined ? `the ${eventWhere} breakpoint` : `the breakpoint at ${rangeText(breakpoint)}`;
+            start === undefined ? `the ${eventWhere} breakpoint` : `the breakpoint at ${addressRange(breakpoint)}`;
         const remove = textButton("bp-remove", "×", `Remove ${what}`);
         remove.setAttribute("aria-label", remove.title);
         remove.addEventListener("click", () => this._breakpoints.remove(id));
@@ -472,14 +469,7 @@ export class BreakpointsPanel {
     }
 
     _restore() {
-        if (!this._storage) return;
-        let saved;
-        try {
-            saved = JSON.parse(this._storage().getItem(StorageKey) ?? "null");
-        } catch (error) {
-            console.warn(`Could not read the saved breakpoints: ${error}`);
-            return;
-        }
+        const saved = readStored(this._storage, StorageKey, "the saved breakpoints");
         if (saved?.version !== StoreVersion || !Array.isArray(saved.breakpoints)) return;
         for (const spec of saved.breakpoints) {
             try {
@@ -507,18 +497,11 @@ export class BreakpointsPanel {
     }
 
     _save() {
-        if (!this._storage) return;
         const breakpoints = this._breakpoints
             .list()
             .filter(({ owner }) => owner === "user")
             .map((breakpoint) => this._specOf(breakpoint));
-        try {
-            this._storage().setItem(
-                StorageKey,
-                JSON.stringify({ version: StoreVersion, breakpoints: [...breakpoints, ...this._unrestored] }),
-            );
-        } catch (error) {
-            console.warn(`Could not save the breakpoints: ${error}`);
-        }
+        const saved = { version: StoreVersion, breakpoints: [...breakpoints, ...this._unrestored] };
+        writeStored(this._storage, StorageKey, saved, "the breakpoints");
     }
 }
