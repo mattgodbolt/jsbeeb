@@ -260,7 +260,7 @@ export class DisassemblyView {
 
     /**
      * The execute breakpoints on the code the row at `address` shows: unpinned, pinned to the bank the panel is set to
-     * show there, or where it shows what is paged, pinned to a bank the CPU would stop in there now.
+     * show there, or anywhere it is not set to a bank, pinned to a bank the CPU would stop in there now.
      */
     _executeBreakpoints(address) {
         const cpu = this._cpu;

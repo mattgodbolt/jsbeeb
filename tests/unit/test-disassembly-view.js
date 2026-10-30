@@ -204,20 +204,23 @@ describe("DisassemblyView", () => {
     });
 
     it.each([
-        ["paged", "", 4, SidewaysStart, true],
-        ["paged, another bank paged", "", 5, SidewaysStart, false],
-        ["set to its bank, another paged", "4", 5, SidewaysStart, true],
-        ["set to another bank, its bank paged", "5", 4, SidewaysStart, false],
-        ["paged, outside the sideways area", "", 4, 0xc000, true],
-        ["set to another bank, outside the sideways area", "5", 4, 0xc000, true],
-        ["paged, another bank paged, outside the sideways area", "", 5, 0xc000, false],
-    ])("shows a breakpoint pinned to bank 4 where the panel shows %s: %s", (_, shown, paged, address, dot) => {
-        cpu.romSelect(paged);
-        paging.view = shown;
-        cpu.breakpoints.add({ kind: "execute", start: address, bank: 4 });
-        view.update(address);
-        expect(rowAtAddress(address).querySelector(".bp_gutter").classList.contains("active")).toBe(dot);
-    });
+        ["paged", true, "", 4, SidewaysStart],
+        ["paged, another bank paged", false, "", 5, SidewaysStart],
+        ["set to its bank, another paged", true, "4", 5, SidewaysStart],
+        ["set to another bank, its bank paged", false, "5", 4, SidewaysStart],
+        ["paged, outside the sideways area", true, "", 4, 0xc000],
+        ["set to another bank, outside the sideways area", true, "5", 4, 0xc000],
+        ["paged, another bank paged, outside the sideways area", false, "", 5, 0xc000],
+    ])(
+        "whether the gutter shows a breakpoint pinned to bank 4 where the panel shows %s: %s",
+        (_, dot, shown, paged, address) => {
+            cpu.romSelect(paged);
+            paging.view = shown;
+            cpu.breakpoints.add({ kind: "execute", start: address, bank: 4 });
+            view.update(address);
+            expect(rowAtAddress(address).querySelector(".bp_gutter").classList.contains("active")).toBe(dot);
+        },
+    );
 
     describe("SHEILA registers", () => {
         const program = (bytes) => bytes.forEach((byte, i) => cpu.writemem(0x2002 + i, byte));
