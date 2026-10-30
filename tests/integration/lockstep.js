@@ -17,9 +17,13 @@ import { loadData } from "../../src/loader.js";
 import { keyCodes } from "../../src/keymap.js";
 import { bootedTestMachine, mode7Text } from "./helpers.js";
 import { keyCodeFor } from "../helpers/session-fakes.js";
+import { seededRandom } from "../helpers/seeded-random.js";
 
 // Steps the host runs after the last input, for its effect to reach the screen.
 const SettleSteps = 50;
+// The MOS takes a key only once two of its 10ms polls have seen it, so a key held for less than
+// about 22ms can be missed; a brisk typist's 50ms is safe however the host slices.
+const KeyHoldSeconds = 0.05;
 const MaxStepCycles = 60000;
 const MaxDelaySteps = 12;
 const EmptySliceEvery = 7;
@@ -28,19 +32,9 @@ const ScribbleAt = 0x3000;
 const ScribbleBytes = 0x100;
 const Scribble = 0xff;
 const SidewaysRamBank = 4;
-const LcgMultiplier = 1664525;
-const LcgIncrement = 1013904223;
 // Room for the instruction a run to a cycle finishes past it.
 const InstructionSlackCycles = 100;
 const MsPerMinute = 60 * 1000;
-
-function seededRandom(seed) {
-    let state = seed;
-    return (limit) => {
-        state = (Math.imul(state, LcgMultiplier) + LcgIncrement) >>> 0;
-        return state % limit;
-    };
-}
 
 const hosting = (machine, send = () => {}, onJump = () => {}) =>
     new LockstepHost(machine.processor, send, onJump, { rtcBaseMs: RtcBaseMs });
@@ -56,15 +50,12 @@ async function joining(lockstep, model, onDesync = () => {}, prepare = async () 
     return { machine, lockstep: new LockstepGuest(machine.processor, onDesync) };
 }
 
-const Gap = [null, null, null];
-
-// One input per host step; the gaps let the OS's keyboard scan see each change.
-const press = (key) => [{ kind: "key", key, down: true }, ...Gap];
-const release = (key) => [{ kind: "key", key, down: false }, ...Gap];
+const press = (key) => [{ kind: "key", key, down: true }];
+const release = (key) => [{ kind: "key", key, down: false }];
 const tap = (key) => [...press(key), ...release(key)];
 const ShiftedKeyNames = { $: "K4" };
 
-/** The inputs that type `text` on the host, one per step. */
+/** The inputs that type `text` on the host. */
 function typing(text) {
     return [...text].flatMap((char) => {
         if (ShiftedKeyNames[char]) {
@@ -85,15 +76,18 @@ const keyInput = (machine, key, down) => ({
 
 /**
  * Runs a session in-process: the host executes uneven slices, some of them empty,
- * with `inputs` fed in one per step; commits reach each guest after a random delay,
- * in order; and each guest runs uneven slices of its own. `joinAt` adds a guest at
- * that host step, `corruptAt` scribbles on the first guest's RAM, `resetAt` hard
- * resets the host and `guestResetAt` the first guest. A guest that desyncs, and every
- * guest after the host jumps, is sent a fresh snapshot down the same queue, as a
- * browser's host would. `prepare` may change the host before the session starts.
+ * with `inputs` fed in at most one per step, a null taking a step and a key waiting
+ * until the host has run KeyHoldSeconds since the key before it; commits reach each
+ * guest after a random delay, in order; and each guest runs uneven slices of its own.
+ * Just before the input with that index goes in, `joinAt` adds a guest, `corruptAt`
+ * scribbles on the first guest's RAM, `resetAt` hard resets the host and
+ * `guestResetAt` the first guest. A guest that desyncs, and every guest after the host
+ * jumps, is sent a fresh snapshot down the same queue, as a browser's host would.
+ * `prepare` may change the host before the session starts.
  */
 async function runSession({ model, inputs, joinAt = [0], corruptAt, resetAt, guestResetAt, prepare, seed = 1 }) {
-    const random = seededRandom(seed);
+    const fraction = seededRandom(seed);
+    const random = (limit) => Math.floor(fraction() * limit);
     const host = await bootedTestMachine(model);
     prepare?.(host);
     const guests = [];
@@ -115,7 +109,9 @@ async function runSession({ model, inputs, joinAt = [0], corruptAt, resetAt, gue
             guests.forEach(resync);
         },
     );
-    const typed = inputs.map((input) => input && keyInput(host, input.key, input.down));
+    const keyHoldCycles = KeyHoldSeconds * host.model.cyclesPerSecond;
+    let fed = 0;
+    let lastKeyAt = -Infinity;
     const deliver = (guest, now) => {
         while (guest.inbox.length > 0 && guest.inbox[0].due <= now) {
             const { commit, snapshot } = guest.inbox.shift().message;
@@ -127,32 +123,39 @@ async function runSession({ model, inputs, joinAt = [0], corruptAt, resetAt, gue
             }
         }
     };
-    const steps = inputs.length + SettleSteps;
-    for (; step < steps; ++step) {
-        if (joinAt.includes(step)) {
-            const guest = { inbox: [], desyncs: [] };
-            Object.assign(
-                guest,
-                await joining(lockstep, model, (reason) => {
-                    guest.desyncs.push(reason);
-                    resync(guest);
-                }),
-            );
-            guests.push(guest);
-        }
-        if (step === corruptAt) {
-            corruptedAt = cycleCount(guests[0].machine.processor);
-            for (let offset = 0; offset < ScribbleBytes; ++offset) {
-                guests[0].machine.processor.writemem(ScribbleAt + offset, Scribble);
+    for (let settling = SettleSteps; fed < inputs.length || settling > 0; ++step) {
+        if (fed === inputs.length) --settling;
+        const input = inputs[fed];
+        const due = fed < inputs.length && (!input || cycleCount(host.processor) - lastKeyAt >= keyHoldCycles);
+        if (due) {
+            if (joinAt.includes(fed)) {
+                const guest = { inbox: [], desyncs: [] };
+                Object.assign(
+                    guest,
+                    await joining(lockstep, model, (reason) => {
+                        guest.desyncs.push(reason);
+                        resync(guest);
+                    }),
+                );
+                guests.push(guest);
             }
+            if (fed === corruptAt) {
+                corruptedAt = cycleCount(guests[0].machine.processor);
+                for (let offset = 0; offset < ScribbleBytes; ++offset) {
+                    guests[0].machine.processor.writemem(ScribbleAt + offset, Scribble);
+                }
+            }
+            if (fed === resetAt) host.processor.reset(true);
+            if (fed === guestResetAt) {
+                guestResetFrom = cycleCount(guests[0].machine.processor);
+                guests[0].machine.processor.reset(true);
+            }
+            if (input) {
+                lockstep.input(keyInput(host, input.key, input.down));
+                lastKeyAt = cycleCount(host.processor);
+            }
+            ++fed;
         }
-        if (step === resetAt) host.processor.reset(true);
-        if (step === guestResetAt) {
-            guestResetFrom = cycleCount(guests[0].machine.processor);
-            guests[0].machine.processor.reset(true);
-        }
-        const input = typed[step];
-        if (input) lockstep.input(input);
         lockstep.execute(step % EmptySliceEvery === 0 ? 0 : random(MaxStepCycles));
         for (const guest of guests) {
             deliver(guest, step);
@@ -187,8 +190,8 @@ function expectIdentical(host, guests) {
 
 describe("lockstep sessions", () => {
     it("keeps guests identical to the host while it types, through delays and uneven slices", async () => {
-        // The sixth key goes down at step 40 and up at 44.
-        const joinWithKeyHeld = 41;
+        // Just before the sixth key comes up.
+        const joinWithKeyHeld = 11;
         const { host, guests, desyncs } = await runSession({
             model: "B-DFS1.2",
             inputs: typing("PRINT 67-25\n"),
