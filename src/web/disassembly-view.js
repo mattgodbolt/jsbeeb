@@ -7,16 +7,6 @@ import { keyLine } from "./panel-keys.js";
 const InitialRows = 16;
 const WheelPixelsPerInstruction = 30;
 
-const Writes = /^\*?(?:ST[AXYZ]|SAX|SH[ASXY])\b/;
-const ReadModifyWrites = /^\*?(?:ASL|LSR|ROL|ROR|INC|DEC|TSB|TRB|DCP|ISB|RLA|RRA|SLO|SRE)\b/;
-
-/** @returns {("read" | "write")[]} */
-function operandAccesses(instruction) {
-    if (Writes.test(instruction)) return ["write"];
-    if (ReadModifyWrites.test(instruction)) return ["read", "write"];
-    return ["read"];
-}
-
 function nameTitle({ name, set }, addr) {
     const url = nameUrl(set, name, addr);
     return `${name}: $${hexword(addr)}, from ${set.title}${url ? `\nDefined at ${url}` : ""}`;
@@ -210,7 +200,7 @@ export class DisassemblyView {
         row.querySelector(".instr_asc").textContent = bytes.map(byteChar).join("");
         const disNode = row.querySelector(".disassembly");
         disNode.innerHTML = text;
-        const accesses = operandAccesses(text);
+        const { accesses } = cpu.disassembler.describeOpcode(cpu.peekmem(address));
         for (const ref of disNode.querySelectorAll(".instr_mem_ref, .instr_instr_ref")) {
             const target = parseInt(ref.dataset.ref, 10);
             const operand = names.operand(address, target);
