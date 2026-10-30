@@ -36,8 +36,6 @@ describe("addArchiveSources", () => {
     afterEach(() => vi.restoreAllMocks());
 
     it.each([
-        ["sth", StairwayToHell, "Acornsoft/Elite.zip"],
-        ["tapeSth", StairwayToHell, "AnF/Chuckie.zip"],
         ["hfe", BbcDiscArchive, "Games/ELITE.hfe"],
         ["bitshifters", BitshiftersArchive, "bs-paradroid.ssd"],
     ])("hands the loader a %s fetcher that asks its archive", async (schema, Archive, path) => {
@@ -69,12 +67,19 @@ describe("addArchiveSources", () => {
         expect(await register().listers.get(source)()).toEqual([expect.objectContaining(expected)]);
     });
 
-    it("lists both Stairway to Hell catalogues, discs and tapes told apart", async () => {
+    it("fetches and lists Stairway to Hell's discs and tapes each from its own catalogue", async () => {
         fetchesOwnArchive(StairwayToHell);
         const media = register();
-        const { archive: discs } = await media.fetchers.get("sth")("");
+        const disc = await media.fetchers.get("sth")("Acornsoft/Elite.zip");
+        const tape = await media.fetchers.get("tapeSth")("AnF/ChuckieEgg.zip");
+        expect([disc.path, tape.path]).toEqual(["Acornsoft/Elite.zip", "AnF/ChuckieEgg.zip"]);
+        expect(disc.archive).not.toBe(tape.archive);
+        const catalogues = new Map([
+            [disc.archive, [disc.path]],
+            [tape.archive, [tape.path]],
+        ]);
         vi.spyOn(StairwayToHell.prototype, "catalogue").mockImplementation(async function () {
-            return this === discs ? ["Acornsoft/Elite.zip"] : ["AnF/ChuckieEgg.zip"];
+            return catalogues.get(this);
         });
         expect(await media.listers.get("sth")()).toEqual([
             expect.objectContaining({ ref: "sth:Acornsoft/Elite.zip", kind: "disc", title: "Elite" }),

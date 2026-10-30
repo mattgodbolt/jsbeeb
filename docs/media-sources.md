@@ -170,6 +170,6 @@ same disc.
    can load its references. A source whose route needs no fetcher, as GitHub's does not, has
    nothing to register there.
 6. The README's list of `disc=` forms, and a mention in the media window paragraph.
-7. Tests: the archive (`fetch` stubbed with `vi.spyOn`, restored after each test), the registration in
-   `test-archive-sources.js`, the descriptor in the catalogue tests, the schema in the resolver tests, and any
-   new row behaviour in the media window tests.
+7. Tests: the archive (`fetch` stubbed with `vi.spyOn`, restored after each test), the
+   registration in `test-archive-sources.js`, the descriptor in the catalogue tests, the schema in
+   the resolver tests, and any new row behaviour in the media window tests.
