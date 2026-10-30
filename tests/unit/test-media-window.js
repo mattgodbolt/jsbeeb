@@ -1454,6 +1454,7 @@ describe("MediaWindow", () => {
         window.openFor(0);
         expect(byId("deck-window").classList.contains("target")).toBe(true);
         expect(byId("media-search").placeholder).toBe("Search for a tape for the deck");
+        expect(byId("media-open-label").title).toBe("Open a tape image from this computer");
     });
 
     describe("what a slot is called", () => {

@@ -46,20 +46,21 @@ export class FrontPanel {
     }
 
     updateLedVisibility() {
-        const bbcDisplay = this.model.isAtom ? "none" : "";
-        for (const el of document.querySelectorAll(".bbc-only")) {
-            el.style.display = bbcDisplay;
-        }
+        for (const el of document.querySelectorAll(".bbc-only")) el.style.display = this.model.isAtom ? "none" : "";
+        for (const el of document.querySelectorAll(".drives-only"))
+            el.style.display = this.model.hasDiscDrives ? "" : "none";
     }
 
     syncLights() {
         const { processor } = this;
         this.cassette.update(processor.tapeInterface.motorOn);
+        if (this.model.hasDiscDrives) {
+            this.drive0.update(processor.fdc.motorOn[0]);
+            this.drive1.update(processor.fdc.motorOn[1]);
+        }
         if (!this.model.isAtom) {
             this.caps.update(processor.sysvia.capsLockLight);
             this.shift.update(processor.sysvia.shiftLockLight);
-            this.drive0.update(processor.fdc.motorOn[0]);
-            this.drive1.update(processor.fdc.motorOn[1]);
             if (processor.econet) {
                 this.network.update(processor.econet.activityLight());
             }

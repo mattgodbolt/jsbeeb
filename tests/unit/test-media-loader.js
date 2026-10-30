@@ -33,7 +33,7 @@ describe("MediaLoader", () => {
                 filestore: {},
                 econet: {},
             },
-            model: { isAtom: false },
+            model: { isAtom: false, hasDiscDrives: true },
             drives: { layoutForDrive: () => DiscLayout.auto, putDiscIn: vi.fn(), eject: vi.fn() },
             urlState: fakeUrlState(),
             modals: { hide: vi.fn() },
@@ -186,6 +186,15 @@ describe("MediaLoader", () => {
         it("does not list a tape file that turned out not to be one", async () => {
             const media = make();
             await expect(media.openFile(fileFor("junk.uef", new Uint8Array(16)))).rejects.toThrow("not a UEF");
+            const { descriptors } = await media.listAll();
+            expect(descriptors.filter((d) => d.source === "session")).toEqual([]);
+        });
+
+        it("refuses a disc file on a machine without disc drives, and does not list it", async () => {
+            deps.model.hasDiscDrives = false;
+            const media = make();
+            await expect(media.openFile(fileFor("mine.ssd", ssdImage()))).rejects.toThrow("no disc drives");
+            expect(deps.drives.putDiscIn).not.toHaveBeenCalled();
             const { descriptors } = await media.listAll();
             expect(descriptors.filter((d) => d.source === "session")).toEqual([]);
         });

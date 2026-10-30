@@ -577,7 +577,7 @@ export class MediaWindow {
         const into = forTape ? "the deck" : `drive ${target}`;
         this.list.openText.textContent = `Open a file into ${into}…`;
         this.list.openLabel.title = forTape
-            ? "Open a tape image from this computer; a disc image goes into drive 0"
+            ? `Open a tape image from this computer${this.model.hasDiscDrives ? "; a disc image goes into drive 0" : ""}`
             : `Open a disc image from this computer into drive ${target}; a tape image goes into the deck`;
         this.list.search.placeholder = forTape
             ? "Search for a tape for the deck"
