@@ -583,6 +583,7 @@ describe("FloatingPanel", () => {
             const draw = vi.fn();
             const refresh = floating.whileOpen(draw);
             floating.open();
+            expect(draw).toHaveBeenCalledTimes(1);
             frames.run();
             expect(draw).toHaveBeenCalledTimes(1);
             cycles += 100;
@@ -603,9 +604,8 @@ describe("FloatingPanel", () => {
             const draw = vi.fn(() => {
                 if (--workLeft > 0) refresh.drawSoon();
             });
-            const refresh = arrangement.refreshing(() => floating.isOpen, draw);
+            const refresh = floating.whileOpen(draw);
             floating.open();
-            refresh.drawNow();
             frames.run();
             frames.run();
             expect(draw).toHaveBeenCalledTimes(2);

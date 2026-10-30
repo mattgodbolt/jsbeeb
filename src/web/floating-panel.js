@@ -217,7 +217,7 @@ export class PanelArrangement extends EventTarget {
      * Has `draw` called once a frame while `isShown()`, but only when the machine has moved on since
      * it last drew or it has been asked to draw again. Left alone while nothing moves, what it shows
      * stays put, so that a click lands on what was under the pointer when it went down. Its owner
-     * draws it on opening, with `drawNow`.
+     * draws it on opening, with `drawNow`; `FloatingPanel.whileOpen` does both for one panel.
      * @param {function(): boolean} isShown
      * @param {function(): void} draw
      * @returns {PanelRefresh}
@@ -472,7 +472,7 @@ export class PanelArrangement extends EventTarget {
  * title and a close button, and an empty body.
  * @param {object} options the FloatingPanel's, less `panel`
  * @param {string} options.id the panel's, of panel-layout.js's PanelIds; the element's is `<id>-panel`
- * @param {string} options.title
+ * @param {string | null} options.title
  * @param {string} options.feature what analytics calls it
  * @returns {{floating: FloatingPanel, body: HTMLElement}}
  */
