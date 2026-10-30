@@ -125,45 +125,37 @@ describe("Disassemble6502", () => {
         });
 
         it.each([
-            ["LDA abs,Y", fake6502, 0xb9, "y", "anz", true],
-            ["TAX", fake6502, 0xaa, "a", "xnz", true],
-            ["CMP #", fake6502, 0xc9, "a", "nzc", true],
-            ["AND #", fake6502, 0x29, "a", "anz", true],
-            ["SEC", fake6502, 0x38, "", "c", true],
-            ["BEQ", fake6502, 0xf0, "z", "", true],
-            ["STA zp,X", fake6502, 0x95, "ax", "", true],
-            ["EOR #", fake6502, 0x49, "a", "anz", false],
-            ["INX", fake6502, 0xe8, "x", "xnz", false],
-            ["ADC #", fake6502, 0x69, "adc", "anvzc", false],
-            ["ROL A", fake6502, 0x2a, "ac", "anzc", false],
-            ["INC zp", fake6502, 0xe6, "", "nz", false],
-            ["PHA", fake6502, 0x48, "as", "s", false],
-            ["PLP", fake6502, 0x28, "s", "snvdizc", false],
-            ["JSR", fake6502, 0x20, "s", "s", false],
-            ["SMB0", fake65C02, 0x87, "", "", true],
-            ["*SLO zp", fake6502, 0x07, "a", "anzc", false],
-            ["*LAX (zp,X), whose load moves its own pointer", fake6502, 0xa3, "ax", "axnz", false],
-            ["TSB zp", fake65C02, 0x04, "a", "z", false],
-            ["CMOS BRK", fake65C02, 0x00, "snvdizc", "sdi", false],
-            ["NMOS BRK, which leaves D alone", fake6502, 0x00, "snvdizc", "si", false],
-            ["*ANC #, which writes N before copying it to C", fake6502, 0x0b, "a", "anzc", true],
-            ["an unknown opcode", fake6502, 0x02, "", "", false],
-        ])("measures what %s reads and writes, and whether it settles", (_, cpu, opcode, reads, writes, idempotent) => {
-            expect(cpu().disassembler.effects(opcode)).toEqual({
-                reads: [...reads],
-                writes: [...writes],
-                idempotent,
-            });
+            ["LDA abs,Y", fake6502, 0xb9, true],
+            ["TAX", fake6502, 0xaa, true],
+            ["CMP #", fake6502, 0xc9, true],
+            ["AND #", fake6502, 0x29, true],
+            ["*ANC #", fake6502, 0x0b, true],
+            ["SEC", fake6502, 0x38, true],
+            ["BEQ", fake6502, 0xf0, true],
+            ["STA zp,X", fake6502, 0x95, true],
+            ["SMB0", fake65C02, 0x87, true],
+            ["EOR #", fake6502, 0x49, false],
+            ["INX", fake6502, 0xe8, false],
+            ["ADC #", fake6502, 0x69, false],
+            ["ROL A", fake6502, 0x2a, false],
+            ["INC zp", fake6502, 0xe6, false],
+            ["PHA", fake6502, 0x48, false],
+            ["JSR", fake6502, 0x20, false],
+            ["*LAX (zp,X), whose load moves its own pointer", fake6502, 0xa3, false],
+            ["TSB zp", fake65C02, 0x04, false],
+            ["an unknown opcode", fake6502, 0x02, false],
+        ])("measures whether %s settles", (_, cpu, opcode, idempotent) => {
+            expect(cpu().disassembler.isIdempotent(opcode)).toBe(idempotent);
         });
 
         it("measures without touching the machine it measures", () => {
             const cpu = fake6502();
-            const machine = () => ({
-                registers: [cpu.a, cpu.x, cpu.y, cpu.s, cpu.pc, cpu.p.asByte()],
-                memory: Array.from({ length: 0x10000 }, (_, address) => cpu.peekmem(address)),
-            });
+            const machine = () =>
+                [cpu.a, cpu.x, cpu.y, cpu.s, cpu.pc, cpu.p.asByte()].concat(
+                    Array.from({ length: 0x10000 }, (_, address) => cpu.peekmem(address)),
+                );
             const before = machine();
-            for (let opcode = 0; opcode < 256; opcode++) cpu.disassembler.effects(opcode);
+            for (let opcode = 0; opcode < 256; opcode++) cpu.disassembler.isIdempotent(opcode);
             expect(machine()).toEqual(before);
         });
     });

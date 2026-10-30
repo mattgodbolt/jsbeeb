@@ -1016,98 +1016,41 @@ function instructionLength(mode) {
     return mode.includes("abs") || mode === "zp,branch" ? 3 : 2;
 }
 
-const Registers = ["a", "x", "y", "s"];
-const FlagBits = { n: 0x80, v: 0x40, d: 0x08, i: 0x04, z: 0x02, c: 0x01 };
-const Flags = Object.keys(FlagBits);
 const ProbePc = 0x2000;
 // Whether an instruction settles can hang on the values it meets (TSB settles at once if A shares a bit with memory),
-// so it runs from two states unlike in every register, flag and memory byte, and one with memory clear but for its
-// operands.
+// so it runs from two states unlike in every register and flag, the second's memory sharing no bit with its A.
 const ProbeStates = [
     { a: 0x5a, x: 0x3c, y: 0xc3, s: 0xe0, flags: 0x00, fill: (address) => (address * 7 + 0x35) & 0xff },
-    { a: 0xa5, x: 0xc3, y: 0x3c, s: 0x1f, flags: 0xff, fill: (address) => (address * 13 + 0x9a) & 0xff },
-    { a: 0x81, x: 0x7e, y: 0x18, s: 0x80, flags: 0x5a, fill: (address) => (address >> 8 === ProbePc >> 8 ? 0x70 : 0) },
+    { a: 0xa5, x: 0xc3, y: 0x3c, s: 0x1f, flags: 0xff, fill: (address) => (address * 13 + 0x9a) & 0x5a },
 ];
-const UnknownEffects = { reads: [], writes: [], idempotent: false };
 
 /**
- * Runs `instruction` once from `state` on a stand-in for `cpu`: the real CPU's methods (adc, push, brk...) over
- * registers, flags and memory of its own, noting each register or flag read before the instruction writes it, and
- * each one written.
+ * Runs `instruction` once from `state` on a stand-in for `cpu`, whose own methods (adc, push, brk...) then work on
+ * the stand-in's registers, flags and memory; returns the state it leaves.
  */
-function runRecorded(cpu, instruction, state) {
-    const reads = new Set();
-    const writes = new Set();
-    const memory = new Map(state.memory);
-    const registers = { ...state };
-    const read = (name) => {
-        if (!writes.has(name)) reads.add(name);
-    };
-    const register = (name, store) => ({
-        get: () => (read(name), registers[name]),
-        set: (value) => {
-            writes.add(name);
-            registers[name] = store(value);
-        },
-    });
-    const flags = {
-        setzn(value) {
-            this.n = value & 0x80;
-            this.z = !(value & 0xff);
-            return value & 0xff;
-        },
-        asByte: () => Flags.reduce((byte, flag) => (flags[flag] ? byte | FlagBits[flag] : byte), 0x30),
-        setFromByte(byte) {
-            for (const flag of Flags) this[flag] = byte & FlagBits[flag];
-        },
-    };
-    for (const flag of Flags) {
-        Object.defineProperty(flags, flag, register(flag, Boolean));
-        registers[flag] = !!(state.flags & FlagBits[flag]);
-    }
-    const readmem = (address) => memory.get(address & 0xffff) ?? state.fill(address & 0xffff);
-    const writemem = (address, value) => memory.set(address & 0xffff, value & 0xff);
+function runOnStandIn(cpu, instruction, { a, x, y, s, flags, fill, memory }) {
+    const p = Object.create(Object.getPrototypeOf(cpu.p));
+    p.setFromByte(flags);
+    const written = new Map(memory);
+    const readmem = (address) => written.get(address & 0xffff) ?? fill(address & 0xffff);
+    const writemem = (address, value) => written.set(address & 0xffff, value & 0xff);
     const noop = () => {};
-    const stand = Object.create(cpu, {
-        ...Object.fromEntries(Registers.map((name) => [name, register(name, (value) => value & 0xff)])),
-        pc: { value: ProbePc, writable: true },
-        p: { value: flags },
-        readmem: { value: readmem },
-        readmemZpStack: { value: readmem },
-        writemem: { value: writemem },
-        writememZpStack: { value: writemem },
-        polltime: { value: noop },
-        polltimeAddr: { value: noop },
-        checkInt: { value: noop },
-        branch: { value: noop },
+    const standIn = Object.assign(Object.create(cpu), { a, x, y, s, p, pc: ProbePc, readmem, writemem });
+    Object.assign(standIn, { readmemZpStack: readmem, writememZpStack: writemem });
+    Object.assign(standIn, { polltime: noop, polltimeAddr: noop, checkInt: noop, branch: noop });
+    instruction(standIn);
+    return { a: standIn.a, x: standIn.x, y: standIn.y, s: standIn.s, flags: p.asByte(), fill, memory: written };
+}
+
+function settles(cpu, instruction) {
+    return ProbeStates.every((state) => {
+        const once = runOnStandIn(cpu, instruction, state);
+        const twice = runOnStandIn(cpu, instruction, once);
+        const sameMemory = [...twice.memory].every(
+            ([address, value]) => (once.memory.get(address) ?? once.fill(address)) === value,
+        );
+        return sameMemory && ["a", "x", "y", "s", "flags"].every((name) => once[name] === twice[name]);
     });
-    instruction(stand);
-    const flagsByte = Flags.reduce((byte, flag) => (registers[flag] ? byte | FlagBits[flag] : byte), 0);
-    const { a, x, y, s, fill } = registers;
-    return { reads, writes, state: { a, x, y, s, flags: flagsByte, fill, memory } };
-}
-
-function sameState(first, second) {
-    const sameMemory = [...second.memory].every(
-        ([address, value]) => (first.memory.get(address) ?? first.fill(address)) === value,
-    );
-    return ["a", "x", "y", "s", "flags"].every((name) => first[name] === second[name]) && sameMemory;
-}
-
-/** What `instruction` reads and writes of the registers and flags, and whether running it twice is running it once. */
-function measureEffects(cpu, instruction) {
-    const reads = new Set();
-    const writes = new Set();
-    let idempotent = true;
-    for (const state of ProbeStates) {
-        const once = runRecorded(cpu, instruction, { ...state, memory: [] });
-        const twice = runRecorded(cpu, instruction, once.state);
-        once.reads.forEach((name) => reads.add(name));
-        once.writes.forEach((name) => writes.add(name));
-        idempotent &&= sameState(once.state, twice.state);
-    }
-    const inOrder = (names) => [...Registers, ...Flags].filter((name) => names.has(name));
-    return { reads: inOrder(reads), writes: inOrder(writes), idempotent };
 }
 
 const UnknownOpcode = { mnemonic: "???", mode: "implied", length: 1, accesses: [], flow: "next" };
@@ -1147,19 +1090,17 @@ class Disassemble6502 {
         this.undocumented = undocumented;
         this.descriptions = describeOpcodes(opcodes);
         this.compile = compile;
-        this.measured = [];
+        this.settled = [];
     }
 
     /**
-     * What the opcode's emulation reads and writes of "a", "x", "y", "s" and the flags "n", "v", "d", "i", "z", "c"
-     * (a register only counts as read if it is read before being written), and whether running it again at once,
-     * with memory as it left it, changes nothing more. Measured by running it, on first asking.
-     * @returns {{reads: string[], writes: string[], idempotent: boolean}}
+     * Whether running the opcode's emulation again at once, with memory as it left it, changes nothing more in the
+     * registers, flags or memory; measured by running it, on first asking.
      */
-    effects(opcode) {
-        if (!(opcode in this.opcodes)) return UnknownEffects;
-        this.measured[opcode] ??= measureEffects(this.cpu, this.compile(this.opcodes[opcode]));
-        return this.measured[opcode];
+    isIdempotent(opcode) {
+        if (!(opcode in this.opcodes)) return false;
+        this.settled[opcode] ??= settles(this.cpu, this.compile(this.opcodes[opcode]));
+        return this.settled[opcode];
     }
 
     /** @returns {OpcodeDescription} */
