@@ -683,6 +683,7 @@ export class SysVia extends Via {
         // Mouse joystick button state
         this.mouseButton1 = false;
         this.mouseButton2 = false;
+        this.keyChanges = 0;
         this.keyboardEnabled = true;
         this.shift = new ShiftOverride(BBC.SHIFT);
         this.setKeyLayout(initialLayout);
@@ -772,7 +773,7 @@ export class SysVia extends Via {
             }
         }
         this.shift.clear();
-        this.updateKeys();
+        this._keysChanged();
     }
 
     disableKeyboard() {
@@ -801,7 +802,7 @@ export class SysVia extends Via {
     setMapped(mapping, val) {
         if (!this.keyboardEnabled) return;
         this.shift.setMapped(this.keys, mapping, val);
-        this.updateKeys();
+        this._keysChanged();
     }
 
     keyDown(key, shiftDown) {
@@ -817,16 +818,22 @@ export class SysVia extends Via {
 
     keyDownRaw(colrow) {
         this.keys[colrow[0]][colrow[1]] = 1;
-        this.updateKeys();
+        this._keysChanged();
     }
 
     keyUpRaw(colrow) {
         this.keys[colrow[0]][colrow[1]] = 0;
-        this.updateKeys();
+        this._keysChanged();
     }
 
     keyToggleRaw(colrow) {
         this.keys[colrow[0]][colrow[1]] = 1 - this.keys[colrow[0]][colrow[1]];
+        this._keysChanged();
+    }
+
+    /** Counted for `machineMoment`. */
+    _keysChanged() {
+        ++this.keyChanges;
         this.updateKeys();
     }
 
