@@ -6,6 +6,9 @@ import { StartEdge } from "../../src/web/panel-layout.js";
 import { stitchHtml } from "../../tools/html-includes.js";
 import { RomBankBytes } from "../../src/6502.js";
 import { findModel } from "../../src/models.js";
+import { fake6502 } from "../../src/fake6502.js";
+import { Video } from "../../src/video.js";
+import { SoundChip } from "../../src/soundchip.js";
 
 let indexHtmlDoc = null;
 
@@ -303,4 +306,13 @@ export function fitRomHeader(cpu, bank, title, version) {
 export function romless(name) {
     const model = findModel(name);
     return Object.assign(Object.create(Object.getPrototypeOf(model)), model, { os: [] });
+}
+
+/** A fake6502 machine with a real Video and SoundChip, so their state goes into its snapshots. */
+export function machineWithRealChips(model, options) {
+    return fake6502(model, {
+        ...options,
+        video: new Video(false, 1024 * 768, () => {}),
+        soundChip: new SoundChip(() => {}),
+    });
 }
