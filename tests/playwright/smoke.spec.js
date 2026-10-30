@@ -588,6 +588,35 @@ test("a panel's keys act only while the machine is stopped, and every other key 
     await beeb.expectScreenText(">UX");
 });
 
+test("a stop picked from the Breakpoints panel's Stop on menu leaves the keyboard to the machine, whose Escape the open menu keeps, and stops it at a BRK", async ({
+    beeb,
+    page,
+}) => {
+    await beeb.open();
+    await beeb.expectScreenText(">");
+    await beeb.disableAutoRepeat();
+    await beeb.togglePanel("breakpoints");
+    const stopOn = page.locator("#breakpoints-panel .bp-stop-on");
+    const menu = page.locator(".bp-stop-menu");
+    await stopOn.click();
+    await menu.locator('.bp-stop-choice:text-is("BRK")').click();
+    await expect(menu).toBeHidden();
+    await expect(page.locator("#breakpoints-panel .bp-kind")).toHaveText(["BRK"]);
+    await beeb.pressKey("x");
+    await beeb.expectScreenText(">X");
+    await stopOn.click();
+    await expect(menu).toBeVisible();
+    // BASIC reports an Escape with a BRK, so one reaching the machine would stop it here.
+    await beeb.expectKeyKept("Escape");
+    await expect(menu).toBeHidden();
+    await beeb.pressKey("y");
+    await beeb.expectScreenText(">XY");
+    // A mistake, which BASIC reports with a BRK.
+    await beeb.pressKey("Enter");
+    await expect(page.locator("#breakpoints-panel tr.bp-stopped")).toHaveCount(1);
+    await beeb.expectHeld();
+});
+
 test("the system VIA panel opens from the Debug menu, keeps up with the running machine, leaves it the keyboard, and reopens on reload", async ({
     beeb,
     page,

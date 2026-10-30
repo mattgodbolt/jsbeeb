@@ -262,6 +262,7 @@ class Base6502 {
         throw new Error("Must be overridden");
     }
 
+    /** Takes a BRK, or an interrupt for `isIrq`, returning the vector it took. */
     brk(isIrq) {
         // Behavior here generally discovered via Visual 6502 analysis.
         // 6502 has a quirky BRK; it was sanitized in 65c12.
@@ -302,6 +303,7 @@ class Base6502 {
                 this.polltime(1);
             }
         }
+        return vector;
     }
 
     branch(taken) {
@@ -749,11 +751,13 @@ export class Cpu6502 extends Base6502 {
         this.polltime = this.buildPolltime();
         this.is1MHzAccess = this.buildIs1MHzAccess();
 
-        this._debugRead = this._debugWrite = this._debugInstruction = null;
+        this._debugRead = this._debugWrite = this._debugInstruction = this._debugInterrupt = null;
         this.resumingFromStop = false;
         this.debugInstruction = new DebugHook(this, "_debugInstruction", { remembersStop: true });
         this.debugRead = new DebugHook(this, "_debugRead");
         this.debugWrite = new DebugHook(this, "_debugWrite");
+        // Called with the vector and the address the interrupt returns to, after an interrupt is taken.
+        this.debugInterrupt = new DebugHook(this, "_debugInterrupt");
         this.breakpoints = new Breakpoints(this);
 
         this.scheduler = new Scheduler();
@@ -1792,7 +1796,13 @@ export class Cpu6502 extends Base6502 {
      * executeInternal: the debug read or debug write might change tracing or other debugging while it runs.
      */
     get onFastPath() {
-        return !(this.forceTracing || this._debugInstruction || this._debugRead || this._debugWrite);
+        return !(
+            this.forceTracing ||
+            this._debugInstruction ||
+            this._debugRead ||
+            this._debugWrite ||
+            this._debugInterrupt
+        );
     }
 
     execute(numCyclesToRun) {
@@ -1842,7 +1852,12 @@ export class Cpu6502 extends Base6502 {
             this.oldAArray[this.oldPcIndex] = this.a;
             this.oldXArray[this.oldPcIndex] = this.x;
             this.oldYArray[this.oldPcIndex] = this.y;
-            if (this.takeInt) this.brk(true);
+            if (this.takeInt) {
+                const returnsTo = this.pc;
+                const vector = this.brk(true);
+                // Stopped at the handler's first instruction, which no instruction hook then stops at again.
+                if (this._debugInterrupt?.(vector, returnsTo)) this.debugInstruction.rememberUnseenStop();
+            }
             if (!this.resetLine) this.reset(false);
         }
         return !this.halted;
@@ -1866,13 +1881,13 @@ export class Cpu6502 extends Base6502 {
 
     /** Runs `run` with every debug hook detached, so nothing it executes is seen by a hook or halts at one. */
     withoutDebugHooks(run) {
-        const attached = [this._debugInstruction, this._debugRead, this._debugWrite];
-        this._debugInstruction = this._debugRead = this._debugWrite = null;
+        const attached = [this._debugInstruction, this._debugRead, this._debugWrite, this._debugInterrupt];
+        this._debugInstruction = this._debugRead = this._debugWrite = this._debugInterrupt = null;
         this.refreshLook();
         try {
             return run();
         } finally {
-            [this._debugInstruction, this._debugRead, this._debugWrite] = attached;
+            [this._debugInstruction, this._debugRead, this._debugWrite, this._debugInterrupt] = attached;
             this.refreshLook();
         }
     }

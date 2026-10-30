@@ -59,7 +59,7 @@ export function textButton(className, text, title) {
 /**
  * Makes `popup`, fixed on the page outside any panel, a popup: its buttons kept from focus as a panel's are, and
  * `dismiss` called on a pointerdown outside the elements `inside()` lists while it is open (null while closed), or on
- * Escape, which goes on to the page as well, as if nothing had been open.
+ * Escape, which goes no further: not to the machine, nor to a panel.
  * @param {HTMLElement} popup
  * @param {() => (HTMLElement | null)[] | null} inside
  * @param {() => void} dismiss
@@ -81,7 +81,10 @@ export function popupBehaviour(popup, inside, dismiss) {
     document.addEventListener(
         "keydown",
         (e) => {
-            if (e.key === "Escape") dismiss();
+            if (e.key !== "Escape" || !inside()) return;
+            e.preventDefault();
+            e.stopPropagation();
+            dismiss();
         },
         true,
     );

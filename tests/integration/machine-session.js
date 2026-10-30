@@ -214,6 +214,16 @@ describe("MachineSession watching execution", () => {
         expect(session.hitBreakpoint()).toEqual({ id, type: "write", address: Counter, value: 0x42 });
     });
 
+    it("stops as the machine takes an IRQ, at the handler the vector names", async () => {
+        const IrqVector = 0xfffe;
+        const id = session.addBreakpoint("irq", undefined);
+
+        await session.runFor(CyclesPerInterlacedFrame);
+
+        expect(session.hitBreakpoint()).toEqual({ id, type: "irq", address: vectorAt(session, IrqVector) });
+        expect(session.listBreakpoints()).toEqual([expect.objectContaining({ id, type: "irq", address: undefined })]);
+    });
+
     it("keeps the first hits a log breakpoint logs between drains, counting the rest", async () => {
         const id = session.addBreakpoint("execute", 0x0000, { end: 0xffff, action: "log" });
         await session.runFor(3 * CyclesPerInterlacedFrame);
