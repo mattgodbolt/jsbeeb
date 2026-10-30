@@ -172,7 +172,7 @@ export class SnapshotUI {
     }
 
     async reloadSnapshotMedia(savedMedia) {
-        // An Atom without drives used to start with a disc in its hidden drive 0, which its states recorded.
+        // A state saved by a drive-less Atom can name the page's default disc in its hidden drive 0.
         if (!savedMedia || !this.model.hasDiscDrives) return;
         for (let driveIndex = 0; driveIndex < 2; driveIndex++) {
             const discKey = driveIndex === 0 ? "disc1" : "disc2";
