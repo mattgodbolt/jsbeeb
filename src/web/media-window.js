@@ -352,6 +352,8 @@ export class MediaWindow {
             hide: section.querySelector(".bay-hide"),
             save: section.querySelector(".bay-save"),
             surface: section.querySelector(".bay-surface"),
+            report: section.querySelector(".bay-report"),
+            notes: section.querySelector(".bay-notes"),
             radios: [...pitch.querySelectorAll("input")],
             watched: null,
             onTrackWrite: (isSideUpper, trackNum) => {
@@ -387,6 +389,8 @@ export class MediaWindow {
         bay.save.title = `Download drive ${driveIndex}'s disc as an image`;
         bay.surface.title = `Open the disc surface window on drive ${driveIndex}`;
         bay.surface.addEventListener("click", () => this.visualiser.openOn(driveIndex));
+        bay.report.title = `Open the disc surface window on drive ${driveIndex}, listing what is odd about the disc`;
+        bay.report.addEventListener("click", () => this.visualiser.openReport(driveIndex));
         return bay;
     }
 
@@ -1009,7 +1013,8 @@ export class MediaWindow {
             radio.checked = !!drive && radio.value === tracksLabel(drive.tracksPerStep);
             radio.disabled = !drive;
         }
-        for (const control of [bay.save, bay.surface]) control.disabled = !disc || !!busy;
+        for (const control of [bay.save, bay.surface, bay.report]) control.disabled = !disc || !!busy;
+        this.showNotes(bay, busy ? [] : (disc?.loadNotes ?? []));
         bay.eject.disabled = !!busy;
         bay.fail.textContent = failed ? `could not load ${failed.descriptor.title}: ${errorText(failed.error)}` : "";
         bay.retry.hidden = !failed;
@@ -1053,6 +1058,20 @@ export class MediaWindow {
             readout.title = `Drive ${driveIndex} holds ${name}, ${tracks} track. Click to open the media window`;
         }
         this.showSummary();
+    }
+
+    /** What loading the disc found out, oddities picked out. */
+    showNotes(bay, notes) {
+        bay.notes.replaceChildren(
+            ...notes.flatMap(({ text, isOdd }, index) => {
+                const part = document.createElement("span");
+                part.textContent = text;
+                part.classList.toggle("warn", isOdd);
+                return index ? [" · ", part] : [part];
+            }),
+        );
+        bay.notes.title = notes.map(({ text }) => text).join("\n");
+        bay.notes.hidden = !notes.length;
     }
 
     renderDeck() {

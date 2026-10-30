@@ -1784,6 +1784,29 @@ button.decoded-bit:not(.lit) {
   white-space: nowrap;
 }
 
+.disc-report {
+  flex-shrink: 0;
+  max-height: 136px;
+  overflow: auto;
+  margin: 4px 0 0;
+  padding: 2px 4px;
+  list-style: none;
+  background: #1a1a1a;
+  color: #ccc;
+  font-family: consolas, monospace;
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.disc-report .txt-btn {
+  padding: 0;
+  white-space: normal;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  text-decoration-color: rgba(255, 255, 255, 0.35);
+}
+
 div.smoothie-chart-tooltip {
   background: #444;
   padding: 1em;
@@ -1887,7 +1910,7 @@ div.smoothie-chart-tooltip {
   position: relative;
   display: grid;
   grid-template-columns: 22px 76px minmax(0, 1fr) 118px;
-  grid-template-rows: 22px 44px 22px;
+  grid-template-rows: 22px 44px 22px auto;
   column-gap: 8px;
   align-items: center;
   background-color: var(--fascia);
@@ -2257,8 +2280,19 @@ div.smoothie-chart-tooltip {
   min-width: 0;
 }
 
-.bay-line .warn {
+.bay-line .warn,
+.bay-notes .warn {
   color: #8a3f00;
+}
+
+.bay-notes {
+  grid-column: 1 / 5;
+  grid-row: 4;
+  font-size: 11px;
+  color: #8a8068;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .bay-line .spacer,
@@ -3273,7 +3307,7 @@ div.smoothie-chart-tooltip {
 
   .bay {
     grid-template-columns: 16px 44px minmax(0, 1fr) 62px;
-    grid-template-rows: 22px 42px auto;
+    grid-template-rows: 22px 42px auto auto;
     column-gap: 6px;
     padding: 5px 6px 5px 5px;
   }

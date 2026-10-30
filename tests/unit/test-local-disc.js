@@ -1,5 +1,5 @@
 import { localDisc } from "../../src/web/local-disc.js";
-import { afterEach, beforeEach, describe, it, expect, vi } from "vitest";
+import { afterEach, describe, it, expect, vi } from "vitest";
 import { DiscLayout } from "../../src/disc.js";
 import { uint8ArrayToString } from "../../src/binary.js";
 
@@ -11,7 +11,6 @@ describe("a disc held in browser local storage", () => {
         created.flushWrites();
     };
 
-    beforeEach(() => vi.spyOn(globalThis.console, "log").mockImplementation(() => {}));
     afterEach(() => {
         vi.unstubAllGlobals();
         vi.restoreAllMocks();

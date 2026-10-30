@@ -9,6 +9,8 @@ import { discFor } from "../../src/fdc.js";
 import { domFromIndexHtml, fakeAnimationFrames, ssdImage, teardownDom } from "./helpers.js";
 
 const CanvasSize = 100;
+const OddTrack = 40;
+const OddSector = 5;
 
 const overlayContext = () => ({
     clearRect: vi.fn(),
@@ -138,7 +140,6 @@ describe("DiscVisualiser", () => {
 
     describe("with a disc in the drive", () => {
         beforeEach(() => {
-            vi.spyOn(console, "log").mockImplementation(() => {});
             fdc.drives[0].disc = discFor("elite.ssd", ssdImage());
             fdc.drives[0].spinning = true;
         });
@@ -179,6 +180,34 @@ describe("DiscVisualiser", () => {
             overlay.dispatchEvent(new MouseEvent("dblclick"));
             frames.run();
             expect(status()).not.toContain("x");
+        });
+
+        it("lists what is odd about the side, and zooms in on a finding when it is clicked", () => {
+            const visualiser = make();
+            visualiser.openReport(0);
+            frames.run();
+            const findings = () => [...document.querySelectorAll("#disc-report li")].map((item) => item.textContent);
+            expect(document.getElementById("disc-report").hidden).toBe(false);
+            expect(findings()).toEqual(["Nothing odd on this side."]);
+            const odd = discFor("odd.ssd", ssdImage());
+            const track = odd.getTrack(false, OddTrack);
+            const dataWord = Math.floor(track.findSectors()[OddSector].dataPosBitOffset / 32) + 2;
+            track.pulses2Us[dataWord] = IbmDiscFormat.fmTo2usPulses(0xff, 0x55);
+            fdc.drives[0].disc = odd;
+            visualiser.redraw();
+            frames.run();
+            expect(findings()).toEqual([`track ${OddTrack}: sector ${OddSector} with a bad data CRC`]);
+            pumpUntilScanned();
+            document.querySelector("#disc-report button").click();
+            const overlay = document.getElementById("disc-overlay");
+            overlay.dispatchEvent(new MouseEvent("mousemove", { clientX: CanvasSize / 2, clientY: CanvasSize / 2 }));
+            frames.run();
+            expect(status()).toContain("6.0x");
+            expect(document.getElementById("disc-hover-where").textContent).toMatch(
+                new RegExp(`^Track ${OddTrack} · `),
+            );
+            document.getElementById("disc-report-toggle").click();
+            expect(document.getElementById("disc-report").hidden).toBe(true);
         });
 
         it("opens zoomed in on the head, wherever it is", () => {

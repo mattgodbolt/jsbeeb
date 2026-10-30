@@ -102,6 +102,49 @@ describe("HFE loader tests", function () {
     });
 });
 
+describe("what loading an HFE notes for the media window", () => {
+    const flipped = (byte) => {
+        let reversed = 0;
+        for (let bit = 0; bit < 8; ++bit) reversed |= ((byte >> bit) & 1) << (7 - bit);
+        return reversed;
+    };
+    const HfeBlockSize = 512;
+    const LutBlockOffset = 18;
+    const PastTheStart = 8;
+    const SetIndex = 0xf1;
+    const SetBitRate = 0xf2;
+    const SlowBitRate = 10;
+
+    /** An HFE v3 image with opcodes written over the flux a little way into each of the tracks given. */
+    const withOpcodes = (hfe, trackNums, opcodes) => {
+        const data = hfe.slice();
+        const lut = HfeBlockSize * (data[LutBlockOffset] | (data[LutBlockOffset + 1] << 8));
+        for (const trackNum of trackNums) {
+            const offset = HfeBlockSize * (data[lut + trackNum * 4] | (data[lut + trackNum * 4 + 1] << 8));
+            opcodes.forEach((byte, index) => (data[offset + PastTheStart + index] = flipped(byte)));
+        }
+        return data;
+    };
+    const load = (data) => loadHfe(new Disc(true, new DiscConfig(), "test.hfe"), data);
+
+    it("notes the version, sides and tracks, and nothing odd about a clean image", () => {
+        expect(load(toHfe(countingImage(80 * TrackBytes, false))).loadNotes).toEqual([
+            { text: "HFE v3, 1 side, 80 tracks", isOdd: false },
+        ]);
+    });
+
+    it("notes the tracks with a wild bit rate or a late index, folded into runs", () => {
+        let data = toHfe(countingImage(80 * TrackBytes, false));
+        data = withOpcodes(data, [3, 4, 5, 9], [SetBitRate, SlowBitRate]);
+        data = withOpcodes(data, [2], [SetIndex]);
+        expect(load(data).loadNotes).toEqual([
+            { text: "HFE v3, 1 side, 80 tracks", isOdd: false },
+            { text: "a bit rate far from 250 kbit/s on tracks 3-5, 9", isOdd: true },
+            { text: "the index part way round on track 2", isOdd: true },
+        ]);
+    });
+});
+
 describe("telling a 40 track HFE from an 80 track one", () => {
     const withTracks = (numTracks) => {
         const data = new Uint8Array(512);

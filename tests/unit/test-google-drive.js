@@ -1,13 +1,11 @@
 // @vitest-environment jsdom
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { GoogleDriveLoader } from "../../src/web/google-drive.js";
 import { DiscLayout } from "../../src/disc.js";
 import { ssdImage, teardownDom } from "./helpers.js";
 
 describe("GoogleDriveLoader", () => {
-    beforeEach(() => vi.spyOn(console, "log").mockImplementation(() => {}));
-
     afterEach(teardownDom);
 
     describe("creating a disc", () => {
@@ -32,6 +30,27 @@ describe("GoogleDriveLoader", () => {
             expect(detected.disc.is40Track).toBe(true);
             const contiguous = await loader.create("fresh.ssd", ssdImage(fortyTrackSectors), DiscLayout.contiguous);
             expect(contiguous.disc.is40Track).toBe(false);
+        });
+
+        it("reports a change Drive will not take once, however many tracks are written", async () => {
+            vi.useFakeTimers();
+            const loader = makeSignedIn();
+            const refused = [];
+            const { disc } = await loader.create(
+                "fresh.ssd",
+                ssdImage(fortyTrackSectors),
+                DiscLayout.contiguous,
+                (error) => refused.push(error.message),
+            );
+            loader.gapi.client.request.mockRejectedValue({
+                result: { error: { message: "Insufficient permissions" } },
+            });
+            for (const trackNum of [0, 1]) {
+                disc.writePulses(false, trackNum, 0, 0);
+                disc.flushWrites();
+                await vi.runAllTimersAsync();
+            }
+            expect(refused).toEqual(["Insufficient permissions"]);
         });
     });
 

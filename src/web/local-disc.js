@@ -15,7 +15,6 @@ export function localDisc(name, layout = DiscLayout.auto, onSaveError = () => {}
     let data;
     const dataString = window.localStorage[discName];
     if (!dataString) {
-        console.log("Creating browser-local disc " + name);
         const discType = guessDiscTypeFromName(name);
         if (!discType.byteSize) {
             throw new Error(`Cannot create blank disc of type ${discType.extension} - unknown size`);
@@ -25,7 +24,6 @@ export function localDisc(name, layout = DiscLayout.auto, onSaveError = () => {}
             discType.setDiscName(data, name);
         }
     } else {
-        console.log("Loading browser-local disc " + name);
         data = stringToUint8Array(dataString);
     }
     let reportedSaveError = false;
@@ -34,7 +32,6 @@ export function localDisc(name, layout = DiscLayout.auto, onSaveError = () => {}
             const str = uint8ArrayToString(data);
             window.localStorage.setItem(discName, str);
         } catch (e) {
-            console.log(`Unable to save browser-local disc ${name}: ${e}`);
             if (reportedSaveError) return;
             reportedSaveError = true;
             onSaveError(e);

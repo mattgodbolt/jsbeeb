@@ -366,6 +366,15 @@
               <button type="button" class="btn btn-outline-light" data-view="density">Pulses</button>
               <button type="button" class="btn btn-outline-light" data-view="format">Format</button>
             </div>
+            <button
+              type="button"
+              class="btn btn-sm btn-outline-light"
+              id="disc-report-toggle"
+              aria-pressed="false"
+              title="List what is odd about this side of the disc"
+            >
+              Report
+            </button>
           </div>
           <div class="disc-stack">
             <canvas id="disc-surface"></canvas>
@@ -375,6 +384,7 @@
           <div class="disc-status" id="disc-status"></div>
           <div class="disc-status" id="disc-hover-where"></div>
           <div class="disc-status" id="disc-hover-what"></div>
+          <ul class="disc-report" id="disc-report" hidden></ul>
         </div>
       </div>
       <div id="watch-panel" data-feature="watches" hidden>
@@ -963,8 +973,10 @@
                 </li>
               </ul>
             </div>
+            <button type="button" class="txt-btn bay-report">Report</button>
             <button type="button" class="txt-btn bay-surface">Surface</button>
           </div>
+          <div class="bay-notes"></div>
         </section>
       </template>
     </div>

@@ -265,14 +265,22 @@ class FmReader {
     }
 }
 
+/**
+ * Where the sector decoder reports something odd on a track: what, and how far round the track, in
+ * pulses from the index.
+ * @typedef {function(string, number): void} DecoderWarning
+ */
+
+const ignoreWarnings = () => {};
+
 class Sector {
     /**
      * @param {Track} track
      * @param {boolean} isMfm
      * @param {Number} idPosBitOffset
-     * @param {function(string): void} [warn] where to report anomalies; the console by default
+     * @param {DecoderWarning} warn
      */
-    constructor(track, isMfm, idPosBitOffset, warn = console.log) {
+    constructor(track, isMfm, idPosBitOffset, warn) {
         this.track = track;
         this.isMfm = isMfm;
         this._readerType = isMfm ? MfmReader : FmReader;
@@ -287,7 +295,7 @@ class Sector {
         const idReader = this._readerAt(this.idPosBitOffset);
         const { data: headerData, iffyPulses } = idReader.read(6);
         if (iffyPulses) {
-            this._warn(`Iffy pulse in sector header ${this.description}`);
+            this._warn(`iffy pulse in sector ${this.sectorNumber}'s header`, this.idPosBitOffset);
         }
         this.header = headerData;
         let crc = idReader.initialCrc;
@@ -322,7 +330,7 @@ class Sector {
      */
     read(nextSector) {
         if (this.dataPosBitOffset === null) {
-            this._warn(`Sector header without data ${this.description}`);
+            this._warn(`sector ${this.sectorNumber}'s header has no data after it`, this.idPosBitOffset);
             return;
         }
 
@@ -352,7 +360,7 @@ class Sector {
             sectorSize = sectorSize >>> 1;
         } while (sectorSize >= 128);
         if (seenIffyData) {
-            this._warn(`Iffy pulse in sector data ${this.description}`);
+            this._warn(`iffy pulse in sector ${this.sectorNumber}'s data`, this.dataPosBitOffset);
         }
     }
 
@@ -448,10 +456,10 @@ class Track {
 
     /**
      * Debug functionality to try and interpret the track.
-     * @param {function(string): void} [warn] where to report anomalies; the console by default
+     * @param {DecoderWarning} [warn] where to report anomalies; nowhere by default
      * @returns {Sector[]}
      */
-    findSectors(warn = console.log) {
+    findSectors(warn = ignoreWarnings) {
         const sectors = this.findSectorIds(warn);
         for (let sectorIndex = 0; sectorIndex !== sectors.length; ++sectorIndex) {
             const nextSector = sectors[sectorIndex + 1]; // Will be unset for last
@@ -483,10 +491,10 @@ class Track {
     }
 
     /**
-     * @param {function(string): void} [warn] where to report anomalies; the console by default
+     * @param {DecoderWarning} [warn] where to report anomalies; nowhere by default
      * @returns {Sector[]}
      */
-    findSectorIds(warn = console.log) {
+    findSectorIds(warn = ignoreWarnings) {
         const sectors = [];
         // Pass 1: walk the track and find header and data markers.
         const bitLength = this.length * 32;
@@ -513,7 +521,7 @@ class Track {
                 const syncBefore = this._pulseWindowEndingAt(pulseIndex - BitWindowBits);
                 const num0s = FmSyncHiZeroBits + syncBefore.countTrailingNibbles(FmZeroBitPulses);
                 if (num0s <= ShortSyncZeros) {
-                    warn(`Short zeros sync ${this.description}`);
+                    warn("short zeros sync before an address mark", pulseIndex);
                 }
                 dataByte = data;
             } else if (markDetector.equals(MfmMarkerHi, MfmMarkerLo)) {
@@ -540,9 +548,7 @@ class Track {
                 case IbmDiscFormat.dataMarkDataPattern:
                 case IbmDiscFormat.deletedDataMarkDataPattern:
                     if (!sector || sector.dataPosBitOffset) {
-                        warn(
-                            `Sector data without header ${this.description}; mark bitpos ${pulseIndex}; previous good sector ${sector ? sector.description : "none"}`,
-                        );
+                        warn("sector data without a header", pulseIndex);
                     } else {
                         sector.dataPosBitOffset = pulseIndex + 1;
                         if (dataByte === IbmDiscFormat.deletedDataMarkDataPattern) {
@@ -553,7 +559,7 @@ class Track {
                     }
                     break;
                 default:
-                    warn(`Unknown marker byte ${hexbyte(dataByte)} ${this.description}`);
+                    warn(`unknown marker byte &${hexbyte(dataByte)}`, pulseIndex);
             }
         }
         return sectors;
@@ -986,6 +992,8 @@ export class Disc {
         this.isDoubleSided = false;
         // Whether the surface holds a 48 tpi layout, which a drive reads by double stepping.
         this.is40Track = false;
+        /** @type {{text: string, isOdd: boolean}[]} what loading the image found out, for the media window */
+        this.loadNotes = [];
 
         this._trackWriteListeners = new Set();
         this._savingListeners = new Set();
@@ -1273,38 +1281,83 @@ export class Disc {
             }
         }
     }
+}
 
-    logSummary() {
-        const maxTrack = this.tracksUsed;
-        const numSides = this.isDoubleSided ? 2 : 1;
-        for (let side = 0; side < numSides; ++side) {
-            for (let trackNum = 0; trackNum < maxTrack; ++trackNum) {
-                const track = this.getTrack(side === 1, trackNum);
-                const sectors = track.findSectors();
-                if (sectors.length) {
-                    if (track.length >= IbmDiscFormat.bytesPerTrack * 1.015) {
-                        console.log(`Long track ${track.description}, ${track.length} bytes`);
-                    } else if (track.length <= IbmDiscFormat.bytesPerTrack * 0.985) {
-                        console.log(`Short track ${track.description}, ${track.length} bytes`);
-                    }
-                    if (sectors[0].isMfm) {
-                        if (sectors.length !== 16 && sectors.length !== 18) {
-                            console.log(`Non-standard MFM sector count ${track.description} count ${sectors.length}`);
-                        }
-                    } else {
-                        if (sectors.length !== 10) {
-                            console.log(`Non-standard FM sector count ${track.description} count ${sectors.length}`);
-                        }
-                    }
-                    for (const sector of sectors) {
-                        if (sector.hasHeaderCrcError) console.log(`${sector.description} has bad header crc`);
-                        if (sector.trackNumber !== trackNum) console.log(`${sector.description} has bad track id`);
-                        if (sector.hasDataCrcError) console.log(`${sector.description} has bad data crc`);
-                    }
-                } else {
-                    console.log(`"Unformatted track ${track.description}"`);
-                }
-            }
-        }
+/** @returns {string} ascending numbers with each run of consecutive ones folded, as "3-5, 9" */
+export function numberRuns(numbers) {
+    const runs = [];
+    for (const number of numbers) {
+        const last = runs.at(-1);
+        if (last && last.to === number - 1) last.to = number;
+        else runs.push({ from: number, to: number });
     }
+    return runs.map(({ from, to }) => (from === to ? `${from}` : `${from}-${to}`)).join(", ");
+}
+
+// A track within this of the standard length is not worth remarking on.
+const TrackLengthTolerance = 0.015;
+const StandardFmSectors = [10];
+const StandardMfmSectors = [16, 18];
+
+/**
+ * What is odd about one side of a disc, track by track: long or short tracks, unusual sector
+ * counts, CRC errors, sectors that claim another track, anything the decoder warns of, and runs of
+ * unformatted tracks. A double stepped disc's tracks are numbered as its sectors number them.
+ *
+ * @param {Disc} disc
+ * @param {boolean} isSideUpper
+ * @returns {{trackNum: number, fraction: number, text: string}[]} each finding, with the physical
+ *     track it is on and how far round that track
+ */
+export function discReport(disc, isSideUpper) {
+    const findings = [];
+    const step = disc.is40Track ? 2 : 1;
+    let unformatted = null;
+    const endUnformatted = () => {
+        if (!unformatted) return;
+        const { from, to } = unformatted;
+        const tracks = from === to ? `track ${from / step}` : `tracks ${from / step}-${to / step}`;
+        findings.push({ trackNum: from, fraction: 0, text: `${tracks}: unformatted` });
+        unformatted = null;
+    };
+    for (let trackNum = 0; trackNum < disc.tracksUsed; trackNum += step) {
+        const track = disc.getTrack(isSideUpper, trackNum);
+        const claimed = trackNum / step;
+        const pulsesRound = track.length * PulsesPerWord;
+        const onTrack = [];
+        const note = (text, pulse) =>
+            onTrack.push({ trackNum, fraction: pulse / pulsesRound, text: `track ${claimed}: ${text}` });
+        const sectors = track.findSectors(note);
+        if (!sectors.length) {
+            unformatted = { from: unformatted?.from ?? trackNum, to: trackNum };
+            continue;
+        }
+        endUnformatted();
+        const lengthRatio = track.length / IbmDiscFormat.bytesPerTrack;
+        if (Math.abs(lengthRatio - 1) >= TrackLengthTolerance)
+            note(`${lengthRatio > 1 ? "long" : "short"}, ${Math.round(lengthRatio * 100)}% of the standard length`, 0);
+        const isMfm = sectors[0].isMfm;
+        if (!(isMfm ? StandardMfmSectors : StandardFmSectors).includes(sectors.length))
+            note(`${sectors.length} ${isMfm ? "MFM" : "FM"} ${sectors.length === 1 ? "sector" : "sectors"}`, 0);
+        // Sectors that share a fault are named together, at the first of them.
+        const faults = new Map();
+        const fault = (what, sector) => {
+            const found = faults.get(what) ?? { at: sector.idPosBitOffset, sectorNums: [] };
+            found.sectorNums.push(sector.sectorNumber);
+            faults.set(what, found);
+        };
+        for (const sector of sectors) {
+            if (sector.hasHeaderCrcError) fault("a bad header CRC", sector);
+            if (sector.trackNumber !== claimed) fault(`a header claiming track ${sector.trackNumber}`, sector);
+            if (sector.hasDataCrcError) fault("a bad data CRC", sector);
+        }
+        for (const [what, { at, sectorNums }] of faults)
+            note(
+                `${sectorNums.length === 1 ? "sector" : "sectors"} ${numberRuns(sectorNums.toSorted((a, b) => a - b))} with ${what}`,
+                at,
+            );
+        findings.push(...onTrack);
+    }
+    endUnformatted();
+    return findings;
 }

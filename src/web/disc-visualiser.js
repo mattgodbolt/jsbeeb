@@ -1,4 +1,5 @@
 import { IbmDiscFormat } from "../disc-format.js";
+import { discReport } from "../disc.js";
 import { FloatingPanel, MenuGroup } from "./floating-panel.js";
 import { EndEdge, StartEdge } from "./panel-layout.js";
 import {
@@ -31,6 +32,7 @@ const MarkOutline = "#0d0d0d";
 const ScanBudgetMs = 16;
 
 const HeadZoom = 6;
+const ReportRefreshMs = 500;
 
 /** A trackpad reports deltas in the tens, a mouse notch about 100. */
 const WheelZoomRate = 0.003;
@@ -98,6 +100,8 @@ export class DiscVisualiser {
         this.hoverWhatElem = document.getElementById("disc-hover-what");
         this.legendElem = document.getElementById("disc-legend");
         this.sideControls = document.getElementById("disc-side-controls");
+        this.reportToggle = document.getElementById("disc-report-toggle");
+        this.reportElem = document.getElementById("disc-report");
 
         this._view = "density";
         this._driveIndex = 0;
@@ -117,9 +121,14 @@ export class DiscVisualiser {
         this._hover = null;
         this._pan = null;
         this._surfaceStale = false;
+        this._showingReport = false;
+        this._reportStale = true;
+        this._reportMadeAt = -Infinity;
 
         this._onTrackWrite = (isSideUpper, trackNum) => {
-            if (isSideUpper === this._isSideUpper) this._staleTracks.add(trackNum);
+            if (isSideUpper !== this._isSideUpper) return;
+            this._staleTracks.add(trackNum);
+            this._reportStale = true;
         };
         this._onResize = () => this._resize();
         this._resizeObserver = new ResizeObserver(this._onResize);
@@ -143,6 +152,10 @@ export class DiscVisualiser {
         this._bindChoice("[data-drive]", (button) => this._select(Number(button.dataset.drive), this._isSideUpper));
         this._bindChoice("[data-side]", (button) => this._select(this._driveIndex, button.dataset.side === "1"));
         this._bindChoice("[data-view]", (button) => this._setView(button.dataset.view));
+        this.reportToggle.addEventListener("click", () => {
+            this._showReport(!this._showingReport);
+            this.update();
+        });
         this.overlayCanvas.addEventListener("mousemove", (e) => this._hoverAt(this._canvasPoint(e)));
         this.overlayCanvas.addEventListener("mouseleave", () => this._hoverAt(null));
         this._bindZoomAndPan();
@@ -251,23 +264,80 @@ export class DiscVisualiser {
         this.update();
     }
 
+    /** Opens the panel on the given drive's lower side, listing what is odd about it. */
+    openReport(driveIndex) {
+        this._showReport(true);
+        this.openOn(driveIndex);
+    }
+
     /** Opens the panel on the side of the drive's disc under its head, zoomed in on the head where it is now. */
     zoomToHead(driveIndex) {
         const drive = this._fdc.drives[driveIndex];
         this._select(driveIndex, drive.isSideUpper);
         this.open();
-        const geometry = this._geometry;
-        if (geometry) {
-            const radius = geometry.radiusOf(Math.min(drive.track, geometry.numTracks - 1));
-            const angle = geometry.angleOf(drive.positionFraction);
-            const halfView = geometry.size / (2 * HeadZoom);
-            this._setViewport(
-                HeadZoom,
-                geometry.centre + radius * Math.cos(angle) - halfView,
-                geometry.centre + radius * Math.sin(angle) - halfView,
-            );
-        }
+        this._zoomTo(drive.track, drive.positionFraction);
         this.update();
+    }
+
+    /** Zooms in on a place on the side shown: a track, and how far round it. */
+    _zoomTo(trackNum, fraction) {
+        const geometry = this._geometry;
+        if (!geometry) return;
+        const radius = geometry.radiusOf(Math.min(trackNum, geometry.numTracks - 1));
+        const angle = geometry.angleOf(fraction);
+        const halfView = geometry.size / (2 * HeadZoom);
+        this._setViewport(
+            HeadZoom,
+            geometry.centre + radius * Math.cos(angle) - halfView,
+            geometry.centre + radius * Math.sin(angle) - halfView,
+        );
+    }
+
+    /** Lists the findings at the next draw, for a disc or side that is new to the list. */
+    _reportAfresh() {
+        this._reportStale = true;
+        this._reportMadeAt = -Infinity;
+    }
+
+    _showReport(on) {
+        this._showingReport = on;
+        this._reportAfresh();
+        this.reportElem.hidden = !on;
+        this.reportToggle.classList.toggle("active", on);
+        this.reportToggle.setAttribute("aria-pressed", String(on));
+    }
+
+    /** Lists the side's findings again, but as a program writes to the disc no more than once a while. */
+    _updateReport() {
+        if (!this._showingReport || !this._reportStale) return;
+        const now = performance.now();
+        if (now - this._reportMadeAt < ReportRefreshMs) {
+            this._refresh.drawSoon();
+            return;
+        }
+        this._reportStale = false;
+        this._reportMadeAt = now;
+        const findings = this._disc ? discReport(this._disc, this._isSideUpper) : [];
+        const items = findings.map(({ trackNum, fraction, text }) => {
+            const item = document.createElement("li");
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = "txt-btn";
+            button.textContent = text;
+            button.title = "Zoom in on it";
+            button.addEventListener("click", () => {
+                this._zoomTo(trackNum, fraction);
+                this.update();
+            });
+            item.append(button);
+            return item;
+        });
+        if (!items.length) {
+            const item = document.createElement("li");
+            item.textContent = this._disc ? "Nothing odd on this side." : "No disc.";
+            items.push(item);
+        }
+        this.reportElem.replaceChildren(...items);
     }
 
     _start() {
@@ -298,6 +368,7 @@ export class DiscVisualiser {
         else if (this._staleTracks.size && !this._scanning) this._repaintStaleTracks();
         this._drawOverlay();
         this._updateStatus();
+        this._updateReport();
         // The machine may stand still while a scan or stale tracks are left to paint.
         if (this._scanning || this._staleTracks.size) this._refresh.drawSoon();
     }
@@ -335,6 +406,7 @@ export class DiscVisualiser {
         this._disc = disc;
         disc?.addTrackWriteListener(this._onTrackWrite);
         this._needsFullRepaint = true;
+        this._reportAfresh();
     }
 
     _detach() {

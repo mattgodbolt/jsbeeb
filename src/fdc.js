@@ -14,7 +14,6 @@ import { stringToUint8Array } from "./binary.js";
 import { loadData } from "./loader.js";
 
 export function load(name) {
-    console.log("Loading disc from " + name);
     return loadData(name);
 }
 
@@ -249,20 +248,10 @@ export function guessDiscTypeFromName(name) {
     return ssdDiscType;
 }
 
-/**
- * @param {DiscType} discType
- * @param {Uint8Array} data
- * @param {string} name
- * @param {string} layout - one of DiscLayout
- * @returns {boolean} whether to lay the image out for a 40 track drive
- */
-function is40TrackLayout(discType, data, name, layout) {
-    if (layout !== DiscLayout.auto) return layout === DiscLayout.expanded40;
-    const sniffed = discType.sniffLayout(data);
-    if (!sniffed) return false;
-    console.log(`${name} loaded as ${sniffed.is40Track ? "40" : "80"} track: ${sniffed.reason}`);
-    return sniffed.is40Track;
-}
+const layoutNote = ({ is40Track, reason }) => ({
+    text: `${is40Track ? "40" : "80"} track, as ${reason}`,
+    isOdd: false,
+});
 
 /**
  * Create a disc object of the appropriate type based on the file name
@@ -276,15 +265,17 @@ export function discFor(name, stringData, onChange, layout = DiscLayout.auto) {
     const data = typeof stringData !== "string" ? stringData : stringToUint8Array(stringData);
     const discType = guessDiscTypeFromName(name);
     const config = new DiscConfig();
-    config.expandTo80 = is40TrackLayout(discType, data, name, layout);
+    const sniffed = layout === DiscLayout.auto ? discType.sniffLayout(data) : null;
+    config.expandTo80 = sniffed ? sniffed.is40Track : layout === DiscLayout.expanded40;
     const disc = discType.loader(new Disc(true, config, name), data, onChange);
+    let reading = sniffed;
     // A flux image of a 40 track disc read in an 80 track drive already holds it spread across the
     // surface, so nothing needs moving and only the drive needs telling to step twice.
     if (layout === DiscLayout.auto && discType.isFluxImage && !disc.is40Track) {
-        const sniffed = sniffSurfaceLayout(disc);
-        disc.is40Track = sniffed.is40Track;
-        console.log(`${name} surface reads as ${sniffed.is40Track ? "40" : "80"} track: ${sniffed.reason}`);
+        reading = sniffSurfaceLayout(disc);
+        disc.is40Track = reading.is40Track;
     }
+    if (reading) disc.loadNotes.unshift(layoutNote(reading));
     disc.setOriginalImageCrc32(data instanceof Uint8Array ? data : new Uint8Array(data));
     return disc;
 }

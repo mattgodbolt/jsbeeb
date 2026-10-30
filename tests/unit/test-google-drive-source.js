@@ -76,8 +76,19 @@ describe("GoogleDriveSource", () => {
             loader.load.mockResolvedValue({ savesChanges: false });
             const source = make();
             await source.load({ id: "abc", name: "mine.ssd" }, "auto");
-            expect(loader.load).toHaveBeenCalledWith("abc", "auto");
+            expect(loader.load).toHaveBeenCalledWith("abc", "auto", expect.any(Function));
             expect(toasts()).toEqual([expect.stringContaining("mine.ssd is read only on Google Drive")]);
+        });
+
+        it("says when Drive will not take a loaded disc's changes", async () => {
+            loader.authorized = true;
+            loader.load.mockResolvedValue({ savesChanges: true });
+            await make().load({ id: "abc", name: "mine.ssd" }, "auto");
+            const [, , onSaveError] = loader.load.mock.calls[0];
+            onSaveError(new Error("Insufficient permissions"));
+            expect(toasts()).toEqual([
+                expect.stringContaining("Google Drive would not take changes to mine.ssd (Insufficient permissions)"),
+            ]);
         });
 
         it("asks for a connection rather than signing in by itself", async () => {
