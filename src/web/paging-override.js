@@ -10,7 +10,7 @@ import {
     viewedBank,
     viewsFor,
 } from "../paging.js";
-import { placePopup, popupBehaviour, textButton } from "./dom-utils.js";
+import { PopupMenu, textButton } from "./dom-utils.js";
 
 const FixedViews = {
     [PagedView]: { label: "paged", title: "Memory as the CPU has it paged now" },
@@ -36,25 +36,13 @@ export class PagingOverride {
         this._view = PagedView;
         this._disassembler = null;
         this._picker = textButton("paging-picker", "", "");
-        this._picker.setAttribute("aria-haspopup", "menu");
-        this._picker.setAttribute("aria-expanded", "false");
-        this._menu = document.createElement("div");
-        this._menu.className = "paging-menu";
-        this._menu.setAttribute("role", "menu");
-        this._menu.hidden = true;
         floating.panel.querySelector(".panel-title").after(this._picker);
-        document.body.append(this._menu);
-        this._picker.addEventListener("click", () => this._showMenu(this._menu.hidden));
-        popupBehaviour(
-            this._menu,
-            () => (this._menu.hidden ? null : [this._picker, this._menu]),
-            () => this.dismissMenu(),
-        );
-        floating.addEventListener("close", () => this.dismissMenu());
-    }
-
-    dismissMenu() {
-        this._showMenu(false);
+        this._menu = new PopupMenu({
+            opener: this._picker,
+            className: "paging-menu",
+            floating,
+            build: () => this._choices(),
+        });
     }
 
     setCpu(cpu) {
@@ -124,29 +112,17 @@ export class PagingOverride {
         this._picker.classList.toggle("overridden", this._view !== PagedView);
     }
 
-    _showMenu(show) {
-        if (show === !this._menu.hidden) return;
-        this._menu.hidden = !show;
-        this._picker.setAttribute("aria-expanded", String(show));
-        if (!show) return;
-        this._menu.replaceChildren(
-            ...viewsFor(this._cpu.model).map((view) => {
-                const { label, contents, title } = this._describe(view);
-                const choice = textButton(
-                    "paging-choice",
-                    contents ? `${view.toUpperCase()} ${contents}` : label,
-                    title,
-                );
-                choice.setAttribute("role", "menuitemradio");
-                choice.setAttribute("aria-checked", String(view === this._view));
-                choice.addEventListener("click", () => {
-                    this._showMenu(false);
-                    this.view = view;
-                });
-                return choice;
-            }),
-        );
-        const { left, bottom } = this._picker.getBoundingClientRect();
-        placePopup(this._menu, left, bottom);
+    _choices() {
+        return viewsFor(this._cpu.model).map((view) => {
+            const { label, contents, title } = this._describe(view);
+            const choice = textButton("paging-choice", contents ? `${view.toUpperCase()} ${contents}` : label, title);
+            choice.setAttribute("role", "menuitemradio");
+            choice.setAttribute("aria-checked", String(view === this._view));
+            choice.addEventListener("click", () => {
+                this._menu.show(false);
+                this.view = view;
+            });
+            return choice;
+        });
     }
 }

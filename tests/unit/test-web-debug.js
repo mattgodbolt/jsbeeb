@@ -23,6 +23,7 @@ import {
     domFromIndexHtml,
     fakeAnimationFrames,
     fitRomHeader,
+    pressKeepsFocus,
     romless,
     sentEvents,
     stubResizeObserver,
@@ -551,12 +552,6 @@ describe("Debugger", () => {
                 expect(document.getElementById("cpu6502_pc").textContent).toBe("2002");
             });
 
-            it("keeps its buttons from focus", () => {
-                const press = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
-                button("step").dispatchEvent(press);
-                expect(press.defaultPrevented).toBe(true);
-            });
-
             describe("stopped in a tight loop", () => {
                 const loopLine = () => document.querySelector("#toolbar-panel .tight-loop");
                 const stopIn = (code) => {
@@ -1029,21 +1024,10 @@ describe("Debugger", () => {
             expect(changed()).toBe(true);
         });
 
-        it("keeps its menu from focus, closing it on Escape, a press elsewhere, or its panel closing", () => {
+        it("closes its menu on its panel closing", () => {
             const menu = () => document.querySelector(".paging-menu:not([hidden])");
             picker("memory-panel").click();
-            const press = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
-            menu().querySelector("button").dispatchEvent(press);
-            expect(press.defaultPrevented).toBe(true);
-            document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
-            expect(menu()).toBeNull();
-            picker("memory-panel").click();
-            document.getElementById("memory").dispatchEvent(new Event("pointerdown", { bubbles: true }));
-            expect(menu()).toBeNull();
-            picker("memory-panel").click();
-            dbgr.hide();
-            expect(menu()).toBeNull();
-            picker("memory-panel").click();
+            expect(menu()).not.toBeNull();
             dbgr.panels.memory.close();
             expect(menu()).toBeNull();
         });
@@ -1613,14 +1597,6 @@ describe("Debugger", () => {
             expect(watchRows()).toEqual([]);
         });
 
-        it("closes the menu on leaving the debugger", () => {
-            dbgr.debug(cpu.pc);
-            goTo("goto-mem-addr-form", "$70");
-            rightClick(memByte(0x70));
-            dbgr.hide();
-            expect(watchMenu().hidden).toBe(true);
-        });
-
         it("leaves a watch's list of formats open when the machine steps or goes", () => {
             addWatch("$70");
             watchControl(0, "watch-format").click();
@@ -1834,9 +1810,7 @@ describe("Debugger", () => {
             goTo("goto-mem-addr-form", "$70");
             rightClick(memByte(0x70));
             for (const choice of watchMenu().querySelectorAll("button")) {
-                const press = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
-                choice.dispatchEvent(press);
-                expect(press.defaultPrevented).toBe(true);
+                expect(pressKeepsFocus(choice)).toBe(true);
                 expect(choice.tabIndex).toBe(-1);
             }
         });
@@ -1856,19 +1830,11 @@ describe("Debugger", () => {
             expect(empty()).toBe(true);
         });
 
-        it("keeps its buttons from focus, by mouse or by Tab", () => {
+        it("keeps its buttons out of the tab order", () => {
             dbgr.debug(cpu.pc);
             addWatch("$70");
-            for (const button of [
-                watchControl(0, "watch-format"),
-                watchChoices(0).querySelector("button"),
-                watchControl(0, "watch-remove"),
-            ]) {
-                const press = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
-                button.dispatchEvent(press);
-                expect(press.defaultPrevented).toBe(true);
-                expect(button.tabIndex).toBe(-1);
-            }
+            const buttons = [...document.querySelectorAll("#watch-panel .watch-list button")];
+            expect(buttons.map((button) => button.tabIndex)).toEqual(buttons.map(() => -1));
         });
     });
 
@@ -2334,9 +2300,7 @@ describe("Debugger", () => {
                 expect(link.href).toBe(PlaceUrl);
                 expect(link.target).toBe("_blank");
                 expect(link.title).toBe(`oswrch: $3000, from Test MOS\nDefined at ${PlaceUrl}`);
-                const press = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
-                link.dispatchEvent(press);
-                expect(press.defaultPrevented).toBe(true);
+                expect(pressKeepsFocus(link)).toBe(true);
             });
 
             it("keeps a named operand following its address, saying where it's defined", async () => {

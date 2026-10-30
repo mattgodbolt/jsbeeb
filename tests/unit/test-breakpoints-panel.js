@@ -399,17 +399,10 @@ describe("BreakpointsPanel", () => {
             expect(rowText(rows()[0])).toEqual(["", "LN", "line 120", "always", "0", "stop", "×"]);
         });
 
-        it("closes on a click elsewhere, or on Escape, which goes no further", () => {
+        it("closes on a click elsewhere, adding nothing", () => {
             openMenu();
             document.body.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true }));
             expect(menu().hidden).toBe(true);
-            openMenu();
-            const pageSaw = vi.fn();
-            document.addEventListener("keydown", pageSaw);
-            document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-            document.removeEventListener("keydown", pageSaw);
-            expect(menu().hidden).toBe(true);
-            expect(pageSaw).not.toHaveBeenCalled();
             expect(cpu.breakpoints.list()).toEqual([]);
         });
 

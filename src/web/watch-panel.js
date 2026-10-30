@@ -185,10 +185,6 @@ export class WatchPanel {
         placePopup(this._menu, x, y);
     }
 
-    dismissMenu() {
-        if (this._openPopup?.popup === this._menu) this._showPopup(null);
-    }
-
     _add({ address, label }, initialFormat) {
         const row = document.createElement("tr");
         const cell = (className, text) => {

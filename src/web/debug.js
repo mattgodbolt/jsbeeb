@@ -1154,8 +1154,6 @@ export class Debugger {
         if (!this._inDebugger) return;
         // A run handed to the loop keeps the memory it started from, to show what it changed.
         if (!this._runningTo) this.updatePrevMem();
-        this.watches.dismissMenu();
-        for (const paging of Object.values(this._paging)) paging.dismissMenu();
         this.watches.clearFired();
         this._inDebugger = false;
         this._loopNote.clear();
