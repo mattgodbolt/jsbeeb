@@ -199,24 +199,32 @@ describe("Cpu6502 NMI lines", () => {
         cpu = fake6502();
     });
 
-    it("takes an NMI when the first source rises", () => {
-        cpu.setNmi(NmiSource.fdc, true);
+    // The line is the OR of its sources, and an NMI is taken on its rising edge.
+    it.each([
+        ["the first source rising", [["fdc", true]], true],
+        ["a source rising while another is held", [["fdc", true], "take", ["econet", true]], false],
+        [
+            "a source pulsing while another is held",
+            [["fdc", true], ["econet", true], "take", ["fdc", false], ["fdc", true]],
+            false,
+        ],
+        [
+            "a source rising once every source has dropped",
+            [["fdc", true], ["econet", true], "take", ["fdc", false], ["econet", false], ["econet", true]],
+            true,
+        ],
+    ])("after %s, takes an NMI: %s", (_name, steps, taken) => {
+        for (const step of steps) {
+            if (step === "take") takesNmi(cpu);
+            else cpu.setNmi(NmiSource[step[0]], step[1]);
+        }
 
-        expect(cpu.nmi).toBe(true);
-        expect(takesNmi(cpu)).toBe(true);
-    });
-
-    it("does not take a second NMI for a source rising while another is held", () => {
-        cpu.setNmi(NmiSource.fdc, true);
-        takesNmi(cpu);
-
-        cpu.setNmi(NmiSource.econet, true);
-
-        expect(takesNmi(cpu)).toBe(false);
+        expect(takesNmi(cpu)).toBe(taken);
     });
 
     it("holds the line until every source has dropped", () => {
         cpu.setNmi(NmiSource.fdc, true);
+        expect(cpu.nmi).toBe(true);
         cpu.setNmi(NmiSource.econet, true);
 
         cpu.setNmi(NmiSource.fdc, false);
@@ -224,29 +232,6 @@ describe("Cpu6502 NMI lines", () => {
 
         cpu.setNmi(NmiSource.econet, false);
         expect(cpu.nmi).toBe(false);
-    });
-
-    it("does not take an NMI for a source pulsing while another is held", () => {
-        cpu.setNmi(NmiSource.fdc, true);
-        cpu.setNmi(NmiSource.econet, true);
-        takesNmi(cpu);
-
-        cpu.setNmi(NmiSource.fdc, false);
-        cpu.setNmi(NmiSource.fdc, true);
-
-        expect(takesNmi(cpu)).toBe(false);
-    });
-
-    it("takes another NMI once every source has dropped and one rises again", () => {
-        cpu.setNmi(NmiSource.fdc, true);
-        cpu.setNmi(NmiSource.econet, true);
-        takesNmi(cpu);
-        cpu.setNmi(NmiSource.fdc, false);
-        cpu.setNmi(NmiSource.econet, false);
-
-        cpu.setNmi(NmiSource.econet, true);
-
-        expect(takesNmi(cpu)).toBe(true);
     });
 
     it("tells each source whether its own line is up", () => {
