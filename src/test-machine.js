@@ -12,6 +12,7 @@ import { VduTextCapture } from "./vdu-capture.js";
 import { setNodeBasePath } from "./loader.js";
 import { Typist } from "./typist.js";
 import { keyCodes } from "./keymap.js";
+import { cycleCount } from "./lockstep.js";
 
 export const MaxCyclesPerIter = 100 * 1000;
 const VblankSearchCycles = 10 * 1000 * 1000;
@@ -44,11 +45,6 @@ export class TestMachine {
         this.typist = new Typist(this.processor);
         this._capturedChars = [];
         this._captureHookInstalled = false;
-    }
-
-    /** The keyboard interface for this machine (SysVia for BBC, PPIA for Atom). */
-    get _keyInterface() {
-        return this.processor.keyboardInterface;
     }
 
     async initialise() {
@@ -156,8 +152,7 @@ export class TestMachine {
 
     /** Emulated cycles since power-on, undoing the per-second rebasing execute() applies. */
     get elapsedCycles() {
-        const cpu = this.processor;
-        return cpu.cycleSeconds * this.model.cyclesPerSecond + cpu.currentCycles;
+        return cycleCount(this.processor);
     }
 
     async runUntilVblank() {
@@ -297,7 +292,7 @@ export class TestMachine {
      */
     keyDown(code, shiftDown = false) {
         requireKnownKeyCode("keyDown", code);
-        this._keyInterface.keyDown(code, shiftDown);
+        this.processor.keyboardInterface.keyDown(code, shiftDown);
     }
 
     /**
@@ -306,7 +301,7 @@ export class TestMachine {
      */
     keyUp(code) {
         requireKnownKeyCode("keyUp", code);
-        this._keyInterface.keyUp(code);
+        this.processor.keyboardInterface.keyUp(code);
     }
 
     /**
@@ -315,10 +310,7 @@ export class TestMachine {
      * @param {Uint8Array|Buffer} data - ROM data (up to one 16KB bank)
      */
     loadSidewaysRam(slot, data) {
-        const offset = this.processor.romOffset + slot * RomBankBytes;
-        for (let i = 0; i < data.length && i < RomBankBytes; i++) {
-            this.processor.ramRomOs[offset + i] = data[i];
-        }
+        this.processor.romBank(slot).set(data.subarray(0, RomBankBytes));
     }
 
     writebyte(addr, val) {
