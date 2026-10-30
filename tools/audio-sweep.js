@@ -16,8 +16,6 @@
  */
 
 import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 
 const ChipClockHz = 4000000;
 export const toneHz = (period) => ChipClockHz / (32 * period);
@@ -701,12 +699,12 @@ async function main() {
             return;
         }
         default:
-            console.error(fs.readFileSync(fileURLToPath(import.meta.url), "utf8").split("*/")[0]);
+            console.error(fs.readFileSync(import.meta.filename, "utf8").split("*/")[0]);
             process.exit(1);
     }
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (import.meta.main) {
     main().catch((error) => {
         console.error(error.message);
         process.exit(1);

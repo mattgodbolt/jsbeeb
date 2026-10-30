@@ -1,6 +1,6 @@
 // One A/B sample's measurement, shared by the Node sample (tools/node-ab-sample.js) and the shell bundle
 // (tools/shell-ab-sample.js), so it has no Node or browser dependencies.
-import { TickMs } from "../src/emulation-tick.js";
+import { tickCycles, TickMs } from "../src/emulation-tick.js";
 import { median } from "./ab-stats.js";
 
 const MsPerSecond = 1000;
@@ -35,7 +35,7 @@ export function wholeSlices(options, name, least) {
  */
 export function timeSlices(cpu, { warmupSecs, measureSecs }) {
     const { cyclesPerSecond } = cpu.model;
-    const sliceCycles = Math.round((cyclesPerSecond * TickMs) / MsPerSecond);
+    const sliceCycles = tickCycles(cyclesPerSecond);
     const warmupSlices = Math.round(warmupSecs * SlicesPerSecond);
     for (let slice = 0; slice < warmupSlices; slice++) cpu.execute(sliceCycles);
     const slices = Math.round(measureSecs * SlicesPerSecond);

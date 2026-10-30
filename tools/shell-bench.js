@@ -5,12 +5,12 @@ import { spawn } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 
 import { SampleSecsDefaults, wholeSlices } from "./ab-sample.js";
 
-const ToolsDir = path.dirname(fileURLToPath(import.meta.url));
+const ToolsDir = import.meta.dirname;
 const RepoRoot = path.resolve(ToolsDir, "..");
 const EntryScript = path.join(ToolsDir, "shell-ab-sample.js");
 const HostScript = path.join(ToolsDir, "shell-host.js");
@@ -210,7 +210,7 @@ async function main() {
     }
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (import.meta.main) {
     main().catch((error) => {
         console.error(error.message);
         process.exit(1);
