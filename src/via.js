@@ -831,7 +831,7 @@ export class SysVia extends Via {
         this._keysChanged();
     }
 
-    /** A key can go up while the machine is stopped, taking no cycles, so it is counted for `machineMoment`. */
+    /** Counted for `machineMoment`. */
     _keysChanged() {
         ++this.keyChanges;
         this.updateKeys();

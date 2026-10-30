@@ -27,7 +27,7 @@ export function cycleCount(cpu) {
     return cpu.cycleSeconds * cpu.model.cyclesPerSecond + cpu.currentCycles;
 }
 
-/** Changes whenever the processor does: as its cycle count moves, and at a reset or state load, which need not move it. */
+/** Changes whenever the processor does: as its cycle count moves, and at a reset or state load, which need not. */
 export function cpuMoment(cpu) {
     return `${cpu.resetsAndLoads}:${cycleCount(cpu)}`;
 }
