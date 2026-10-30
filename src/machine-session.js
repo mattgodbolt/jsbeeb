@@ -581,7 +581,8 @@ export class MachineSession {
 
     /**
      * Return the first breakpoint that stopped the machine since the last reset, or null: its id, type and the
-     * address hit, its bank if it has one, and the byte read or written.
+     * address hit (an interrupt's handler, or the instruction for a breakpoint with no address), its bank if it has
+     * one, and the byte read or written.
      */
     hitBreakpoint() {
         for (const [id, hit] of this._breakpointHits) {

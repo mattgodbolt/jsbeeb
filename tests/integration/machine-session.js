@@ -214,9 +214,9 @@ describe("MachineSession watching execution", () => {
         expect(session.hitBreakpoint()).toEqual({ id, type: "write", address: Counter, value: 0x42 });
     });
 
-    it("stops as the machine takes an IRQ, at the handler the vector names", async () => {
+    it("stops as the machine takes an IRQ with the vsync flag set, at the handler the vector names", async () => {
         const IrqVector = 0xfffe;
-        const id = session.addBreakpoint("irq", undefined);
+        const id = session.addBreakpoint("irq", undefined, { condition: "?&FE4D AND 2" });
 
         await session.runFor(CyclesPerInterlacedFrame);
 

@@ -204,7 +204,11 @@ describe("Breakpoints", () => {
         const EnableVsyncIrq = 0x82;
         const NmiVector = 0xfffa;
         const IrqVector = 0xfffe;
-        const Handler = 0x2100;
+        const NmiHandler = 0x2100;
+        const IrqHandler = 0x2110;
+        const InVsyncCycles = 100;
+        const StackPage = 0x01;
+        const PastVsyncCycles = 10000;
         const Line = 100;
         const Field = 40000;
         const LongestInstruction = 7;
@@ -212,11 +216,14 @@ describe("Breakpoints", () => {
         const runField = () => cpu.execute(Field + Field / 2);
 
         beforeEach(() => {
-            for (const vector of [NmiVector, IrqVector]) {
-                cpu.writemem(vector, Handler & 0xff);
-                cpu.writemem(vector + 1, Handler >> 8);
+            for (const [vector, handler] of [
+                [NmiVector, NmiHandler],
+                [IrqVector, IrqHandler],
+            ]) {
+                cpu.writemem(vector, handler & 0xff);
+                cpu.writemem(vector + 1, handler >> 8);
+                cpu.writemem(handler, Rti);
             }
-            cpu.writemem(Handler, Rti);
         });
 
         it.each([
@@ -228,9 +235,9 @@ describe("Breakpoints", () => {
                     cpu.sysvia.write(SysViaIer, EnableVsyncIrq);
                     cpu.p.i = false;
                 },
-                { access: "interrupt", address: Handler },
+                { access: "interrupt", address: IrqHandler },
             ],
-            ["nmi", () => cpu.setNmi(NmiSource.fdc, true), { access: "interrupt", address: Handler }],
+            ["nmi", () => cpu.setNmi(NmiSource.fdc, true), { access: "interrupt", address: NmiHandler }],
         ])(
             "a %s breakpoint stops the machine before the instruction or handler, saying what hit it",
             (kind, set, hit) => {
@@ -246,10 +253,41 @@ describe("Breakpoints", () => {
         it("runs the handler an interrupt stopped at without an execute breakpoint there stopping it again", () => {
             cpu.setNmi(NmiSource.fdc, true);
             breakpoints.add({ kind: "nmi" });
-            breakpoints.add({ kind: "execute", start: Handler });
+            breakpoints.add({ kind: "execute", start: NmiHandler });
             expect(runField()).toBe(false);
             expect(runField()).toBe(true);
             expect(hits.map((hit) => hit.kind)).toEqual(["nmi"]);
+        });
+
+        it("takes a BRK for no IRQ", () => {
+            cpu.writemem(Jump, Brk);
+            breakpoints.add({ kind: "irq" });
+            expect(runField()).toBe(true);
+            expect(hits).toEqual([]);
+        });
+
+        it("stops at an NMI that takes over a BRK part way through, as on the 6502", () => {
+            cpu.writemem(Jump, Brk);
+            let raised = false;
+            cpu.debugWrite.add((address) => {
+                if (raised || address >> 8 !== StackPage) return false;
+                cpu.setNmi(NmiSource.fdc, true);
+                raised = true;
+                return false;
+            });
+            breakpoints.add({ kind: "nmi" });
+            expect(runField()).toBe(false);
+            expect(hits).toEqual([expect.objectContaining({ kind: "nmi", address: NmiHandler, pc: Jump + 2 })]);
+        });
+
+        it("waits for vsync to start again after a state is restored part way through it", () => {
+            breakpoints.add({ kind: "vsync" });
+            expect(runField()).toBe(false);
+            const inVsync = cpu.snapshotState();
+            expect(cpu.execute(PastVsyncCycles)).toBe(true);
+            cpu.restoreState(inVsync);
+            expect(cpu.execute(InVsyncCycles)).toBe(true);
+            expect(hits).toHaveLength(1);
         });
 
         it.each([

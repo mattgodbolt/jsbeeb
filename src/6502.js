@@ -14,7 +14,7 @@ import { signExtend } from "./binary.js";
 import { hexbyte, hexword } from "./hex.js";
 import { loadData } from "./loader.js";
 import { MediaResolver } from "./media-resolver.js";
-import { Breakpoints } from "./breakpoints.js";
+import { BrkOpcode, Breakpoints } from "./breakpoints.js";
 
 async function romImage(name) {
     return (await new MediaResolver().resolve("rom", name)).data;
@@ -36,6 +36,8 @@ const OsOffset = RomOffset + NumRomBanks * RomBankBytes;
 const BbcMemoryBytes = OsOffset + RomBankBytes;
 // Further from every real offset than any address, and a small integer in every V8 build.
 const SlowPathOffset = -0x40000000;
+const NmiVector = 0xfffa;
+const IrqVector = 0xfffe;
 
 /**
  * Packs sideways RAM banks into a snapshot's `swram` and `swramBankMask`: the banks back to back in ascending
@@ -281,9 +283,9 @@ class Base6502 {
         // sequence, and yes, on 6502, an NMI can redirect the vector
         // for a half-way done BRK instruction.
         this.polltime(4);
-        let vector = 0xfffe;
+        let vector = IrqVector;
         if ((this.model.nmos || isIrq) && this._nmiEdge) {
-            vector = 0xfffa;
+            vector = NmiVector;
             this._nmiEdge = false;
             this.nmiAcknowledged();
         }
@@ -756,7 +758,7 @@ export class Cpu6502 extends Base6502 {
         this.debugInstruction = new DebugHook(this, "_debugInstruction", { remembersStop: true });
         this.debugRead = new DebugHook(this, "_debugRead");
         this.debugWrite = new DebugHook(this, "_debugWrite");
-        // Called with the vector and the address the interrupt returns to, after an interrupt is taken.
+        // Called with "irq" or "nmi" and the address the interrupt returns to, after an interrupt is taken.
         this.debugInterrupt = new DebugHook(this, "_debugInterrupt");
         this.breakpoints = new Breakpoints(this);
 
@@ -1576,6 +1578,7 @@ export class Cpu6502 extends Base6502 {
         this.takeInt = state.takeInt;
         if (state.stoppedAtBreakpoint) this.debugInstruction.rememberUnseenStop();
         else this.debugInstruction.forgetStop();
+        this.breakpoints.forgetSeen();
 
         // 3. Memory
         // Older snapshots saved 128KB of ram; only the first 64KB was ever mapped.
@@ -1852,15 +1855,27 @@ export class Cpu6502 extends Base6502 {
             this.oldAArray[this.oldPcIndex] = this.a;
             this.oldXArray[this.oldPcIndex] = this.x;
             this.oldYArray[this.oldPcIndex] = this.y;
+            if (opcode === BrkOpcode && this._debugInterrupt) this.checkBrkTakenByNmi(this.oldPcArray[this.oldPcIndex]);
             if (this.takeInt) {
                 const returnsTo = this.pc;
-                const vector = this.brk(true);
+                const taken = this.brk(true) === NmiVector ? "nmi" : "irq";
                 // Stopped at the handler's first instruction, which no instruction hook then stops at again.
-                if (this._debugInterrupt?.(vector, returnsTo)) this.debugInstruction.rememberUnseenStop();
+                if (this._debugInterrupt?.(taken, returnsTo)) this.debugInstruction.rememberUnseenStop();
             }
             if (!this.resetLine) this.reset(false);
         }
         return !this.halted;
+    }
+
+    /**
+     * Tells the interrupt hook of an NMI that took over the BRK at `brkPc`, as one arriving part way through a BRK
+     * does on the 6502: it shows as the BRK going to the NMI's handler rather than the IRQ's.
+     */
+    checkBrkTakenByNmi(brkPc) {
+        const vectorAt = (address) => this.peekmem(address) | (this.peekmem(address + 1) << 8);
+        const nmiHandler = vectorAt(NmiVector);
+        if (this.pc !== nmiHandler || nmiHandler === vectorAt(IrqVector)) return;
+        if (this._debugInterrupt("nmi", (brkPc + 2) & 0xffff)) this.debugInstruction.rememberUnseenStop();
     }
 
     executeInternalFast() {

@@ -5,9 +5,7 @@ import { requireBank } from "./paging.js";
 const Actions = ["stop", "log"];
 const AddressSpace = 0x10000;
 const LastAddress = AddressSpace - 1;
-const BrkOpcode = 0x00;
-const NmiVector = 0xfffa;
-const IrqVector = 0xfffe;
+export const BrkOpcode = 0x00;
 const AccessesOfKind = new Map([
     ["execute", ["execute"]],
     ["read", ["read"]],
@@ -37,6 +35,8 @@ function turns(holds) {
     };
 }
 
+const takenIs = (cpu, entry, address, value, taken) => taken === entry.kind;
+
 /**
  * The kinds with no address: each acts on the instructions, or the interrupts, its test picks out. `firesOn` makes
  * a fresh test, as a test that a change has happened keeps what it saw last.
@@ -47,8 +47,8 @@ const EventKinds = new Map([
         "undocumented",
         { access: "execute", firesOn: () => (cpu, entry, address) => !cpu.disassembler.isDocumented(address) },
     ],
-    ["irq", { access: "interrupt", firesOn: () => (cpu, entry, address, vector) => vector === IrqVector }],
-    ["nmi", { access: "interrupt", firesOn: () => (cpu, entry, address, vector) => vector === NmiVector }],
+    ["irq", { access: "interrupt", firesOn: () => takenIs }],
+    ["nmi", { access: "interrupt", firesOn: () => takenIs }],
     ["vsync", { access: "execute", firesOn: turns((cpu) => cpu.video.beamPosition().inVSync) }],
     ["line", { access: "execute", firesOn: turns((cpu, entry) => cpu.video.beamPosition().line === entry.line) }],
 ]);
@@ -150,6 +150,11 @@ export class Breakpoints {
     clear() {
         this._entries.clear();
         this._changed();
+    }
+
+    /** Starts each stop waiting for a change afresh, as the machine has jumped to a state it did not run into. */
+    forgetSeen() {
+        for (const entry of this._entries.values()) entry.fires = EventKinds.get(entry.kind)?.firesOn() ?? null;
     }
 
     resetHits() {
@@ -265,11 +270,12 @@ export class Breakpoints {
     }
 
     _handler(access) {
-        if (access === "interrupt") return (vector, returnsTo) => this._check(access, this._cpu.pc, vector, returnsTo);
-        return (address, value) => this._check(access, address, value & 0xff, undefined);
+        if (access === "interrupt") return (taken, returnsTo) => this._check(access, this._cpu.pc, 0, returnsTo, taken);
+        return (address, value) => this._check(access, address, value & 0xff, undefined, undefined);
     }
 
-    _check(access, address, value, returnsTo) {
+    /** `returnsTo` and `taken`, "irq" or "nmi", are an interrupt's. */
+    _check(access, address, value, returnsTo, taken) {
         // A handler earlier in the same dispatch can remove the last breakpoint, detaching this one before its call.
         const watching = this._watching[access];
         if (!watching?.covered[address]) return false;
@@ -282,7 +288,7 @@ export class Breakpoints {
         let stop = false;
         for (const entry of entries) {
             if (address < entry.from || address > entry.to) continue;
-            if (entry.fires && !entry.fires(cpu, entry, address, value)) continue;
+            if (entry.fires && !entry.fires(cpu, entry, address, value, taken)) continue;
             if (entry.bank !== undefined && !cpu.isBankPagedAt(entry.bank, address)) continue;
             if (entry.test && !entry.test(cpu, pc, value, old)) continue;
             if (entry.accepts && !entry.accepts(address, value, pc)) continue;

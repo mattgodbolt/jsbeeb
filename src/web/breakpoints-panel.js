@@ -209,6 +209,7 @@ export class BreakpointsPanel {
 
     /** Shows `cpu`'s breakpoints, first putting back the ones saved on an earlier visit. */
     setCpu(cpu) {
+        this._showStopMenu(false);
         this._cpu = cpu;
         this._breakpoints = cpu.breakpoints;
         this._restore();
@@ -285,7 +286,6 @@ export class BreakpointsPanel {
             button.addEventListener("click", () => {
                 this._showStopMenu(false);
                 add();
-                // A pick hands the keyboard back to the machine, from the add field too.
                 this._input.blur();
             });
             return button;
