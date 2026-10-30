@@ -151,11 +151,15 @@ describe("40 track discs", () => {
         expect(drive.track).toBe(1);
     });
 
-    it("stops on the outermost track double stepping can reach", () => {
-        vi.spyOn(globalThis.console, "log").mockImplementation(() => {});
-        const drive = driveSteppedIn(fortyTrackDisc(), IbmDiscFormat.tracksPerDisc);
+    it("stops on the outermost track double stepping can reach, and says so", () => {
+        const drive = driveSteppedIn(fortyTrackDisc(), IbmDiscFormat.tracksPerDisc - 2);
+        const stops = [];
+        drive.addEventListener("headStop", ({ track }) => stops.push(track));
+
+        drive.seekOneTrack(1);
 
         expect(drive.track).toBe(IbmDiscFormat.tracksPerDisc - 2);
+        expect(stops).toEqual([IbmDiscFormat.tracksPerDisc - 2]);
     });
 
     it("wipes the track its head also covers", () => {

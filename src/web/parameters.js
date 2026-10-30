@@ -298,8 +298,6 @@ export const Parameters = {
     glEnabled: { type: ParamTypes.BOOL_DEFAULT_TRUE, localToPage: true },
     lowLatency: { type: ParamTypes.BOOL_DEFAULT_TRUE, localToPage: true },
     fakeVideo: { type: ParamTypes.BOOL, takenFromHost: true },
-    logFdcCommands: { type: ParamTypes.BOOL, localToPage: true },
-    logFdcStateChanges: { type: ParamTypes.BOOL, localToPage: true },
     audioDebug: { type: ParamTypes.BOOL, localToPage: true },
 
     // Numeric parameters

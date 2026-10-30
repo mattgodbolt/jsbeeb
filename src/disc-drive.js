@@ -61,6 +61,14 @@ class SeekEndEvent extends Event {
     }
 }
 
+/** The head was stepped against its stop at `track`, the outermost or innermost it can reach. */
+class HeadStopEvent extends Event {
+    constructor(track) {
+        super("headStop");
+        this.track = track;
+    }
+}
+
 /**
  * Abstract base class defining the interface for disc drives.
  * All disc drive implementations must extend this class.
@@ -470,12 +478,9 @@ export class DiscDrive extends BaseDiscDrive {
     _selectTrack(track) {
         this._checkTrackNeedsWrite();
         const lastTrack = IbmDiscFormat.tracksPerDisc - this._tracksPerStep;
-        if (track < 0) {
-            track = 0;
-            console.log("Clang! disc head stopped at track 0");
-        } else if (track > lastTrack) {
-            track = lastTrack;
-            console.log("Clang! disc head stopper at track max");
+        if (track < 0 || track > lastTrack) {
+            track = track < 0 ? 0 : lastTrack;
+            this.dispatchEvent(new HeadStopEvent(track));
         }
         const fraction = this.positionFraction;
         this._track = track;

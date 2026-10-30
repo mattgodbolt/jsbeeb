@@ -13,6 +13,13 @@ import { loadHfe, sniffHfeLayout, toHfe } from "./disc-hfe.js";
 import { stringToUint8Array } from "./binary.js";
 import { loadData } from "./loader.js";
 
+/**
+ * What a disc controller reports to its log, for the Disc controller panel to spell out: a command, its result, a
+ * change of state or of the control register, a note on what it did, or a warning of something unusual. The other
+ * fields depend on the kind and the chip.
+ * @typedef {{kind: "command" | "result" | "state" | "control" | "note" | "warning"} & Object<string, *>} FdcLogEntry
+ */
+
 export function load(name) {
     console.log("Loading disc from " + name);
     return loadData(name);

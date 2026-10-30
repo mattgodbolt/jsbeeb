@@ -701,7 +701,6 @@ export class Cpu6502 extends Base6502 {
         super(model, { cycleAccurate });
         this.config = config;
         this.keyLayout = config.keyLayout;
-        this.debugFlags = this.config.debugFlags;
         this.cmos = cmos;
         this.debugger = dbgr;
 
@@ -773,7 +772,7 @@ export class Cpu6502 extends Base6502 {
         this.adconverter = new Adc(this.sysvia, this.scheduler);
         this.touchScreen = new TouchScreen(this.scheduler, this.model.cyclesPerSecond);
         this.soundChip.setScheduler(this.scheduler);
-        this.fdc = new this.model.Fdc(this, this.ddNoise, this.scheduler, this.debugFlags);
+        this.fdc = new this.model.Fdc(this, this.ddNoise, this.scheduler);
     }
 
     get memoryBytes() {

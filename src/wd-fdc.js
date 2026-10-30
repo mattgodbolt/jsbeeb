@@ -38,7 +38,7 @@ export const Command = Object.freeze({
  * @readonly
  * @enum {Number}
  */
-const CommandBits = Object.freeze({
+export const CommandBits = Object.freeze({
     typeIIMulti: 0x10,
     disableSpinUp: 0x08,
     typeIVerify: 0x04,
@@ -136,8 +136,6 @@ export const State = Object.freeze({
     done: 19,
 });
 
-const stateName = (state) => Object.keys(State).find((name) => State[name] === state);
-
 /**
  * Timer state.
  *
@@ -170,10 +168,9 @@ export class WdFdc {
      * @param {Cpu6502} cpu
      * @param {Scheduler} scheduler
      * @param {BaseDiscDrive[] | undefined} drives
-     * @param {*} debugFlags
      * @param {WdFdcVariant} [variant]
      */
-    constructor(cpu, scheduler, drives, debugFlags, variant = WdFdcVariant.wd1770) {
+    constructor(cpu, scheduler, drives, variant = WdFdcVariant.wd1770) {
         this._cpu = cpu;
         if (drives) this._drives = drives;
         else
@@ -229,9 +226,9 @@ export class WdFdc {
         this._onDiscCrc = 0;
         this._lastMfmBit = false;
 
-        this.logCommands = debugFlags ? !!debugFlags.logFdcCommands : false;
-        this.logStateChanges = debugFlags ? !!debugFlags.logFdcStateChanges : false;
-        /** @type {((line: string) => void) | null} where log lines go besides the console */
+        this.logCommands = false;
+        this.logStateChanges = false;
+        /** @type {((entry: import("./fdc.js").FdcLogEntry) => void) | null} */
         this.onLog = null;
 
         for (const drive of this._drives) {
@@ -288,14 +285,31 @@ export class WdFdc {
         this._updateNmi();
     }
 
-    _log(message) {
-        const line = `WD1770: ${message}`;
-        console.log(line);
-        this.onLog?.(line);
+    get chip() {
+        return this._is1772 ? "WD1772" : "WD1770";
     }
 
-    _logCommand(message) {
-        if (this.logCommands) this._log(message);
+    _log(entry) {
+        this.onLog?.(entry);
+    }
+
+    _note(text) {
+        if (this.logCommands) this._log({ kind: "note", text });
+    }
+
+    _warn(text) {
+        console.warn(`${this.chip}: ${text}`);
+        this._log({ kind: "warning", text });
+    }
+
+    /** The registers a log entry shows as they stand. */
+    get _loggedRegisters() {
+        return {
+            track: this._trackRegister,
+            sector: this._sectorRegister,
+            data: this._dataRegister,
+            control: this._controlRegister,
+        };
     }
 
     _opusRemapAddr(addr) {
@@ -387,7 +401,7 @@ export class WdFdc {
             case 1:
             case 2:
             case 3:
-                this._logCommand(`control register now ${hexbyte(val)}`);
+                if (this.logCommands) this._log({ kind: "control", value: val });
                 this._writeControl(val);
                 break;
             case 4:
@@ -395,16 +409,16 @@ export class WdFdc {
                 if (!this._isReset(this._controlRegister)) this._doCommand(val);
                 break;
             case 5:
-                this._logCommand(`track register now ${val}`);
+                this._note(`track register set to ${val}`);
                 this._trackRegister = val;
                 break;
             case 6:
                 // Ignore sector reg changes in reset; note that track/data registers will still be accepted.
                 if (!this._isReset(this._controlRegister)) {
-                    this._logCommand(`sector register now ${val}`);
+                    this._note(`sector register set to ${val}`);
                     this._sectorRegister = val;
                 } else {
-                    this._logCommand(`ignoring sector write of ${val}`);
+                    this._note(`sector register write of ${val} ignored in reset`);
                 }
                 break;
             case 7:
@@ -417,11 +431,14 @@ export class WdFdc {
     }
 
     _doCommand(val) {
-        this._logCommand(
-            `command ${hexbyte(val)} tr ${this._trackRegister} sr ${this._sectorRegister} dr ${this._dataRegister} ` +
-                `cr ${hexbyte(this._controlRegister)} ` +
-                `ptrk ${this._currentDrive?.track} hpos ${this._currentDrive?.headPosition}`,
-        );
+        if (this.logCommands)
+            this._log({
+                kind: "command",
+                byte: val,
+                ...this._loggedRegisters,
+                stepRateMs: this._stepRateMsFor(val),
+                headTrack: this._currentDrive?.track ?? null,
+            });
         const command = val & 0xf0;
 
         if (command === Command.forceInterrupt) {
@@ -433,7 +450,7 @@ export class WdFdc {
             // rule here. Whether a command will do anything when busy seems to depend on
             // the current command, the new command and also the current place in the
             // internal state machine!
-            this._log(`command ${hexbyte(val)} while busy with ${hexbyte(this._command)} - ignoring`);
+            this._warn(`command &${hexbyte(val)} ignored while busy with &${hexbyte(this._command)}`);
             return;
         }
 
@@ -505,7 +522,7 @@ export class WdFdc {
             // unreliable on a drive that takes a while to come up to speed.
             if (val & CommandBits.disableSpinUp) {
                 this._indexPulseCount = 6;
-                this._log(`command ${hexbyte(val)} spin up wait disabled, motor was off`);
+                this._note("no spin up wait, though the motor was off");
                 this._settleThenDispatch();
             } else {
                 this._setState(State.spinUpWait);
@@ -517,14 +534,8 @@ export class WdFdc {
      * @param {State|Number} state
      */
     _setState(state) {
-        if (this.logStateChanges && state !== this._state) {
-            this._log(
-                `State ${stateName(this._state)} -> ${stateName(state)} @ tr ${this._trackRegister} ` +
-                    `sr ${this._sectorRegister} dr ${this._dataRegister} ` +
-                    `cr ${hexbyte(this._controlRegister)} ` +
-                    `ptrk ${this._currentDrive?.track} hpos ${this._currentDrive?.headPosition}`,
-            );
-        }
+        if (this.logStateChanges && state !== this._state)
+            this._log({ kind: "state", from: this._state, to: state, ...this._loggedRegisters });
         this._state = state;
         this._stateCount = 0;
     }
@@ -704,7 +715,7 @@ export class WdFdc {
         switch (this._command) {
             case Command.restore:
                 this._trackRegister = 0xff;
-                this._logCommand(`track register now ${this._trackRegister}`);
+                this._note(`track register set to ${this._trackRegister}`);
                 this._dataRegister = 0;
                 // The head steps out from wherever it is, whatever the track register says
                 if (this._currentDrive) this._makeSeekNoise(-this._currentDrive.logicalTrack);
@@ -850,7 +861,7 @@ export class WdFdc {
         if (this._statusRegister & Status.busy) throw new Error("Unexpectedly busy in idle state");
         // different sources disagree on 10 vs 9 index pulses for spin down.
         if (this._indexPulseCount < 9) return;
-        this._logCommand("automatic motor off");
+        this._note("automatic motor off");
         this._setMotor(false);
         // In @scarybeasts's testing on a 1772 the polled track 0 and index bits get cleared on spin down;
         // write protect, polled the same way, is assumed to go with them.
@@ -1169,7 +1180,8 @@ export class WdFdc {
         // EMU NOTE: leave DRQ alone, if it is raised, leave it raised.
         if (this._doRaiseIntRq) this._setIntRq(true);
 
-        this._logCommand(`result status ${hexbyte(this._statusRegister)}`);
+        if (this.logCommands)
+            this._log({ kind: "result", commandType: this._commandType, status: this._statusRegister });
     }
 
     /** A restore that steps 255 times without seeing track 0 stops there, with a seek error if it was to verify. */
@@ -1498,7 +1510,7 @@ export class WdFdc {
     inspect() {
         const control = this._controlRegister;
         return {
-            chip: this._is1772 ? "WD1772" : "WD1770",
+            chip: this.chip,
             command: this._command,
             commandType: this._commandType,
             isVerify: this._isCommandVerify,
@@ -1520,8 +1532,8 @@ export class WdFdc {
 }
 
 export class NoiseAwareWdFdc extends WdFdc {
-    constructor(cpu, ddNoise, scheduler, debugFlags) {
-        super(cpu, scheduler, undefined, debugFlags);
+    constructor(cpu, ddNoise, scheduler) {
+        super(cpu, scheduler, undefined);
         attachDriveNoise(this.drives, ddNoise);
     }
 }

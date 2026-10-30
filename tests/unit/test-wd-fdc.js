@@ -105,7 +105,7 @@ function makeFdc({
         new DiscDrive(1, scheduler, cpu.peripheralCyclesPerSecond),
     ];
     if (disc) drives[0].setDisc(disc);
-    const fdc = new WdFdc(cpu, scheduler, drives, {}, variant);
+    const fdc = new WdFdc(cpu, scheduler, drives, variant);
     fdc.write(controlRegister, control);
     return { cpu, scheduler, fdc, drives };
 }

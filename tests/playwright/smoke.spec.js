@@ -768,7 +768,7 @@ test("the disc controller panel's log keeps the newest line in view as lines com
         const lines = async (frames) => {
             for (let value = 0; value < frames; ++value) {
                 await new Promise((resolve) => setTimeout(resolve));
-                for (let line = 0; line < 4; ++line) window.processor.fdc.write(3, value & 0xff);
+                for (let line = 0; line < 70; ++line) window.processor.fdc.write(3, value & 0xff);
                 await frame();
             }
             await frame();
@@ -781,7 +781,7 @@ test("the disc controller panel's log keeps the newest line in view as lines com
         await lines(8);
         return { followed, scrolledUp: { top: log.scrollTop, atBottom: atBottom() } };
     });
-    expect(views).toEqual({ followed: { lines: 500, atBottom: true }, scrolledUp: { top: 0, atBottom: false } });
+    expect(views).toEqual({ followed: { lines: 10000, atBottom: true }, scrolledUp: { top: 0, atBottom: false } });
 });
 
 test("the BASIC panel opens from the Debug menu at the prompt, its content no wider than the size it opened at", async ({
