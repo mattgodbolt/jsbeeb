@@ -14,10 +14,7 @@ import { installIcons } from "./web/icons.js";
 import { QuickSettings } from "./web/quick-settings.js";
 import { toast } from "./web/toast.js";
 import { MediaLoader } from "./web/media-loader.js";
-import { SthSource } from "./web/sth-source.js";
-import { HfeSource } from "./web/hfe-source.js";
-import { BitshiftersSource } from "./web/bitshifters-source.js";
-import { GitHubSource } from "./web/github-source.js";
+import { addArchiveSources } from "./web/archive-sources.js";
 import { GoogleDriveSource } from "./web/google-drive-source.js";
 import { isSnapshotFile, SnapshotUI } from "./web/snapshot-ui.js";
 import { Autoboot } from "./web/autoboot.js";
@@ -300,10 +297,7 @@ const autoBoot = new Autoboot({
     processor,
     sendKeys: (keysToSend, check) => keyboard.sendRawKeyboard(keysToSend, check),
 });
-new SthSource({ media });
-new HfeSource({ media });
-new BitshiftersSource({ media });
-new GitHubSource({ media });
+addArchiveSources(media);
 const googleDriveSource = new GoogleDriveSource({ media });
 const machineSwitch = new MachineSwitch({ model, processor, fitted: takenFromHost, urlState, modals });
 const snapshots = new SnapshotUI({
