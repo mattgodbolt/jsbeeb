@@ -93,7 +93,7 @@ describe("Disc builder tests", () => {
 });
 
 describe("SSD loader tests", function () {
-    it("should load and roundtrip Elite", { timeout: 60000 }, () => {
+    it("should load and roundtrip Elite", () => {
         const data = new Uint8Array(fs.readFileSync("public/discs/elite.ssd"));
         const disc = new Disc(true, new DiscConfig(), "test.ssd");
         loadSsd(disc, data, false);
@@ -207,8 +207,7 @@ describe("40 track SSD images", () => {
         for (const physical of [1, 3, 77]) expect(disc.getTrack(false, physical).findSectors()).toEqual([]);
     });
 
-    // Whole-image round trips are slow under coverage instrumentation on CI.
-    it("saves back to the image it was loaded from", { timeout: 60000 }, () => {
+    it("saves back to the image it was loaded from", () => {
         for (const numSides of [1, 2]) {
             const image = numberedImage(40, numSides);
             expect(toSsdOrDsd(fortyTrackDisc(image, numSides === 2))).toEqual(image);

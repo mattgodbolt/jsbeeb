@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { BbcDiscArchive, byTitle, describe as describeDisc, Provenance } from "../../src/bbcdiscs.js";
 import { bytesResponse, describeManifestCatalogue, manifestResponse } from "./helpers.js";
