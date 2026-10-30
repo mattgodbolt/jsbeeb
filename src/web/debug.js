@@ -884,19 +884,19 @@ export class Debugger {
 
     /**
      * Where the disassembly shows: the program counter while the machine runs or outside the debugger. Stopped in
-     * it, the cursor, which first goes to the program counter if the machine has moved since a stop last put it there.
+     * it, the cursor, which first goes to the program counter if the machine has moved since it last went there.
      */
     _disassemblyAt() {
         if (this._loop?.isRunning() || !this._inDebugger) return this.cpu.pc;
         const { cycles, pc } = this._cursorPlacedAt;
         if (cycles !== this._arrangement.cycleCount() || pc !== this.cpu.pc) {
             this._disassembly.update(this.cpu.pc);
-            this._placedCursor();
+            this._noteCursorAtPc();
         }
         return this._disassembly.cursor;
     }
 
-    _placedCursor() {
+    _noteCursorAtPc() {
         this._cursorPlacedAt = { cycles: this._arrangement.cycleCount(), pc: this.cpu.pc };
     }
 
@@ -1010,7 +1010,7 @@ export class Debugger {
         this.cancelRun();
         this._matchSymbols();
         for (const own of OwnPanels) own.show(this, where);
-        this._placedCursor();
+        this._noteCursorAtPc();
         this._loopNote.show();
         this.watches.showWhichFired();
         this._refresh.drawn();
