@@ -82,6 +82,7 @@ describe("Parameters", () => {
                 default: afterglowMs,
             });
             expect(Parameters[setting].fit(MaxPersistenceMs + 1)).toBe(MaxPersistenceMs);
+            expect(Parameters[setting].fit(-1)).toBe(0);
         }
     });
 
