@@ -593,7 +593,6 @@ test("a stop picked from the Breakpoints panel's Stop on menu leaves the keyboar
 }) => {
     await beeb.open();
     await beeb.expectScreenText(">");
-    await beeb.disableAutoRepeat();
     await beeb.togglePanel("breakpoints");
     const stopOn = page.locator("#breakpoints-panel .bp-stop-on");
     const menu = page.locator(".bp-stop-menu");
