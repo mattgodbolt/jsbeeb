@@ -359,7 +359,6 @@ const WdErrorBits = {
     ],
     2: [
         [Status.writeProtected, "write protected"],
-        [Status.typeIIorIIIDeletedMark, "deleted data"],
         [Status.recordNotFound, "not found"],
         [Status.crcError, "CRC error"],
         [Status.typeIIorIIILostByte, "lost data"],
@@ -403,8 +402,10 @@ function wdLogLine(entry) {
             const errors = WdErrorBits[Math.min(entry.commandType, 2)]
                 .filter(([mask]) => entry.status & mask)
                 .map(([, text]) => text);
+            const deleted =
+                entry.commandType > 1 && entry.status & Status.typeIIorIIIDeletedMark ? ", deleted data" : "";
             return {
-                text: `done: ${errors.length ? errors.join(", ") : "ok"}`,
+                text: `done: ${errors.length ? errors.join(", ") : "ok"}${deleted}`,
                 raw: `status ${hexbyte(entry.status)}`,
             };
         }

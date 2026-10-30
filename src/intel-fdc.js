@@ -499,7 +499,7 @@ export class IntelFdc {
                 break;
             case 3:
             default:
-                this._warn(`write to unwired register: ${hexword(addr)}=${hexbyte(val)}`);
+                this._warn(`write to unwired register: &${hexword(addr)}=&${hexbyte(val)}`);
         }
     }
 
@@ -1222,7 +1222,7 @@ export class IntelFdc {
             case Registers.mmioData & 0x07:
                 return this._mmioData;
             default:
-                this._warn(`read of unemulated MMIO register ${hexbyte(reg)}`);
+                this._warn(`read of unemulated MMIO register &${hexbyte(reg)}`);
                 break;
         }
         return 0;
@@ -1252,7 +1252,7 @@ export class IntelFdc {
                 this._mmioData = val;
                 break;
             default:
-                this._warn(`write to unemulated MMIO register ${hexbyte(reg)}`);
+                this._warn(`write to unemulated MMIO register &${hexbyte(reg)}`);
                 break;
         }
     }

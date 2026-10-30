@@ -270,9 +270,9 @@ describe("FdcPanel", () => {
         const { fdc } = panelFor(IntelFdc);
         for (let value = 0; value <= MaxLogLines; ++value) fdc.write(IntelUnwiredAddr, value & 0xff);
         expect(logLines()).toHaveLength(MaxLogLines);
-        expect(logLines()[0]).toBe("warning: write to unwired register: 0003=01");
+        expect(logLines()[0]).toBe("warning: write to unwired register: &0003=&01");
         expect(part("fdc-log").firstElementChild.classList).toContain("fdc-log-warning");
-        expect(console.warn).toHaveBeenCalledWith("8271: write to unwired register: 0003=01");
+        expect(console.warn).toHaveBeenCalledWith("8271: write to unwired register: &0003=&01");
     });
 
     it("logs the control byte a Master wrote, decoded as its latch is wired", () => {
