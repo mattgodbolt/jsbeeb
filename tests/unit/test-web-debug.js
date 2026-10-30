@@ -1127,6 +1127,8 @@ describe("Debugger", () => {
         const pc = () => document.getElementById("cpu6502_pc").textContent;
         // LDX #3; DEX; BNE $2002; LDA #$41
         const countdown = [0xa2, 0x03, 0xca, 0xd0, 0xfd, 0xa9, 0x41];
+        // Pushes a return to $200A and the flags as an interrupt would, then jumps to a handler at $3000.
+        const interrupted = [0xa9, 0x20, 0x48, 0xa9, 0x0a, 0x48, 0x08, 0x4c, 0x00, 0x30, 0xea];
         let loop;
 
         /** Runs and stops as the emulation loop does, a tick at a time. */
@@ -1143,8 +1145,6 @@ describe("Debugger", () => {
             expect(pc()).toBe("2002");
         });
 
-        // Pushes a return to $200A and the flags as an interrupt would, then jumps to a handler at $3000.
-        const interrupted = [0xa9, 0x20, 0x48, 0xa9, 0x0a, 0x48, 0x08, 0x4c, 0x00, 0x30, 0xea];
         it.each([
             {
                 name: "steps over a loop that leaves backwards",
@@ -1164,6 +1164,15 @@ describe("Debugger", () => {
                 cursor: "$2009",
                 keys: "m",
                 stopsAt: "200b",
+                x: 0,
+            },
+            {
+                name: "steps over a loop that makes a call",
+                // LDX #3; JSR $3000; DEX; BNE $2002; NOP, with an RTS at $3000
+                code: { 0x2000: [0xa2, 0x03, 0x20, 0x00, 0x30, 0xca, 0xd0, 0xfa, 0xea], 0x3000: [0x60] },
+                cursor: "$2006",
+                keys: "m",
+                stopsAt: "2008",
                 x: 0,
             },
             {
