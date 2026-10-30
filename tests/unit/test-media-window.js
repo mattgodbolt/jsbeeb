@@ -816,6 +816,7 @@ describe("MediaWindow", () => {
             await vi.waitFor(() => expect(fdc.drives[0].disc).toBeTruthy());
             expect(deps.processor.reset).not.toHaveBeenCalled();
             expect(deps.autoboot).not.toHaveBeenCalled();
+            expect(deps.media.setAutoboot).not.toHaveBeenCalled();
         });
 
         describe("what a load into a drive does", () => {
@@ -1231,6 +1232,18 @@ describe("MediaWindow", () => {
             expect(confirm).not.toHaveBeenCalled();
             expect(deps.media.loadDiscImage).not.toHaveBeenCalled();
             expect(slots().recent.rank(paradroid)).toBe(0);
+        });
+
+        it("switches an Atom without asking on Enter, and boots the disc on the machine it switches to", async () => {
+            deps.model.isAtom = true;
+            await openWith([paradroid]);
+            pressEnter();
+            await vi.waitFor(() =>
+                expect(navigatedTo()).toBe(
+                    "https://bbc.example/?autoboot&disc1=bitshifters:bs-paradroid.ssd&model=Master",
+                ),
+            );
+            expect(confirm).not.toHaveBeenCalled();
         });
 
         it("asks on a shift-click, which only loads: yes switches with no boot, no loads it here", async () => {

@@ -165,6 +165,8 @@ same for that row.
 - **Only drive 0 boots.** Aim at drive 1 or the cassette deck with the **Into** control, by clicking a slot, or from
   its line in the LED panel under the screen; what goes there just goes in. The row and the hint under the list say what
   will happen.
+- **The Atom has no disc boot.** On the Atom with DOS a disc only goes into the drive, with no **Autoboot** tick;
+  `LINK #E000` at its prompt starts Atom DOS.
 - **What the list holds:** the built-in examples, the Stairway to Hell archive, the HFE archive of flux captures, the
   demos and games Bitshifters publish, games and demos from their authors' GitHub repos, your Google Drive once
   connected, discs kept in this browser, and files opened this session. With nothing typed, what you loaded most

@@ -286,7 +286,7 @@ export class MediaWindow {
 
     /**
      * Opens a file from this computer into the aimed drive, the deck or the machine's state, says
-     * so, boots a disc that went into drive 0 if Autoboot is ticked, and gets out of the way.
+     * so, boots a disc that went into drive 0 as Autoboot says, and gets out of the way.
      */
     async openFile(file, title, entry) {
         try {
@@ -874,9 +874,12 @@ export class MediaWindow {
     async loadDisc(driveIndex, d, { shift = false, boot, stayOpen = false, entry } = {}) {
         this.unfold(driveIndex);
         const slot = this.slots.drive(driveIndex);
+        // A switch to another model boots it by that model's rules, not this one's.
+        const bootsAfterSwitch = () =>
+            this.decideBoot(driveIndex, { shift, boot, bootable: d.requires.model !== undefined || this.bootable });
         if (
             !this.machineSwitch.satisfies(d) &&
-            (await this.machineSwitch.switchFor(d, slot, { boot: this.decideBoot(driveIndex, { shift, boot }).boots }))
+            (await this.machineSwitch.switchFor(d, slot, { boot: bootsAfterSwitch().boots }))
         ) {
             this.slots.recent.note(d.ref, "disc");
             return;
