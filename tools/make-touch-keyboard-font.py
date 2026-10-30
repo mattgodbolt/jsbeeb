@@ -78,6 +78,13 @@ def capsule(pen, start, end, half_width):
     pen.closePath()
 
 
+def glyph_pen(font, advance):
+    """CFF charstrings store their advance less the Private dict's nominalWidthX; some renderers (Chrome on Android)
+    read that rather than hmtx, so the two must agree."""
+    nominal_width = font["CFF "].cff.topDictIndex[0].Private.nominalWidthX
+    return T2CharStringPen(advance - nominal_width, font.getGlyphSet())
+
+
 def charstring(font, pen):
     cff = font["CFF "].cff
     top = cff.topDictIndex[0]
@@ -108,7 +115,7 @@ def slash_zero(font):
     letter_o = glyph_set["O"]
     recording = RecordingPen()
     letter_o.draw(recording)
-    pen = T2CharStringPen(letter_o.width, glyph_set)
+    pen = glyph_pen(font, letter_o.width)
     recording.replay(pen)
 
     xmin, ymin, xmax, ymax = bounds(glyph_set, "O")
@@ -125,7 +132,7 @@ def add_f(font):
     def to_font(x, y):
         return (x - FBoxLeft) * FScale, (FBoxHeight - y) * FScale
 
-    pen = T2CharStringPen(FAdvance, font.getGlyphSet())
+    pen = glyph_pen(font, FAdvance)
     half_width = FStrokeWidth / 2
     p0, p1, p2, p3 = (to_font(*p) for p in FHook)
     previous = p0
@@ -158,7 +165,7 @@ def add_arrows(font):
         area = sum(x0 * y1 - x1 * y0 for (x0, y0), (x1, y1) in zip(outline, outline[1:] + outline[:1]))
         if area < 0:
             outline.reverse()
-        pen = T2CharStringPen(advance, font.getGlyphSet())
+        pen = glyph_pen(font, advance)
         pen.moveTo(point(*outline[0]))
         for corner in outline[1:]:
             pen.lineTo(point(*corner))
