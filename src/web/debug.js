@@ -288,6 +288,7 @@ export const MemoryKeys = [
 ];
 
 const RememberedPanelsKey = "debugPanels";
+const BrowserStorage = () => window.localStorage;
 const MinPanelWidth = 220;
 const DisassemblyWidth = 400;
 /**
@@ -341,7 +342,6 @@ const OwnPanels = [
         show: (dbgr) => dbgr.updateMemory(),
     },
 ];
-const BrowserStorage = () => window.localStorage;
 
 /** Of the panels `ids`, those that were open when the debugger's were last seen. */
 function rememberedPanels(ids) {
