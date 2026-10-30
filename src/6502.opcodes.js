@@ -37,7 +37,7 @@ function push(reg) {
 }
 
 class InstructionGen {
-    constructor(is65c12, cycleAccurate = true) {
+    constructor(is65c12, cycleAccurate) {
         this.is65c12 = is65c12;
         this.cycleAccurate = cycleAccurate;
         this.ops = {};
@@ -97,6 +97,34 @@ class InstructionGen {
         this.append(this.cycle, `cpu.writememZpStack(${addr}, ${reg});`, true);
     }
 
+    /** Reads the little-endian pointer at `lowAddr` and `highAddr` into `addr`, each byte by the `read` method. */
+    pointerOp(read, lowAddr, highAddr) {
+        this.append("let lo, hi;");
+        this[read](lowAddr, "lo");
+        this[read](highAddr, "hi");
+        this.append("const addr = lo | (hi << 8);");
+    }
+
+    /** The operand access, `op` and its write back, a read-modify-write spending a spurious cycle between. */
+    operandOp(op, addr) {
+        if (op.read) {
+            this.readOp(addr, "REG");
+            if (op.write) this.spuriousOp(addr, "REG");
+        }
+        this.append(op.op);
+        if (op.write) this.writeOp(addr, "REG");
+    }
+
+    /** As operandOp, in zero page. */
+    zpOperandOp(op, addr) {
+        if (op.read) {
+            this.zpReadOp(addr, "REG");
+            if (op.write) this.tick(1); // Spurious write
+        }
+        this.append(op.op);
+        if (op.write) this.zpWriteOp(addr, "REG");
+    }
+
     render(startCycle) {
         if (this.cycle < 2) this.cycle = 2;
         this.prepend(this.cycle - 1, "cpu.checkInt();", true);
@@ -154,7 +182,7 @@ class InstructionGen {
 }
 
 class SplitInstruction {
-    constructor(preamble, condition, is65c12, cycleAccurate = true) {
+    constructor(preamble, condition, is65c12, cycleAccurate) {
         this.preamble = preamble;
         this.condition = condition;
         this.ifTrue = new InstructionGen(is65c12, cycleAccurate);
@@ -1188,7 +1216,7 @@ class Disassemble6502 {
             case "(abs,x)": {
                 const destAddr = this.cpu.peekmem(addr + 1) | (this.cpu.peekmem(addr + 2) << 8);
                 const indDest = this.cpu.peekmem(destAddr) | (this.cpu.peekmem(destAddr + 1) << 8);
-                return [`${name} (${formatJumpAddr(destAddr)},x)${suffix}`, next, indDest];
+                return [`${name} (${formatJumpAddr(destAddr)},X)${suffix}`, next, indDest];
             }
         }
         return [`${name} ${mode}`, next];
@@ -1237,7 +1265,14 @@ class Disassemble6502 {
     }
 }
 
-function makeCpuFunctions(cpu, cpuType, opcodes, undocumented, is65c12, cycleAccurate = true) {
+function nmosIndexedStoreRead(ig, op) {
+    // Pure stores still exhibit a read at the non-carried address.
+    ig.readOp("addrNonCarry");
+    // with this quirk on undocumented instructions, a page crossing writes to 00XX
+    if (op.zpQuirk) ig.append("if (addrWithCarry !== addrNonCarry) addrWithCarry &= 0xff;");
+}
+
+function makeCpuFunctions(cpu, cpuType, opcodes, undocumented, is65c12, cycleAccurate) {
     function getInstruction(opcodeString, needsReg) {
         const split = opcodeString.split(" ");
         const opcode = split[0];
@@ -1263,14 +1298,7 @@ function makeCpuFunctions(cpu, cpuType, opcodes, undocumented, is65c12, cycleAcc
             case "zp,branch":
                 ig.tick(2);
                 ig.append("const addr = cpu.getb() | 0;");
-                if (op.read) {
-                    ig.zpReadOp("addr", "REG");
-                    if (op.write) {
-                        ig.tick(1); // Spurious write
-                    }
-                }
-                ig.append(op.op);
-                if (op.write) ig.zpWriteOp("addr", "REG");
+                ig.zpOperandOp(op, "addr");
                 return ig.render();
 
             case "zp":
@@ -1283,26 +1311,13 @@ function makeCpuFunctions(cpu, cpuType, opcodes, undocumented, is65c12, cycleAcc
                     ig.tick(3);
                     ig.append(`const addr = (cpu.getb() + cpu.${arg[3]}) & 0xff;`);
                 }
-                if (op.read) {
-                    ig.zpReadOp("addr", "REG");
-                    if (op.write) {
-                        ig.tick(1); // Spurious write
-                    }
-                }
-                ig.append(op.op);
-                if (op.write) ig.zpWriteOp("addr", "REG");
+                ig.zpOperandOp(op, "addr");
                 return ig.render();
 
             case "abs":
                 ig.tick(3 + (op.extra || 0));
                 ig.append("const addr = cpu.getw() | 0;");
-                if (op.read) {
-                    ig.readOp("addr", "REG");
-                    if (op.write) ig.spuriousOp("addr", "REG");
-                }
-                ig.append(op.op);
-                if (op.write) ig.writeOp("addr", "REG");
-
+                ig.operandOp(op, "addr");
                 return ig.render();
 
             case "abs,x":
@@ -1347,12 +1362,7 @@ function makeCpuFunctions(cpu, cpuType, opcodes, undocumented, is65c12, cycleAcc
                         // Without page crossing, the CPU still has the bug of reading the non-carried address(!)
                         ig.ifFalse.readOp("addrNonCarry");
                     } else {
-                        // Pure stores still exhibit a read at the non-carried address.
-                        ig.readOp("addrNonCarry");
-                        if (op.zpQuirk) {
-                            // with this quirk on undocumented instructions, a page crossing writes to 00XX
-                            ig.append("if (addrWithCarry !== addrNonCarry) addrWithCarry &= 0xff;");
-                        }
+                        nmosIndexedStoreRead(ig, op);
                     }
                 }
                 ig.append(op.op);
@@ -1362,9 +1372,6 @@ function makeCpuFunctions(cpu, cpuType, opcodes, undocumented, is65c12, cycleAcc
             case "imm":
                 if (op.write) {
                     throw new Error("This isn't possible");
-                }
-                if (op.read) {
-                    // NOP imm
                 }
                 ig.tick(2);
                 ig.append("REG = cpu.getb() | 0;");
@@ -1381,25 +1388,14 @@ function makeCpuFunctions(cpu, cpuType, opcodes, undocumented, is65c12, cycleAcc
             case "(,x)":
                 ig.tick(3); // two, plus one for the seemingly spurious extra read of zp
                 ig.append("const zpAddr = (cpu.getb() + cpu.x) & 0xff;");
-                ig.append("let lo, hi;");
-                ig.zpReadOp("zpAddr", "lo");
-                ig.zpReadOp("(zpAddr + 1) & 0xff", "hi");
-                ig.append("const addr = lo | (hi << 8);");
-                if (op.read) {
-                    ig.readOp("addr", "REG");
-                    if (op.write) ig.spuriousOp("addr", "REG");
-                }
-                ig.append(op.op);
-                if (op.write) ig.writeOp("addr", "REG");
+                ig.pointerOp("zpReadOp", "zpAddr", "(zpAddr + 1) & 0xff");
+                ig.operandOp(op, "addr");
                 return ig.render();
 
             case "(),y":
                 ig.tick(2);
                 ig.append("const zpAddr = cpu.getb() | 0;");
-                ig.append("let lo, hi;");
-                ig.zpReadOp("zpAddr", "lo");
-                ig.zpReadOp("(zpAddr + 1) & 0xff", "hi");
-                ig.append("const addr = lo | (hi << 8);");
+                ig.pointerOp("zpReadOp", "zpAddr", "(zpAddr + 1) & 0xff");
                 ig.append("let addrWithCarry = (addr + cpu.y) & 0xffff;");
                 ig.append("const addrNonCarry = (addr & 0xff00) | (addrWithCarry & 0xff);");
                 if (op.read && !op.write) {
@@ -1424,12 +1420,7 @@ function makeCpuFunctions(cpu, cpuType, opcodes, undocumented, is65c12, cycleAcc
                         // triggers 1MHz bus stretching. We model this as tick(1).
                         ig.tick(1);
                     } else {
-                        // Pure stores still exhibit a read at the non-carried address.
-                        ig.readOp("addrNonCarry");
-                        if (op.zpQuirk) {
-                            // with this quirk on undocumented instructions, a page crossing writes to 00XX
-                            ig.append("if (addrWithCarry !== addrNonCarry) addrWithCarry &= 0xff;");
-                        }
+                        nmosIndexedStoreRead(ig, op);
                     }
                 }
                 ig.append(op.op);
@@ -1444,20 +1435,14 @@ function makeCpuFunctions(cpu, cpuType, opcodes, undocumented, is65c12, cycleAcc
                 } else {
                     ig.append("const nextAddr = ((absAddr + 1) & 0xff) | (absAddr & 0xff00);");
                 }
-                ig.append("let lo, hi;");
-                ig.readOp("absAddr", "lo");
-                ig.readOp("nextAddr", "hi");
-                ig.append("const addr = lo | (hi << 8);");
+                ig.pointerOp("readOp", "absAddr", "nextAddr");
                 ig.append(op.op);
                 return ig.render();
 
             case "(abs,x)":
                 ig.tick(4);
                 ig.append("const absAddr = (cpu.getw() + cpu.x) | 0;");
-                ig.append("let lo, hi;");
-                ig.readOp("absAddr", "lo");
-                ig.readOp("(absAddr + 1) & 0xffff", "hi");
-                ig.append("const addr = lo | (hi << 8);");
+                ig.pointerOp("readOp", "absAddr", "(absAddr + 1) & 0xffff");
                 ig.append(op.op);
                 return ig.render();
 
@@ -1465,10 +1450,7 @@ function makeCpuFunctions(cpu, cpuType, opcodes, undocumented, is65c12, cycleAcc
                 // Timing here is guessed at, but appears to be correct.
                 ig.tick(2);
                 ig.append("const zpAddr = cpu.getb() | 0;");
-                ig.append("let lo, hi;");
-                ig.zpReadOp("zpAddr", "lo");
-                ig.zpReadOp("(zpAddr + 1) & 0xff", "hi");
-                ig.append("const addr = lo | (hi << 8);");
+                ig.pointerOp("zpReadOp", "zpAddr", "(zpAddr + 1) & 0xff");
                 if (op.read) ig.readOp("addr", "REG");
                 ig.append(op.op);
                 if (op.write) ig.writeOp("addr", "REG");
@@ -1597,8 +1579,6 @@ ${indent}`)
             (text) => new Function("cpu", [getInstruction(text, true)].flat().join("\n")),
         ),
         runInstruction: new Runner(),
-        opcodes: opcodes,
-        getInstruction: getInstruction,
     };
 }
 

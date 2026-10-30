@@ -7,7 +7,6 @@ import {
     SessionGuest,
     SessionHost,
     cleanName,
-    gzipCodec,
     hostSession,
     joinLink,
     roomFrom,
@@ -21,7 +20,7 @@ import { AdcCentreValue } from "../../src/adc.js";
 import { StatsIntervalMs } from "../../src/web/session-log.js";
 import { ParamTypes, parseQueryString } from "../../src/url-params.js";
 import { Parameters, urlParamType } from "../../src/web/parameters.js";
-import { sentEvents } from "./helpers.js";
+import { sentEvents, teardownDom } from "./helpers.js";
 import { inProcessTransport } from "../helpers/session-link.js";
 import {
     CyclesPerSecond,
@@ -58,16 +57,6 @@ describe("cleanName", () => {
         [42, null],
     ])("makes %j %j", (name, cleaned) => {
         expect(cleanName(name)).toBe(cleaned);
-    });
-});
-
-describe("gzipCodec", () => {
-    it("gives back what it packed, smaller, and refuses what is not gzip", async () => {
-        const text = JSON.stringify({ ram: "\u0000".repeat(10000) });
-        const packed = await gzipCodec.compress(text);
-        expect(packed.length).toBeLessThan(text.length / 10);
-        expect(await gzipCodec.decompress(packed)).toBe(text);
-        await expect(gzipCodec.decompress(new Uint8Array([1, 2, 3]))).rejects.toThrow();
     });
 });
 
@@ -243,13 +232,10 @@ beforeEach(() => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date", "performance"] });
 });
 
-afterEach(() => {
+afterEach(async () => {
     for (const host of hosts) host.close();
     for (const guest of guests) guest.leave();
-    vi.useRealTimers();
-    vi.unstubAllGlobals();
-    vi.unstubAllEnvs();
-    vi.restoreAllMocks();
+    await teardownDom();
 });
 
 describe("SessionHost", () => {
@@ -1879,8 +1865,6 @@ describe("startSessionFromUrl", () => {
 });
 
 describe("hostSession", () => {
-    afterEach(() => window.history.replaceState(null, "", "/"));
-
     const taken = () => new RendezvousError("Rendezvous create room failed with status 409", 409);
 
     it("hosts a room with a name of its own, on the machine as it is, leaving the URL alone", async () => {
@@ -1943,8 +1927,6 @@ describe("hostSession", () => {
 });
 
 describe("joinLink", () => {
-    afterEach(() => window.history.replaceState(null, "", "/"));
-
     it("keeps nothing of this page's own query or fragment, and adds the name if there is one", () => {
         window.history.replaceState(null, "", "/?model=Master&disc=elite.ssd#frag");
         expect(joinLink("brave-owls-sing")).toBe(`${window.location.origin}/?client=brave-owls-sing`);

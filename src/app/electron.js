@@ -11,23 +11,12 @@ function init(args) {
     api.onLoadDisc(({ drive, path }) => slots.load(slots.drive(drive), describeRef(path, "disc"), { entry: "menu" }));
     api.onLoadTape(({ path }) => slots.load(slots.deck, describeRef(path, "tape"), { entry: "menu" }));
 
-    api.onShowModal((message) => {
-        if (modals && modals.show) modals.show(message.modalId);
-    });
-
-    api.onAction((message) => {
-        if (actions && actions[message.actionId]) {
-            actions[message.actionId]();
-        }
-    });
-
+    api.onShowModal((message) => modals.show(message.modalId));
+    api.onAction((message) => actions[message.actionId]?.());
     api.onLoadState(async (message) => {
-        if (loadStateFile) {
-            const response = await fetch(message.path);
-            const blob = await response.blob();
-            const file = new File([blob], message.path.split("/").pop());
-            await loadStateFile(file);
-        }
+        const response = await fetch(message.path);
+        const blob = await response.blob();
+        await loadStateFile(new File([blob], message.path.split("/").pop()));
     });
 
     // The app's Debug menu lists the same panels as the page's, which the app has no navbar to show.
@@ -56,17 +45,10 @@ function init(args) {
         });
     }
 
-    // Save settings when they change
-    if (settings) {
-        settings.addEventListener("change", (e) => {
-            api.saveSettings(e.detail);
-        });
-    }
-    if (media) {
-        slots.addEventListener("changed", (e) => {
-            if (!e.detail.slot.busy) api.saveSettings(e.detail.slot.urlParams());
-        });
-    }
+    settings.addEventListener("change", (e) => api.saveSettings(e.detail));
+    slots.addEventListener("changed", (e) => {
+        if (!e.detail.slot.busy) api.saveSettings(e.detail.slot.urlParams());
+    });
 }
 
 /** Whether the page is running inside the desktop app, whose preload removes the `.not-electron` page furniture. */

@@ -6,7 +6,6 @@ import { toast } from "./toast.js";
 import { errorText, reportIgnoredFiles, reportLoadFailure } from "./reporting.js";
 import { MediaResolver, Schemas, openIfZip, routeOf, splitImage } from "../media-resolver.js";
 import { MediaSlots } from "./media-slots.js";
-import { stringToUint8Array } from "../binary.js";
 import { noteFeature } from "./analytics.js";
 import { failingFor, LoadFailures } from "../loader.js";
 import { browserDiscNames, describeBrowserDisc, describeBuiltIn, describeSessionFile } from "./media-catalogue.js";
@@ -32,20 +31,6 @@ export const BuiltInImages = [
         file: "5000mstr36008.ssd",
     },
 ];
-
-function readFileAsBinaryString(file) {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            resolve(e.target.result);
-        };
-        reader.onerror = (e) => {
-            console.error(`Error reading file ${file.name}:`, e);
-            reject(new Error(`Failed to read file ${file.name}`));
-        };
-        reader.readAsBinaryString(file);
-    });
-}
 
 /**
  * Getting discs and tapes into the machine: resolving any image reference the
@@ -232,8 +217,7 @@ export class MediaLoader extends EventTarget {
     async loadSCSIFile(file) {
         const { processor } = this;
         if (!processor.filestore) return;
-        const binaryData = await readFileAsBinaryString(file);
-        processor.filestore.scsi = stringToUint8Array(binaryData);
+        processor.filestore.scsi = new Uint8Array(await file.arrayBuffer());
 
         processor.filestore.PC = 0x400;
         processor.filestore.SP = 0xff;

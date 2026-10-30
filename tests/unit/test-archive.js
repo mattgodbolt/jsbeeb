@@ -6,6 +6,8 @@ import { fileURLToPath } from "url";
 import {
     crc32,
     createZipBlob,
+    gzipCodec,
+    isGzip,
     replaceOrAddExtension,
     ungzip,
     unzip,
@@ -170,11 +172,6 @@ function repeatMember(times) {
     return result;
 }
 
-async function gzipMember(text) {
-    const stream = new Blob([new TextEncoder().encode(text)]).stream().pipeThrough(new CompressionStream("gzip"));
-    return new Uint8Array(await new Response(stream).arrayBuffer());
-}
-
 function concat(parts) {
     const result = new Uint8Array(parts.reduce((total, part) => total + part.length, 0));
     let offset = 0;
@@ -204,7 +201,7 @@ describe("gzip tests", function () {
     });
 
     it("should concatenate members of differing contents", async () => {
-        const members = await Promise.all(["first ", "second ", "third"].map(gzipMember));
+        const members = await Promise.all(["first ", "second ", "third"].map(gzipCodec.compress));
         const result = await ungzip(concat(members));
         expect(new TextDecoder().decode(result)).toBe("first second third");
     });
@@ -235,5 +232,17 @@ describe("gzip tests", function () {
     it("should reject non-gzip data", async () => {
         const notGzip = new Uint8Array([0, 1, 2, 3, 4, 5, 6, 7]);
         await expect(ungzip(notGzip)).rejects.toThrow();
+    });
+});
+
+describe("gzipCodec", () => {
+    it("gives back what it packed, smaller, and refuses what is not gzip", async () => {
+        const text = JSON.stringify({ ram: "\u0000".repeat(10000) });
+        const packed = await gzipCodec.compress(text);
+        expect(packed.length).toBeLessThan(text.length / 10);
+        expect(isGzip(packed)).toBe(true);
+        expect(await gzipCodec.decompress(packed)).toBe(text);
+        expect(isGzip(new TextEncoder().encode(text))).toBe(false);
+        await expect(gzipCodec.decompress(new Uint8Array([1, 2, 3]))).rejects.toThrow();
     });
 });

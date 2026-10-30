@@ -1,5 +1,5 @@
 import { checkWorkload, readWorkload, restoreWorkload } from "../benchmark-workloads.js";
-import { TickMs } from "../emulation-tick.js";
+import { tickCycles, TickMs } from "../emulation-tick.js";
 import { isSameModel } from "../snapshot.js";
 import { FakeVideo } from "../video.js";
 
@@ -176,7 +176,7 @@ export class BenchmarkPage {
     }
 
     async measure(workload, { processor, display, audioHandler, clocksPerSecond }) {
-        const tickCycles = (clocksPerSecond * TickMs) / 1000;
+        const cyclesPerTick = tickCycles(clocksPerSecond);
         const video = processor.video;
 
         const runSecond = (presents) => {
@@ -184,7 +184,8 @@ export class BenchmarkPage {
             let presentMs = 0;
             const start = performance.now();
             for (let chunk = 0; chunk < ChunksPerSecond; ++chunk) {
-                if (!processor.execute(tickCycles)) throw new Error(`The CPU stopped at &${processor.pc.toString(16)}`);
+                if (!processor.execute(cyclesPerTick))
+                    throw new Error(`The CPU stopped at &${processor.pc.toString(16)}`);
                 audioHandler.flushChipEvents();
                 if (presents) {
                     const presentStart = performance.now();
@@ -237,7 +238,7 @@ export class BenchmarkPage {
             model: workload.model,
             repeats: Repeats,
             warmupSeconds: WarmupSeconds,
-            tickCycles,
+            tickCycles: cyclesPerTick,
             mhz: clocksPerSecond / passes.full.ms.median / 1000,
             passes,
             split: {

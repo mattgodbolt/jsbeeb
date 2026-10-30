@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { TickMs } from "../../../src/emulation-tick.js";
+import { tickCycles } from "../../../src/emulation-tick.js";
 import { SlicesPerSecond, timeSlices } from "../../../tools/ab-sample.js";
 
 describe("timeSlices", () => {
@@ -9,7 +9,7 @@ describe("timeSlices", () => {
         const slices = [];
         const cpu = { model: { cyclesPerSecond }, execute: (cycles) => slices.push(cycles) };
         const { cycles, sliceMs } = timeSlices(cpu, { warmupSecs: 2, measureSecs: 3 });
-        const sliceCycles = (cyclesPerSecond * TickMs) / 1000;
+        const sliceCycles = tickCycles(cyclesPerSecond);
         expect(slices).toHaveLength(5 * SlicesPerSecond);
         expect(new Set(slices)).toEqual(new Set([sliceCycles]));
         expect(sliceMs).toHaveLength(3 * SlicesPerSecond);

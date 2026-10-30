@@ -97,14 +97,6 @@ describe("Modals", () => {
             await vi.runAllTimersAsync();
             expect(document.getElementById("help").classList.contains("show")).toBe(true);
         });
-
-        it("reports whether any modal is up", () => {
-            expect(modals.anyVisible()).toBe(false);
-            raise("help");
-            expect(modals.anyVisible()).toBe(true);
-            lower("help");
-            expect(modals.anyVisible()).toBe(false);
-        });
     });
 
     it("notes the opening of a dialog that declares its feature, and of no other", () => {

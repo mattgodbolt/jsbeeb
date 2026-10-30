@@ -7,6 +7,12 @@ import { hexbyte } from "./hex.js";
 
 export const PulsesPerWord = 32;
 
+// The 1770 datasheet's recommended MFM gaps, in bytes.
+const MfmGap1_4Es = 60;
+const MfmSync00s = 12;
+const MfmGap2_4Es = 22;
+const MfmGap3_4Es = 24;
+
 class TrackBuilder {
     /**
      * @param {Track} track
@@ -62,11 +68,6 @@ class TrackBuilder {
         // Fill to standard track size or buffer capacity, whichever is smaller
         const fillCount = Math.min(IbmDiscFormat.bytesPerTrack, this._track.pulses2Us.length) - this._index;
         this.appendRepeatFmByte(data, fillCount);
-        return this;
-    }
-
-    appendRepeatFmByteWithClocks(data, clocks, count) {
-        for (let i = 0; i < count; ++i) this.appendFmDataAndClocks(data, clocks);
         return this;
     }
 
@@ -136,38 +137,42 @@ class TrackBuilder {
     }
 
     /**
-     * @param {number[]} pulseDeltas array of lengths between pulses
-     * @param {boolean} isMfm whether this is an MFM track
+     * An FM sector: its ID record, gap 2 and data record.
+     * @param {{idMark: number, dataMark: number, track: number, head: number, sector: number, lengthCode: number,
+     *     data: Uint8Array}} sector
      */
-    buildFromPulses(pulseDeltas, isMfm) {
-        this._isMfm = isMfm;
-        let hasWarned = false;
-        for (const pulse of pulseDeltas) {
-            if (!IbmDiscFormat.checkPulse(pulse, isMfm)) {
-                console.log(`Found a bad pulse for ${this.track.description}`);
-            }
-            if (!this.appendPulseDelta(pulse, isMfm) && !hasWarned) {
-                console.log(`Truncated disc data for ${this.track.description}, ignoring the rest`);
-                hasWarned = true;
-            }
-        }
-        this.setTrackLength();
+    appendFmSector({ idMark, dataMark, track, head, sector, lengthCode, data }) {
+        return this.resetCrc()
+            .appendFmDataAndClocks(idMark, IbmDiscFormat.markClockPattern)
+            .appendFmChunk([track, head, sector, lengthCode])
+            .appendCrc()
+            .appendRepeatFmByte(0xff, IbmDiscFormat.stdGap2FFs)
+            .appendRepeatFmByte(0x00, IbmDiscFormat.stdSync00s)
+            .resetCrc()
+            .appendFmDataAndClocks(dataMark, IbmDiscFormat.markClockPattern)
+            .appendFmChunk(data)
+            .appendCrc();
     }
 
-    appendPulseDelta(deltaUs, quantizeMfm) {
-        let num2UsUnits = quantizeMfm ? Math.round(deltaUs / 2) : 2 * Math.round(deltaUs / 4);
-        while (num2UsUnits--) {
-            if (this._index >= this._track.pulses2Us.length) return false;
-            if (num2UsUnits === 0) {
-                this._track.pulses2Us[this._index] |= 0x80000000 >>> this._pulsesIndex;
-            }
-            this._pulsesIndex++;
-            if (this._pulsesIndex === 32) {
-                this._pulsesIndex = 0;
-                this._index++;
-            }
-        }
-        return true;
+    /**
+     * An MFM sector as the 1770 datasheet lays it out: the sync before its ID record, the ID record, gap 2 and the
+     * data record.
+     * @param {{idMark: number, dataMark: number, track: number, head: number, sector: number, lengthCode: number,
+     *     data: Uint8Array}} sector
+     */
+    appendMfmSector({ idMark, dataMark, track, head, sector, lengthCode, data }) {
+        return this.appendRepeatMfmByte(0x00, MfmSync00s)
+            .resetCrc()
+            .appendMfm3xA1Sync()
+            .appendMfmChunk([idMark, track, head, sector, lengthCode])
+            .appendCrc()
+            .appendRepeatMfmByte(0x4e, MfmGap2_4Es)
+            .appendRepeatMfmByte(0x00, MfmSync00s)
+            .resetCrc()
+            .appendMfm3xA1Sync()
+            .appendMfmByte(dataMark)
+            .appendMfmChunk(data)
+            .appendCrc();
     }
 }
 
@@ -592,29 +597,18 @@ export class DiscConfig {
 // for SSDs, which leaves room to step and settle before it comes round.
 const SsdTrackSkew = 3;
 
-class SsdFormat {
-    static get sectorSize() {
-        return 256;
-    }
-
-    static get sectorsPerTrack() {
-        return 10;
-    }
-
-    static get tracksPerDisc() {
-        return 80;
-    }
-
-    static get trackSize() {
-        return SsdFormat.sectorSize * SsdFormat.sectorsPerTrack;
-    }
-}
+// Both formats' sectors are 256 bytes, which an ID record's length code gives as 128 << 1.
+const SectorLengthCode = 1;
+const SsdSectorSize = 256;
+const SsdSectorsPerTrack = 10;
+const SsdTracksPerDisc = 80;
+const SsdTrackSize = SsdSectorSize * SsdSectorsPerTrack;
 
 /** @returns {Number} how many logical tracks of `data` hold anything, ignoring a run of trailing zeros */
 function tracksWithData(data, numSides) {
     let lastUsed = data.length - 1;
     while (lastUsed >= 0 && data[lastUsed] === 0) lastUsed--;
-    return Math.floor(lastUsed / (SsdFormat.trackSize * numSides)) + 1;
+    return Math.floor(lastUsed / (SsdTrackSize * numSides)) + 1;
 }
 
 // The DFS catalogue is the first two sectors of a side. Sector 1 holds how many files there are and
@@ -634,13 +628,13 @@ const DfsMaxEntries = 31;
  */
 export function sniffDfsLayout(data, isDsd) {
     const contiguous = (reason) => ({ is40Track: false, reason });
-    if (data.length < 2 * SsdFormat.sectorSize) return contiguous("it is smaller than a catalogue");
+    if (data.length < 2 * SsdSectorSize) return contiguous("it is smaller than a catalogue");
     const entryBytes = data[DfsEntryCountOffset];
     if (entryBytes % DfsEntrySize !== 0 || entryBytes > DfsMaxEntries * DfsEntrySize)
         return contiguous(`its catalogue claims ${entryBytes} bytes of file entries`);
     const sectors = ((data[DfsSectorCountOffset] & 3) << 8) | data[DfsSectorCountOffset + 1];
     const reason = `its catalogue claims ${sectors} sectors`;
-    const fortyTrackSectors = (SsdFormat.tracksPerDisc / 2) * SsdFormat.sectorsPerTrack;
+    const fortyTrackSectors = (SsdTracksPerDisc / 2) * SsdSectorsPerTrack;
     if (sectors === 0 || sectors > fortyTrackSectors) return contiguous(reason);
     const tracks = tracksWithData(data, isDsd ? 2 : 1);
     if (tracks > IbmDiscFormat.tracksPerDisc / 2) return contiguous(`it holds data as far as track ${tracks - 1}`);
@@ -651,7 +645,7 @@ export function sniffDfsLayout(data, isDsd) {
 const DfsTitleFirstHalf = 8;
 const DfsTitleSecondHalf = 4;
 const DfsCycleOffset = 4;
-const DfsEntryCountInSector1 = DfsEntryCountOffset - SsdFormat.sectorSize;
+const DfsEntryCountInSector1 = DfsEntryCountOffset - SsdSectorSize;
 
 const isPrintableAscii = (byte) => byte >= 0x20 && byte < 0x7f;
 
@@ -667,7 +661,7 @@ export function dfsCatalogue(disc, isSideUpper = false) {
     const sectors = new Map();
     for (const sector of disc.getTrack(isSideUpper, 0).findSectors()) {
         const usable =
-            !sector.hasHeaderCrcError && !sector.hasDataCrcError && sector.sectorData?.length === SsdFormat.sectorSize;
+            !sector.hasHeaderCrcError && !sector.hasDataCrcError && sector.sectorData?.length === SsdSectorSize;
         if (usable && !sectors.has(sector.sectorNumber)) sectors.set(sector.sectorNumber, sector.sectorData);
     }
     const sector0 = sectors.get(0);
@@ -718,15 +712,15 @@ export function sniffSurfaceLayout(disc, isSideUpper) {
  * @param {function(Uint8Array): void} onChange - Optional callback when disc content changes
  */
 export function loadSsd(disc, data, isDsd, onChange) {
-    const blankSector = new Uint8Array(SsdFormat.sectorSize);
+    const blankSector = new Uint8Array(SsdSectorSize);
     const numSides = isDsd ? 2 : 1;
-    if (data.length % SsdFormat.sectorSize !== 0) {
-        const paddedLength = Math.ceil(data.length / SsdFormat.sectorSize) * SsdFormat.sectorSize;
+    if (data.length % SsdSectorSize !== 0) {
+        const paddedLength = Math.ceil(data.length / SsdSectorSize) * SsdSectorSize;
         const padded = new Uint8Array(paddedLength);
         padded.set(data);
         data = padded;
     }
-    const maxSize = SsdFormat.sectorSize * SsdFormat.sectorsPerTrack * SsdFormat.tracksPerDisc * numSides;
+    const maxSize = SsdSectorSize * SsdSectorsPerTrack * SsdTracksPerDisc * numSides;
     if (data.length > maxSize) {
         throw new Error("SSD file is too large");
     }
@@ -737,49 +731,33 @@ export function loadSsd(disc, data, isDsd, onChange) {
     // far as the surface has room for.
     const numTracks = Math.min(
         IbmDiscFormat.tracksPerDisc / trackStep,
-        Math.max(SsdFormat.tracksPerDisc / trackStep, tracksWithData(data, numSides)),
+        Math.max(SsdTracksPerDisc / trackStep, tracksWithData(data, numSides)),
     );
 
     for (let track = 0; track < numTracks; ++track) {
-        const firstSector =
-            (SsdFormat.sectorsPerTrack - ((SsdTrackSkew * track) % SsdFormat.sectorsPerTrack)) %
-            SsdFormat.sectorsPerTrack;
+        const firstSector = (SsdSectorsPerTrack - ((SsdTrackSkew * track) % SsdSectorsPerTrack)) % SsdSectorsPerTrack;
         for (let side = 0; side < numSides; ++side) {
-            const trackOffset = (track * numSides + side) * SsdFormat.trackSize;
+            const trackOffset = (track * numSides + side) * SsdTrackSize;
             const trackBuilder = disc.buildTrack(side === 1, track * trackStep);
             // Sync pattern at start of track, as the index pulse starts, aka GAP 5.
             trackBuilder
                 .appendRepeatFmByte(0xff, IbmDiscFormat.stdGap1FFs)
                 .appendRepeatFmByte(0x00, IbmDiscFormat.stdSync00s);
 
-            for (let slot = 0; slot < SsdFormat.sectorsPerTrack; ++slot) {
-                const sector = (firstSector + slot) % SsdFormat.sectorsPerTrack;
-                // Sector header, aka ID.
-                trackBuilder
-                    .resetCrc()
-                    .appendFmDataAndClocks(IbmDiscFormat.idMarkDataPattern, IbmDiscFormat.markClockPattern)
-                    .appendFmByte(track)
-                    .appendFmByte(0)
-                    .appendFmByte(sector)
-                    .appendFmByte(1)
-                    .appendCrc();
+            for (let slot = 0; slot < SsdSectorsPerTrack; ++slot) {
+                const sector = (firstSector + slot) % SsdSectorsPerTrack;
+                const offset = trackOffset + sector * SsdSectorSize;
+                trackBuilder.appendFmSector({
+                    idMark: IbmDiscFormat.idMarkDataPattern,
+                    dataMark: IbmDiscFormat.dataMarkDataPattern,
+                    track,
+                    head: 0,
+                    sector,
+                    lengthCode: SectorLengthCode,
+                    data: offset < data.length ? data.subarray(offset, offset + SsdSectorSize) : blankSector,
+                });
 
-                // Sync pattern between sector header and sector data, aka GAP 2.
-                trackBuilder
-                    .appendRepeatFmByte(0xff, IbmDiscFormat.stdGap2FFs)
-                    .appendRepeatFmByte(0x00, IbmDiscFormat.stdSync00s);
-
-                // Sector data.
-                const offset = trackOffset + sector * SsdFormat.sectorSize;
-                const sectorData =
-                    offset < data.length ? data.subarray(offset, offset + SsdFormat.sectorSize) : blankSector;
-                trackBuilder
-                    .resetCrc()
-                    .appendFmDataAndClocks(IbmDiscFormat.dataMarkDataPattern, IbmDiscFormat.markClockPattern)
-                    .appendFmChunk(sectorData)
-                    .appendCrc();
-
-                if (slot !== SsdFormat.sectorsPerTrack - 1) {
+                if (slot !== SsdSectorsPerTrack - 1) {
                     // Sync pattern between sectors, aka GAP 3.
                     trackBuilder
                         .appendRepeatFmByte(0xff, IbmDiscFormat.std10SectorGap3FFs)
@@ -810,19 +788,9 @@ export function loadSsd(disc, data, isDsd, onChange) {
     return disc;
 }
 
-class AdfFormat {
-    static get sectorSize() {
-        return 256;
-    }
-
-    static get sectorsPerTrack() {
-        return 16;
-    }
-
-    static get tracksPerDisc() {
-        return 80;
-    }
-}
+const AdfSectorSize = 256;
+const AdfSectorsPerTrack = 16;
+const AdfTracksPerDisc = 80;
 
 /**
  * @param {Disc} disc
@@ -830,52 +798,38 @@ class AdfFormat {
  * @param {boolean} isDsd
  */
 export function loadAdf(disc, data, isDsd) {
-    const blankSector = new Uint8Array(AdfFormat.sectorSize);
+    const blankSector = new Uint8Array(AdfSectorSize);
     const numSides = isDsd ? 2 : 1;
-    if (data.length % AdfFormat.sectorSize !== 0) {
+    if (data.length % AdfSectorSize !== 0) {
         throw new Error("ADF file size is not a multiple of sector size");
     }
-    const maxSize = AdfFormat.sectorSize * AdfFormat.sectorsPerTrack * AdfFormat.tracksPerDisc * numSides;
+    const maxSize = AdfSectorSize * AdfSectorsPerTrack * AdfTracksPerDisc * numSides;
     if (data.length > maxSize) {
         throw new Error("ADF file is too large");
     }
 
     let offset = 0;
-    for (let track = 0; track < AdfFormat.tracksPerDisc; ++track) {
+    for (let track = 0; track < AdfTracksPerDisc; ++track) {
         if (offset >= data.length) break;
 
         for (let side = 0; side < numSides; ++side) {
             // Using recommended values from the 177x datasheet.
             const trackBuilder = disc.buildTrack(side === 1, track);
-            trackBuilder.appendRepeatMfmByte(0x4e, 60);
-            for (let sector = 0; sector < AdfFormat.sectorsPerTrack; ++sector) {
-                trackBuilder
-                    .appendRepeatMfmByte(0x00, 12)
-                    .resetCrc()
-                    .appendMfm3xA1Sync()
-                    .appendMfmByte(IbmDiscFormat.idMarkDataPattern)
-                    .appendMfmByte(track)
-                    .appendMfmByte(0)
-                    .appendMfmByte(sector)
-                    .appendMfmByte(1)
-                    .appendCrc();
-
-                // Sync pattern between sector header and sector data, aka GAP 2.
-                trackBuilder.appendRepeatMfmByte(0x4e, 22).appendRepeatMfmByte(0x00, 12);
-
-                // Sector data.
-                const sectorData =
-                    offset < data.length ? data.subarray(offset, offset + AdfFormat.sectorSize) : blankSector;
-                offset += AdfFormat.sectorSize;
-                trackBuilder
-                    .resetCrc()
-                    .appendMfm3xA1Sync()
-                    .appendMfmByte(IbmDiscFormat.dataMarkDataPattern)
-                    .appendMfmChunk(sectorData)
-                    .appendCrc();
+            trackBuilder.appendRepeatMfmByte(0x4e, MfmGap1_4Es);
+            for (let sector = 0; sector < AdfSectorsPerTrack; ++sector) {
+                trackBuilder.appendMfmSector({
+                    idMark: IbmDiscFormat.idMarkDataPattern,
+                    dataMark: IbmDiscFormat.dataMarkDataPattern,
+                    track,
+                    head: 0,
+                    sector,
+                    lengthCode: SectorLengthCode,
+                    data: offset < data.length ? data.subarray(offset, offset + AdfSectorSize) : blankSector,
+                });
+                offset += AdfSectorSize;
 
                 // Sync pattern between sectors, aka GAP 3.
-                trackBuilder.appendRepeatMfmByte(0x4e, 24);
+                trackBuilder.appendRepeatMfmByte(0x4e, MfmGap3_4Es);
             }
             trackBuilder.fillMfmByte(0x4e);
         }
@@ -890,10 +844,9 @@ function sectorShortfall(sector) {
     if (sector.hasDataCrcError || sector.hasHeaderCrcError) return "with a CRC error";
     // A header whose data mark never arrives leaves the sector with nothing to write.
     if (!sector.sectorData) return "with no data";
-    if (sector.sectorNumber >= SsdFormat.sectorsPerTrack)
-        return `numbered past the ${SsdFormat.sectorsPerTrack} a track holds`;
-    if (sector.sectorData.length !== SsdFormat.sectorSize) return `not ${SsdFormat.sectorSize} bytes`;
-    if (sector.trackNumber >= SsdFormat.tracksPerDisc) return `past track ${SsdFormat.tracksPerDisc}`;
+    if (sector.sectorNumber >= SsdSectorsPerTrack) return `numbered past the ${SsdSectorsPerTrack} a track holds`;
+    if (sector.sectorData.length !== SsdSectorSize) return `not ${SsdSectorSize} bytes`;
+    if (sector.trackNumber >= SsdTracksPerDisc) return `past track ${SsdTracksPerDisc}`;
     return null;
 }
 
@@ -907,7 +860,7 @@ function sectorShortfall(sector) {
  */
 function ssdOffsetOf(sector, isSideUpper, numSides) {
     const track = sector.trackNumber * numSides + (isSideUpper ? 1 : 0);
-    return track * SsdFormat.trackSize + sector.sectorNumber * SsdFormat.sectorSize;
+    return track * SsdTrackSize + sector.sectorNumber * SsdSectorSize;
 }
 
 /**
@@ -961,14 +914,14 @@ export function toSsdOrDsd(disc, { force = false } = {}) {
             );
     }
     const numSides = disc.isDoubleSided ? 2 : 1;
-    const result = new Uint8Array(numSides * SsdFormat.tracksPerDisc * SsdFormat.trackSize);
+    const result = new Uint8Array(numSides * SsdTracksPerDisc * SsdTrackSize);
     let numTracks = 0;
     for (const { sector, isSideUpper } of sectors) {
         if (sectorShortfall(sector)) continue;
         result.set(sector.sectorData, ssdOffsetOf(sector, isSideUpper, numSides));
         numTracks = Math.max(numTracks, sector.trackNumber + 1);
     }
-    return result.slice(0, numTracks * numSides * SsdFormat.trackSize);
+    return result.slice(0, numTracks * numSides * SsdTrackSize);
 }
 
 export class Disc {

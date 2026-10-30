@@ -4,14 +4,14 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync } from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 
-import { FewestDecisivePairs, PercentPerUnit } from "./ab-stats.js";
+import { describeComparison, FewestDecisivePairs, PercentPerUnit, sampleUntilResolved } from "./ab-stats.js";
 
-export const RepoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+export const RepoRoot = path.resolve(import.meta.dirname, "..");
 export const BenchmarksPath = path.join("public", "benchmarks");
 export const ManifestName = "workloads.json";
 export const Sides = ["a", "b"];
+export const DiagnosticSides = { a: ["a"], b: ["b"], both: ["a", "b"] };
 const ShortShaLength = 10;
 
 const PairDefaults = { "min-pairs": "8", "max-pairs": "30", horizon: "2" };
@@ -191,4 +191,40 @@ export function assertWritableFile(file) {
     if (!isDirectory(path.dirname(path.resolve(file))) || isDirectory(file)) {
         throw new Error(`Cannot write ${file}: it needs to be a file in a directory that exists`);
     }
+}
+
+/** Samples workload `name` until the comparison resolves, printing each pair's interval and then the verdict. */
+export async function compareWorkload(name, sample, { minPairs, maxPairs, horizon }, engine) {
+    const onPair = ({ pairs, ratio, low, high }) =>
+        console.error(`  ${name} ${pairs} pairs: ${ratio.toFixed(3)} [${low.toFixed(3)}, ${high.toFixed(3)}]`);
+    const result = await sampleUntilResolved({ sample, onPair, minPairs, maxPairs, horizon });
+    console.log(describeComparison(name, result, engine));
+    return result;
+}
+
+/** The parts of a JSON report both runners write: the two sides, and the settings that decide when to stop. */
+export const reportSides = (sides) => ({
+    a: { spec: sides[0].spec, sha: sides[0].sha },
+    b: { spec: sides[1].spec, sha: sides[1].sha },
+});
+export const reportPairSettings = ({ minPairs, maxPairs, horizon }) => ({
+    minPairs,
+    maxPairs,
+    horizonPercent: horizon * PercentPerUnit,
+});
+
+export function onInterrupt(handler) {
+    for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) process.once(signal, handler);
+}
+
+/** Exits with the code `main` resolves to, or prints why it failed and exits with 1. */
+export function runMain(main) {
+    main().then(
+        (code) => process.exit(code),
+        (error) => {
+            console.error(error.message);
+            if (error.cause) console.error(error.cause.message);
+            process.exit(1);
+        },
+    );
 }

@@ -7,7 +7,7 @@
 
 import { RomBankBytes } from "./6502.js";
 import { Disc, DiscConfig } from "./disc.js";
-import { KeyMatrixSize } from "./via.js";
+import { KeyMatrixSize } from "./keymap.js";
 
 const HashIntervalSeconds = 1;
 // A guest more than MaxGuestLagSeconds behind the host catches up by running up to MaxCatchUpSeconds per execute
@@ -27,9 +27,14 @@ export function cycleCount(cpu) {
     return cpu.cycleSeconds * cpu.model.cyclesPerSecond + cpu.currentCycles;
 }
 
-/** Changes whenever the machine does: as its cycle count moves, and at a reset or state load, which need not move it. */
-export function machineMoment(cpu) {
+/** Changes whenever the processor does: as its cycle count moves, and at a reset or state load, which need not. */
+export function cpuMoment(cpu) {
     return `${cpu.resetsAndLoads}:${cycleCount(cpu)}`;
+}
+
+/** Changes whenever the machine does: as its processor does, and as a key goes down or up, which takes no cycles. */
+export function machineMoment(cpu) {
+    return `${cpuMoment(cpu)}:${cpu.sysvia.keyChanges}`;
 }
 
 // The CPU runs whole instructions until it reaches its target, so asking for a

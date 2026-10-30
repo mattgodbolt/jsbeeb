@@ -176,7 +176,7 @@ describe("Keyboard", () => {
 
         test("leaves jsbeeb's own shortcuts on the physical key", () => {
             const handler = vi.fn();
-            keyboard.registerKeyHandler(keyCodes.S, handler, { alt: true, ctrl: false });
+            keyboard.registerAltKeyHandler(keyCodes.S, handler);
 
             keyboard.keyDown(keyEvent("KeyS", "s", { altKey: true }));
 
@@ -484,20 +484,20 @@ describe("Keyboard", () => {
         expect(mockSysvia.keyUp).not.toHaveBeenCalled();
     });
 
-    test("gives a key to its Ctrl handler instead of the machine", () => {
+    test("runs an Alt shortcut only with Alt alone held", () => {
         const handler = vi.fn();
-        keyboard.registerKeyHandler(keyCodes.E, handler, { alt: false, ctrl: true });
+        keyboard.registerAltKeyHandler(keyCodes.E, handler);
         running = true;
 
+        keyboard.keyDown(keyEvent(keyCodes.E, "", { ctrlKey: true, altKey: true }));
         keyboard.keyDown(keyEvent(keyCodes.E, "", { ctrlKey: true }));
 
-        expect(handler).toHaveBeenCalledWith(true, keyCodes.E, false);
-        expect(mockSysvia.keyDown).not.toHaveBeenCalled();
+        expect(handler).not.toHaveBeenCalled();
     });
 
     test("runs a shortcut once however long it is held, even when its repeats outlast a blur", () => {
         const handler = vi.fn();
-        keyboard.registerKeyHandler(keyCodes.T, handler, { alt: true, ctrl: false });
+        keyboard.registerAltKeyHandler(keyCodes.T, handler);
         const altT = (repeat) => keyEvent(keyCodes.T, "", { altKey: true, repeat });
 
         keyboard.keyDown(altT(false));

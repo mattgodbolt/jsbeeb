@@ -9,7 +9,7 @@ import {
     panelShell,
 } from "../../src/web/floating-panel.js";
 import { EndEdge, Gap, overlaps, StartEdge } from "../../src/web/panel-layout.js";
-import { bareFloatingPanel, fakeAnimationFrames, sentEvents, teardownDom } from "./helpers.js";
+import { bareFloatingPanel, fakeAnimationFrames, pressKeepsFocus, sentEvents, teardownDom } from "./helpers.js";
 
 const NavbarHeight = 50;
 const HeaderHeight = 30;
@@ -373,9 +373,7 @@ describe("FloatingPanel", () => {
                 floating.panel.querySelector(".panel-close"),
                 floating.panel.querySelector(".link"),
             ]) {
-                const press = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
-                target.dispatchEvent(press);
-                expect(press.defaultPrevented).toBe(true);
+                expect(pressKeepsFocus(target)).toBe(true);
             }
         });
 

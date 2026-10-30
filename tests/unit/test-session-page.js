@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { sessionPage } from "../../src/web/session-page.js";
 import { PanelArrangement } from "../../src/web/floating-panel.js";
-import { captureDownloads, domFromIndexHtml, toasts } from "./helpers.js";
+import { captureDownloads, domFromIndexHtml, teardownDom, toasts } from "./helpers.js";
 
 describe("sessionPage", () => {
     const link = () => `${window.location.origin}/?client=room`;
@@ -20,11 +20,9 @@ describe("sessionPage", () => {
         vi.spyOn(console, "log").mockImplementation(() => {});
     });
 
-    afterEach(() => {
+    afterEach(async () => {
         delete navigator.clipboard;
-        window.history.replaceState(null, "", "/");
-        document.body.innerHTML = "";
-        vi.restoreAllMocks();
+        await teardownDom();
     });
 
     const settle = () => new Promise((resolve) => setTimeout(resolve));

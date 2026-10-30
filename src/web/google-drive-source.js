@@ -17,17 +17,10 @@ const saveFailed = (name) => (error) =>
 
 const isUnauthorised = (error) => error?.status === 401 || error?.result?.error?.code === 401;
 
-/** @returns {Uint8Array} an empty sector image, its catalogue titled from `name` where the format has one */
-function blankSectorImage(discType, name) {
-    const data = new Uint8Array(discType.byteSize);
-    if (discType.supportsCatalogue) discType.setDiscName(data, name);
-    return data;
-}
-
 /** @returns {import("../disc.js").Disc} a blank sector image with every track written out, ready to save as flux */
 function formattedDisc(name) {
     const sectorName = replaceOrAddExtension(name, FluxBlankSectorExtension);
-    const data = blankSectorImage(disc.guessDiscTypeFromName(sectorName), name);
+    const data = disc.blankImage(disc.guessDiscTypeFromName(sectorName), name);
     return disc.discFor(sectorName, data, undefined, DiscLayout.contiguous);
 }
 
@@ -109,7 +102,7 @@ export class GoogleDriveSource {
      */
     async createBlank(name, layout) {
         const discType = disc.guessDiscTypeFromName(name);
-        const data = discType.isFluxImage ? discType.saver(formattedDisc(name)) : blankSectorImage(discType, name);
+        const data = discType.isFluxImage ? discType.saver(formattedDisc(name)) : disc.blankImage(discType, name);
         return this.createFrom(name, data, layout);
     }
 
