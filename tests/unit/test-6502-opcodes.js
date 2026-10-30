@@ -77,6 +77,18 @@ describe("Disassemble6502", () => {
             mem.set([0xb1, 0xf2], 0x2000);
             expect(disassembler.disassemble(0x2000, true)[0]).toBe("LDA ($f2),Y ; $eaea + Y");
         });
+
+        it.each([
+            ["6502", cpu6502Opcodes],
+            ["65C02", cpu65c02Opcodes],
+            ["65C12", cpu65c12Opcodes],
+        ])("writes no lowercase but hex digits in any %s opcode's listing", (_, opcodes) => {
+            const dis = opcodes({ peekmem: (addr) => mem[addr & 0xffff] }).disassembler;
+            for (let op = 0; op < 256; op++) {
+                mem[0x2000] = op;
+                expect(dis.disassemble(0x2000, true)[0]).not.toMatch(/[g-z]/);
+            }
+        });
     });
 
     describe("what an instruction does", () => {

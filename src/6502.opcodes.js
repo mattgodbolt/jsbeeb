@@ -1188,7 +1188,7 @@ class Disassemble6502 {
             case "(abs,x)": {
                 const destAddr = this.cpu.peekmem(addr + 1) | (this.cpu.peekmem(addr + 2) << 8);
                 const indDest = this.cpu.peekmem(destAddr) | (this.cpu.peekmem(destAddr + 1) << 8);
-                return [`${name} (${formatJumpAddr(destAddr)},x)${suffix}`, next, indDest];
+                return [`${name} (${formatJumpAddr(destAddr)},X)${suffix}`, next, indDest];
             }
         }
         return [`${name} ${mode}`, next];
