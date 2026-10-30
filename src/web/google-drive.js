@@ -151,7 +151,11 @@ export class GoogleDriveLoader {
                     if (reportedSaveError) return;
                     reportedSaveError = true;
                     // The Drive client rejects with its response, not an Error.
-                    onSaveError(error?.result?.error ? new Error(error.result.error.message) : error);
+                    onSaveError(
+                        error instanceof Error
+                            ? error
+                            : new Error(error?.result?.error?.message ?? "the request to Google Drive failed"),
+                    );
                 }
             }, 200);
         }

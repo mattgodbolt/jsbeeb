@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 
-import { Disc, DiscConfig, loadAdf, loadSsd, sniffSurfaceLayout, toSsdOrDsd } from "../../src/disc.js";
+import { Disc, DiscConfig, discReport, loadAdf, loadSsd, sniffSurfaceLayout, toSsdOrDsd } from "../../src/disc.js";
 import { loadHfe, sniffHfeLayout, toHfe, convertTrackToHfeV3 } from "../../src/disc-hfe.js";
 import { SectorBytes, fmDiscWithSector, mfmDiscWithSector } from "../helpers/disc-builders.js";
 import * as fs from "node:fs";
@@ -158,6 +158,15 @@ describe("what loading an HFE notes for the media window", () => {
             { text: "a bit rate far from 250 kbit/s on tracks 3-5, 9", isOdd: true },
             { text: "the index part way round on track 2", isOdd: true },
         ]);
+    });
+});
+
+describe("the report on a dual format disc", () => {
+    it("reads each side at its own pitch", { timeout: 30000 }, () => {
+        // Elite's side 0 is 40 track and its side 1 80 track.
+        const texts = (isSideUpper) => discReport(elite(), isSideUpper).map(({ text }) => text);
+        expect(texts(false)).toContain("track 1: sectors 246-255 with a header claiming track 38");
+        expect(texts(true)).toContain("tracks 40-80: flux, but no sector IDs");
     });
 });
 

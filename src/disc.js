@@ -1305,7 +1305,7 @@ const StandardMfmSectors = [16, 18];
 /**
  * What is odd about one side of a disc, track by track: long or short tracks, unusual sector
  * counts, CRC errors, sectors that claim another track, anything the decoder warns of, and runs of
- * unformatted tracks. A double stepped disc's tracks are numbered as its sectors number them.
+ * tracks with no sectors. A double stepped side's tracks are numbered as its sectors number them.
  *
  * @param {Disc} disc
  * @param {boolean} isSideUpper
@@ -1314,8 +1314,8 @@ const StandardMfmSectors = [16, 18];
  */
 export function discReport(disc, isSideUpper) {
     const findings = [];
-    // A dual format disc can be 80 track on its other side, so the side is asked, but only on a disc that has any.
-    const step = disc.is40Track && sniffSurfaceLayout(disc, isSideUpper).is40Track ? 2 : 1;
+    // A dual format disc's sides can differ in pitch, so the side is asked rather than the disc.
+    const step = sniffSurfaceLayout(disc, isSideUpper).is40Track ? 2 : 1;
     // Tracks with no sectors and nothing else to say come in runs, each told in one line.
     let run = null;
     const endRun = () => {
