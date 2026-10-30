@@ -4,7 +4,6 @@ import {
     arranged,
     capture,
     closed,
-    emptyLayout,
     Gap,
     opened,
     parseLayout,
@@ -13,6 +12,7 @@ import {
     resolve,
     snap,
 } from "./panel-layout.js";
+import { readStored, writeStored } from "./stored-json.js";
 
 const StorageKey = "panelLayout";
 const BaseZIndex = 10;
@@ -265,20 +265,11 @@ export class PanelArrangement extends EventTarget {
     }
 
     _read() {
-        try {
-            return parseLayout(this._storage().getItem(StorageKey));
-        } catch (error) {
-            console.warn(`Could not read the panel layout: ${error}`);
-            return emptyLayout();
-        }
+        return parseLayout(readStored(this._storage, StorageKey, "the panel layout"));
     }
 
     _save(layout) {
-        try {
-            this._storage().setItem(StorageKey, JSON.stringify(layout));
-        } catch (error) {
-            console.warn(`Could not save the panel layout: ${error}`);
-        }
+        writeStored(this._storage, StorageKey, layout, "the panel layout");
     }
 
     /** The window below the navbar. Panels may go over the lights. */

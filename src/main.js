@@ -14,10 +14,7 @@ import { installIcons } from "./web/icons.js";
 import { QuickSettings } from "./web/quick-settings.js";
 import { toast } from "./web/toast.js";
 import { MediaLoader } from "./web/media-loader.js";
-import { SthSource } from "./web/sth-source.js";
-import { HfeSource } from "./web/hfe-source.js";
-import { BitshiftersSource } from "./web/bitshifters-source.js";
-import { GitHubSource } from "./web/github-source.js";
+import { addArchiveSources } from "./web/archive-sources.js";
 import { GoogleDriveSource } from "./web/google-drive-source.js";
 import { isSnapshotFile, SnapshotUI } from "./web/snapshot-ui.js";
 import { Autoboot } from "./web/autoboot.js";
@@ -60,7 +57,8 @@ import { PageActions } from "./web/page-actions.js";
 import { processDriveTrackParams } from "./url-params.js";
 import { processInputParams, takenFromHostValues } from "./web/parameters.js";
 import { hostKeyCodes, userKeymap } from "./keymap.js";
-import { gzipCodec, hostSession, joinLink, sessionRefusal, startSessionFromUrl } from "./web/shared-session.js";
+import { hostSession, joinLink, sessionRefusal, startSessionFromUrl } from "./web/shared-session.js";
+import { gzipCodec } from "./archive.js";
 import { SessionDialog } from "./web/session-dialog.js";
 import { sessionPage } from "./web/session-page.js";
 import { webRtcTransport } from "./web/session-transport.js";
@@ -91,12 +89,7 @@ labelPageShortcuts();
 const plan = startupPlan(parsedQuery);
 const { settings: driveTracks, warnings: driveTrackWarnings } = processDriveTrackParams(parsedQuery);
 
-const extraRoms = [];
-if (Array.isArray(parsedQuery.rom)) {
-    parsedQuery.rom.forEach((romPath) => {
-        if (romPath) extraRoms.push(romPath);
-    });
-}
+const extraRoms = (parsedQuery.rom ?? []).filter(Boolean);
 
 const cpuMultiplier = parsedQuery.cpuMultiplier ?? 1;
 const noSeek = !!parsedQuery.noseek;
@@ -306,10 +299,7 @@ const autoBoot = new Autoboot({
     processor,
     sendKeys: (keysToSend, check) => keyboard.sendRawKeyboard(keysToSend, check),
 });
-new SthSource({ media });
-new HfeSource({ media });
-new BitshiftersSource({ media });
-new GitHubSource({ media });
+addArchiveSources(media);
 const googleDriveSource = new GoogleDriveSource({ media });
 const machineSwitch = new MachineSwitch({ model, processor, fitted: takenFromHost, urlState, modals });
 const snapshots = new SnapshotUI({
@@ -523,7 +513,6 @@ exposeConsoleSurface(window, { loop, processor, video, audioHandler });
 electron({
     settings,
     media,
-    drives,
     modals,
     loadStateFile: snapshots.loadStateFromFile.bind(snapshots),
     panels: panelArrangement,

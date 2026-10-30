@@ -27,6 +27,8 @@ const AudioDebugSlowTickMs = 30;
 const AudioDebugSlowPresentMs = 30;
 
 const VirtualMhzUpdateMs = 3333;
+const DefaultBenchmarkCycles = 10 * 1000 * 1000;
+const BenchmarkFrameSkip = 1000000;
 
 class VirtualSpeedUpdater {
     constructor(cpuSpeed) {
@@ -50,7 +52,6 @@ class VirtualSpeedUpdater {
     }
 
     display() {
-        // MRG would be nice to graph instantaneous speed to get some idea where the time goes.
         if (this.cycles) {
             const thisMHz = this.cycles / this.time / 1000;
             this.v.textContent = thisMHz.toFixed(1);
@@ -395,31 +396,23 @@ export class EmulationLoop extends EventTarget {
     }
 
     benchmarkCpu(numCycles) {
-        numCycles = numCycles || 10 * 1000 * 1000;
-        const oldFS = this.display.frameSkip;
-        this.display.frameSkip = 1000000;
-        const startTime = performance.now();
-        this.processor.execute(numCycles);
-        const endTime = performance.now();
-        this.display.frameSkip = oldFS;
-        const msTaken = endTime - startTime;
-        const virtualMhz = numCycles / msTaken / 1000;
-        console.log("Took " + msTaken + "ms to execute " + numCycles + " cycles");
-        console.log("Virtual " + virtualMhz.toFixed(2) + "MHz");
+        this._timeCycles("cycles", numCycles, (cycles) => this.processor.execute(cycles));
     }
 
     benchmarkVideo(numCycles) {
-        numCycles = numCycles || 10 * 1000 * 1000;
+        this._timeCycles("video cycles", numCycles, (cycles) => this.display.video.polltime(cycles));
+    }
+
+    _timeCycles(label, numCycles, run) {
+        numCycles = numCycles || DefaultBenchmarkCycles;
         const oldFS = this.display.frameSkip;
-        this.display.frameSkip = 1000000;
+        this.display.frameSkip = BenchmarkFrameSkip;
         const startTime = performance.now();
-        this.display.video.polltime(numCycles);
-        const endTime = performance.now();
+        run(numCycles);
+        const msTaken = performance.now() - startTime;
         this.display.frameSkip = oldFS;
-        const msTaken = endTime - startTime;
-        const virtualMhz = numCycles / msTaken / 1000;
-        console.log("Took " + msTaken + "ms to execute " + numCycles + " video cycles");
-        console.log("Virtual " + virtualMhz.toFixed(2) + "MHz");
+        console.log(`Took ${msTaken}ms to execute ${numCycles} ${label}`);
+        console.log(`Virtual ${(numCycles / msTaken / 1000).toFixed(2)}MHz`);
     }
 
     profileCpu(arg) {

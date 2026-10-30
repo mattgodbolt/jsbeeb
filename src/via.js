@@ -1,6 +1,4 @@
-import { BBC, getKeyMap, ShiftOverride } from "./keymap.js";
-
-export const KeyMatrixSize = 16;
+import { BBC, getKeyMap, WithKeyMatrix } from "./keymap.js";
 
 const ORB = 0x0,
     ORA = 0x1,
@@ -532,15 +530,6 @@ class Via {
         this.portBUpdated();
     }
 
-    _taskOffset(task) {
-        return task.scheduled() ? task.expireEpoch - this.scheduler.epoch : null;
-    }
-
-    _restoreTask(task, offset) {
-        if (offset === null || offset === undefined) task.cancel();
-        else task.reschedule(offset);
-    }
-
     snapshotState() {
         return {
             ora: this.ora,
@@ -570,9 +559,9 @@ class Via {
             justhit: this.justhit,
             t1_pb7: this.t1_pb7,
             lastPolltime: this.lastPolltime,
-            taskOffset: this._taskOffset(this.task),
-            ca2PulseTaskOffset: this._taskOffset(this.ca2PulseTask),
-            cb2PulseTaskOffset: this._taskOffset(this.cb2PulseTask),
+            taskOffset: this.task.offset(),
+            ca2PulseTaskOffset: this.ca2PulseTask.offset(),
+            cb2PulseTaskOffset: this.cb2PulseTask.offset(),
         };
     }
 
@@ -607,9 +596,9 @@ class Via {
         this.t1_pb7 = state.t1_pb7;
         this.lastPolltime = state.lastPolltime;
         this.updateIFR();
-        this._restoreTask(this.task, state.taskOffset);
-        this._restoreTask(this.ca2PulseTask, state.ca2PulseTaskOffset);
-        this._restoreTask(this.cb2PulseTask, state.cb2PulseTaskOffset);
+        this.task.restoreOffset(state.taskOffset);
+        this.ca2PulseTask.restoreOffset(state.ca2PulseTaskOffset);
+        this.cb2PulseTask.restoreOffset(state.cb2PulseTaskOffset);
     }
 
     setca1(level) {
@@ -669,23 +658,18 @@ class Via {
     }
 }
 
-export class SysVia extends Via {
+export class SysVia extends WithKeyMatrix(Via) {
     constructor(cpu, scheduler, { video, soundChip, cmos, isMaster, initialLayout, getGamepads } = {}) {
         super(cpu, scheduler, 0x01);
 
         this.IC32 = 0;
         this.capsLockLight = false;
         this.shiftLockLight = false;
-        this.keys = [];
-        for (let i = 0; i < KeyMatrixSize; ++i) {
-            this.keys[i] = new Uint8Array(KeyMatrixSize);
-        }
+        this._initKeyMatrix(BBC.SHIFT, KeyboardColumns);
         // Mouse joystick button state
         this.mouseButton1 = false;
         this.mouseButton2 = false;
         this.keyChanges = 0;
-        this.keyboardEnabled = true;
-        this.shift = new ShiftOverride(BBC.SHIFT);
         this.setKeyLayout(initialLayout);
         this.video = video;
         this.soundChip = soundChip;
@@ -721,7 +705,7 @@ export class SysVia extends Via {
             IC32: this.IC32,
             capsLockLight: this.capsLockLight,
             shiftLockLight: this.shiftLockLight,
-            keyScanTaskOffset: this._taskOffset(this.keyScanTask),
+            keyScanTaskOffset: this.keyScanTask.offset(),
         };
     }
 
@@ -744,7 +728,7 @@ export class SysVia extends Via {
 
     restoreState(state) {
         super.restoreState(state);
-        this._restoreTask(this.keyScanTask, state.keyScanTaskOffset);
+        this.keyScanTask.restoreOffset(state.keyScanTaskOffset);
         this.IC32 = state.IC32;
         this.capsLockLight = state.capsLockLight;
         this.shiftLockLight = state.shiftLockLight;
@@ -766,88 +750,10 @@ export class SysVia extends Via {
         this.setca1(level);
     }
 
-    clearKeys() {
-        for (let i = 0; i < this.keys.length; ++i) {
-            for (let j = 0; j < this.keys[i].length; ++j) {
-                this.keys[i][j] = false;
-            }
-        }
-        this.shift.clear();
-        this._keysChanged();
-    }
-
-    disableKeyboard() {
-        this.keyboardEnabled = false;
-        this.clearKeys();
-    }
-
-    enableKeyboard() {
-        this.keyboardEnabled = true;
-        this.clearKeys();
-    }
-
-    set(key, val, shiftDown) {
-        const mapping = this.keyMapping(key, shiftDown);
-        if (mapping) this.setMapped(mapping, val);
-    }
-
-    /**
-     * Where a key code lands on the BBC's key matrix under the current layout, as
-     * `[col, row, bbcShiftOverride?]`, or undefined.
-     */
-    keyMapping(key, shiftDown) {
-        return this.keycodeToRowCol[!!shiftDown][key];
-    }
-
-    setMapped(mapping, val) {
-        if (!this.keyboardEnabled) return;
-        this.shift.setMapped(this.keys, mapping, val);
-        this._keysChanged();
-    }
-
-    keyDown(key, shiftDown) {
-        this.set(key, 1, shiftDown);
-    }
-
-    keyUp(key) {
-        // set up for both keymaps
-        // (with and without shift)
-        this.set(key, 0, true);
-        this.set(key, 0, false);
-    }
-
-    keyDownRaw(colrow) {
-        this.keys[colrow[0]][colrow[1]] = 1;
-        this._keysChanged();
-    }
-
-    keyUpRaw(colrow) {
-        this.keys[colrow[0]][colrow[1]] = 0;
-        this._keysChanged();
-    }
-
-    keyToggleRaw(colrow) {
-        this.keys[colrow[0]][colrow[1]] = 1 - this.keys[colrow[0]][colrow[1]];
-        this._keysChanged();
-    }
-
     /** Counted for `machineMoment`. */
     _keysChanged() {
         ++this.keyChanges;
-        this.updateKeys();
-    }
-
-    hasAnyKeyDown() {
-        // 10 for BBC, 13 for Master 128
-        const numCols = 13;
-        for (let i = 0; i < numCols; ++i) {
-            for (let j = 0; j < 8; ++j) {
-                if (this.keys[i][j]) {
-                    return true;
-                }
-            }
-        }
-        return false;
+        super._keysChanged();
     }
 
     updateKeys() {

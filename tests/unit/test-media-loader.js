@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { BuiltInImages, MediaLoader } from "../../src/web/media-loader.js";
-import { GitHubSource } from "../../src/web/github-source.js";
+import { addArchiveSources } from "../../src/web/archive-sources.js";
 import { MachineRequirements } from "../../src/web/media-catalogue.js";
 import { DiscLayout } from "../../src/disc.js";
 import { discFor } from "../../src/fdc.js";
@@ -289,7 +289,7 @@ describe("MediaLoader", () => {
 
         it("describes a github: reference on the bundled list, with the machine it needs", async () => {
             const media = make();
-            new GitHubSource({ media });
+            addArchiveSources(media);
             await expect(media.describe("github:mattgodbolt/nm/ninja_music.ssd")).resolves.toMatchObject({
                 requires: MachineRequirements.Master,
             });

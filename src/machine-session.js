@@ -6,16 +6,9 @@
  */
 
 import { readFileSync } from "fs";
-import { fileURLToPath } from "url";
-import path from "path";
 import { TestMachine } from "./test-machine.js";
 import { VduTextCapture } from "./vdu-capture.js";
 import { InstrumentedSoundChip, FakeSoundChip } from "./soundchip.js";
-
-// Resolve the jsbeeb package root from our own location (src/machine-session.js
-// → go up one level).  Passed to setNodeBasePath() so the ROM loader resolves
-// files relative to this package regardless of the calling process's cwd.
-const _jsbeebRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 import * as fdc from "./fdc.js";
 import { loadTapeFromData } from "./tapes.js";
 import { MediaResolver } from "./media-resolver.js";
@@ -25,7 +18,7 @@ import { BbcDiscArchive } from "./bbcdiscs.js";
 import { Video } from "./video.js";
 import { findModel } from "./models.js";
 import { requireBank } from "./paging.js";
-import { setNodeBasePath } from "./loader.js";
+import { hexbyte, hexword } from "./hex.js";
 
 // BBC framebuffer is 1024×625 pixels
 const FB_WIDTH = 1024;
@@ -137,7 +130,6 @@ export class MachineSession {
 
     /** Load ROMs and hardware; call once before anything else */
     async initialise() {
-        setNodeBasePath(_jsbeebRoot);
         await this._machine.initialise();
         if (this._opts.discImage) {
             this.loadDisc(this._opts.discImage);
@@ -744,10 +736,10 @@ export class MachineSession {
             y: cpu.y,
             s: cpu.s, // stack pointer
             p: cpu.p, // processor status
-            pcHex: `0x${cpu.pc.toString(16).toUpperCase().padStart(4, "0")}`,
-            aHex: `0x${cpu.a.toString(16).toUpperCase().padStart(2, "0")}`,
-            xHex: `0x${cpu.x.toString(16).toUpperCase().padStart(2, "0")}`,
-            yHex: `0x${cpu.y.toString(16).toUpperCase().padStart(2, "0")}`,
+            pcHex: `0x${hexword(cpu.pc).toUpperCase()}`,
+            aHex: `0x${hexbyte(cpu.a).toUpperCase()}`,
+            xHex: `0x${hexbyte(cpu.x).toUpperCase()}`,
+            yHex: `0x${hexbyte(cpu.y).toUpperCase()}`,
         };
     }
 
@@ -763,12 +755,7 @@ export class MachineSession {
     async screenshot() {
         // Read from _completeFb8, the last fully-painted frame snapshotted in paint_ext.
         // The video's fb32 is the live render buffer (cleared and partially refilled each frame).
-        const { default: sharp } = await import("sharp");
-        return sharp(Buffer.from(this._completeFb8.buffer), {
-            raw: { width: FB_WIDTH, height: FB_HEIGHT, channels: 4 },
-        })
-            .png()
-            .toBuffer();
+        return (await this._completeFrame()).png().toBuffer();
     }
 
     /**
@@ -788,14 +775,19 @@ export class MachineSession {
         const w = FB_WIDTH - left - right;
         const h = FB_HEIGHT - top - bottom;
 
-        const { default: sharp } = await import("sharp");
-        return sharp(Buffer.from(this._completeFb8.buffer), {
-            raw: { width: FB_WIDTH, height: FB_HEIGHT, channels: 4 },
-        })
+        return (await this._completeFrame())
             .extract({ left, top, width: w, height: h })
             .resize(w * scale, h * scale, { kernel: "nearest" }) // nearest-neighbour keeps pixels crisp
             .png()
             .toBuffer();
+    }
+
+    /** A sharp image of the last complete frame. */
+    async _completeFrame() {
+        const { default: sharp } = await import("sharp");
+        return sharp(Buffer.from(this._completeFb8.buffer), {
+            raw: { width: FB_WIDTH, height: FB_HEIGHT, channels: 4 },
+        });
     }
 
     /** Free any resources (currently just clears the framebuffer) */

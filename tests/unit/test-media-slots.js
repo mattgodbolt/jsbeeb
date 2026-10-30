@@ -260,12 +260,6 @@ describe("MediaSlots", () => {
             expect(followed.mock.calls).toEqual([[0], [1]]);
             expect(changes).toEqual(["drive 0", "drive 1", "the deck"]);
         });
-
-        it("finds slots by the window's targets", () => {
-            expect(slots.slotFor(1)).toBe(slots.drive(1));
-            expect(slots.slotFor("tape")).toBe(slots.deck);
-            expect(slots.deck.urlParams()).toEqual({ tape: undefined });
-        });
     });
 
     describe("analytics", () => {

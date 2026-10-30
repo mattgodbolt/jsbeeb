@@ -1,35 +1,22 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 
 import { SoundChip } from "../../src/soundchip.js";
+import { loadWorkletProcessor } from "../helpers/stub-audio-context.js";
 import { goertzelAmplitude } from "./helpers.js";
 
-// audio-renderer.js reads AudioWorklet globals at import time, so stub them
-// before dynamically importing it.
+const OutputQuantum = 128;
+const OutputRate = 48000;
+
 let SoundChipProcessor;
 
 beforeAll(async () => {
-    vi.stubGlobal("sampleRate", 48000);
-    vi.stubGlobal("currentTime", 0);
-    vi.stubGlobal(
-        "AudioWorkletProcessor",
-        class {
-            constructor() {
-                this.port = { postMessage() {}, onmessage: null };
-            }
-        },
-    );
-    vi.stubGlobal("registerProcessor", (name, cls) => {
-        SoundChipProcessor = cls;
-    });
-    await import("../../src/web/audio-renderer.js");
+    SoundChipProcessor = await loadWorkletProcessor(() => import("../../src/web/audio-renderer.js"), OutputRate);
 });
 
 afterAll(() => {
     vi.unstubAllGlobals();
 });
 
-const OutputQuantum = 128;
-const OutputRate = 48000;
 const CyclesPerMs = 2000;
 const CyclesPerSample = 4; // 2MHz CPU, 500kHz chip
 

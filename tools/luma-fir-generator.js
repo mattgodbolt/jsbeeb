@@ -7,7 +7,7 @@
  * DC. Baked into the shader by vite-plugin-fir-shader.js.
  */
 
-import { formatCoefficients } from "./fir-generator.js";
+import { formatCoefficients, sinc, unitDc } from "./fir-generator.js";
 
 export const LumaTaps = 31;
 const SampleRateMhz = 16;
@@ -20,7 +20,6 @@ const NotchTaps = LumaTaps - LowpassTaps + 1;
 // A lower beta narrows the trap, at the cost of ripple either side of it.
 const NotchBeta = 3;
 
-const sinc = (x) => (Math.abs(x) < 1e-12 ? 1 : Math.sin(Math.PI * x) / (Math.PI * x));
 // Windows span taps+2 points so the outermost taps are not wasted on zeros.
 const hann = (n, taps) => 0.5 - 0.5 * Math.cos((2 * Math.PI * (n + 1)) / (taps + 1));
 const kaiser = (n, taps, beta) => {
@@ -61,11 +60,6 @@ function convolve(a, b) {
     const result = new Array(a.length + b.length - 1).fill(0);
     a.forEach((x, i) => b.forEach((y, j) => (result[i + j] += x * y)));
     return result;
-}
-
-function unitDc(kernel) {
-    const sum = kernel.reduce((total, x) => total + x, 0);
-    return kernel.map((x) => x / sum);
 }
 
 /** @returns {number[]} LumaTaps coefficients summing to one */

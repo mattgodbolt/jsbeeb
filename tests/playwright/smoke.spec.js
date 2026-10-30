@@ -802,13 +802,20 @@ test("the disc controller panel's log keeps the newest line in view as lines com
             await frame();
         };
         await lines(160);
-        const followed = { lines: log.childElementCount, atBottom: atBottom() };
+        const followed = {
+            lines: log.childElementCount,
+            first: log.firstElementChild.textContent,
+            atBottom: atBottom(),
+        };
         log.scrollTop = 0;
         await frame();
         await lines(8);
         return { followed, scrolledUp: { top: log.scrollTop, atBottom: atBottom() } };
     });
-    expect(views).toEqual({ followed: { lines: 10000, atBottom: true }, scrolledUp: { top: 0, atBottom: false } });
+    expect(views).toEqual({
+        followed: { lines: 10000, first: "warning: write to unwired register: &0003=&11", atBottom: true },
+        scrolledUp: { top: 0, atBottom: false },
+    });
 });
 
 test("the BASIC panel opens from the Debug menu at the prompt, its content no wider than the size it opened at", async ({

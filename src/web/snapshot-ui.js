@@ -1,6 +1,7 @@
 import * as disc from "../fdc.js";
 import { DiscLayout } from "../disc.js";
 import { downloadBlob } from "./dom-utils.js";
+import { gzipCodec, isGzip } from "../archive.js";
 import {
     createSnapshot,
     restoreSnapshot,
@@ -19,16 +20,6 @@ const PendingStateKey = "jsbeeb-pending-state";
 /** Enough for the restored OS to settle before the user sees the screen. */
 const PostRestoreCycles = 40000;
 
-async function compressBlob(blob) {
-    const stream = blob.stream().pipeThrough(new CompressionStream("gzip"));
-    return new Response(stream).blob();
-}
-
-async function decompressBlob(blob) {
-    const stream = blob.stream().pipeThrough(new DecompressionStream("gzip"));
-    return new Response(stream).blob();
-}
-
 export function isSnapshotFile(filename, arrayBuffer) {
     const lower = filename.toLowerCase();
     if (lower.endsWith(".snp") || lower.endsWith(".json") || lower.endsWith(".json.gz") || lower.endsWith(".gz"))
@@ -42,16 +33,8 @@ export function isSnapshotFile(filename, arrayBuffer) {
 async function readSnapshot(arrayBuffer) {
     if (isBemSnapshot(arrayBuffer)) return await parseBemSnapshot(arrayBuffer);
     if (isUefSnapshot(arrayBuffer)) return parseUefSnapshot(arrayBuffer);
-    // Detect gzip (magic bytes 0x1f 0x8b) or plain JSON
     const bytes = new Uint8Array(arrayBuffer);
-    let text;
-    if (bytes[0] === 0x1f && bytes[1] === 0x8b) {
-        const decompressed = await decompressBlob(new Blob([arrayBuffer]));
-        text = await decompressed.text();
-    } else {
-        text = new TextDecoder().decode(arrayBuffer);
-    }
-    return snapshotFromJSON(text);
+    return snapshotFromJSON(isGzip(bytes) ? await gzipCodec.decompress(bytes) : new TextDecoder().decode(bytes));
 }
 
 /**
@@ -115,7 +98,7 @@ export class SnapshotUI {
             const manifest = snapshotMedia(this.slots);
             const snapshot = createSnapshot(this.processor, this.model, manifest);
             const json = snapshotToJSON(snapshot);
-            const blob = await compressBlob(new Blob([json]));
+            const blob = new Blob([await gzipCodec.compress(json)]);
             const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
             downloadBlob(blob, `jsbeeb-${this.model.name}-${timestamp}.json.gz`);
         } catch (e) {

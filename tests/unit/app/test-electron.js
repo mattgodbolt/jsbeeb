@@ -35,6 +35,8 @@ describe("the Electron hooks", () => {
             media: { slots },
             modals: { show: vi.fn() },
             actions: { media: vi.fn() },
+            settings: new EventTarget(),
+            loadStateFile: vi.fn(),
         };
     });
 

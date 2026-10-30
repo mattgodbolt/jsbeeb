@@ -2,7 +2,8 @@
 // v1 (BEMSNAP1): Fixed-size 327,885 byte packed struct. Reference: beebjit state.c
 // v3 (BEMSNAP3): Section-based with key+size headers, zlib-compressed memory. Reference: b-em savestate.c
 
-import { volumeTable, buildVideoState, buildSnapshot } from "./snapshot-helpers.js";
+import { buildSnapshot, buildVideoState, importedSoundState, importedViaState } from "./snapshot-helpers.js";
+import { volumeTable } from "./soundchip.js";
 import { inflate } from "./archive.js";
 import { BaseRamBytes } from "./6502.js";
 
@@ -106,77 +107,60 @@ function readCpuFromBytes(data) {
     };
 }
 
-function convertViaState(bemVia, ic32) {
-    const result = {
-        ora: bemVia.ora,
-        orb: bemVia.orb,
-        ira: bemVia.ira,
-        irb: bemVia.irb,
-        ddra: bemVia.ddra,
-        ddrb: bemVia.ddrb,
-        sr: bemVia.sr,
-        acr: bemVia.acr,
-        pcr: bemVia.pcr,
-        ifr: bemVia.ifr,
-        ier: bemVia.ier,
-        t1l: bemVia.t1l,
-        t2l: bemVia.t2l,
-        t1c: bemVia.t1c,
-        t2c: bemVia.t2c,
-        t1hit: bemVia.acr & 0x40 ? false : !!bemVia.t1hit,
-        t2hit: !!bemVia.t2hit,
-        portapins: 0xff,
-        portbpins: 0xff,
-        ca1: !!bemVia.ca1,
-        ca2: !!bemVia.ca2,
-        cb1: false,
-        cb2: false,
-        justhit: 0,
-        t1_pb7: (bemVia.orb >> 7) & 1,
-        lastPolltime: 0,
-        taskOffset: 1,
-    };
-    if (ic32 !== undefined) {
-        result.IC32 = ic32;
-        result.capsLockLight = !(ic32 & 0x40);
-        result.shiftLockLight = !(ic32 & 0x80);
-    }
-    return result;
-}
+// What a v3 snapshot with no section for a VIA holds for it.
+const MissingBemVia = Object.freeze({
+    ora: 0,
+    orb: 0,
+    ira: 0,
+    irb: 0,
+    ddra: 0,
+    ddrb: 0,
+    sr: 0,
+    acr: 0,
+    pcr: 0,
+    ifr: 0,
+    ier: 0,
+    t1l: 0x1fffe,
+    t2l: 0x1fffe,
+    t1c: 0x1fffe,
+    t2c: 0x1fffe,
+    t1hit: 1,
+    t2hit: 1,
+    ca1: 0,
+    ca2: 0,
+});
 
-function convertSoundState(snLatch, snCount, snStat, snVol, snNoise, snShift) {
+const BemSoundSize = 55;
+
+/** b-em's SN76489 block: latches, counts, states, volumes, noise register and LFSR, each per b-em channel. */
+function readBemSound(data, offset) {
+    const view = new DataView(data.buffer, data.byteOffset + offset);
     const registers = new Uint16Array(4);
     const counter = new Float32Array(4);
     const outputBit = [false, false, false, false];
     const volume = new Float32Array(4);
-
     for (let i = 0; i < 4; ++i) {
         const snChannel = 3 - i;
-        let period = snLatch[snChannel] >> 6;
-        let count = snCount[snChannel] >> 6;
+        let period = view.getUint32(snChannel * 4, true) >> 6;
+        let count = view.getUint32(16 + snChannel * 4, true) >> 6;
         if (i === 3) {
             period >>= 1;
             count >>= 1;
         }
         registers[i] = period;
         counter[i] = count;
-        outputBit[i] = snStat[snChannel] < 16;
-        volume[i] = volumeTable[snVol[snChannel] & 0x0f];
+        outputBit[i] = view.getUint32(32 + snChannel * 4, true) < 16;
+        volume[i] = volumeTable[view.getUint8(48 + snChannel) & 0x0f];
     }
-    registers[3] = snNoise & 0x07;
+    registers[3] = view.getUint8(52) & 0x07;
+    return importedSoundState({ registers, counter, outputBit, volume }, view.getUint16(53, true));
+}
 
-    return {
-        registers,
-        counter,
-        outputBit,
-        volume,
-        lfsr: snShift,
-        latchedRegister: 0,
-        residual: 0,
-        sineOn: false,
-        sineStep: 0,
-        sineTime: 0,
-    };
+/** What a v3 snapshot with no sound section holds: silence, with the noise LFSR at its reset value. */
+function missingBemSound() {
+    const bytes = new Uint8Array(BemSoundSize);
+    new DataView(bytes.buffer).setUint16(53, 1 << 14, true);
+    return bytes;
 }
 
 // ── V1 parser (BEMSNAP1, fixed struct) ──────────────────────────────
@@ -186,7 +170,6 @@ function parseBemV1(buffer) {
         throw new Error(`Invalid BEM v1 snapshot size: expected ${BemV1Size}, got ${buffer.byteLength}`);
     }
     const bytes = new Uint8Array(buffer);
-    const view = new DataView(buffer);
 
     const bemModel = bytes[V1Off.model];
     const modelName = BemV1Models[bemModel];
@@ -215,18 +198,6 @@ function parseBemV1(buffer) {
     const crtcRegs = bytes.slice(crtcOff, crtcOff + 18);
 
     const soundOff = crtcOff + 18 + 7 + 4 + 1 + 4;
-    const snLatch = [],
-        snCount = [],
-        snStat = [],
-        snVol = [];
-    for (let i = 0; i < 4; i++) {
-        snLatch.push(view.getUint32(soundOff + i * 4, true));
-        snCount.push(view.getUint32(soundOff + 16 + i * 4, true));
-        snStat.push(view.getUint32(soundOff + 32 + i * 4, true));
-        snVol.push(bytes[soundOff + 48 + i]);
-    }
-    const snNoise = bytes[soundOff + 52];
-    const snShift = view.getUint16(soundOff + 53, true);
 
     return buildSnapshot(
         "b-em",
@@ -234,10 +205,10 @@ function parseBemV1(buffer) {
         cpuState,
         ram,
         roms,
-        convertViaState(sysVia, sysViaIC32),
-        convertViaState(userVia),
+        importedViaState(sysVia, sysViaIC32),
+        importedViaState(userVia, undefined),
         buildVideoState(ulaControl, ulaPalette, crtcRegs),
-        convertSoundState(snLatch, snCount, snStat, snVol, snNoise, snShift),
+        readBemSound(bytes, soundOff),
     );
 }
 
@@ -295,9 +266,9 @@ const BemSupportedTubes = ["6502 Internal", "6502 External"];
  * Convert b-em's tube sections into jsbeeb tube state.
  * @param {object} sections - parsed v3 sections
  * @param {string|null} tubeName - co-processor name from the model section
- * @returns {Promise<object|null>} jsbeeb tube state, or null if no usable co-processor
+ * @returns {object|null} jsbeeb tube state, or null if no usable co-processor
  */
-async function parseBemTube(sections, tubeName) {
+function parseBemTube(sections, tubeName) {
     // b-em names the model's co-processor even when it failed to start one, so naming a tube but
     // carrying no state for it is valid. Carrying only one of the two sections is not.
     if (!sections["T"] && !sections["P"]) return null;
@@ -401,7 +372,7 @@ function readBemTubeName(data, pos) {
     return fitted ? readString(data, pos) : null;
 }
 
-async function parseBemV3(buffer) {
+function parseBemV3(buffer) {
     const bytes = new Uint8Array(buffer);
     let offset = 8; // Skip "BEMSNAP3" signature
 
@@ -471,66 +442,20 @@ async function parseBemV3(buffer) {
             roms = memData.slice(romStart, romStart + 262144);
         }
     }
-    return finishV3Parse(modelName, cpuState, ram, roms, sections, await parseBemTube(sections, tubeName));
-}
 
-function finishV3Parse(modelName, cpuState, ram, roms, sections, tube) {
-    // Parse system VIA
-    let sysvia = convertViaState(
-        {
-            ora: 0,
-            orb: 0,
-            ira: 0,
-            irb: 0,
-            ddra: 0,
-            ddrb: 0,
-            sr: 0,
-            acr: 0,
-            pcr: 0,
-            ifr: 0,
-            ier: 0,
-            t1l: 0x1fffe,
-            t2l: 0x1fffe,
-            t1c: 0x1fffe,
-            t2c: 0x1fffe,
-            t1hit: 1,
-            t2hit: 1,
-            ca1: 0,
-            ca2: 0,
-        },
-        0,
-    );
+    const tube = parseBemTube(sections, tubeName);
+
+    let sysvia = importedViaState(MissingBemVia, 0);
     if (sections["S"]) {
         const data = sections["S"].data;
         const via = readViaFromBytes(data, 0);
         const ic32 = data.length > ViaDataSize ? data[ViaDataSize] : 0;
-        sysvia = convertViaState(via, ic32);
+        sysvia = importedViaState(via, ic32);
     }
 
-    // Parse user VIA
-    let uservia = convertViaState({
-        ora: 0,
-        orb: 0,
-        ira: 0,
-        irb: 0,
-        ddra: 0,
-        ddrb: 0,
-        sr: 0,
-        acr: 0,
-        pcr: 0,
-        ifr: 0,
-        ier: 0,
-        t1l: 0x1fffe,
-        t2l: 0x1fffe,
-        t1c: 0x1fffe,
-        t2c: 0x1fffe,
-        t1hit: 1,
-        t2hit: 1,
-        ca1: 0,
-        ca2: 0,
-    });
+    let uservia = importedViaState(MissingBemVia, undefined);
     if (sections["U"]) {
-        uservia = convertViaState(readViaFromBytes(sections["U"].data, 0));
+        uservia = importedViaState(readViaFromBytes(sections["U"].data, 0), undefined);
     }
 
     // Parse Video ULA
@@ -583,25 +508,7 @@ function finishV3Parse(modelName, cpuState, ram, roms, sections, tube) {
         }
     }
 
-    // Parse sound
-    let soundChip = convertSoundState([0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], 0, 1 << 14);
-    if (sections["s"]) {
-        const data = sections["s"].data;
-        const view = new DataView(data.buffer, data.byteOffset);
-        const snLatch = [],
-            snCount = [],
-            snStat = [],
-            snVol = [];
-        for (let i = 0; i < 4; i++) {
-            snLatch.push(view.getUint32(i * 4, true));
-            snCount.push(view.getUint32(16 + i * 4, true));
-            snStat.push(view.getUint32(32 + i * 4, true));
-            snVol.push(data[48 + i]);
-        }
-        const snNoise = data[52];
-        const snShift = view.getUint16(53, true);
-        soundChip = convertSoundState(snLatch, snCount, snStat, snVol, snNoise, snShift);
-    }
+    const soundChip = readBemSound(sections["s"]?.data ?? missingBemSound(), 0);
 
     return buildSnapshot(
         "b-em",

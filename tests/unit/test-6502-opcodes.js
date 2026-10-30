@@ -70,7 +70,7 @@ describe("Disassemble6502", () => {
 
         it("wraps a branch's target round the top of memory, as the CPU does", () => {
             mem.set([0xd0, 0x10], 0xfff8);
-            expect(disassembler.disassemble(0xfff8)).toEqual([`BNE ${instrRef(0x0a, "000a")}`, 0xfffa, 0x0a]);
+            expect(disassembler.disassemble(0xfff8)).toEqual([`BNE ${instrRef(0x0a, "000a")}`, 0xfffa]);
         });
 
         it("keeps references out of the plain listing", () => {
@@ -207,7 +207,7 @@ describe("Disassemble6502", () => {
         it("disassembles the 65C02 bit branches as three bytes", () => {
             const disassembler65c02 = cpu65c02Opcodes({ peekmem: (addr) => mem[addr & 0xffff] }).disassembler;
             mem.set([0x0f, 0x41, 0x10], 0x2000);
-            expect(disassembler65c02.disassemble(0x2000, true)).toEqual(["BBR0 $41, $2013", 0x2003, 0x2013]);
+            expect(disassembler65c02.disassemble(0x2000, true)).toEqual(["BBR0 $41, $2013", 0x2003]);
         });
 
         it("treats every listed 65C02 opcode as documented", () => {

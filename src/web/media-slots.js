@@ -87,11 +87,6 @@ export class MediaSlots extends EventTarget {
         return this.driveSlots[index];
     }
 
-    /** The slot the window's targets name: a drive index, or "tape". */
-    slotFor(target) {
-        return target === "tape" ? this.deck : this.driveSlots[target];
-    }
-
     /** What a slot holds, by the reference it is known by. */
     holding(ref) {
         return this.all.find((slot) => slot.media && slot.ref === ref) ?? null;

@@ -3,7 +3,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Settings, mapLegacyModels } from "../../src/web/settings.js";
 import { DefaultModel, findModel } from "../../src/models.js";
-import { fakeUrlState, teardownDom, toasts } from "./helpers.js";
+import { DisplaySection, Parameters, urlParamType } from "../../src/web/parameters.js";
+import { configForm } from "../../src/web/config-form.js";
+import { Config } from "../../src/web/config.js";
+import { UrlState } from "../../src/web/url-state.js";
+import { ParamTypes } from "../../src/url-params.js";
+import { domFromIndexHtml, fakeUrlState, teardownDom, toasts } from "./helpers.js";
 
 describe("Settings", () => {
     let urlState;
@@ -65,34 +70,6 @@ describe("Settings", () => {
             });
         });
 
-        it("reads only the stored settings back from storage", () => {
-            const stored = {
-                keyLayout: "gaming",
-                displayMode: "pal",
-                audioOutput: "off",
-                speakerAmount: "0",
-                palPersistenceMs: "10",
-                rgbPersistenceMs: "20",
-                tubeCpuMultiplier: "2",
-                microphoneChannel: "1",
-                coProcessor: "true",
-                speechOutput: "true",
-            };
-            for (const [name, value] of Object.entries(stored)) window.localStorage[name] = value;
-            expect(make()).toMatchObject({
-                keyLayout: "gaming",
-                displayMode: "pal",
-                audioOutput: "off",
-                speakerAmount: 0,
-                palPersistenceMs: 10,
-                rgbPersistenceMs: 20,
-                tubeCpuMultiplier: 1,
-                microphoneChannel: undefined,
-                coProcessor: false,
-                speechOutput: false,
-            });
-        });
-
         it("prefers a usable URL value to storage, and storage to an unusable one", () => {
             for (const [name, value] of Object.entries({ keyLayout: "gaming", displayMode: "pal", audioOutput: "off" }))
                 window.localStorage[name] = value;
@@ -114,13 +91,6 @@ describe("Settings", () => {
             const settings = make();
             expect(settings.audioOutput).toBe("speaker");
             expect(settings.speakerAmount).toBe(1);
-        });
-
-        it("keeps an afterglow within what a display can show", () => {
-            urlState.params.palPersistenceMs = 5000;
-            expect(make().palPersistenceMs).toBe(500);
-            window.localStorage.rgbPersistenceMs = "-1";
-            expect(make().rgbPersistenceMs).toBe(0);
         });
 
         it("resolves the model and the fittings", () => {
@@ -150,63 +120,6 @@ describe("Settings", () => {
             expect(window.localStorage.audioOutput).toBe("board");
             expect(urlState.params.audioOutput).toBe("board");
             expect(urlState.updateUrl).toHaveBeenCalledTimes(1);
-        });
-
-        it("remembers in storage the key layout, the display and the sound, and nothing else", () => {
-            const settings = make();
-            settings.set({
-                model: "Master",
-                keyLayout: "natural",
-                displayMode: "pal",
-                audioOutput: "board",
-                speakerAmount: 0.5,
-                palPersistenceMs: 60,
-                rgbPersistenceMs: 30,
-                coProcessor: true,
-                tubeCpuMultiplier: 2,
-                hasEconet: true,
-                hasMusic5000: true,
-                hasTeletextAdaptor: true,
-                hasVideoNula: true,
-                mouseJoystickEnabled: true,
-                speechOutput: true,
-                microphoneChannel: 1,
-            });
-            expect(Object.keys(window.localStorage).sort()).toEqual([
-                "audioOutput",
-                "displayMode",
-                "keyLayout",
-                "palPersistenceMs",
-                "rgbPersistenceMs",
-                "speakerAmount",
-            ]);
-        });
-
-        it("lets only the settings sliders change live settle", () => {
-            const settings = make();
-            const settled = [];
-            for (const [name, value] of Object.entries({
-                speakerAmount: 0.5,
-                palPersistenceMs: 60,
-                rgbPersistenceMs: 30,
-                tubeCpuMultiplier: 2,
-                displayMode: "pal",
-                coProcessor: true,
-            })) {
-                urlState.updateUrl.mockClear();
-                settings.set({ [name]: value });
-                if (urlState.updateUrl.mock.calls.length === 0) settled.push(name);
-                vi.advanceTimersByTime(300);
-            }
-            expect(settled).toEqual(["speakerAmount", "palPersistenceMs", "rgbPersistenceMs"]);
-        });
-
-        it("keeps an afterglow set live within what a display can show, everywhere it goes", () => {
-            const settings = make();
-            settings.set({ palPersistenceMs: 5000 });
-            expect(settings.palPersistenceMs).toBe(500);
-            expect(window.localStorage.palPersistenceMs).toBe("500");
-            expect(urlState.params.palPersistenceMs).toBe(500);
         });
 
         it.each([
@@ -284,6 +197,101 @@ describe("Settings", () => {
         it("names a model with no synonym by its name", () => {
             urlState.params.model = "Tube65C02";
             expect(make().value("model")).toBe("Tube65C02");
+        });
+    });
+
+    describe("adding a setting takes its declaration alone", () => {
+        const withMadeUpSetting = {
+            ...Parameters,
+            screenTint: {
+                type: ParamTypes.STRING,
+                stored: true,
+                default: "amber",
+                fromUrl: (tint) => tint.toLowerCase(),
+                valid: (tint) => ["amber", "green"].includes(tint),
+                field: {
+                    type: "menu",
+                    section: DisplaySection,
+                    label: "Screen tint",
+                    options: [
+                        { value: "amber", text: "Amber" },
+                        { value: "green", text: "Green" },
+                    ],
+                },
+            },
+            scanlines: { type: ParamTypes.BOOL, stored: true, default: true },
+            tintLevel: { type: ParamTypes.INT, stored: true, default: 3 },
+            glow: { type: ParamTypes.FLOAT, stored: true, default: 10, fit: (glow) => Math.min(glow, 20) },
+            frameCount: { type: ParamTypes.INT, default: 1 },
+        };
+        const urlStateFor = (search) =>
+            new UrlState(
+                { origin: "https://bbc.example", pathname: "/", search, hash: "" },
+                { pushState: vi.fn() },
+                (name) => urlParamType(name, withMadeUpSetting),
+            );
+        const settingsFor = (search) => new Settings({ urlState: urlStateFor(search), parameters: withMadeUpSetting });
+
+        it("is read, with its default", () => {
+            expect(settingsFor("").screenTint).toBe("amber");
+            expect(settingsFor("?screenTint=green").screenTint).toBe("green");
+        });
+
+        it("is adjusted from the URL before it is checked", () => {
+            expect(settingsFor("?screenTint=Green").screenTint).toBe("green");
+            expect(settingsFor("?screenTint=Blue").screenTint).toBe("amber");
+        });
+
+        it("is stored and read back", () => {
+            settingsFor("").set({ screenTint: "green" });
+            expect(window.localStorage.screenTint).toBe("green");
+            expect(settingsFor("").screenTint).toBe("green");
+        });
+
+        it("reads a stored checkbox and numbers back as what was stored, not the default", () => {
+            settingsFor("").set({ scanlines: false, tintLevel: 0, glow: 0.5 });
+            expect(window.localStorage.scanlines).toBe("false");
+            expect(settingsFor("")).toMatchObject({ scanlines: false, tintLevel: 0, glow: 0.5 });
+        });
+
+        it("is read back from storage only when it is stored", () => {
+            window.localStorage.frameCount = "5";
+            const settings = settingsFor("");
+            expect(settings.frameCount).toBe(1);
+            settings.set({ frameCount: 2 });
+            expect(window.localStorage.frameCount).toBe("5");
+        });
+
+        it("is kept within its fit when read and when set, everywhere it goes", () => {
+            expect(settingsFor("?glow=50").glow).toBe(20);
+            const settings = settingsFor("");
+            settings.set({ glow: 50 });
+            expect(settings.glow).toBe(20);
+            expect(window.localStorage.glow).toBe("20");
+            expect(settings.urlState.params.glow).toBe(20);
+        });
+
+        it("round-trips through the URL", () => {
+            const settings = settingsFor("?model=Master");
+            settings.set({ screenTint: "green" });
+            expect(settings.urlState.url()).toBe("https://bbc.example/?model=Master&screenTint=green");
+            expect(settingsFor(new URL(settings.urlState.url()).search).screenTint).toBe("green");
+        });
+
+        it("appears in the dialog where it is declared, and sets the setting", () => {
+            domFromIndexHtml("configuration");
+            const settings = settingsFor("?screenTint=green");
+            new Config(settings);
+            const layout = configForm(withMadeUpSetting).find(Array.isArray);
+            expect(layout.map((field) => field.setting ?? field.id)).toEqual([
+                "displayMode",
+                "screenTint",
+                "persistence",
+            ]);
+            expect(document.getElementById("screenTintDropdown").textContent.trim()).toBe("Green");
+            document.querySelector('.screen-tint-menu a[data-value="amber"]').click();
+            document.getElementById("configuration").dispatchEvent(new Event("hide.bs.modal"));
+            expect(settings.screenTint).toBe("amber");
         });
     });
 

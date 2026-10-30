@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { TestMachine } from "../../src/test-machine.js";
 import { Video } from "../../src/video.js";
-import { mode7Text } from "./helpers.js";
+import { bootedTestMachine, mode7Text } from "./helpers.js";
 
 const ScreenColumns = 40;
 const FramebufferPixels = 1024 * 1024;
@@ -23,9 +23,7 @@ describe.each([
     it("boots to BASIC with its own banner, runs a line and changes mode without touching a VideoNuLA", async () => {
         const onMissingVideoNula = vi.fn();
         const video = new Video(false, FramebufferPixels, () => {}, { onMissingVideoNula });
-        const machine = new TestMachine(model, { video });
-        await machine.initialise();
-        await machine.runUntilInput(10);
+        const machine = await bootedTestMachine(model, { video }, 10);
         expect(screenLines(machine)).toEqual(startup);
 
         await machine.type("PRINT 6*7");
@@ -57,9 +55,7 @@ it.each(["Master", "MasterADFS"])("the %s MOS boots and changes mode without tou
     const video = new Video(true, FramebufferPixels, () => {}, {
         onMissingVideoNula,
     });
-    const machine = new TestMachine(model, { video });
-    await machine.initialise();
-    await machine.runUntilInput(10);
+    const machine = await bootedTestMachine(model, { video }, 10);
     await machine.type("MODE 2");
     await machine.runUntilInput(10);
     expect(onMissingVideoNula).not.toHaveBeenCalled();
@@ -74,9 +70,7 @@ describe("the Master's TIME$", () => {
         { from: "Wed,15 Apr 2026.12:00:00", set: "Fri,31 Jul 2026.12:00:00", shown: "Fri,31 Jul 2026.12:00" },
         { from: "Sun,01 Feb 2026.12:00:00", set: "Tue,29 Feb 2028.12:00:00", shown: "Tue,29 Feb 2028.12:00" },
     ])("reads back $set as $shown", async ({ from, set, shown }) => {
-        const machine = new TestMachine("Master");
-        await machine.initialise();
-        await machine.runUntilInput(10);
+        const machine = await bootedTestMachine("Master", undefined, 10);
         for (const time of [from, set].filter(Boolean)) {
             await machine.type(`TIME$="${time}"`);
             await machine.runUntilInput(10);
@@ -88,9 +82,7 @@ describe("the Master's TIME$", () => {
 });
 
 it("MOS 0.10 names itself to *FX0", async () => {
-    const machine = new TestMachine("B-MOS0.10");
-    await machine.initialise();
-    await machine.runUntilInput(10);
+    const machine = await bootedTestMachine("B-MOS0.10", undefined, 10);
     await machine.type("*FX0");
     await machine.runUntilInput(10);
     expect(screenLines(machine).slice(-2)).toEqual(["OS EPROM 0.10", ">"]);

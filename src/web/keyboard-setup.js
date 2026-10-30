@@ -72,7 +72,6 @@ export class KeyboardSetup {
         }));
         keyboard.addEventListener("notice", showNotice);
 
-        const alt = { alt: true, ctrl: false };
         const runners = {
             toggleDebugger: () => dbgr.toggleDebugger(),
             toggleDebugPanels: () => dbgr.togglePanels(),
@@ -86,19 +85,15 @@ export class KeyboardSetup {
         for (const shortcut of Shortcuts) {
             if (!shortcut.key) continue;
             const run = runners[shortcut.run];
-            keyboard.registerKeyHandler(
-                keyCodes[shortcut.key],
-                (down, _code, shift) => {
-                    if (down) run(shift);
-                },
-                alt,
-            );
+            keyboard.registerAltKeyHandler(keyCodes[shortcut.key], (down, _code, shift) => {
+                if (down) run(shift);
+            });
         }
 
         // Alt means the underlying key is never forwarded to the BBC Micro (keyboard.js bails
         // out early when a handler fires), so typing numbers works normally.
         const handleSwitch = (index) => (down) => accessibilitySwitches.setSwitch(index, down);
-        SwitchKeys.forEach((name, index) => keyboard.registerKeyHandler(keyCodes[name], handleSwitch(index), alt));
+        SwitchKeys.forEach((name, index) => keyboard.registerAltKeyHandler(keyCodes[name], handleSwitch(index)));
 
         document.addEventListener("keydown", (evt) => {
             actions.onAnyKeyDown();

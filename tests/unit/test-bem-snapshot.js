@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "fs";
 import { isBemSnapshot, parseBemSnapshot } from "../../src/bem-snapshot.js";
 
 const BemSnapshotSize = 327885;
@@ -168,6 +169,18 @@ describe("b-em v3 model import", () => {
         const buffer = await makeBemV3WithTube({ modelName, tubeName: null, tubeState: false });
 
         expect((await parseBemSnapshot(buffer)).model).toBe(expected);
+    });
+
+    it("reads a real b-em v3 file", async () => {
+        const file = readFileSync(new URL("../frogman.snp", import.meta.url));
+        const { model, state } = await parseBemSnapshot(
+            file.buffer.slice(file.byteOffset, file.byteOffset + file.byteLength),
+        );
+
+        expect(model).toBe("Master");
+        expect(state.roms.length).toBe(256 * 1024);
+        expect(state.video.regs[0]).toBe(127);
+        expect(state.video.ulactrl).not.toBe(0);
     });
 });
 

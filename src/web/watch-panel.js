@@ -2,7 +2,8 @@ import { hexword } from "../hex.js";
 import { formatWatch, parseCondition, WatchFormats, writeStops } from "../watches.js";
 import { FloatingPanel, MenuGroup } from "./floating-panel.js";
 import { StartEdge } from "./panel-layout.js";
-import { placePopup, popupBehaviour, textButton } from "./dom-utils.js";
+import { bindGotoForm } from "./debug-dom.js";
+import { placePopup, popupBehaviour, setText, textButton } from "./dom-utils.js";
 
 const MinPanelSize = { w: 200, h: 80 };
 const RowCells = 5;
@@ -28,7 +29,6 @@ export class WatchPanel {
      */
     constructor({ peek, resolve, arrangement }) {
         this._peek = peek;
-        this._resolve = resolve;
         /** @type {Watch[]} */
         this._watches = [];
         this._cpu = null;
@@ -39,7 +39,6 @@ export class WatchPanel {
         this.panel = document.getElementById("watch-panel");
         this._list = this.panel.querySelector(".watch-list");
         this._empty = this.panel.querySelector(".watch-empty");
-        this._input = document.getElementById("watch-add");
         this._menu = document.getElementById("watch-menu");
         /** @type {{address: number, label: string} | null} */
         this._offered = null;
@@ -75,18 +74,7 @@ export class WatchPanel {
             () => (this._openPopup ? [this._openPopup.opener, this._openPopup.popup] : null),
             () => this._showPopup(null),
         );
-        this._input.addEventListener("input", () => this._input.classList.remove("is-invalid"));
-        document.getElementById("watch-add-form").addEventListener("submit", (e) => {
-            e.preventDefault();
-            const text = this._input.value.trim();
-            if (!text) return;
-            const found = this._resolve(text);
-            this._input.classList.toggle("is-invalid", found === undefined);
-            if (!found) return;
-            this._add(found, WatchFormats[0]);
-            this._input.value = "";
-            this._input.blur();
-        });
+        bindGotoForm(document.getElementById("watch-add-form"), resolve, (found) => this._add(found, WatchFormats[0]));
     }
 
     /** Sets the breakpoints of the watches that stop the machine on `cpu`, and no longer on the last one. */
@@ -169,7 +157,7 @@ export class WatchPanel {
     update() {
         for (const watch of this._watches) {
             const text = formatWatch(this._peek, watch.address, watch.format);
-            if (watch.value.textContent !== text) watch.value.textContent = text;
+            setText(watch.value, text);
         }
     }
 

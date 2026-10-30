@@ -2,6 +2,11 @@ import { hexword } from "../hex.js";
 
 // The DOM pieces the debugger's views share.
 
+/** `$1234`, or `$1234-$1240` for a range of more than one address. */
+export function addressRange({ start, end }) {
+    return start === end ? `$${hexword(start)}` : `$${hexword(start)}-$${hexword(end)}`;
+}
+
 export function labelHtml(addr) {
     return '<span class="addr">' + hexword(addr) + "</span>";
 }
@@ -83,14 +88,14 @@ export class FittedRows {
 }
 
 /**
- * Has a panel's "Go to" box hand `go` what its text resolves to, marking the box instead when it resolves to nothing.
+ * Has a form's one text box hand `go` what its text resolves to, marking the box instead when it resolves to nothing.
  * @template Target
  * @param {HTMLFormElement} form
  * @param {(text: string) => Target | undefined} resolve
  * @param {(target: Target) => void} go
  */
 export function bindGotoForm(form, resolve, go) {
-    const addr = form.querySelector(".goto-addr");
+    const addr = form.querySelector("input");
     addr.addEventListener("input", () => addr.classList.remove("is-invalid"));
     form.addEventListener("submit", (e) => {
         e.preventDefault();

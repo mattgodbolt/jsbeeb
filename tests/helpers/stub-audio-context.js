@@ -25,3 +25,27 @@ export function stubAudioContext() {
         }),
     };
 }
+
+/**
+ * The processor class a worklet module registers, caught by stubbing the AudioWorkletGlobalScope it reads at import
+ * time. `importModule` does the import so its path resolves from the caller; the globals stay stubbed until
+ * `vi.unstubAllGlobals()`.
+ */
+export async function loadWorkletProcessor(importModule, sampleRate) {
+    let processor;
+    vi.stubGlobal("sampleRate", sampleRate);
+    vi.stubGlobal("currentTime", 0);
+    vi.stubGlobal(
+        "AudioWorkletProcessor",
+        class {
+            constructor() {
+                this.port = { postMessage() {}, onmessage: null };
+            }
+        },
+    );
+    vi.stubGlobal("registerProcessor", (_name, registered) => {
+        processor = registered;
+    });
+    await importModule();
+    return processor;
+}

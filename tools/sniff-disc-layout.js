@@ -17,7 +17,7 @@
  */
 
 import { readdir, readFile } from "node:fs/promises";
-import { basename, extname, join } from "node:path";
+import { extname, join } from "node:path";
 import { argv, exit, stdout } from "node:process";
 import { brotliDecompressSync } from "node:zlib";
 
@@ -144,7 +144,7 @@ async function main() {
 }
 
 // Only walk a directory when invoked as a script, so the helpers can be tested.
-if (basename(argv[1] ?? "") === "sniff-disc-layout.js") {
+if (import.meta.main) {
     main().catch((e) => {
         stdout.write(`${e.stack}\n`);
         exit(1);

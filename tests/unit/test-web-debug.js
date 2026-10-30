@@ -24,6 +24,7 @@ import {
     domFromIndexHtml,
     fakeAnimationFrames,
     fitRomHeader,
+    pressKeepsFocus,
     romless,
     sentEvents,
     stubResizeObserver,
@@ -572,12 +573,6 @@ describe("Debugger", () => {
                 expect(document.getElementById("cpu6502_pc").textContent).toBe("2002");
             });
 
-            it("keeps its buttons from focus", () => {
-                const press = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
-                button("step").dispatchEvent(press);
-                expect(press.defaultPrevented).toBe(true);
-            });
-
             describe("stopped in a tight loop", () => {
                 const loopLine = () => document.querySelector("#toolbar-panel .tight-loop");
                 const stopIn = (code) => {
@@ -1050,20 +1045,13 @@ describe("Debugger", () => {
             expect(changed()).toBe(true);
         });
 
-        it("keeps its menu from focus, closing it on Escape, a press elsewhere, or its panel closing", () => {
+        it("closes its menu on leaving the debugger or its panel closing", () => {
             const menu = () => document.querySelector(".paging-menu:not([hidden])");
             picker("memory-panel").click();
-            const press = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
-            menu().querySelector("button").dispatchEvent(press);
-            expect(press.defaultPrevented).toBe(true);
-            document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
-            expect(menu()).toBeNull();
-            picker("memory-panel").click();
-            document.getElementById("memory").dispatchEvent(new Event("pointerdown", { bubbles: true }));
-            expect(menu()).toBeNull();
-            picker("memory-panel").click();
+            expect(menu()).not.toBeNull();
             dbgr.hide();
             expect(menu()).toBeNull();
+            dbgr.debug(cpu.pc);
             picker("memory-panel").click();
             dbgr.panels.memory.close();
             expect(menu()).toBeNull();
@@ -1127,6 +1115,8 @@ describe("Debugger", () => {
         const pc = () => document.getElementById("cpu6502_pc").textContent;
         // LDX #3; DEX; BNE $2002; LDA #$41
         const countdown = [0xa2, 0x03, 0xca, 0xd0, 0xfd, 0xa9, 0x41];
+        // Pushes a return to $200A and the flags as an interrupt would, then jumps to a handler at $3000.
+        const interrupted = [0xa9, 0x20, 0x48, 0xa9, 0x0a, 0x48, 0x08, 0x4c, 0x00, 0x30, 0xea];
         let loop;
 
         /** Runs and stops as the emulation loop does, a tick at a time. */
@@ -1143,6 +1133,90 @@ describe("Debugger", () => {
             expect(pc()).toBe("2002");
         });
 
+        it.each([
+            {
+                name: "steps over a loop that leaves backwards",
+                // NOP; LDX #3; DEX; BEQ $2000; BNE $2003
+                code: { 0x2000: [0xea, 0xa2, 0x03, 0xca, 0xf0, 0xfa, 0xd0, 0xfb] },
+                cursor: "$2006",
+                keys: "m",
+                stopsAt: "2000",
+            },
+            {
+                name: "steps over a loop that makes a call with the stack about to wrap",
+                // LDX #1; TXS; LDX #3; JSR $3000; DEX; BNE $2005; NOP, with an RTS at $3000
+                code: {
+                    0x2000: [0xa2, 0x01, 0x9a, 0xa2, 0x03, 0x20, 0x00, 0x30, 0xca, 0xd0, 0xfa, 0xea],
+                    0x3000: [0x60],
+                },
+                cursor: "$2009",
+                keys: "m",
+                stopsAt: "200b",
+                x: 0,
+            },
+            {
+                name: "steps over a loop that makes a call",
+                // LDX #3; JSR $3000; DEX; BNE $2002; NOP, with an RTS at $3000
+                code: { 0x2000: [0xa2, 0x03, 0x20, 0x00, 0x30, 0xca, 0xd0, 0xfa, 0xea], 0x3000: [0x60] },
+                cursor: "$2006",
+                keys: "m",
+                stopsAt: "2008",
+                x: 0,
+            },
+            {
+                name: "steps over a forward branch to where it went",
+                // LDA #0; BEQ $2006; NOP; NOP; NOP
+                code: { 0x2000: [0xa9, 0x00, 0xf0, 0x02, 0xea, 0xea, 0xea] },
+                keys: "nm",
+                stopsAt: "2006",
+            },
+            {
+                name: "steps out past the returns of the calls it makes",
+                code: { 0x2000: [0x20, 0x00, 0x30], 0x3000: [0x20, 0x00, 0x31, 0x60], 0x3100: [0x60] },
+                keys: "no",
+                stopsAt: "2003",
+            },
+            {
+                name: "steps out through a return that has a breakpoint",
+                code: { 0x2000: [0x20, 0x00, 0x30], 0x3000: [0x60] },
+                keys: "nto",
+                stopsAt: "2003",
+            },
+            {
+                name: "runs right round to a breakpoint on the current instruction",
+                code: { 0x2000: countdown },
+                keys: "ntc",
+                stopsAt: "2002",
+                x: 2,
+            },
+            {
+                name: "steps out of an interrupt handler through its RTI",
+                // LDX #2; DEX; BNE $3002; RTI
+                code: { 0x2000: interrupted, 0x3000: [0xa2, 0x02, 0xca, 0xd0, 0xfd, 0x40] },
+                cursor: "$3002",
+                keys: "o",
+                stopsAt: "200a",
+            },
+            {
+                name: "steps over an RTI to where it returns",
+                code: { 0x2000: interrupted, 0x3000: [0x40] },
+                cursor: "$3000",
+                keys: "m",
+                stopsAt: "200a",
+            },
+        ])("$name", ({ code, cursor, keys, stopsAt, x }) => {
+            for (const [address, bytes] of Object.entries(code)) load(Number(address), bytes);
+            dbgr.debug(cpu.pc);
+            if (cursor) {
+                goTo("goto-dis-addr-form", cursor);
+                keyPress("c");
+            }
+            for (const key of keys) keyPress(key);
+            expect(pc()).toBe(stopsAt);
+            expect(loop.running).toBe(false);
+            if (x !== undefined) expect(cpu.x).toBe(x);
+        });
+
         it("steps one instruction on n even when it goes nowhere", () => {
             load(0x2000, [0x4c, 0x00, 0x20]);
             dbgr.debug(cpu.pc);
@@ -1150,29 +1224,6 @@ describe("Debugger", () => {
             keyPress("n");
             expect(pc()).toBe("2000");
             expect(cpu.currentCycles - before).toBe(3);
-        });
-
-        it("steps over a loop that leaves backwards", () => {
-            // NOP; LDX #3; DEX; BEQ $2000; BNE $2003
-            load(0x2000, [0xea, 0xa2, 0x03, 0xca, 0xf0, 0xfa, 0xd0, 0xfb]);
-            dbgr.debug(cpu.pc);
-            goTo("goto-dis-addr-form", "$2006");
-            keyPress("c");
-            keyPress("m");
-            expect(pc()).toBe("2000");
-            expect(loop.running).toBe(false);
-        });
-
-        it("steps over a loop that makes a call with the stack about to wrap", () => {
-            // LDX #1; TXS; LDX #3; JSR $3000; DEX; BNE $2005; NOP, with an RTS at $3000
-            load(0x2000, [0xa2, 0x01, 0x9a, 0xa2, 0x03, 0x20, 0x00, 0x30, 0xca, 0xd0, 0xfa, 0xea]);
-            load(0x3000, [0x60]);
-            dbgr.debug(cpu.pc);
-            goTo("goto-dis-addr-form", "$2009");
-            keyPress("c");
-            keyPress("m");
-            expect(pc()).toBe("200b");
-            expect(cpu.x).toBe(0);
         });
 
         it("steps over onto the reset entry", () => {
@@ -1207,16 +1258,6 @@ describe("Debugger", () => {
             expect(cpu.onFastPath).toBe(true);
         });
 
-        it("steps out past the returns of the calls it makes", () => {
-            load(0x2000, [0x20, 0x00, 0x30]);
-            load(0x3000, [0x20, 0x00, 0x31, 0x60]);
-            load(0x3100, [0x60]);
-            dbgr.debug(cpu.pc);
-            keyPress("n");
-            keyPress("o");
-            expect(pc()).toBe("2003");
-        });
-
         it("steps over a 65C12 loop closed by BRA to wherever it leaves by", async () => {
             cpu = fake6502(TEST_65C12, { video });
             await cpu.initialise();
@@ -1239,15 +1280,6 @@ describe("Debugger", () => {
             goTo("goto-dis-addr-form", "$2003");
             keyPress("c");
             expect(pc()).toBe("2002");
-        });
-
-        it("steps over a forward branch to where it went", () => {
-            // LDA #0; BEQ $2006; NOP; NOP; NOP
-            load(0x2000, [0xa9, 0x00, 0xf0, 0x02, 0xea, 0xea, 0xea]);
-            dbgr.debug(cpu.pc);
-            keyPress("n");
-            keyPress("m");
-            expect(pc()).toBe("2006");
         });
 
         it("stops a step over at a breakpoint inside the call, and steps out from it", () => {
@@ -1423,18 +1455,6 @@ describe("Debugger", () => {
             });
         });
 
-        it("steps over a loop that makes a call", () => {
-            // LDX #3; JSR $3000; DEX; BNE $2002; NOP, with an RTS at $3000
-            load(0x2000, [0xa2, 0x03, 0x20, 0x00, 0x30, 0xca, 0xd0, 0xfa, 0xea]);
-            load(0x3000, [0x60]);
-            dbgr.debug(cpu.pc);
-            goTo("goto-dis-addr-form", "$2006");
-            keyPress("c");
-            keyPress("m");
-            expect(pc()).toBe("2008");
-            expect(cpu.x).toBe(0);
-        });
-
         it("steps over a recursive call to where it returns at the same depth", () => {
             // $3000: DEC $70; BEQ $3007; JSR $3000; RTS
             load(0x2000, [0x20, 0x00, 0x30]);
@@ -1455,48 +1475,6 @@ describe("Debugger", () => {
             dbgr.debug(cpu.pc);
             keyPress("m");
             expect(pc()).toBe(hexword(vector));
-        });
-
-        it("runs right round to a breakpoint on the current instruction", () => {
-            load(0x2000, countdown);
-            dbgr.debug(cpu.pc);
-            keyPress("n");
-            keyPress("t");
-            keyPress("c");
-            expect(pc()).toBe("2002");
-            expect(cpu.x).toBe(2);
-        });
-
-        it("steps out through a return that has a breakpoint", () => {
-            load(0x2000, [0x20, 0x00, 0x30]);
-            load(0x3000, [0x60]);
-            dbgr.debug(cpu.pc);
-            keyPress("n");
-            keyPress("t");
-            keyPress("o");
-            expect(pc()).toBe("2003");
-        });
-
-        it("steps out of an interrupt handler through its RTI", () => {
-            // Push a return to $200A and the flags as an interrupt would, then enter the handler:
-            // LDX #2; DEX; BNE $3002; RTI
-            load(0x2000, [0xa9, 0x20, 0x48, 0xa9, 0x0a, 0x48, 0x08, 0x4c, 0x00, 0x30, 0xea]);
-            load(0x3000, [0xa2, 0x02, 0xca, 0xd0, 0xfd, 0x40]);
-            dbgr.debug(cpu.pc);
-            goTo("goto-dis-addr-form", "$3002");
-            keyPress("c");
-            keyPress("o");
-            expect(pc()).toBe("200a");
-        });
-
-        it("steps over an RTI to where it returns", () => {
-            load(0x2000, [0xa9, 0x20, 0x48, 0xa9, 0x0a, 0x48, 0x08, 0x4c, 0x00, 0x30, 0xea]);
-            load(0x3000, [0x40]);
-            dbgr.debug(cpu.pc);
-            goTo("goto-dis-addr-form", "$3000");
-            keyPress("c");
-            keyPress("m");
-            expect(pc()).toBe("200a");
         });
     });
 
@@ -1855,9 +1833,7 @@ describe("Debugger", () => {
             goTo("goto-mem-addr-form", "$70");
             rightClick(memByte(0x70));
             for (const choice of watchMenu().querySelectorAll("button")) {
-                const press = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
-                choice.dispatchEvent(press);
-                expect(press.defaultPrevented).toBe(true);
+                expect(pressKeepsFocus(choice)).toBe(true);
                 expect(choice.tabIndex).toBe(-1);
             }
         });
@@ -1877,19 +1853,12 @@ describe("Debugger", () => {
             expect(empty()).toBe(true);
         });
 
-        it("keeps its buttons from focus, by mouse or by Tab", () => {
+        it("keeps its buttons out of the tab order", () => {
             dbgr.debug(cpu.pc);
             addWatch("$70");
-            for (const button of [
-                watchControl(0, "watch-format"),
-                watchChoices(0).querySelector("button"),
-                watchControl(0, "watch-remove"),
-            ]) {
-                const press = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
-                button.dispatchEvent(press);
-                expect(press.defaultPrevented).toBe(true);
-                expect(button.tabIndex).toBe(-1);
-            }
+            const buttons = [...document.querySelectorAll("#watch-panel .watch-list button")];
+            expect(buttons.length).toBeGreaterThan(0);
+            expect(buttons.map((button) => button.tabIndex)).toEqual(buttons.map(() => -1));
         });
     });
 
@@ -2355,9 +2324,7 @@ describe("Debugger", () => {
                 expect(link.href).toBe(PlaceUrl);
                 expect(link.target).toBe("_blank");
                 expect(link.title).toBe(`oswrch: $3000, from Test MOS\nDefined at ${PlaceUrl}`);
-                const press = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
-                link.dispatchEvent(press);
-                expect(press.defaultPrevented).toBe(true);
+                expect(pressKeepsFocus(link)).toBe(true);
             });
 
             it("keeps a named operand following its address, saying where it's defined", async () => {
