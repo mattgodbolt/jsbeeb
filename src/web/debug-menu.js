@@ -2,8 +2,9 @@ const Divider = '<li><hr class="dropdown-divider" /></li>';
 
 /**
  * The navbar's Debug menu: into or out of the debugger, the debugger's panels shown or hidden, and
- * every panel that lists itself (see PanelArrangement.listed) under its group's heading, ticked while open. It is drawn again
- * each time it opens, so a panel appears in it by being registered with a title.
+ * every panel that lists itself (see PanelArrangement.listed) under its group's heading, ticked
+ * while open. It is drawn again each time it opens, so a panel appears in it by being registered
+ * with a title.
  */
 export class DebugMenu {
     /**
