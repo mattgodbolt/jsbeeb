@@ -166,7 +166,7 @@ same for that row.
   its line in the LED panel under the screen; what goes there just goes in. The row and the hint under the list say what
   will happen.
 - **The Atom has no disc boot.** On the Atom with DOS a disc only goes into the drive, with no **Autoboot** tick;
-  `LINK #E000` at its prompt starts Atom DOS.
+  `LINK #E000` at its prompt starts Atom DOS. A disc that needs a Master still switches to one and boots there.
 - **What the list holds:** the built-in examples, the Stairway to Hell archive, the HFE archive of flux captures, the
   demos and games Bitshifters publish, games and demos from their authors' GitHub repos, your Google Drive once
   connected, discs kept in this browser, and files opened this session. With nothing typed, what you loaded most

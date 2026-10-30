@@ -13,6 +13,7 @@ import {
 } from "./media-catalogue.js";
 import { errorText, reportLoadFailure } from "./reporting.js";
 import { guessDiscTypeFromName } from "../fdc.js";
+import { findModel } from "../models.js";
 import { toast } from "./toast.js";
 import { noteFeature } from "./analytics.js";
 
@@ -193,6 +194,12 @@ export class MediaWindow {
     /** The Atom has no SHIFT+BREAK: a reset leaves it at its prompt, with Atom DOS not even linked in. */
     get bootable() {
         return !this.model.isAtom;
+    }
+
+    /** Whether `d` can boot where it would run: on the machine it switches to, if this one cannot run it. */
+    bootableFor(d) {
+        if (!d || this.machineSwitch.satisfies(d) || d.requires.model === undefined) return this.bootable;
+        return !findModel(d.requires.model).isAtom;
     }
 
     get defaultTarget() {
@@ -608,7 +615,7 @@ export class MediaWindow {
     renderHint() {
         const first = this.list.rows.querySelector(".media-row-main")?.descriptor;
         const target = first ? this.rowTarget(first) : this.target;
-        const keys = hintKeys(target, this.bootable, this.list.autoboot.checked);
+        const keys = hintKeys(target, this.bootableFor(first), this.list.autoboot.checked);
         this.list.hint.replaceChildren(
             ...[...keys, ["Esc", "closes"]].map(([key, what]) => {
                 const span = document.createElement("span");
@@ -760,7 +767,7 @@ export class MediaWindow {
         main.className = "media-row-main";
         const target = this.rowTarget(d);
         const label = [d.title, d.publisher, d.detail, sourceName(d.source)].filter(Boolean).join(", ");
-        main.title = this.actionWords(target, label);
+        main.title = this.actionWords(target, d, label);
         main.setAttribute("aria-label", recent ? `${main.title}, recently loaded` : main.title);
         const cell = (className, text) => {
             const span = document.createElement("span");
@@ -798,7 +805,7 @@ export class MediaWindow {
             button.type = "button";
             button.className = "media-target";
             button.textContent = String(other);
-            button.title = this.actionWords(other, d.title);
+            button.title = this.actionWords(other, d, d.title);
             button.setAttribute("aria-label", button.title);
             button.addEventListener("click", (e) => this.loadDisc(other, d, { shift: e.shiftKey, entry: main.entry }));
             targets.append(button);
@@ -819,17 +826,22 @@ export class MediaWindow {
         return li;
     }
 
-    /** What a plain click on something named `label` does when it goes to `target`. */
-    actionWords(target, label) {
+    /** What a plain click on `d`, named `label`, does when it goes to `target`. */
+    actionWords(target, d, label) {
         if (target === "tape") return `Load ${label} into the cassette deck`;
-        return this.decideBoot(target).boots
+        return this.decideBoot(target, d).boots
             ? `Boot ${label} from drive ${target}`
             : `Load ${label} into drive ${target}`;
     }
 
-    /** What a load into `driveIndex` does, by the Autoboot tick as it is now. */
-    decideBoot(driveIndex, asked = {}) {
-        return bootDecision({ driveIndex, bootable: this.bootable, ticked: this.list.autoboot.checked, ...asked });
+    /** What a load of `d` into `driveIndex` does, by the Autoboot tick as it is now; null `d` is one loaded here. */
+    decideBoot(driveIndex, d, asked = {}) {
+        return bootDecision({
+            driveIndex,
+            bootable: this.bootableFor(d),
+            ticked: this.list.autoboot.checked,
+            ...asked,
+        });
     }
 
     /** Which slot a descriptor's media is loaded in, as text, or null. */
@@ -874,12 +886,11 @@ export class MediaWindow {
     async loadDisc(driveIndex, d, { shift = false, boot, stayOpen = false, entry } = {}) {
         this.unfold(driveIndex);
         const slot = this.slots.drive(driveIndex);
-        // A switch to another model boots it by that model's rules, not this one's.
-        const bootsAfterSwitch = () =>
-            this.decideBoot(driveIndex, { shift, boot, bootable: d.requires.model !== undefined || this.bootable });
         if (
             !this.machineSwitch.satisfies(d) &&
-            (await this.machineSwitch.switchFor(d, slot, { boot: bootsAfterSwitch().boots }))
+            (await this.machineSwitch.switchFor(d, slot, {
+                boot: this.decideBoot(driveIndex, d, { shift, boot }).boots,
+            }))
         ) {
             this.slots.recent.note(d.ref, "disc");
             return;
@@ -904,7 +915,7 @@ export class MediaWindow {
     /** Boots what has just gone into a drive if it is to, and has the URL say whether a link to it boots. */
     loaded(driveIndex, asked) {
         const { inUrl } = this.slots.drive(driveIndex);
-        const { boots, urlAutoboot } = this.decideBoot(driveIndex, { ...asked, inUrl });
+        const { boots, urlAutoboot } = this.decideBoot(driveIndex, null, { ...asked, inUrl });
         if (boots) {
             this.processor.reset(true);
             this.boot();

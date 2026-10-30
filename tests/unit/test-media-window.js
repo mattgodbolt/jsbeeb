@@ -1237,6 +1237,8 @@ describe("MediaWindow", () => {
         it("switches an Atom without asking on Enter, and boots the disc on the machine it switches to", async () => {
             deps.model.isAtom = true;
             await openWith([paradroid]);
+            expect(hint()).toEqual(["Enter boots from drive 0", "Shift+Enter loads without booting", "Esc closes"]);
+            expect(rowMain().title).toMatch(/^Boot Paradroid/);
             pressEnter();
             await vi.waitFor(() =>
                 expect(navigatedTo()).toBe(
