@@ -1,5 +1,4 @@
 import { deflate } from "pako";
-import { typedArrayToBase64, base64ToTypedArray, bytesToTypedArray } from "./state-utils.js";
 import { findModel } from "./models.js";
 import { inflate } from "./archive.js";
 
@@ -11,6 +10,8 @@ const CompressedArrayEncoding = "deflate";
 const CompressArraysFromBytes = 1024;
 // A session's join waits on this; the default level 6 takes over twice as long to save a sixth of the bytes.
 const ArrayCompressionLevel = 1;
+// String.fromCharCode takes its bytes as arguments, so a large array goes in chunks.
+const Base64ChunkBytes = 8192;
 
 /**
  * Whether a snapshot was taken on a machine with a second processor fitted.
@@ -132,15 +133,43 @@ export function restoreSnapshot(cpu, model, snapshot) {
     cpu.restoreState(snapshot.state);
 }
 
+function bytesToBase64(bytes) {
+    const parts = [];
+    for (let i = 0; i < bytes.length; i += Base64ChunkBytes) {
+        parts.push(String.fromCharCode(...bytes.subarray(i, i + Base64ChunkBytes)));
+    }
+    return btoa(parts.join(""));
+}
+
+function base64ToBytes(base64) {
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return bytes;
+}
+
+// A copy, because a view straight onto the bytes' buffer could start at an offset the element size does not divide.
+function bytesToTypedArray(bytes, Constructor) {
+    const elementSize = Constructor.BYTES_PER_ELEMENT;
+    if (bytes.length % elementSize !== 0) {
+        throw new Error(
+            `Data length (${bytes.length} bytes) is not a multiple of ${Constructor.name} element size (${elementSize})`,
+        );
+    }
+    const result = new Constructor(bytes.length / elementSize);
+    new Uint8Array(result.buffer).set(bytes);
+    return result;
+}
+
 function encodeTypedArray(array) {
     const bytes = new Uint8Array(array.buffer, array.byteOffset, array.byteLength);
     const type = array.constructor.name;
-    if (bytes.length < CompressArraysFromBytes) return { __typedArray: true, type, data: typedArrayToBase64(bytes) };
+    if (bytes.length < CompressArraysFromBytes) return { __typedArray: true, type, data: bytesToBase64(bytes) };
     return {
         __typedArray: true,
         type,
         encoding: CompressedArrayEncoding,
-        data: typedArrayToBase64(deflate(bytes, { level: ArrayCompressionLevel })),
+        data: bytesToBase64(deflate(bytes, { level: ArrayCompressionLevel })),
     };
 }
 
@@ -149,11 +178,11 @@ function decodeTypedArray({ type, encoding, data }) {
     if (!Constructor) {
         throw new Error(`Unknown TypedArray type: ${type}`);
     }
-    if (encoding === undefined) return base64ToTypedArray(data, Constructor);
+    if (encoding === undefined) return bytesToTypedArray(base64ToBytes(data), Constructor);
     if (encoding !== CompressedArrayEncoding) {
         throw new Error(`Unknown TypedArray encoding: ${encoding}`);
     }
-    return bytesToTypedArray(inflate(base64ToTypedArray(data, Uint8Array)), Constructor);
+    return bytesToTypedArray(inflate(base64ToBytes(data)), Constructor);
 }
 
 /**
