@@ -88,45 +88,32 @@ app.whenReady()
         app.exit(1);
     });
 
-function makeLoader(drive) {
+/** A menu click that asks for a file and sends its path to the page; `setting`, if given, remembers the path. */
+function pickFile({ title, filters, channel, message, setting }) {
     return async (_, browserWindow) => {
-        const result = await dialog.showOpenDialog(browserWindow, {
-            title: "Load a disc image",
-            filters: [
-                { name: "Disc images", extensions: ["ssd", "dsd"] },
-                { name: "ZIPped disc images", extensions: ["zip"] },
-            ],
-            properties: ["openFile"],
-        });
-        if (!result.canceled) {
-            const filePath = getFileParam(result.filePaths[0]);
-            store.set(`settings.disc${drive + 1}`, filePath);
-            browserWindow.webContents.send("load", { drive, path: filePath });
-        }
+        const result = await dialog.showOpenDialog(browserWindow, { title, filters, properties: ["openFile"] });
+        if (result.canceled) return;
+        const filePath = getFileParam(result.filePaths[0]);
+        if (setting) store.set(setting, filePath);
+        browserWindow.webContents.send(channel, { ...message, path: filePath });
     };
 }
 
-function makeTapeLoader() {
-    return async (_, browserWindow) => {
-        const result = await dialog.showOpenDialog(browserWindow, {
-            title: "Load a tape image",
-            filters: [
-                { name: "Tape images", extensions: ["uef"] },
-                { name: "ZIPped tape images", extensions: ["zip"] },
-            ],
-            properties: ["openFile"],
-        });
-        if (!result.canceled) {
-            const filePath = getFileParam(result.filePaths[0]);
-            store.set("settings.tape", filePath);
-            browserWindow.webContents.send("load-tape", { path: filePath });
-        }
-    };
-}
+const loadDisc = (drive) =>
+    pickFile({
+        title: "Load a disc image",
+        filters: [
+            { name: "Disc images", extensions: ["ssd", "dsd"] },
+            { name: "ZIPped disc images", extensions: ["zip"] },
+        ],
+        channel: "load",
+        message: { drive },
+        setting: `settings.disc${drive + 1}`,
+    });
 
-function showModal(modalId, options = {}) {
+function showModal(modalId) {
     return (_, browserWindow) => {
-        browserWindow.webContents.send("show-modal", { modalId, ...options });
+        browserWindow.webContents.send("show-modal", { modalId });
     };
 }
 
@@ -194,11 +181,11 @@ const template = (panels) => [
         submenu: [
             {
                 label: "Load disc 0...",
-                click: makeLoader(0),
+                click: loadDisc(0),
             },
             {
                 label: "Load disc 1...",
-                click: makeLoader(1),
+                click: loadDisc(1),
             },
             { type: "separator" },
             {
@@ -208,7 +195,16 @@ const template = (panels) => [
             { type: "separator" },
             {
                 label: "Load Tape from File...",
-                click: makeTapeLoader(),
+                click: pickFile({
+                    title: "Load a tape image",
+                    filters: [
+                        { name: "Tape images", extensions: ["uef"] },
+                        { name: "ZIPped tape images", extensions: ["zip"] },
+                    ],
+                    channel: "load-tape",
+                    message: {},
+                    setting: "settings.tape",
+                }),
             },
             { type: "separator" },
             isMac ? { role: "close" } : { role: "quit" },
@@ -250,20 +246,16 @@ const template = (panels) => [
             {
                 label: "Load State...",
                 accelerator: "CmdOrCtrl+O",
-                click: async (_, browserWindow) => {
-                    const result = await dialog.showOpenDialog(browserWindow, {
-                        title: "Load emulator state",
-                        filters: [
-                            { name: "Snapshot files", extensions: ["gz", "json", "snp", "uef"] },
-                            { name: "All files", extensions: ["*"] },
-                        ],
-                        properties: ["openFile"],
-                    });
-                    if (!result.canceled) {
-                        const filePath = getFileParam(result.filePaths[0]);
-                        browserWindow.webContents.send("load-state", { path: filePath });
-                    }
-                },
+                click: pickFile({
+                    title: "Load emulator state",
+                    filters: [
+                        { name: "Snapshot files", extensions: ["gz", "json", "snp", "uef"] },
+                        { name: "All files", extensions: ["*"] },
+                    ],
+                    channel: "load-state",
+                    message: {},
+                    setting: undefined,
+                }),
             },
             { type: "separator" },
             {
