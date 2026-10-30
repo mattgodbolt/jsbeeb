@@ -1,6 +1,5 @@
 import { SoundChip, ToneCounterSteps } from "../soundchip.js";
 import { decodedPanel, DecodedRegisters, register, spelt } from "./decoded-registers.js";
-import { MenuGroup } from "./floating-panel.js";
 import { EndEdge, StartEdge } from "./panel-layout.js";
 
 const MinPanelSize = { w: 240, h: 120 };
@@ -151,7 +150,6 @@ export class SoundChipPanel {
         const { floating, body } = decodedPanel({
             id: "soundchip",
             title: "Sound chip",
-            menuGroup: MenuGroup.hardware,
             feature: "sound_chip",
             place: () => ({ x: EndEdge, y: StartEdge }),
             minSize: MinPanelSize,

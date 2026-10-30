@@ -16,7 +16,6 @@ import {
     TimerState as WdTimerState,
 } from "../wd-fdc.js";
 import { decodedPanel, DecodedRegisters, fixed, lit, register, spelt } from "./decoded-registers.js";
-import { MenuGroup } from "./floating-panel.js";
 import { Centred, StartEdge } from "./panel-layout.js";
 import { readStored, writeStored } from "./stored-json.js";
 
@@ -486,10 +485,9 @@ export class FdcPanel {
     constructor({ cpu, arrangement, visualiser, storage }) {
         this._fdc = cpu.fdc;
         this._storage = storage;
-        const { floating, body } = decodedPanel({
+        const { floating, body, part } = decodedPanel({
             id: "fdc",
             title: "Disc controller",
-            menuGroup: MenuGroup.hardware,
             feature: "disc_controller",
             place: () => ({ x: Centred, y: StartEdge }),
             minSize: MinPanelSize,
@@ -521,7 +519,6 @@ export class FdcPanel {
                 </div>
                 <div class="fdc-log"></div>
             </div>`;
-        const part = (className) => body.querySelector(`.${className}`);
         const { chip } = this._fdc.inspect();
         const sections = chip === "8271" ? IntelSections : WdSections;
         this._logLine = chip === "8271" ? intelLogLine : wdLogLine;
