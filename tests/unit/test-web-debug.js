@@ -16,7 +16,7 @@ import { PanelKeys } from "../../src/web/panel-keys.js";
 import { PanelArrangement } from "../../src/web/floating-panel.js";
 import { SysViaPanel } from "../../src/web/sysvia-panel.js";
 import { FdcPanel } from "../../src/web/fdc-panel.js";
-import { cycleCount } from "../../src/lockstep.js";
+import { cycleCount, machineMoment } from "../../src/lockstep.js";
 import {
     bankOffset,
     captureDownloads,
@@ -90,7 +90,7 @@ describe("Debugger", () => {
     /** A debugger on a fresh page, with a loop that puts the machine in it when stopped. */
     const makeDebugger = (symbolSets) => {
         arrangement = new PanelArrangement(() => window.localStorage);
-        arrangement.followMachine(() => cycleCount(cpu));
+        arrangement.followMachine(() => machineMoment(cpu));
         keys = new PanelKeys(arrangement);
         labelFiles = new LabelFiles({ load: vi.fn() });
         const made = new Debugger({
@@ -494,15 +494,17 @@ describe("Debugger", () => {
                 ["a power-on reset", () => cpu.reset(true)],
                 ["a soft reset, which leaves the cycle count", () => cpu.reset(false)],
                 ["a state put in", (saved) => cpu.restoreState(saved)],
-                ["a state put in at the same program counter", (saved) => cpu.restoreState({ ...saved, pc: 0x2002 })],
+                [
+                    "the state it is already in, at the same cycle and program counter",
+                    () => cpu.restoreState(cpu.snapshotState()),
+                ],
             ])("move the cursor to the program counter after %s, and only then", (_, replace) => {
                 const cursorAt = () => addrOf(currentRow()).slice(0, 4);
                 const saved = cpu.snapshotState();
                 keyPress("n");
                 goTo("goto-dis-addr-form", "3000");
                 replace(saved);
-                // Not the once-a-frame refresh, which waits for cycles a soft reset does not take.
-                arrangement.drawAllNow();
+                frames.run();
                 expect(cursorAt()).toBe(hexword(cpu.pc));
                 goTo("goto-dis-addr-form", "3000");
                 arrangement.drawAllNow();

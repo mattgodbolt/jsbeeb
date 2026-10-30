@@ -27,6 +27,11 @@ export function cycleCount(cpu) {
     return cpu.cycleSeconds * cpu.model.cyclesPerSecond + cpu.currentCycles;
 }
 
+/** Changes whenever the machine does: as its cycle count moves, and at a reset or state load, which need not move it. */
+export function machineMoment(cpu) {
+    return `${cpu.resetsAndLoads}:${cycleCount(cpu)}`;
+}
+
 // The CPU runs whole instructions until it reaches its target, so asking for a
 // cycle that some machine stopped at lands on it exactly. The target is set rather
 // than added to, since a loop asking for fractions of a cycle leaves it fractional,

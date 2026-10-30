@@ -387,7 +387,7 @@ export class Debugger {
         this._stopwatchFrom = 0;
         this._inDebugger = false;
         // Where the machine was as the cursor last went to the program counter.
-        this._cursorPlacedAt = { cycles: null, pc: null };
+        this._cursorPlacedAt = null;
         this._hidingPanels = false;
         this._matchedAt = 0;
         this._screenBounds = () => null;
@@ -888,8 +888,7 @@ export class Debugger {
      */
     _disassemblyAt() {
         if (this._loop?.isRunning() || !this._inDebugger) return this.cpu.pc;
-        const { cycles, pc } = this._cursorPlacedAt;
-        if (cycles !== this._arrangement.cycleCount() || pc !== this.cpu.pc) {
+        if (this._cursorPlacedAt !== this._arrangement.machineMoment()) {
             this._disassembly.update(this.cpu.pc);
             this._noteCursorAtPc();
         }
@@ -897,7 +896,7 @@ export class Debugger {
     }
 
     _noteCursorAtPc() {
-        this._cursorPlacedAt = { cycles: this._arrangement.cycleCount(), pc: this.cpu.pc };
+        this._cursorPlacedAt = this._arrangement.machineMoment();
     }
 
     /**
