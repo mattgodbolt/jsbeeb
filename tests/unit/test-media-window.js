@@ -96,7 +96,7 @@ describe("MediaWindow", () => {
             setAutoboot: vi.fn((on) => urlState.set({ autoboot: on ? true : undefined })),
         });
         media.slots = new MediaSlots({ loader: media, drives, processor, urlState });
-        const model = { isAtom: false };
+        const model = { isAtom: false, hasDiscDrives: true };
         confirm = vi.fn();
         deps = {
             media,
@@ -541,12 +541,6 @@ describe("MediaWindow", () => {
             expect(byId("deck-hide").hidden).toBe(true);
             slots().eject(slots().deck);
             expect(byId("deck-hide").hidden).toBe(false);
-        });
-
-        it("starts unfolded on an Atom", () => {
-            deps.model.isAtom = true;
-            make();
-            expect(panel().classList.contains("deck-collapsed")).toBe(false);
         });
     });
 
@@ -1442,11 +1436,12 @@ describe("MediaWindow", () => {
         });
     });
 
-    it("offers only the deck and tapes on the Atom, which has a disc controller but no drives", async () => {
-        deps.model.isAtom = true;
+    it("offers only the deck, unfolded, and tapes on a machine without disc drives", async () => {
+        Object.assign(deps.model, { isAtom: true, hasDiscDrives: false });
         putDiscIn(0, ssd());
         const window = await openWith([elite, chuckie]);
         expect(panel().querySelector(".media-case").hidden).toBe(true);
+        expect(panel().classList.contains("deck-collapsed")).toBe(false);
         expect(document.querySelector('#media-into [data-target="0"]').hidden).toBe(true);
         expect(byId("media-new-disc").hidden).toBe(true);
         expect(byId("media-connect-drive").hidden).toBe(true);

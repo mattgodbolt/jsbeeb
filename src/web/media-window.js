@@ -170,26 +170,22 @@ export class MediaWindow {
         loop.addEventListener("tick", () => this.tick());
         this.pageListeners = new AbortController();
         this.bindDropZone();
-        if (!this.hasDiscDrives) {
+        if (!this.model.hasDiscDrives) {
             this.panel.querySelector(".media-case").hidden = true;
             for (const button of this.list.into.querySelectorAll('[data-target]:not([data-target="tape"])'))
                 button.hidden = true;
             this.list.newDisc.hidden = true;
+            this.list.connect.hidden = true;
         }
-        this.showDeck(!this.hasDiscDrives);
+        this.showDeck(!this.model.hasDiscDrives);
         this.showDrive(false);
         this.showList(true);
         this.setTarget(this.defaultTarget);
         this.renderAll();
     }
 
-    /** The Atom has no disc drives: only the deck, and only tapes to put in it. */
-    get hasDiscDrives() {
-        return !this.model.isAtom;
-    }
-
     get defaultTarget() {
-        return this.hasDiscDrives ? 0 : "tape";
+        return this.model.hasDiscDrives ? 0 : "tape";
     }
 
     get isOpen() {
@@ -212,7 +208,7 @@ export class MediaWindow {
             what.textContent = claimed?.dataset.dropWhat ?? ownWhat;
             words.textContent =
                 claimed?.dataset.dropInto ??
-                (this.hasDiscDrives ? `a disc goes into ${this.targetName}` : "a tape goes in the deck");
+                (this.model.hasDiscDrives ? `a disc goes into ${this.targetName}` : "a tape goes in the deck");
         };
         // dragenter and dragleave fire for every element crossed, so the depth says when the page is left.
         let depth = 0;
@@ -265,6 +261,7 @@ export class MediaWindow {
     /** Takes the window's drop-zone listeners off the page, for a page that builds another window. */
     dispose() {
         this.pageListeners.abort();
+        this.settleNudge?.();
     }
 
     /** Where a disc from this computer goes, in words. */
@@ -288,7 +285,7 @@ export class MediaWindow {
         }
     }
 
-    /** Opens with the list, aimed at drive 0 (the deck, on the Atom). */
+    /** Opens with the list, aimed at drive 0 (the deck, on a machine without drives). */
     open() {
         this.setTarget(this.defaultTarget);
         this.showList(true);
@@ -300,7 +297,7 @@ export class MediaWindow {
     /** Opens from a slot's own line, aimed at that slot. */
     openFor(target) {
         this.floating.open();
-        this.aimAt(this.hasDiscDrives ? target : "tape");
+        this.aimAt(this.model.hasDiscDrives ? target : "tape");
     }
 
     close() {
@@ -616,13 +613,13 @@ export class MediaWindow {
         const { descriptors, failures } = await listing;
         // A newer refresh has been asked for meanwhile: its answer is the one to show.
         if (this.list.latest !== listing) return descriptors;
-        this.list.descriptors = this.hasDiscDrives ? descriptors : descriptors.filter((d) => d.kind === "tape");
+        this.list.descriptors = this.model.hasDiscDrives ? descriptors : descriptors.filter((d) => d.kind === "tape");
         this.list.failures = failures;
         this.list.loaded = true;
         // A source that has dropped out of the listing cannot stay the one chosen.
-        if (this.list.source !== "all" && !descriptors.some((d) => d.source === this.list.source))
+        if (this.list.source !== "all" && !this.list.descriptors.some((d) => d.source === this.list.source))
             this.list.source = "all";
-        this.list.connect.hidden = !this.hasDiscDrives || this.driveSource.connected;
+        this.list.connect.hidden = !this.model.hasDiscDrives || this.driveSource.connected;
         this.list.newDiscDriveOption.hidden = !this.driveSource.connected;
         this.renderChips();
         this.renderList();
@@ -663,7 +660,7 @@ export class MediaWindow {
                     }),
                 ),
             gap,
-            ...(this.hasDiscDrives ? ["disc", "tape"] : ["tape"]).map((kind) =>
+            ...(this.model.hasDiscDrives ? ["disc", "tape"] : ["tape"]).map((kind) =>
                 chip(kind === "disc" ? "Discs" : "Tapes", `Show ${kind}s`, list.kinds[kind], () => {
                     list.kinds[kind] = !list.kinds[kind];
                     this.renderChips();
@@ -1120,7 +1117,7 @@ export class MediaWindow {
     }
 
     showSummary() {
-        const drives = this.hasDiscDrives ? this.processor.fdc.drives : [];
+        const drives = this.model.hasDiscDrives ? this.processor.fdc.drives : [];
         const parts = drives.map((drive, i) => `${i}: ${drive.disc?.name ?? "empty"}`);
         parts.push(`tape: ${this.processor.tapeInterface.tape?.name ?? "empty"}`);
         this.summary.textContent = parts.join(" · ");

@@ -28,6 +28,7 @@ class Model {
         cpuModel,
         isMaster,
         isAtom,
+        hasDiscDrives,
         swram,
         romSockets,
         fdc,
@@ -66,6 +67,8 @@ class Model {
         // twice before it takes the next.
         this.pasteReleaseGapMs = this.isAtom ? 40 : 0;
         this.Fdc = fdc;
+        // Every model is built with a disc controller; an Atom has drives on it only with the DOS ROM.
+        this.hasDiscDrives = hasDiscDrives ?? !this.isAtom;
         this.swram = swram;
         // How many sockets ROMSEL decodes: they fill the top banks, and every bank number pages the socket its low
         // bits pick. A Model B without a sideways board decodes two bits, for four.
@@ -115,7 +118,7 @@ function pickDfs(cmos) {
     return cmos;
 }
 
-function atomModel({ name, synonyms, os, banks }) {
+function atomModel({ name, synonyms, os, banks, hasDiscDrives }) {
     return new Model({
         name,
         shortName: "Atom",
@@ -128,6 +131,7 @@ function atomModel({ name, synonyms, os, banks }) {
         swram: noSwram,
         fdc: NoiseAwareIntelFdc,
         banks,
+        hasDiscDrives,
     });
 }
 
@@ -330,6 +334,7 @@ export const allModels = [
         name: "Acorn Atom (DOS)",
         synonyms: ["Atom-DOS"],
         os: ["atom/Atom_Kernel.rom", "atom/Atom_DOS.rom", "atom/Atom_FloatingPoint.rom", "atom/Atom_Basic.rom"],
+        hasDiscDrives: true,
     }),
     // Neither can be selected as a model: they are fitted to one, by the configuration builder later.
     new Model({
