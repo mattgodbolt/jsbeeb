@@ -6,8 +6,6 @@
  */
 
 import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 
 const WorkflowPath = ".github/workflows/test-and-deploy.yml";
 
@@ -25,6 +23,6 @@ function main() {
     return 1;
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (import.meta.main) {
     process.exit(main());
 }

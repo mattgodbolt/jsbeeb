@@ -6,7 +6,6 @@ import { fork } from "node:child_process";
 import { closeSync, mkdirSync, mkdtempSync, openSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
 import { TickMs } from "../src/emulation-tick.js";
@@ -15,24 +14,28 @@ import {
     BenchmarksPath,
     checkoutRef,
     checkWorkloads,
+    compareWorkload,
+    DiagnosticSides,
     existingCheckout,
     isCheckout,
     ManifestName,
+    onInterrupt,
     pairOptions,
-    pairOptionSpecs,
     pairOptionsHelp,
+    pairOptionSpecs,
     readManifest,
-    RepoRoot,
     removeWorktrees,
+    RepoRoot,
+    reportPairSettings,
+    reportSides,
+    runMain,
     Sides,
 } from "./ab-sides.js";
-import { describeComparison, PercentPerUnit, sampleUntilResolved } from "./ab-stats.js";
 import { SampleSecsDefaults, wholeSlices } from "./ab-sample.js";
 import { bundleSide, findShell, killShells, runShellSample, ShellEngines } from "./shell-bench.js";
 
 const SampleScript = path.join(RepoRoot, "tools", "node-ab-sample.js");
 const Statistics = { total: "mhz", median: "medianSliceMhz" };
-const DiagnosticSides = { a: ["a"], b: ["b"], both: ["a", "b"] };
 const Diagnostics = [
     { option: "cpu-prof", flag: "--cpu-prof" },
     { option: "trace-deopt", flag: "--trace-deopt" },
@@ -219,7 +222,6 @@ async function diagnosticRuns(sides, names, settings) {
 
 async function compare(runner, names, settings) {
     const key = Statistics[settings.statistic];
-    const { minPairs, maxPairs, horizon } = settings;
     const results = [];
     for (const name of names) {
         const raw = [];
@@ -228,10 +230,7 @@ async function compare(runner, names, settings) {
             raw.push({ side, ...result });
             return result[key];
         };
-        const onPair = ({ pairs, ratio, low, high }) =>
-            console.error(`  ${name} ${pairs} pairs: ${ratio.toFixed(3)} [${low.toFixed(3)}, ${high.toFixed(3)}]`);
-        const result = await sampleUntilResolved({ sample, onPair, minPairs, maxPairs, horizon });
-        console.log(describeComparison(name, result, runner.description));
+        const result = await compareWorkload(name, sample, settings, runner.description);
         results.push({ workload: name, ...result, raw });
     }
     return results;
@@ -253,9 +252,7 @@ async function main() {
         removeBundles();
         process.exit(1);
     };
-    process.once("SIGINT", cleanUp);
-    process.once("SIGTERM", cleanUp);
-    process.once("SIGHUP", cleanUp);
+    onInterrupt(cleanUp);
     if (settings.json) assertWritableFile(settings.json);
     if (settings.diagnostics.length > 0) mkdirSync(settings.outDir, { recursive: true });
     try {
@@ -273,19 +270,10 @@ async function main() {
         // Written before the diagnostic runs as well as after, so a failure in them keeps the timings.
         const writeReport = (files) => {
             if (!settings.json) return;
-            const { fakeVideo, statistic, warmupSecs, measureSecs, minPairs, maxPairs, horizon } = settings;
+            const { fakeVideo, statistic, warmupSecs, measureSecs } = settings;
             const report = {
-                a: { spec: sides[0].spec, sha: sides[0].sha },
-                b: { spec: sides[1].spec, sha: sides[1].sha },
-                settings: {
-                    fakeVideo,
-                    statistic,
-                    warmupSecs,
-                    measureSecs,
-                    minPairs,
-                    maxPairs,
-                    horizonPercent: horizon * PercentPerUnit,
-                },
+                ...reportSides(sides),
+                settings: { fakeVideo, statistic, warmupSecs, measureSecs, ...reportPairSettings(settings) },
                 node: process.version,
                 engine: runner.description,
                 results,
@@ -304,13 +292,4 @@ async function main() {
     }
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-    main().then(
-        (code) => process.exit(code),
-        (error) => {
-            console.error(error.message);
-            if (error.cause) console.error(error.cause.message);
-            process.exit(1);
-        },
-    );
-}
+if (import.meta.main) runMain(main);
