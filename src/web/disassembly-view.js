@@ -258,27 +258,23 @@ export class DisassemblyView {
         this.update(ref);
     }
 
-    /** The execute breakpoints on the code the row at `address` shows: unpinned, or pinned to the bank it shows. */
+    /**
+     * The execute breakpoints on the code the row at `address` shows: unpinned, pinned to the bank the panel is set to
+     * show there, or where it shows what is paged, pinned to a bank the CPU would stop in there now.
+     */
     _executeBreakpoints(address) {
-        const bank = this._bankShownAt(address);
-        return this._cpu.breakpoints
+        const cpu = this._cpu;
+        const viewed = this._viewedBankAt(address);
+        const applies = (bank) =>
+            bank === undefined || (viewed === undefined ? cpu.isBankPagedAt(bank, address) : bank === viewed);
+        return cpu.breakpoints
             .list()
-            .filter(
-                (bp) =>
-                    bp.kind === "execute" &&
-                    bp.start <= address &&
-                    address <= bp.end &&
-                    (bp.bank === undefined || bp.bank === bank),
-            );
+            .filter((bp) => bp.kind === "execute" && bp.start <= address && address <= bp.end && applies(bp.bank));
     }
 
-    /** The sideways bank whose code the row at `address` shows, if it shows one. */
-    _bankShownAt(address) {
-        if (address < SidewaysStart || address >= SidewaysEnd) return undefined;
-        const viewed = viewedBank(this._paging.view);
-        if (viewed !== undefined) return viewed;
-        const cpu = this._cpu;
-        return !this._paging.differs(address) && cpu.isBankPagedAt(cpu.pagedBank, address) ? cpu.pagedBank : undefined;
+    /** The sideways bank the panel is set to show at `address`, if it is set to show one there. */
+    _viewedBankAt(address) {
+        return address >= SidewaysStart && address < SidewaysEnd ? viewedBank(this._paging.view) : undefined;
     }
 
     /**
@@ -288,8 +284,7 @@ export class DisassemblyView {
      */
     _toggleBreakpoint(address) {
         const { breakpoints } = this._cpu;
-        const shown = this._bankShownAt(address);
-        const pin = viewedBank(this._paging.view) === undefined ? undefined : shown;
+        const pin = this._viewedBankAt(address);
         const onAddress = this._executeBreakpoints(address).filter(
             (bp) =>
                 bp.start === bp.end &&

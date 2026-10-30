@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DisassemblyView } from "../../src/web/disassembly-view.js";
 import { PagingOverride } from "../../src/web/paging-override.js";
+import { SidewaysStart } from "../../src/paging.js";
 import { FloatingPanel, PanelArrangement } from "../../src/web/floating-panel.js";
 import { PanelKeys } from "../../src/web/panel-keys.js";
 import { StartEdge } from "../../src/web/panel-layout.js";
@@ -77,6 +78,7 @@ describe("DisassemblyView", () => {
     afterEach(teardownDom);
 
     const rows = () => [...document.querySelectorAll("#disassembly .dis_elem:not(.template)")];
+    const rowAtAddress = (address) => rows().find((row) => Number(row.dataset.addr) === address);
     const currentRow = () => document.querySelector("#disassembly .highlight");
     const addrOf = (row) => row.querySelector(".dis_addr").textContent;
     const codeAt = (address) =>
@@ -190,24 +192,31 @@ describe("DisassemblyView", () => {
         expect(cpu.breakpoints.list().map((bp) => bp.id)).toEqual([id]);
     });
 
-    it("pins a breakpoint set in a bank the panel is set to show to that bank, and shows it only there", () => {
-        const Sideways = 0x8000;
-        const rowAt = () => rows().find((row) => Number(row.dataset.addr) === Sideways);
-        const dot = () => rowAt().querySelector(".bp_gutter").classList.contains("active");
+    it("pins a breakpoint set in a bank the panel is set to show to that bank, and clears it there", () => {
         cpu.romSelect(5);
         paging.view = "4";
-        view.update(Sideways);
-        click(rowAt().querySelector(".bp_gutter"));
-        expect(cpu.breakpoints.list()).toEqual([expect.objectContaining({ start: Sideways, bank: 4 })]);
-        expect(dot()).toBe(true);
-        paging.view = "";
-        view.update(Sideways);
-        expect(dot()).toBe(false);
-        cpu.romSelect(4);
-        view.redraw();
-        expect(dot()).toBe(true);
-        click(rowAt().querySelector(".bp_gutter"));
+        view.update(SidewaysStart);
+        const gutter = () => rowAtAddress(SidewaysStart).querySelector(".bp_gutter");
+        click(gutter());
+        expect(cpu.breakpoints.list()).toEqual([expect.objectContaining({ start: SidewaysStart, bank: 4 })]);
+        click(gutter());
         expect(cpu.breakpoints.list()).toEqual([]);
+    });
+
+    it.each([
+        ["paged", "", 4, SidewaysStart, true],
+        ["paged, another bank paged", "", 5, SidewaysStart, false],
+        ["set to its bank, another paged", "4", 5, SidewaysStart, true],
+        ["set to another bank, its bank paged", "5", 4, SidewaysStart, false],
+        ["paged, outside the sideways area", "", 4, 0xc000, true],
+        ["set to another bank, outside the sideways area", "5", 4, 0xc000, true],
+        ["paged, another bank paged, outside the sideways area", "", 5, 0xc000, false],
+    ])("shows a breakpoint pinned to bank 4 where the panel shows %s: %s", (_, shown, paged, address, dot) => {
+        cpu.romSelect(paged);
+        paging.view = shown;
+        cpu.breakpoints.add({ kind: "execute", start: address, bank: 4 });
+        view.update(address);
+        expect(rowAtAddress(address).querySelector(".bp_gutter").classList.contains("active")).toBe(dot);
     });
 
     describe("SHEILA registers", () => {
