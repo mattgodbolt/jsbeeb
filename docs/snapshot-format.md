@@ -124,7 +124,7 @@ No `encoding` field means plain base64, which is how every array before v4 and e
 | `nmiEdge`             | boolean    | NMI edge detected (pending)                                                                                   |
 | `halted`              | boolean    | CPU halted state                                                                                              |
 | `takeInt`             | boolean    | Interrupt pending                                                                                             |
-| `stoppedAtBreakpoint` | boolean    | _(Optional)_ An instruction hook (an execute breakpoint, a run-until) stopped the machine at `pc` (see below) |
+| `stoppedAtBreakpoint` | boolean    | _(Optional)_ An instruction or interrupt hook (execute or IRQ stops, run-until) halted it at `pc` (see below) |
 | `romsel`              | number     | ROM bank select register (&FE30)                                                                              |
 | `acccon`              | number     | ACCCON register (&FE34, Master only)                                                                          |
 | `videoDisplayPage`    | number     | Video display page offset (0 or 0x8000)                                                                       |

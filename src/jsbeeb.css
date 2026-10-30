@@ -969,9 +969,11 @@ small {
 }
 
 #watch-menu,
-.paging-menu {
+.paging-menu,
+.bp-stop-menu {
   position: fixed;
-  z-index: 20;
+  /* Above every floating panel, which stack upwards from 10. */
+  z-index: 1000;
   display: flex;
   flex-direction: column;
   padding: 2px;
@@ -983,12 +985,14 @@ small {
 }
 
 #watch-menu[hidden],
-.paging-menu[hidden] {
+.paging-menu[hidden],
+.bp-stop-menu[hidden] {
   display: none;
 }
 
 #watch-menu .txt-btn,
-.paging-menu .txt-btn {
+.paging-menu .txt-btn,
+.bp-stop-menu .txt-btn {
   color: #cccccc;
   text-align: left;
   font-family: inherit;
@@ -1125,6 +1129,16 @@ small {
   flex: none;
   width: 16ch;
   text-align: left;
+}
+
+#breakpoints-panel .bp-stop-on {
+  flex: none;
+}
+
+.bp-stop-menu .bp-stop-rule {
+  margin: 2px 0;
+  border-color: #555555;
+  opacity: 1;
 }
 
 #breakpoints-panel .bp-remove {

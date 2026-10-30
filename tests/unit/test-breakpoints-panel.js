@@ -288,4 +288,135 @@ describe("BreakpointsPanel", () => {
         await revisit(null);
         expect(cpu.breakpoints.list()).toEqual([]);
     });
+
+    describe("Stop on", () => {
+        const menu = () => document.querySelector(".bp-stop-menu");
+        const choices = () => [...menu().querySelectorAll(".bp-stop-choice")];
+        const openMenu = () => click(panel.panel.querySelector(".bp-stop-on"));
+        const pick = (name) => {
+            openMenu();
+            click(choices().find((choice) => choice.textContent === name));
+        };
+        const specs = () =>
+            cpu.breakpoints.list().map(({ kind, start, end, line, condition, label }) => ({
+                kind,
+                start,
+                end,
+                line,
+                condition,
+                label,
+            }));
+        const Events = ["BRK", "Undocumented opcode", "IRQ", "NMI", "Vsync", "Raster line"];
+        const preset = (kind, start, end, label, condition) => ({
+            kind,
+            start,
+            end,
+            line: undefined,
+            condition,
+            label,
+        });
+
+        it.each([
+            [
+                "B-DFS1.2",
+                [
+                    ["Code in I/O", preset("execute", 0xfc00, 0xfeff, "I/O")],
+                    ["ROMSEL write", preset("write", 0xfe30, 0xfe3f, "ROMSEL")],
+                    ["Disc command", preset("write", 0xfe80, 0xfe80, "disc command")],
+                    ["Sound write", preset("write", 0xfe40, 0xfe40, "sound", "(value AND 15) = 0")],
+                ],
+            ],
+            [
+                "Master",
+                [
+                    ["Code in I/O", preset("execute", 0xfc00, 0xfeff, "I/O")],
+                    ["ROMSEL write", preset("write", 0xfe30, 0xfe33, "ROMSEL")],
+                    ["ACCCON write", preset("write", 0xfe34, 0xfe37, "ACCCON")],
+                    ["Disc command", preset("write", 0xfe28, 0xfe28, "disc command")],
+                    ["Sound write", preset("write", 0xfe40, 0xfe40, "sound", "(value AND 15) = 0")],
+                ],
+            ],
+            ["Atom", []],
+        ])(
+            "on the %s offers the stops with no address, then those at the machine's registers",
+            async (model, presets) => {
+                await revisit(findModel(model));
+                openMenu();
+                expect(choices().map((choice) => choice.textContent)).toEqual([
+                    ...Events,
+                    ...presets.map(([name]) => name),
+                ]);
+                expect(menu().querySelector(".bp-stop-rule").hidden).toBe(presets.length === 0);
+                for (const [name] of presets) pick(name);
+                expect(specs()).toEqual(presets.map(([, spec]) => spec));
+            },
+        );
+
+        it("stops at a write that strobes the sound chip, and not at the write that ends it", () => {
+            const Program = 0x2000;
+            const SoundStrobe = 0x2007;
+            // LDA #8, STA &FE40, LDA #0, STA &FE40, JMP &200A
+            const Strobes = [0xa9, 0x08, 0x8d, 0x40, 0xfe, 0xa9, 0x00, 0x8d, 0x40, 0xfe, 0x4c, 0x0a, 0x20];
+            cpu.reset(true);
+            Strobes.forEach((byte, i) => cpu.writemem(Program + i, byte));
+            cpu.pc = Program;
+            cpu.p.i = true;
+            const hits = [];
+            cpu.breakpoints.onHit((hit) => hits.push(hit));
+            pick("Sound write");
+            expect(cpu.execute(1000)).toBe(false);
+            expect(hits).toEqual([expect.objectContaining({ pc: SoundStrobe, value: 0 })]);
+        });
+
+        it("adds a stop with no address, closing the menu and leaving the keyboard to the machine", () => {
+            input().focus();
+            pick("BRK");
+            pick("IRQ");
+            expect(menu().hidden).toBe(true);
+            expect(document.activeElement).toBe(document.body);
+            expect(specs().map(({ kind }) => kind)).toEqual(["brk", "irq"]);
+            expect(rows().map(rowText)).toEqual([
+                ["", "BRK", "any BRK", "always", "0", "stop", "×"],
+                ["", "IRQ", "IRQ entry", "always", "0", "stop", "×"],
+            ]);
+        });
+
+        it("stops at the raster line typed in the field, which it marks when it holds none", () => {
+            pick("Raster line");
+            expect(input().title).toBe("Type the TV line to stop at here, then pick Raster line");
+            expect(cpu.breakpoints.list()).toEqual([]);
+            type(input(), "100");
+            pick("Raster line");
+            expect(input().value).toBe("");
+            expect(specs()).toEqual([{ ...preset("line"), line: 100 }]);
+            click(rows()[0].querySelector(".bp-line"));
+            const line = rows()[0].querySelector(".bp-edit");
+            type(line, "x");
+            enter(line);
+            expect(line.title).toBe("Line x is not a whole number from 0");
+            type(line, "120");
+            enter(line);
+            expect(rowText(rows()[0])).toEqual(["", "LN", "line 120", "always", "0", "stop", "×"]);
+        });
+
+        it("closes on a click elsewhere, or on Escape, which goes no further", () => {
+            openMenu();
+            document.body.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true }));
+            expect(menu().hidden).toBe(true);
+            openMenu();
+            const pageSaw = vi.fn();
+            document.addEventListener("keydown", pageSaw);
+            document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+            document.removeEventListener("keydown", pageSaw);
+            expect(menu().hidden).toBe(true);
+            expect(pageSaw).not.toHaveBeenCalled();
+            expect(cpu.breakpoints.list()).toEqual([]);
+        });
+
+        it("saves a raster line, and puts it back on the next visit", async () => {
+            cpu.breakpoints.add({ kind: "line", line: 50, hitCount: 2 });
+            await revisit(findModel("B-DFS1.2"));
+            expect(cpu.breakpoints.list()).toEqual([expect.objectContaining({ kind: "line", line: 50, hitCount: 2 })]);
+        });
+    });
 });

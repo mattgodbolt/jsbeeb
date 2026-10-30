@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { describeHit } from "../../src/breakpoints.js";
+import { NmiSource } from "../../src/6502.js";
 import { fake6502 } from "../../src/fake6502.js";
 
 describe("Breakpoints", () => {
@@ -52,15 +53,18 @@ describe("Breakpoints", () => {
         expect(hits).toEqual([expect.objectContaining({ id, action: "stop", hits: 1, ...hit })]);
     });
 
-    it("needs the CPU's slower path only while an enabled breakpoint is set", () => {
-        expect(cpu.onFastPath).toBe(true);
-        const id = breakpoints.add({ kind: "write", start: Data, enabled: false });
-        expect(cpu.onFastPath).toBe(true);
-        breakpoints.update(id, { enabled: true });
-        expect(cpu.onFastPath).toBe(false);
-        breakpoints.remove(id);
-        expect(cpu.onFastPath).toBe(true);
-    });
+    it.each([{ kind: "write", start: Data }, { kind: "irq" }, { kind: "line", line: 0 }])(
+        "needs the CPU's slower path only while an enabled breakpoint is set: %j",
+        (spec) => {
+            expect(cpu.onFastPath).toBe(true);
+            const id = breakpoints.add({ ...spec, enabled: false });
+            expect(cpu.onFastPath).toBe(true);
+            breakpoints.update(id, { enabled: true });
+            expect(cpu.onFastPath).toBe(false);
+            breakpoints.remove(id);
+            expect(cpu.onFastPath).toBe(true);
+        },
+    );
 
     it("stops on the hit count's hit and every one after", () => {
         const id = breakpoints.add({ kind: "execute", start: Store, hitCount: 3 });
@@ -131,6 +135,7 @@ describe("Breakpoints", () => {
                 start: Load,
                 end: Load,
                 bank: undefined,
+                line: undefined,
                 condition: "A = 1",
                 hitCount: 1,
                 enabled: true,
@@ -157,6 +162,11 @@ describe("Breakpoints", () => {
         [{ kind: "read", start: 0, condition: "A =" }, 'Bad condition "A =": expected a value at column 4'],
         [{ kind: "read", start: 0, condition: 5 }, "Breakpoint condition 5 is not text"],
         [{ kind: "read", start: 0, enabled: "false" }, "Breakpoint enabled false is not true or false"],
+        [{ kind: "brk", start: 0 }, "A breakpoint of kind brk has no address"],
+        [{ kind: "irq", bank: 1 }, "A breakpoint of kind irq has no address"],
+        [{ kind: "line" }, "Line undefined is not a whole number from 0"],
+        [{ kind: "line", line: -1 }, "Line -1 is not a whole number from 0"],
+        [{ kind: "read", start: 0, line: 3 }, "A breakpoint of kind read has no line"],
     ])("refuses %j", (spec, message) => {
         expect(() => breakpoints.add(spec)).toThrow(message);
         expect(breakpoints.list()).toEqual([]);
@@ -184,5 +194,129 @@ describe("Breakpoints", () => {
     it("refuses to change or remove a breakpoint that is not there", () => {
         expect(() => breakpoints.remove(7)).toThrow("No breakpoint with id 7");
         expect(() => breakpoints.update(7, {})).toThrow("No breakpoint with id 7");
+    });
+
+    describe("with no address", () => {
+        const Brk = 0x00;
+        const Slo = 0x03;
+        const Rti = 0x40;
+        const SysViaIer = 0xfe4e;
+        const EnableVsyncIrq = 0x82;
+        const NmiVector = 0xfffa;
+        const IrqVector = 0xfffe;
+        const NmiHandler = 0x2100;
+        const IrqHandler = 0x2110;
+        const InVsyncCycles = 100;
+        const StackPage = 0x01;
+        const PastVsyncCycles = 10000;
+        const Line = 100;
+        const Field = 40000;
+        const LongestInstruction = 7;
+
+        const runField = () => cpu.execute(Field + Field / 2);
+
+        beforeEach(() => {
+            for (const [vector, handler] of [
+                [NmiVector, NmiHandler],
+                [IrqVector, IrqHandler],
+            ]) {
+                cpu.writemem(vector, handler & 0xff);
+                cpu.writemem(vector + 1, handler >> 8);
+                cpu.writemem(handler, Rti);
+            }
+        });
+
+        it.each([
+            ["brk", () => cpu.writemem(Jump, Brk), { access: "execute", address: Jump, pc: Jump }],
+            ["undocumented", () => cpu.writemem(Jump, Slo), { access: "execute", address: Jump, pc: Jump }],
+            [
+                "irq",
+                () => {
+                    cpu.sysvia.write(SysViaIer, EnableVsyncIrq);
+                    cpu.p.i = false;
+                },
+                { access: "interrupt", address: IrqHandler },
+            ],
+            ["nmi", () => cpu.setNmi(NmiSource.fdc, true), { access: "interrupt", address: NmiHandler }],
+        ])(
+            "a %s breakpoint stops the machine before the instruction or handler, saying what hit it",
+            (kind, set, hit) => {
+                set();
+                const id = breakpoints.add({ kind });
+                expect(runField()).toBe(false);
+                expect(hits).toEqual([expect.objectContaining({ id, kind, action: "stop", hits: 1, ...hit })]);
+                expect(cpu.pc).toBe(hits[0].address);
+                expect([Start, Store, Load, Jump]).toContain(hits[0].pc);
+            },
+        );
+
+        it("runs the handler an interrupt stopped at without an execute breakpoint there stopping it again", () => {
+            cpu.setNmi(NmiSource.fdc, true);
+            breakpoints.add({ kind: "nmi" });
+            breakpoints.add({ kind: "execute", start: NmiHandler });
+            expect(runField()).toBe(false);
+            expect(cpu.snapshotState().stoppedAtBreakpoint).toBe(true);
+            expect(runField()).toBe(true);
+            expect(hits.map((hit) => hit.kind)).toEqual(["nmi"]);
+        });
+
+        it("takes a BRK for no IRQ", () => {
+            cpu.writemem(Jump, Brk);
+            breakpoints.add({ kind: "irq" });
+            expect(runField()).toBe(true);
+            expect(hits).toEqual([]);
+        });
+
+        it("stops at an NMI that takes over a BRK part way through, as on the 6502", () => {
+            cpu.writemem(Jump, Brk);
+            let raised = false;
+            cpu.debugWrite.add((address) => {
+                if (raised || address >> 8 !== StackPage) return false;
+                cpu.setNmi(NmiSource.fdc, true);
+                raised = true;
+                return false;
+            });
+            breakpoints.add({ kind: "nmi" });
+            expect(runField()).toBe(false);
+            expect(hits).toEqual([expect.objectContaining({ kind: "nmi", address: NmiHandler, pc: Jump + 2 })]);
+        });
+
+        it("waits for vsync to start again after a state is restored part way through it", () => {
+            breakpoints.add({ kind: "vsync" });
+            expect(runField()).toBe(false);
+            const inVsync = cpu.snapshotState();
+            expect(cpu.execute(PastVsyncCycles)).toBe(true);
+            cpu.restoreState(inVsync);
+            expect(cpu.execute(InVsyncCycles)).toBe(true);
+            expect(hits).toHaveLength(1);
+        });
+
+        it.each([
+            ["vsync", { kind: "vsync" }, (beam) => beam.inVSync],
+            ["line", { kind: "line", line: Line }, (beam) => beam.line === Line],
+        ])("a %s breakpoint stops once a field, as it starts to hold", (_, spec, holds) => {
+            breakpoints.add(spec);
+            const stops = [];
+            for (let field = 0; field < 3; field++) {
+                expect(runField()).toBe(false);
+                expect(holds(cpu.video.beamPosition())).toBe(true);
+                stops.push(cpu.currentCycles);
+            }
+            for (const gap of [stops[1] - stops[0], stops[2] - stops[1]])
+                expect(Math.abs(gap - Field)).toBeLessThan(LongestInstruction);
+        });
+
+        it.each([
+            [{ kind: "brk", access: "execute", address: 0x1234, pc: 0x1234 }, "BRK at pc $1234"],
+            [
+                { kind: "undocumented", access: "execute", address: 0x1234, pc: 0x1234 },
+                "undocumented opcode at pc $1234",
+            ],
+            [{ kind: "irq", access: "interrupt", address: 0xdc1c, pc: 0x1234 }, "IRQ to $dc1c from pc $1234"],
+            [{ kind: "vsync", access: "execute", address: 0x1234, pc: 0x1234 }, "vsync at pc $1234"],
+            [{ kind: "line", access: "execute", address: 0x1234, pc: 0x1234, line: 7 }, "line 7 at pc $1234"],
+        ])("describes a hit of %j", (hit, what) => {
+            expect(describeHit({ id: 2, hits: 1, ...hit })).toBe(`Breakpoint 2: ${what}, hit 1`);
+        });
     });
 });

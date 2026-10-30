@@ -214,6 +214,35 @@ describe("MachineSession watching execution", () => {
         expect(session.hitBreakpoint()).toEqual({ id, type: "write", address: Counter, value: 0x42 });
     });
 
+    it("stops only as the machine takes an IRQ with the vsync flag set, at the handler the vector names", async () => {
+        const IrqVector = 0xfffe;
+        const SysViaIfr = 0xfe4d;
+        const VsyncFlag = 0x02;
+        // The System VIA's timer 1 interrupts twice as often as vsync, so most IRQs are not vsync's.
+        const Stops = 4;
+        const id = session.addBreakpoint("irq", undefined, { condition: "?&FE4D AND 2" });
+
+        for (let stop = 0; stop < Stops; stop++) {
+            await session.runFor(2 * CyclesPerInterlacedFrame);
+            expect(session.hitBreakpoint()).toEqual({ id, type: "irq", address: vectorAt(session, IrqVector) });
+            expect(session.readMemory(SysViaIfr, 1)[0] & VsyncFlag).toBe(VsyncFlag);
+            session.resetBreakpointHits();
+        }
+        expect(session.listBreakpoints()).toEqual([expect.objectContaining({ id, type: "irq", address: undefined })]);
+    });
+
+    it("stops at the start of a TV line, changing and listing it by its line", async () => {
+        const Line = 100;
+        const LaterLine = 120;
+        const id = session.addBreakpoint("line", undefined, { line: Line });
+        session.updateBreakpoint(id, { line: LaterLine });
+
+        await session.runFor(2 * CyclesPerInterlacedFrame);
+
+        expect(session.hitBreakpoint()).toMatchObject({ id, type: "line" });
+        expect(session.listBreakpoints()).toEqual([expect.objectContaining({ id, type: "line", line: LaterLine })]);
+    });
+
     it("keeps the first hits a log breakpoint logs between drains, counting the rest", async () => {
         const id = session.addBreakpoint("execute", 0x0000, { end: 0xffff, action: "log" });
         await session.runFor(3 * CyclesPerInterlacedFrame);

@@ -1574,7 +1574,7 @@ describe("Debugger", () => {
             expect(watchRows()).toEqual([["$0070", "$0105", "hex16", "brk", "\u00d7"]]);
         });
 
-        it("closes the menu on a click elsewhere, or on Escape, which goes on to the page", () => {
+        it("closes the menu on a click elsewhere, or on Escape, which goes no further", () => {
             dbgr.debug(cpu.pc);
             goTo("goto-mem-addr-form", "$70");
             rightClick(memByte(0x70));
@@ -1587,7 +1587,7 @@ describe("Debugger", () => {
             document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
             document.removeEventListener("keydown", pageSaw);
             expect(watchMenu().hidden).toBe(true);
-            expect(pageSaw).toHaveBeenCalledOnce();
+            expect(pageSaw).not.toHaveBeenCalled();
             expect(watchRows()).toEqual([]);
         });
 

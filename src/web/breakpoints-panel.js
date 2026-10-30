@@ -1,21 +1,114 @@
 import { hexword } from "../hex.js";
 import { SidewaysEnd, SidewaysStart } from "../paging.js";
-import { textButton } from "./dom-utils.js";
+import { machineSheilaBlocks } from "../sheila.js";
+import { placePopup, popupBehaviour, textButton } from "./dom-utils.js";
 import { DebugGroup, FloatingPanel, MenuGroup, panelShell } from "./floating-panel.js";
 import { EndEdge } from "./panel-layout.js";
 
 const MinPanelSize = { w: 360, h: 100 };
 const StorageKey = "debugBreakpoints";
 const StoreVersion = 1;
-const SavedFields = ["kind", "start", "end", "bank", "condition", "hitCount", "enabled", "action", "label"];
-const Kinds = [
+const SavedFields = ["kind", "start", "end", "bank", "line", "condition", "hitCount", "enabled", "action", "label"];
+const AddressKinds = [
     { kind: "execute", short: "X", name: "Execute", title: "Acts before the CPU runs an instruction here" },
     { kind: "read", short: "R", name: "Read", title: "Acts after an instruction reads here, fetches included" },
     { kind: "write", short: "W", name: "Write", title: "Acts after an instruction writes here" },
     { kind: "access", short: "RW", name: "Read or write", title: "Acts after an instruction reads or writes here" },
 ];
-const KindOf = new Map(Kinds.map((kind) => [kind.kind, kind]));
+const EventKinds = [
+    { kind: "brk", short: "BRK", name: "BRK", where: "any BRK", title: "Acts before the CPU runs a BRK" },
+    {
+        kind: "undocumented",
+        short: "UND",
+        name: "Undocumented opcode",
+        where: "any undocumented opcode",
+        title: "Acts before the CPU runs an opcode its makers left undocumented",
+    },
+    {
+        kind: "irq",
+        short: "IRQ",
+        name: "IRQ",
+        where: "IRQ entry",
+        title: "Acts as the CPU takes an IRQ, before its handler runs",
+    },
+    {
+        kind: "nmi",
+        short: "NMI",
+        name: "NMI",
+        where: "NMI entry",
+        title: "Acts as the CPU takes an NMI, before its handler runs",
+    },
+    {
+        kind: "vsync",
+        short: "VS",
+        name: "Vsync",
+        where: "vsync start",
+        title: "Acts before the first instruction in vsync",
+    },
+    {
+        kind: "line",
+        short: "LN",
+        name: "Raster line",
+        where: "line",
+        title: "Acts before the first instruction on the TV line typed in the field beside, counted from vsync",
+    },
+];
+const KindOf = new Map([...AddressKinds, ...EventKinds].map((kind) => [kind.kind, kind]));
 const RangeSeparator = /\s*-\s*/;
+const WholeNumber = /^\d+$/;
+const IoStart = 0xfc00;
+const IoEnd = 0xfeff;
+// The System VIA's port B drives IC32's latch; a write of 0 to its low four bits clears bit 0, the sound chip's
+// write enable.
+const SoundWriteCondition = "(value AND 15) = 0";
+
+/**
+ * Common stops that are ordinary address breakpoints on the machine `cpu` emulates, each at the SHEILA register it
+ * watches, so left out where the machine has no such register.
+ */
+function presetStops(cpu) {
+    if (cpu.model.isAtom) return [];
+    const blocks = machineSheilaBlocks(cpu);
+    /** The first address taking a write to `name`, or the whole of its block where it is the block's one register. */
+    const written = (name) => {
+        for (const block of blocks) {
+            const index = block.registers.findIndex((register) => register.write === name);
+            if (index < 0) continue;
+            const start = block.start + index;
+            return { start, end: block.registers.length === 1 ? block.end - 1 : start };
+        }
+        return null;
+    };
+    const presets = [
+        {
+            name: "Code in I/O",
+            title: "Acts before the CPU runs an instruction in &FC00-&FEFF",
+            spec: { kind: "execute", start: IoStart, end: IoEnd, label: "I/O" },
+        },
+    ];
+    for (const [register, name, label, title, condition] of [
+        ["ROMSEL", "ROMSEL write", "ROMSEL", "Acts after a write to ROMSEL, paging a sideways bank", undefined],
+        ["ACCCON", "ACCCON write", "ACCCON", "Acts after a write to ACCCON, paging shadow and other RAM", undefined],
+        [
+            "COMMAND",
+            "Disc command",
+            "disc command",
+            "Acts after a command is written to the disc controller",
+            undefined,
+        ],
+        [
+            "ORB",
+            "Sound write",
+            "sound",
+            "Acts after a System VIA write that strobes the sound chip",
+            SoundWriteCondition,
+        ],
+    ]) {
+        const range = written(register);
+        if (range) presets.push({ name, title, spec: { kind: "write", ...range, condition, label } });
+    }
+    return presets;
+}
 
 function rangeText({ start, end }) {
     return start === end ? `$${hexword(start)}` : `$${hexword(start)}-$${hexword(end)}`;
@@ -54,7 +147,7 @@ export class BreakpointsPanel {
         /** @type {{id: number, field: string, input: HTMLInputElement} | null} */
         this._editing = null;
         this._rendering = false;
-        this._newKind = Kinds[0];
+        this._newKind = AddressKinds[0];
 
         const { panel, body } = panelShell({ id: "breakpoints", title: "Breakpoints", feature: "breakpoints" });
         this.panel = panel;
@@ -73,7 +166,22 @@ export class BreakpointsPanel {
         form.prepend(this._kindButton);
         this._showNewKind(this._newKind);
         this._kindButton.addEventListener("click", () =>
-            this._showNewKind(Kinds[(Kinds.indexOf(this._newKind) + 1) % Kinds.length]),
+            this._showNewKind(AddressKinds[(AddressKinds.indexOf(this._newKind) + 1) % AddressKinds.length]),
+        );
+        this._stopOn = textButton("bp-stop-on", "Stop on…", "Add a stop that has no address, or a common one");
+        this._stopOn.setAttribute("aria-haspopup", "menu");
+        this._stopOn.setAttribute("aria-expanded", "false");
+        form.append(this._stopOn);
+        this._stopMenu = document.createElement("div");
+        this._stopMenu.className = "bp-stop-menu";
+        this._stopMenu.setAttribute("role", "menu");
+        this._stopMenu.hidden = true;
+        document.body.append(this._stopMenu);
+        this._stopOn.addEventListener("click", () => this._showStopMenu(this._stopMenu.hidden));
+        popupBehaviour(
+            this._stopMenu,
+            () => (this._stopMenu.hidden ? null : [this._stopOn, this._stopMenu]),
+            () => this._showStopMenu(false),
         );
         this._input.addEventListener("input", () => this._invalid(this._input, null));
         form.addEventListener("submit", (e) => {
@@ -97,10 +205,12 @@ export class BreakpointsPanel {
             () => this.update(),
         );
         this.floating.addEventListener("open", () => refresh.drawNow());
+        this.floating.addEventListener("close", () => this._showStopMenu(false));
     }
 
     /** Shows `cpu`'s breakpoints, first putting back the ones saved on an earlier visit. */
     setCpu(cpu) {
+        this._showStopMenu(false);
         this._cpu = cpu;
         this._breakpoints = cpu.breakpoints;
         this._restore();
@@ -124,7 +234,7 @@ export class BreakpointsPanel {
             const hitText = hitCount > 1 ? `${hits} of ${hitCount}` : `${hits}`;
             const hitCell = this._hitCells.get(id);
             if (hitCell && hitCell.textContent !== hitText) hitCell.textContent = hitText;
-            const nameText = label ?? this._nameOf(start, bank) ?? "";
+            const nameText = label ?? (start === undefined ? undefined : this._nameOf(start, bank)) ?? "";
             const nameCell = this._nameCells.get(id);
             if (nameCell && nameCell.textContent !== nameText) nameCell.textContent = nameText;
         }
@@ -164,6 +274,48 @@ export class BreakpointsPanel {
         }
         this._input.value = "";
         this._input.blur();
+    }
+
+    _showStopMenu(show) {
+        if (show === !this._stopMenu.hidden) return;
+        this._stopMenu.hidden = !show;
+        this._stopOn.setAttribute("aria-expanded", String(show));
+        if (!show) return;
+        const choice = ({ name, title }, add) => {
+            const button = textButton("bp-stop-choice", name, title);
+            button.setAttribute("role", "menuitem");
+            button.addEventListener("click", () => {
+                this._showStopMenu(false);
+                add();
+                this._input.blur();
+            });
+            return button;
+        };
+        const rule = document.createElement("hr");
+        rule.className = "bp-stop-rule";
+        this._stopMenu.replaceChildren(
+            ...EventKinds.map((kind) => choice(kind, () => this._addEvent(kind.kind))),
+            rule,
+            ...presetStops(this._cpu).map((preset) => choice(preset, () => this._breakpoints.add(preset.spec))),
+        );
+        rule.hidden = rule.nextSibling === null;
+        const { left, top, bottom } = this._stopOn.getBoundingClientRect();
+        const height = this._stopMenu.offsetHeight;
+        placePopup(this._stopMenu, left, bottom + height <= window.innerHeight ? bottom : top - height);
+    }
+
+    _addEvent(kind) {
+        if (kind !== "line") {
+            this._breakpoints.add({ kind });
+            return;
+        }
+        const text = this._input.value.trim();
+        if (!WholeNumber.test(text)) {
+            this._invalid(this._input, "Type the TV line to stop at here, then pick Raster line");
+            return;
+        }
+        this._breakpoints.add({ kind, line: Number(text) });
+        this._input.value = "";
     }
 
     _invalid(input, message) {
@@ -219,14 +371,26 @@ export class BreakpointsPanel {
         enable.addEventListener("click", () => change({ enabled: !enabled }));
         cell("", enable);
 
-        const { short, title } = KindOf.get(kind);
+        const { short, where: eventWhere, title } = KindOf.get(kind);
         cell("bp-kind", short).title = title;
 
-        const where = textButton("bp-where", rangeText(breakpoint), `Show ${rangeText(breakpoint)}`);
-        where.addEventListener("click", () =>
-            kind === "execute" ? this._showCode(start, bank) : this._showMemory(start, bank),
-        );
-        const whereCell = cell("bp-address", where);
+        const whereCell = cell("bp-address");
+        if (start === undefined) {
+            whereCell.append(eventWhere);
+            if (kind === "line") {
+                const line = textButton("bp-line", String(breakpoint.line), "");
+                this._editOnClick(line, { id, field: "line" }, String(breakpoint.line), "TV line", (text) =>
+                    change({ line: WholeNumber.test(text.trim()) ? Number(text) : text }),
+                );
+                whereCell.append(" ", this._orEditing(line, id, "line"));
+            }
+        } else {
+            const where = textButton("bp-where", rangeText(breakpoint), `Show ${rangeText(breakpoint)}`);
+            where.addEventListener("click", () =>
+                kind === "execute" ? this._showCode(start, bank) : this._showMemory(start, bank),
+            );
+            whereCell.append(where);
+        }
         const name = document.createElement("span");
         name.className = "bp-name";
         this._nameCells.set(id, name);
@@ -262,7 +426,9 @@ export class BreakpointsPanel {
         actionButton.addEventListener("click", () => change({ action: action === "stop" ? "log" : "stop" }));
         cell("", actionButton);
 
-        const remove = textButton("bp-remove", "×", `Remove the breakpoint at ${rangeText(breakpoint)}`);
+        const what =
+            start === undefined ? `the ${eventWhere} breakpoint` : `the breakpoint at ${rangeText(breakpoint)}`;
+        const remove = textButton("bp-remove", "×", `Remove ${what}`);
         remove.setAttribute("aria-label", remove.title);
         remove.addEventListener("click", () => this._breakpoints.remove(id));
         cell("", remove);
