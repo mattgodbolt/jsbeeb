@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DisassemblyView } from "../../src/web/disassembly-view.js";
+import { PagingOverride } from "../../src/web/paging-override.js";
 import { FloatingPanel, PanelArrangement } from "../../src/web/floating-panel.js";
 import { PanelKeys } from "../../src/web/panel-keys.js";
 import { StartEdge } from "../../src/web/panel-layout.js";
@@ -10,7 +11,7 @@ import { fake6502 } from "../../src/fake6502.js";
 import { findModel, TEST_65C12 } from "../../src/models.js";
 import { FakeVideo } from "../../src/video.js";
 import { hexbyte, parseAddr } from "../../src/hex.js";
-import { domFromIndexHtml, stubResizeObserver, teardownDom } from "./helpers.js";
+import { domFromIndexHtml, romless, stubResizeObserver, teardownDom } from "./helpers.js";
 
 describe("DisassemblyView", () => {
     let cpu;
@@ -20,12 +21,7 @@ describe("DisassemblyView", () => {
     let showMemory;
     let offerWatch;
     let runToCursor;
-
-    const dump = (from, to) => {
-        const bytes = [];
-        for (let at = from; at < to; at++) bytes.push(cpu.peekmem(at));
-        return { hex: bytes.map(hexbyte), asc: bytes.map((b) => (b >= 32 && b < 128 ? String.fromCharCode(b) : ".")) };
-    };
+    let paging;
 
     const useCpu = async (model) => {
         cpu = fake6502(model, { video });
@@ -33,6 +29,7 @@ describe("DisassemblyView", () => {
         cpu.writemem(0x2000, 0xa9);
         cpu.writemem(0x2001, 0x41);
         cpu.pc = 0x2000;
+        paging.setCpu(cpu);
         view.setCpu(cpu);
     };
 
@@ -56,12 +53,16 @@ describe("DisassemblyView", () => {
         showMemory = vi.fn();
         offerWatch = vi.fn();
         runToCursor = vi.fn();
+        paging = new PagingOverride({ floating, changed: () => view.redraw() });
         view = new DisassemblyView({
             floating,
             keys,
+            paging,
             names: () => NoNames,
-            dump,
-            resolve: parseAddr,
+            resolve: (text) => {
+                const address = parseAddr(text);
+                return address === undefined ? undefined : { address, view: paging.view };
+            },
             showing: () => {},
             showMemory,
             offerWatch,
@@ -235,9 +236,15 @@ describe("DisassemblyView", () => {
             expect(codeAt(0x2002).textContent).toBe("JSR $fe40");
         });
 
+        it("offers no other view of memory on a machine without paging", () => {
+            const picker = document.querySelector("#disassembly-panel .paging-picker");
+            expect(picker.hidden).toBe(false);
+            paging.setCpu({ model: findModel("Atom") });
+            expect(picker.hidden).toBe(true);
+        });
+
         it("names the registers the model has where it has them", async () => {
-            const master = findModel("Master");
-            await useCpu(Object.assign(Object.create(Object.getPrototypeOf(master)), master, { os: [] }));
+            await useCpu(romless("Master"));
             program([0x8d, 0x34, 0xfe, 0x8d, 0x28, 0xfe, 0xad, 0x80, 0xfe]);
             view.update(cpu.pc);
             expect(codeAt(0x2002).textContent).toBe("STA $fe34 ; Paging.ACCCON");

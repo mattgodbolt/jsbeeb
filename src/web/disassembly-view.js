@@ -1,4 +1,4 @@
-import { hexword } from "../hex.js";
+import { byteChar, hexbyte, hexword } from "../hex.js";
 import { nameUrl } from "../symbol-sets.js";
 import { machineSheilaBlocks, sheilaName } from "../sheila.js";
 import { bindGotoForm, externalLink, FittedRows, labelHtml } from "./debug-dom.js";
@@ -6,16 +6,6 @@ import { keyLine } from "./panel-keys.js";
 
 const InitialRows = 16;
 const WheelPixelsPerInstruction = 30;
-
-const Writes = /^\*?(?:ST[AXYZ]|SAX|SH[ASXY])\b/;
-const ReadModifyWrites = /^\*?(?:ASL|LSR|ROL|ROR|INC|DEC|TSB|TRB|DCP|ISB|RLA|RRA|SLO|SRE)\b/;
-
-/** @returns {("read" | "write")[]} */
-function operandAccesses(instruction) {
-    if (Writes.test(instruction)) return ["write"];
-    if (ReadModifyWrites.test(instruction)) return ["read", "write"];
-    return ["read"];
-}
 
 function nameTitle({ name, set }, addr) {
     const url = nameUrl(set, name, addr);
@@ -68,10 +58,10 @@ export class DisassemblyView {
      * @param {object} options
      * @param {import("./floating-panel.js").FloatingPanel} options.floating - its panel, whose keys answer while open
      * @param {import("./panel-keys.js").PanelKeys} options.keys
+     * @param {import("./paging-override.js").PagingOverride} options.paging - what it reads memory through
      * @param {() => import("../symbol-names.js").SymbolNames} options.names - the names matched to memory now
-     * @param {(from: number, to: number) => {hex: string[], asc: string[]}} options.dump - the bytes from `from` up to
-     * `to`, as hex and as text
-     * @param {(text: string) => number | undefined} options.resolve - the address a "Go to" text names
+     * @param {(text: string) => {address: number, view: string} | undefined} options.resolve - the address a "Go to"
+     * text names, and the view to show it in
      * @param {(sets: Set<import("../symbol-names.js").SymbolSet>) => void} options.showing - the sets whose names it
      * shows
      * @param {(address: number) => void} options.showMemory - follows a memory operand
@@ -80,9 +70,9 @@ export class DisassemblyView {
      * @param {() => void} options.runToCursor
      * @param {() => void} options.refit - redraws it, once its rows have changed in number
      */
-    constructor({ floating, keys, names, dump, resolve, showing, showMemory, offerWatch, runToCursor, refit }) {
+    constructor({ floating, keys, paging, names, resolve, showing, showMemory, offerWatch, runToCursor, refit }) {
+        this._paging = paging;
         this._names = names;
-        this._dump = dump;
         this._showing = showing;
         this._showMemory = showMemory;
         this._cpu = null;
@@ -94,7 +84,10 @@ export class DisassemblyView {
         this._widget = floating.panel.querySelector("#disassembly");
         this._rows = new FittedRows(this._widget, InitialRows, refit);
 
-        bindGotoForm(floating.panel.querySelector(".goto-form"), resolve, (address) => this.update(address));
+        bindGotoForm(floating.panel.querySelector(".goto-form"), resolve, ({ address, view }) => {
+            this._paging.view = view;
+            this.update(address);
+        });
 
         this._widget.addEventListener("click", (e) => {
             if (e.target.closest(".bp_gutter")) this._gutterClick(e);
@@ -102,10 +95,11 @@ export class DisassemblyView {
         this._widget.addEventListener("contextmenu", (e) => {
             const at = Number(e.target.closest(".dis_elem")?.dataset.addr);
             const operand = e.target.closest(".instr_mem_ref, .instr_instr_ref");
+            const named = (address, name) => offerWatch(e, address, this._paging.differs(address) ? undefined : name);
             if (operand) {
-                offerWatch(e, Number(operand.dataset.ref), operand.dataset.name);
+                named(Number(operand.dataset.ref), operand.dataset.name);
             } else if (e.target.closest(".dis_addr")) {
-                offerWatch(e, at, this._names().address(at, this._cpu.pc)?.name);
+                named(at, this._names().address(at, this._cpu.pc)?.name);
             }
         });
         this._widget.addEventListener("wheel", (evt) => {
@@ -186,8 +180,8 @@ export class DisassemblyView {
     _showRow(row, address, shown) {
         const cpu = this._cpu;
         const names = this._names();
-        const [text, end, jumpTarget] = cpu.disassembler.disassemble(address);
-        const dump = this._dump(address, end);
+        const [text, end, jumpTarget] = this._paging.disassembler.disassemble(address);
+        const bytes = Array.from({ length: end - address }, (_, i) => this._paging.peek(address + i));
         const addrNode = row.querySelector(".dis_addr");
         addrNode.innerHTML = labelHtml(address);
         const named = names.address(address, cpu.pc);
@@ -195,13 +189,13 @@ export class DisassemblyView {
             addrNode.append(" ", nameNode(named, address));
             shown.add(named.set);
         }
-        row.classList.toggle("current", address === cpu.pc);
+        row.classList.toggle("current", address === cpu.pc && !this._paging.differs(address));
         row.classList.toggle("highlight", address === this._cursor);
-        row.querySelector(".instr_bytes").textContent = dump.hex.join(" ");
-        row.querySelector(".instr_asc").textContent = dump.asc.join("");
+        row.querySelector(".instr_bytes").textContent = bytes.map(hexbyte).join(" ");
+        row.querySelector(".instr_asc").textContent = bytes.map(byteChar).join("");
         const disNode = row.querySelector(".disassembly");
         disNode.innerHTML = text;
-        const accesses = operandAccesses(text);
+        const { accesses } = cpu.disassembler.describeOpcode(cpu.peekmem(address));
         for (const ref of disNode.querySelectorAll(".instr_mem_ref, .instr_instr_ref")) {
             const target = parseInt(ref.dataset.ref, 10);
             const operand = names.operand(address, target);
@@ -243,11 +237,13 @@ export class DisassemblyView {
     }
 
     _prevInstruction(address) {
-        return this._cpu.disassembler.prevInstruction(address, this._cpu.pc);
+        // The program counter steers the walk back only where the view shows the code it is running.
+        const { pc } = this._cpu;
+        return this._paging.disassembler.prevInstruction(address, this._paging.differs(pc) ? undefined : pc);
     }
 
     _nextInstruction(address) {
-        return this._cpu.disassembler.nextInstruction(address);
+        return this._paging.disassembler.nextInstruction(address);
     }
 
     _followJump(e) {

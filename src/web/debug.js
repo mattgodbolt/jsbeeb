@@ -1,36 +1,37 @@
-import { toggle } from "./dom-utils.js";
-import { hexbyte, hexword, parseAddr } from "../hex.js";
+import { downloadBlob } from "./dom-utils.js";
+import { byteChar, hexbyte, hexword, parseAddr } from "../hex.js";
 import { NoNames } from "../symbol-names.js";
 import { isHttps } from "../symbol-sets.js";
 import { noteFeature } from "./analytics.js";
+import { toast } from "./toast.js";
 import { WatchPanel } from "./watch-panel.js";
 import { RunMode } from "./emulation-loop.js";
 import { DebugGroup, FloatingPanel } from "./floating-panel.js";
 import { EndEdge, Gap, StartEdge } from "./panel-layout.js";
-import { helpRows, keyLine } from "./panel-keys.js";
+import { keyLine } from "./panel-keys.js";
 import { cycleCount } from "../lockstep.js";
-import {
-    bindGotoForm,
-    cloneTemplate,
-    externalLink,
-    FittedRows,
-    labelHtml,
-    powerOfTwoColumnsThatFit,
-} from "./debug-dom.js";
-import { DisassemblyKeys, DisassemblyView } from "./disassembly-view.js";
+import { NumRomBanks } from "../6502.js";
+import { bindGotoForm, externalLink, FittedRows, labelHtml, powerOfTwoColumnsThatFit } from "./debug-dom.js";
+import { DisassemblyView } from "./disassembly-view.js";
+import { PagingOverride } from "./paging-override.js";
+import { bankView, PagedView, parseViewedAddress, peekViewed, SidewaysStart, viewedBank } from "../paging.js";
+import { Dropdown } from "bootstrap";
 import { TightLoopNote } from "./tight-loop-note.js";
 
 const noop = () => {};
+
+const LabelDrop = {
+    dropWhat: "Drop a label file",
+    dropInto: "BeebAsm, VICE or b-em labels name addresses in the debugger",
+};
 
 const InitialMemoryRows = 16;
 const FewestBytesPerRow = 8;
 const MemoryPageRows = 8;
 const QuickRunsPerSecond = 50;
 const ResetVector = 0xfffc;
-const UnconditionalJump = /^(JMP|RTS|RTI|BRK)\b/;
-const Branch = /^(B(CC|CS|EQ|NE|MI|PL|VC|VS|RA)|BB[RS][0-7])\b/;
-const Call = /^JSR\b/;
-const ReturnOpcodes = new Set([0x60, 0x40]); // RTS, RTI
+const NeverFallsThrough = new Set(["jump", "return", "interrupt"]);
+const HexByte = /^[0-9a-f]{1,2}$/i;
 
 // S counts down and wraps, so "not deeper" is a difference of under half the page, either way round $00.
 function notDeeper(s, startS) {
@@ -62,18 +63,20 @@ function memoryTitle(address, named, inRegion) {
 class MemoryView {
     /**
      * @param {HTMLElement} widget
-     * @param {(address: number) => number} peekMem
+     * @param {PagingOverride} paging - what it reads memory through
      * @param {() => {names: import("../symbol-names.js").SymbolNames, pc: number}} naming
      * @param {(sets: Set<import("../symbol-names.js").SymbolSet>) => void} showing - the sets whose names it shows
      * @param {() => void} redraw - redraws it, once its rows have changed in number or width
      */
-    constructor(widget, peekMem, naming, showing, redraw) {
+    constructor(widget, paging, naming, showing, redraw) {
         this._widget = widget;
-        this._peekMem = peekMem;
+        this._paging = paging;
         this._naming = naming;
         this._showing = showing;
         this._addr = 0;
+        this._first = 0;
         this._prevSnapshot = new Uint8Array(65536);
+        this._snapshotView = PagedView;
         this._rows = new FittedRows(widget, InitialMemoryRows, redraw);
         this._setBytesPerRow(FewestBytesPerRow);
 
@@ -124,6 +127,7 @@ class MemoryView {
         const targetRow = this._addr & -perRow;
         let addr = targetRow - perRow * this._rows.anchor;
         if (addr < 0) addr = 0;
+        this._first = addr;
         const { names, pc } = this._naming();
         const shown = new Set();
         for (const row of this._rows.rows) {
@@ -160,28 +164,72 @@ class MemoryView {
         const hex = [];
         const asc = [];
         const changed = [];
+        // Changes are marked only against a snapshot taken in the view shown.
+        const comparable = this._snapshotView === this._paging.view;
         for (let i = from; i < to; ++i) {
-            const b = this._peekMem(i);
+            const b = this._paging.peek(i);
             hex.push(hexbyte(b));
-            changed.push(i < this._prevSnapshot.length && this._prevSnapshot[i] !== b);
-            if (b >= 32 && b < 128) {
-                asc.push(String.fromCharCode(b));
-            } else {
-                asc.push(".");
-            }
+            changed.push(comparable && i < this._prevSnapshot.length && this._prevSnapshot[i] !== b);
+            asc.push(byteChar(b));
         }
         return { hex: hex, asc: asc, changed: changed };
     }
 
     snapshot() {
+        this._snapshotView = this._paging.view;
         for (let i = 0; i < 65536; ++i) {
-            this._prevSnapshot[i] = this._peekMem(i);
+            this._prevSnapshot[i] = this._paging.peek(i);
         }
     }
 
     /** Moves it on by `rows` of its current width, back for a negative number. */
     step(rows) {
         this.update(this._addr + rows * this._bytesPerRow);
+    }
+
+    /** The first and last addresses it shows, the last no further than $ffff. */
+    shown() {
+        return {
+            from: this._first,
+            to: Math.min(0xffff, this._first + this._rows.rows.length * this._bytesPerRow - 1),
+        };
+    }
+
+    _byteAt(address) {
+        return this._widget.querySelector(`.mem_bytes [data-addr="${address}"]`);
+    }
+
+    /**
+     * Puts a field over the byte at `address`, bringing it into view if need be. Tab hands `write` its new value and
+     * `editNext` the next byte's address (Shift-Tab, the one before's); Enter hands it over and leaves, and Escape just
+     * leaves. A value left as it was is not handed over, as a write to a register is not the same as leaving it alone.
+     */
+    edit(address, write, editNext) {
+        if (!this._byteAt(address)) this.update(address);
+        const byte = this._byteAt(address);
+        const field = document.createElement("input");
+        field.className = "mem-edit panel-field";
+        field.maxLength = 2;
+        field.autocomplete = "off";
+        field.spellcheck = false;
+        field.setAttribute("aria-label", `New value for $${hexword(address)}`);
+        const was = byte.textContent;
+        field.value = was;
+        byte.replaceChildren(field);
+        field.addEventListener("blur", () => this.update(), { once: true });
+        field.addEventListener("input", () => field.classList.remove("is-invalid"));
+        field.addEventListener("keydown", (e) => {
+            if (e.key !== "Enter" && e.key !== "Tab") return;
+            e.preventDefault();
+            const value = HexByte.test(field.value) ? parseInt(field.value, 16) : undefined;
+            field.classList.toggle("is-invalid", value === undefined);
+            if (value === undefined) return;
+            field.blur();
+            if (value !== parseInt(was, 16)) write(address, value);
+            if (e.key === "Tab") editNext((address + (e.shiftKey ? -1 : 1)) & 0xffff);
+        });
+        field.focus();
+        field.select();
     }
 }
 
@@ -209,6 +257,7 @@ export const ToolbarKeys = [
         label: "step out",
         description: "Run until this subroutine or interrupt handler returns",
     },
+    { combo: "v", key: "v", run: "runToVsync", label: "vsync", description: "Run to the start of the next vsync" },
 ];
 
 export const MemoryKeys = [
@@ -223,12 +272,7 @@ export const MemoryKeys = [
     { key: "I", run: "pageBack" },
 ];
 
-/** Help's rows for every key the debugger's panels answer. */
-export const debuggerHelpRows = () => helpRows([ToolbarKeys, DisassemblyKeys, MemoryKeys]);
-
 const RememberedPanelsKey = "debugPanels";
-/** Narrower than this, peripherals would cover the screen, so they wait to be asked for. */
-const PeripheralsWindowWidth = 1600;
 const MinPanelWidth = 220;
 const DisassemblyWidth = 400;
 /**
@@ -238,14 +282,14 @@ const DisassemblyWidth = 400;
  */
 const ColumnWidthNeeded = { left: 280, right: DisassemblyWidth };
 const StackBytesShown = 8;
+const WholeNumber = /^\d+$/;
 const RunningNameMatchMs = 1000;
 const below = (id) => ({ ...StartEdge, attach: { to: id, side: "after" } });
 
 /**
  * The debugger's own panels, each `#<id>-panel` in the page, in the order they open, so that each opens after the
  * panel it sits under. `side` and `place` are where it goes until the user arranges it: down the right of the
- * screen, or down its left. `narrow` says whether it opens by default on a window too narrow for peripherals, and
- * `show` brings it up to date with the machine, the disassembly at `at`.
+ * screen, or down its left. `show` brings it up to date with the machine, the disassembly at `at`.
  */
 const OwnPanels = [
     {
@@ -254,7 +298,6 @@ const OwnPanels = [
         minSize: { w: 200, h: 30 },
         side: "right",
         place: { x: EndEdge, y: StartEdge },
-        narrow: true,
         show: noop,
     },
     {
@@ -263,7 +306,6 @@ const OwnPanels = [
         minSize: { w: MinPanelWidth, h: 120 },
         side: "right",
         place: { x: EndEdge, y: below("toolbar") },
-        narrow: true,
         naturalWidth: DisassemblyWidth,
         show: (dbgr, at) => dbgr.updateDisassembly(at),
     },
@@ -273,7 +315,6 @@ const OwnPanels = [
         minSize: { w: 150, h: 60 },
         side: "right",
         place: { x: EndEdge, y: below("disassembly") },
-        narrow: true,
         show: (dbgr) => dbgr.updateRegisters(),
     },
     {
@@ -282,17 +323,7 @@ const OwnPanels = [
         minSize: { w: MinPanelWidth, h: 100 },
         side: "left",
         place: { x: StartEdge, y: StartEdge },
-        narrow: true,
         show: (dbgr) => dbgr.updateMemory(),
-    },
-    {
-        id: "peripherals",
-        title: "Peripherals",
-        minSize: { w: MinPanelWidth, h: 120 },
-        side: "left",
-        place: { x: StartEdge, y: below("memory") },
-        narrow: false,
-        show: (dbgr) => dbgr.updatePeripherals(),
     },
 ];
 /** Of the panels `ids`, those that were open when the debugger's were last seen. */
@@ -315,7 +346,7 @@ function rememberPanels(ids) {
 }
 
 /**
- * The debugger: its panels (a toolbar, disassembly, memory, registers and peripherals), their
+ * The debugger: its panels (a toolbar, disassembly, memory and registers), their
  * keys, and running the machine to a stop. The panels open on entering the debugger, stay open
  * and keep up with the machine once it runs again, and close on leaving it with Alt-S. They read
  * the machine once a frame while it runs, and only while open, and nothing they read changes it.
@@ -324,14 +355,20 @@ export class Debugger {
     /**
      * @param {object} options
      * @param {import("../symbol-sets.js").SymbolSets | null} options.symbolSets - where names for addresses come from
+     * @param {import("../label-files.js").LabelFiles} options.labelFiles - the user's own names, ahead of the sets'
      * @param {import("./panel-keys.js").PanelKeys} options.keys - where the panels' keys are routed from
      * @param {import("./floating-panel.js").PanelArrangement} options.arrangement - what places its panels
+     * @param {HTMLElement} options.monitor - the monitor around the screen, which shows when a click finds a byte
      */
-    constructor({ symbolSets, keys, arrangement }) {
+    constructor({ symbolSets, labelFiles, keys, arrangement, monitor }) {
         this._arrangement = arrangement;
+        this._monitor = monitor;
         this.patchInstructions = new Map();
         this._loop = null;
         this._runningTo = null;
+        // On the scheduler's clock, which a power-on reset leaves running. Null once the state it started in is
+        // replaced, until it is reset.
+        this._stopwatchFrom = 0;
         this._inDebugger = false;
         this._hidingPanels = false;
         this._matchedAt = 0;
@@ -343,29 +380,43 @@ export class Debugger {
             disassembly: { line: document.querySelector("#disassembly-panel .debug-symbols"), sets: null },
             memory: { line: document.querySelector("#memory-panel .debug-symbols"), sets: null },
         };
+        this.panels = Object.fromEntries(OwnPanels.map((own) => [own.id, this._makePanel(own)]));
+        /** @type {Map<PagingOverride, import("../symbol-names.js").SymbolNames>} */
+        this._viewNames = new Map();
+        this._paging = {
+            memory: new PagingOverride({
+                floating: this.panels.memory,
+                changed: () => this._viewChanged(() => this._memoryView.update()),
+            }),
+            disassembly: new PagingOverride({
+                floating: this.panels.disassembly,
+                changed: () => this._viewChanged(() => this._disassembly.redraw()),
+            }),
+        };
         this._memoryView = new MemoryView(
             document.getElementById("memory"),
-            peek,
-            () => ({ names: this._names, pc: this.cpu.pc }),
-            (sets) => this._credit(this._credits.memory, sets),
+            this._paging.memory,
+            () => ({ names: this._namesIn(this._paging.memory), pc: this.cpu.pc }),
+            (sets) => this._credit(this._credits.memory, this._namesIn(this._paging.memory), sets),
             () => this._redraw(() => this._memoryView.update()),
         );
         this.watches = new WatchPanel({ peek, resolve: (text) => this._resolveWatch(text), arrangement });
         // Fetches the index, and the sets matching memory now, so names typed while the machine runs can resolve.
         this.watches.floating.addEventListener("open", () => this._namesNow());
-        this.uservia = this.sysvia = this.crtc = noop;
         this._symbolSets = symbolSets;
+        this._labelFiles = labelFiles;
         this._names = NoNames;
-        for (const credit of Object.values(this._credits)) toggle(credit.line, symbolSets !== null);
         symbolSets?.addEventListener("loaded", () => {
             // The index arriving is what lets the sets matching memory be fetched.
             if (this.watches.floating.isOpen) this._namesNow();
-            if (!this.cpu || (!this._inDebugger && !this._ownPanelsShown())) return;
-            this._matchSymbols();
-            this._refresh.drawNow();
+            this._renameShown();
+        });
+        this._labelsLine = document.querySelector("#disassembly-panel .debug-labels");
+        labelFiles.addEventListener("change", () => {
+            this._showLabelFiles();
+            this._renameShown();
         });
 
-        this.panels = Object.fromEntries(OwnPanels.map((own) => [own.id, this._makePanel(own)]));
         this._refresh = arrangement.refreshing(
             () => this._ownPanelsShown(),
             () => this._showOpenPanels(),
@@ -381,15 +432,15 @@ export class Debugger {
             stepOver: () => this._fromDebugger(() => this.stepOver()),
             stepOut: () => this._fromDebugger(() => this.stepOut()),
             runToCursor: () => this._fromDebugger(() => this.runToCursor()),
+            runToVsync: () => this._fromDebugger(() => this.runToVsync()),
         };
-        const resolve = (text) => addressFor(this._names, text, this.cpu.pc);
         this._disassembly = new DisassemblyView({
             floating: this.panels.disassembly,
             keys,
-            names: () => this._names,
-            dump: (from, to) => this._memoryView.dump(from, to),
-            resolve,
-            showing: (sets) => this._credit(this._credits.disassembly, sets),
+            paging: this._paging.disassembly,
+            names: () => this._namesIn(this._paging.disassembly),
+            resolve: (text) => this._resolveViewed(this._paging.disassembly, text),
+            showing: (sets) => this._credit(this._credits.disassembly, this._namesIn(this._paging.disassembly), sets),
             showMemory: (address) => this._memoryView.update(address),
             offerWatch: (e, address, name) => this._offerWatch(e, address, name),
             runToCursor: this._actions.runToCursor,
@@ -401,16 +452,207 @@ export class Debugger {
         this._loopNote = new TightLoopNote(this.panels.toolbar.panel.querySelector(".tight-loop"), arrangement);
         this._bindToolbar();
         this._bindKeys(keys);
+        this._bindLabelDrops();
 
-        bindGotoForm(document.getElementById("goto-mem-addr-form"), resolve, (address) =>
-            this._memoryView.update(address),
+        bindGotoForm(
+            document.getElementById("goto-mem-addr-form"),
+            (text) => this._resolveViewed(this._paging.memory, text),
+            ({ address, view }) => {
+                this._paging.memory.view = view;
+                this._memoryView.update(address);
+            },
         );
+        bindGotoForm(
+            document.getElementById("run-to-line-form"),
+            (text) => (WholeNumber.test(text) ? Number(text) : undefined),
+            (line) => this._fromDebugger(() => this.runToLine(line)),
+        );
+        document.getElementById("debug-stopwatch-reset").addEventListener("click", () => {
+            if (!this.cpu) return;
+            this._stopwatchFrom = this.cpu.scheduler.epoch;
+            this.updateRegisters();
+        });
         document.getElementById("memory").addEventListener("contextmenu", (e) => {
             const byte = e.target.closest("[data-addr]");
             if (!byte) return;
             const address = Number(byte.dataset.addr);
-            this._offerWatch(e, address, this._names.address(address, this.cpu.pc)?.name);
+            const named = this._paging.memory.differs(address) ? undefined : this._names.address(address, this.cpu.pc);
+            this._offerWatch(e, address, named?.name);
         });
+        document.getElementById("memory").addEventListener("click", (e) => {
+            if (!e.target.matches(".mem_bytes [data-addr]") || this._loop.mode !== RunMode.debugging) return;
+            this._editMemory(Number(e.target.dataset.addr));
+        });
+        this._bindSaveForm((text) => addressFor(this._namesIn(this._paging.memory), text, this.cpu.pc));
+    }
+
+    /** Edits the byte at `address`, unless the memory panel shows there other memory than the CPU writes to. */
+    _editMemory(address) {
+        if (this._paging.memory.differs(address)) {
+            toast(`$${hexword(address)} shows other memory than the CPU's; pick "paged" to edit it.`, {
+                title: "Memory",
+            });
+            return;
+        }
+        this._memoryView.edit(
+            address,
+            (at, value) => this._writeByte(at, value),
+            (next) => this._editMemory(next),
+        );
+    }
+
+    /** Writes as the CPU would, so that a ROM byte keeps its value and a register's device sees the write. */
+    _writeByte(address, value) {
+        this.cpu.writemem(address, value);
+        const reads = this.cpu.peekmem(address);
+        if (reads !== value && !this.cpu.isDevice(address)) {
+            toast(`$${hexword(address)} is ROM: the write leaves it $${hexbyte(reads)}, as on the machine.`, {
+                title: "Memory",
+            });
+        }
+        this._arrangement.drawAllNow();
+    }
+
+    _bindSaveForm(resolve) {
+        const form = document.getElementById("memory-save-form");
+        const [from, to] = [form.elements.namedItem("from"), form.elements.namedItem("to")];
+        const close = () => {
+            if (form.contains(document.activeElement)) document.activeElement.blur();
+            form.hidden = true;
+        };
+        document.getElementById("memory-save-open").addEventListener("click", () => {
+            if (!form.hidden) return close();
+            const shown = this._memoryView.shown();
+            from.value = `$${hexword(shown.from)}`;
+            to.value = `$${hexword(shown.to)}`;
+            for (const field of [from, to]) field.classList.remove("is-invalid");
+            form.hidden = false;
+        });
+        form.addEventListener("keydown", (e) => {
+            if (e.key === "Escape") close();
+        });
+        form.addEventListener("input", (e) => e.target.classList.remove("is-invalid"));
+        form.addEventListener("submit", (e) => {
+            e.preventDefault();
+            const [start, end] = [from, to].map((field) => resolve(field.value.trim()));
+            from.classList.toggle("is-invalid", start === undefined);
+            to.classList.toggle("is-invalid", end === undefined || end < start);
+            if (start === undefined || end === undefined || end < start) return;
+            const bytes = Uint8Array.from({ length: end - start + 1 }, (_, i) => this._paging.memory.peek(start + i));
+            downloadBlob(new Blob([bytes]), `memory-${hexword(start)}-${hexword(end)}.bin`);
+            close();
+        });
+    }
+
+    _renameShown() {
+        if (!this.cpu || (!this._inDebugger && !this._ownPanelsShown())) return;
+        this._matchSymbols();
+        this._refresh.drawNow();
+    }
+
+    /** Lists the label files under the disassembly, each with the bank it is for and a button to forget it. */
+    _showLabelFiles() {
+        // Bootstrap holds on to each menu's toggle until it is disposed of, open or not.
+        for (const toggle of this._labelsLine.querySelectorAll(".label-bank")) Dropdown.getInstance(toggle)?.dispose();
+        const { files } = this._labelFiles;
+        this._labelsLine.hidden = files.length === 0;
+        this._labelsLine.replaceChildren(
+            "labels from ",
+            ...files.flatMap((file, i) => [...(i ? [" · "] : []), this._labelFileNode(file)]),
+        );
+    }
+
+    _labelFileNode(file) {
+        const node = document.createElement("span");
+        node.className = "label-file dropdown";
+        const bank = document.createElement("button");
+        bank.type = "button";
+        bank.className = "label-bank dropdown-toggle";
+        bank.dataset.bsToggle = "dropdown";
+        bank.textContent = file.bank === null ? "any bank" : `bank ${file.bank}`;
+        bank.title = `Which sideways bank ${file.title} names $8000-$bfff in`;
+        // Bootstrap focuses the toggle as its menu opens.
+        bank.addEventListener("hidden.bs.dropdown", () => bank.blur());
+        const banks = document.createElement("div");
+        banks.className = "dropdown-menu dropdown-menu-dark label-banks";
+        banks.append(
+            ...[null, ...Array.from({ length: NumRomBanks }, (_, n) => n)].map((choice) => {
+                const item = document.createElement("button");
+                item.type = "button";
+                item.className = "dropdown-item";
+                item.classList.toggle("active", choice === file.bank);
+                item.textContent = choice === null ? "any bank" : `${choice}`;
+                item.addEventListener("click", () => this._labelFiles.tie(file, choice));
+                return item;
+            }),
+        );
+        const forget = document.createElement("button");
+        forget.type = "button";
+        forget.className = "label-forget";
+        forget.textContent = "\u00d7";
+        forget.title = forget.ariaLabel = `Forget ${file.title}'s labels`;
+        forget.addEventListener("click", () => this._labelFiles.remove(file));
+        node.append(file.title, " ", bank, banks, forget);
+        return node;
+    }
+
+    async _dropLabels(file) {
+        try {
+            const added = this._labelFiles.add({
+                key: `dropped:${file.name}`,
+                title: file.name,
+                source: "",
+                text: await file.text(),
+                bank: null,
+            });
+            const names = new Set(added.labels.map(({ name }) => name)).size;
+            toast(`${names} names from ${file.name} are in the debugger.`, {
+                title: "Label files",
+            });
+        } catch (error) {
+            toast(error.message, { title: "Label files" });
+        }
+    }
+
+    /** The names matched to memory as `paging` shows it. */
+    _namesIn(paging) {
+        return paging.view === PagedView ? this._names : (this._viewNames.get(paging) ?? NoNames);
+    }
+
+    _viewChanged(redraw) {
+        if (!this.cpu) return;
+        this._matchSymbols();
+        redraw();
+    }
+
+    /**
+     * The address a Go to text names, and the view it is in: the one it qualifies the address with, or else the one
+     * `paging` shows. Names resolve as matched to memory in that view.
+     * @returns {{address: number, view: import("../paging.js").PagingView} | undefined}
+     */
+    _resolveViewed(paging, text) {
+        const parsed = parseViewedAddress(text, this.cpu.model);
+        if (!parsed) return undefined;
+        const view = parsed.view ?? paging.view;
+        const names =
+            view === paging.view
+                ? this._namesIn(paging)
+                : this._namesFor((address) => peekViewed(this.cpu, view, address), this._bankShownBy(view));
+        const address = addressFor(names, parsed.address, this.cpu.pc);
+        return address === undefined ? undefined : { address, view };
+    }
+
+    /**
+     * Shows sideways `bank` from its start: its code in the disassembly while stopped in the debugger, where the
+     * disassembly isn't following the program counter, or else its bytes in the memory panel.
+     */
+    showBank(bank) {
+        const [paging, floating, show] = this._inDebugger
+            ? [this._paging.disassembly, this.panels.disassembly, (at) => this._disassembly.update(at)]
+            : [this._paging.memory, this.panels.memory, (at) => this._memoryView.update(at)];
+        paging.view = bankView(bank);
+        show(SidewaysStart);
+        floating.open();
     }
 
     _offerWatch(e, address, name) {
@@ -512,6 +754,27 @@ export class Debugger {
         return this._arrangement.panelsIn(DebugGroup);
     }
 
+    /**
+     * Has every debug panel and the watch panel take a dropped label file. Other modules make debug panels,
+     * before or after this, so each is marked for the media window's drop zone as a file comes over the page.
+     */
+    _bindLabelDrops() {
+        const takers = () => [...this._debugPanels(), this.watches.floating].map(({ panel }) => panel);
+        document.addEventListener(
+            "dragenter",
+            () => {
+                for (const panel of takers()) Object.assign(panel.dataset, LabelDrop);
+            },
+            true,
+        );
+        document.addEventListener("drop", (e) => {
+            const file = e.dataTransfer?.files[0];
+            if (!file || !takers().some((panel) => panel.contains(e.target))) return;
+            e.preventDefault();
+            this._dropLabels(file);
+        });
+    }
+
     panelsShown() {
         return this._debugPanels().some((floating) => floating.isOpen);
     }
@@ -523,9 +786,7 @@ export class Debugger {
     showPanels() {
         const panels = this._debugPanels();
         const remembered = rememberedPanels(panels.map(({ id }) => id));
-        const wide = window.innerWidth >= PeripheralsWindowWidth;
-        const defaults = OwnPanels.filter((own) => wide || own.narrow).map(({ id }) => id);
-        const chosen = remembered.length ? remembered : defaults;
+        const chosen = remembered.length ? remembered : OwnPanels.map(({ id }) => id);
         const shown = panels.filter(({ id }) => id === "toolbar" || chosen.includes(id));
         // Filled first, so that they are laid out at the size they will be.
         if (this.cpu) {
@@ -590,134 +851,24 @@ export class Debugger {
      * already highlighted, which stays in its row.
      */
     updateDisassembly(address) {
+        this._paging.disassembly.relabel();
         if (address === this._disassembly.cursor && !this._loop?.isRunning()) this._disassembly.redraw();
         else this._disassembly.update(address);
     }
 
     updateMemory() {
+        this._paging.memory.relabel();
         this._memoryView.update();
-    }
-
-    updatePeripherals() {
-        this.sysvia();
-        this.uservia();
-        this.crtc();
     }
 
     setCpu(cpu) {
         this.cpu = cpu;
-        this.sysvia = this.setupVia(document.getElementById("sysvia"), cpu.sysvia);
-        this.uservia = this.setupVia(document.getElementById("uservia"), cpu.uservia);
-        this.crtc = this.setupCrtc(document.getElementById("crtc"), cpu.video);
+        for (const paging of Object.values(this._paging)) paging.setCpu(cpu);
         this._disassembly.setCpu(cpu);
         this._loopNote.setCpu(cpu);
+        this.watches.setCpu(cpu);
         if (this._ownPanelsShown()) this._refresh.drawNow();
     }
-    disassemble(addr) {
-        return this.cpu.disassembler.disassemble(addr);
-    }
-
-    setupCrtc(node, video) {
-        if (!video) return noop;
-        const updates = [];
-        for (const row of node.querySelectorAll("tr:not(.template)")) row.remove();
-
-        const regNode = node.querySelector(".crtc_regs");
-
-        function makeRow(container, text) {
-            const row = cloneTemplate(container);
-            row.querySelector(".register").textContent = text;
-            return row.querySelector(".value");
-        }
-
-        for (let i = 0; i < 16; ++i) {
-            const value = makeRow(regNode, "R" + i);
-            updates.push(() => {
-                this.updateElem(value, hexbyte(video.regs[i]));
-            });
-        }
-
-        const stateNode = node.querySelector(".crtc_state");
-        const others = [
-            "bitmapX",
-            "bitmapY",
-            "dispEnabled",
-            "horizCounter",
-            "inHSync",
-            "scanlineCounter",
-            "vertAdjustCounter",
-            "vertCounter",
-            "inVSync",
-            "endOfMainLatched",
-            "endOfVertAdjustLatched",
-            "inVertAdjust",
-            "inDummyRaster",
-            "addr",
-            "lineStartAddr",
-            "nextLineStartAddr",
-        ];
-        for (const elem of others) {
-            const value = makeRow(stateNode, elem);
-            if (typeof video[elem] === "boolean") {
-                updates.push(() => this.updateElem(value, video[elem] ? "true" : "false"));
-            } else {
-                updates.push(() => this.updateElem(value, hexword(video[elem])));
-            }
-        }
-
-        const update = () => {
-            for (const update of updates) update();
-        };
-        update();
-        return update;
-    }
-
-    setupVia(node, via) {
-        const updates = [];
-        if (!via) return noop;
-        const regs = [
-            "ora",
-            "orb",
-            "ira",
-            "irb",
-            "ddra",
-            "ddrb",
-            "acr",
-            "pcr",
-            "ifr",
-            "ier",
-            "t1c",
-            "t1l",
-            "t2c",
-            "t2l",
-            "t2High",
-            "portapins",
-            "portbpins",
-            "IC32",
-        ];
-        for (const row of node.querySelectorAll("tr:not(.template)")) row.remove();
-        let timers;
-        for (const elem of regs) {
-            if (via[elem] === undefined) continue;
-            const row = cloneTemplate(node);
-            row.querySelector(".register").textContent = elem.toUpperCase();
-            const value = row.querySelector(".value");
-            if (elem.match(/t[12][cl]/)) {
-                updates.push(() => this.updateElem(value, hexword(timers[elem])));
-            } else {
-                updates.push(() => {
-                    this.updateElem(value, hexbyte(via[elem]));
-                });
-            }
-        }
-        const update = () => {
-            timers = via.peekTimers();
-            for (const update of updates) update();
-        };
-        update();
-        return update;
-    }
-
     updateElem(elem, val) {
         const prevVal = elem.textContent;
         if (prevVal !== val) {
@@ -734,6 +885,17 @@ export class Debugger {
             stack.push(hexbyte(cpu.peekmem(0x100 + at)));
         this.updateElem(document.getElementById("cpu6502_stack"), stack.join(" "));
         this.updateElem(document.getElementById("cpu6502_cycles"), String(cycleCount(cpu)));
+        const stopwatch = this._stopwatchFrom === null ? "" : String(cpu.scheduler.epoch - this._stopwatchFrom);
+        this.updateElem(document.getElementById("debug-stopwatch"), stopwatch);
+        const beam = cpu.video.beamPosition();
+        this.updateElem(document.getElementById("beam-line"), String(beam.line));
+        this.updateElem(document.getElementById("beam-cycle"), String(beam.frameCycle));
+        document.getElementById("beam-crtc").hidden = !beam.crtc;
+        if (beam.crtc) {
+            this.updateElem(document.getElementById("crtc-row"), String(beam.crtc.row));
+            this.updateElem(document.getElementById("crtc-scanline"), String(beam.crtc.scanline));
+            this.updateElem(document.getElementById("crtc-column"), String(beam.crtc.column));
+        }
         this.updateElem(document.getElementById("cpu6502_a"), hexbyte(this.cpu.a));
         this.updateElem(document.getElementById("cpu6502_x"), hexbyte(this.cpu.x));
         this.updateElem(document.getElementById("cpu6502_y"), hexbyte(this.cpu.y));
@@ -790,10 +952,12 @@ export class Debugger {
         this._matchSymbols();
         for (const own of OwnPanels) own.show(this, where);
         this._loopNote.show();
+        this.watches.showWhichFired();
         this._refresh.drawn();
         if (!this._inDebugger) {
             noteFeature("debugger", "open");
             this._inDebugger = true;
+            this._monitor.classList.add("finds-bytes");
             if (!this._touchKeyboardShown()) this.showPanels();
         }
         this._arrangement.keepAttached();
@@ -802,12 +966,20 @@ export class Debugger {
 
     _matchSymbols() {
         this._names = this._namesNow();
+        this._viewNames = new Map(
+            Object.values(this._paging)
+                .filter((paging) => paging.view !== PagedView)
+                .map((paging) => [
+                    paging,
+                    this._namesFor((address) => paging.peek(address), this._bankShownBy(paging.view)),
+                ]),
+        );
         this._matchedAt = performance.now();
     }
 
     /** Credits the sets whose names a panel shows, in its own line. */
-    _credit(credit, sets) {
-        const credited = this._names.sets.filter((set) => sets.has(set));
+    _credit(credit, names, sets) {
+        const credited = names.sets.filter((set) => sets.has(set));
         if (credit.sets?.size === credited.length && credited.every((set) => credit.sets.has(set))) return;
         credit.sets = new Set(credited);
         credit.line.style.visibility = credited.length > 0 ? "" : "hidden";
@@ -818,14 +990,25 @@ export class Debugger {
                 title.className = "symbol-set";
                 title.textContent = set.title;
                 title.title = [set.licence, set.notice].filter(Boolean).join("\n\n");
-                return [...(i ? [" · "] : []), title, " (", ...homeNodes(set.home), sourceNode(set.source), ")"];
+                const origin = set.source ? [" (", ...homeNodes(set.home), sourceNode(set.source), ")"] : [];
+                return [...(i ? [" · "] : []), title, ...origin];
             }),
         );
         credit.line.title = credit.line.textContent;
     }
 
     _namesNow() {
-        return this._symbolSets?.names(this._peek) ?? NoNames;
+        return this._namesFor(this._peek, this.cpu?.pagedBank);
+    }
+
+    /** The sideways bank whose labels apply in `view`: the bank it shows, or else the one paged. */
+    _bankShownBy(view) {
+        return viewedBank(view) ?? this.cpu?.pagedBank;
+    }
+
+    /** The names for memory as `peek` reads it, with sideways `bank` at &8000, as a label file sees it. */
+    _namesFor(peek, bank) {
+        return this._labelFiles.names(this._symbolSets?.names(peek) ?? NoNames, bank);
     }
 
     _resolveWatch(text) {
@@ -842,6 +1025,21 @@ export class Debugger {
         return this._inDebugger;
     }
 
+    /**
+     * While the machine is stopped in the debugger, opens the memory panel at the byte drawn at a point of the
+     * screen, 0 to 1 across and down it, and takes the click; otherwise, or while the on-screen keyboard shows,
+     * the click is the machine's.
+     */
+    showScreenByteAt(x, y) {
+        if (!this._inDebugger || this._touchKeyboardShown()) return false;
+        const address = this.cpu.video.addressShownAt(x, y);
+        if (address !== null) {
+            this._memoryView.update(address);
+            this.panels.memory.open();
+        }
+        return true;
+    }
+
     updatePrevMem() {
         this._memoryView.snapshot();
     }
@@ -854,9 +1052,12 @@ export class Debugger {
         // A run handed to the loop keeps the memory it started from, to show what it changed.
         if (!this._runningTo) this.updatePrevMem();
         this.watches.dismissMenu();
+        for (const paging of Object.values(this._paging)) paging.dismissMenu();
+        this.watches.clearFired();
         this._inDebugger = false;
         this._loopNote.clear();
         this._arrangement.keepAttached();
+        this._monitor.classList.remove("finds-bytes");
         // Focus left in a goto box would keep the keyboard from the machine.
         const focused = document.activeElement;
         if (this._debugPanels().some((floating) => floating.panel.contains(focused))) focused.blur();
@@ -929,6 +1130,12 @@ export class Debugger {
         this._runningTo = null;
     }
 
+    /** The machine's state is being replaced, so neither a run to a stop nor the stopwatch's start applies. */
+    replacingState() {
+        this.cancelRun();
+        this._stopwatchFrom = null;
+    }
+
     /**
      * Moves the CPU's cycle target on by one, running each instruction that starts before it. Straight after a
      * breakpoint the target is still at the end of the interrupted time slice, so this runs on to there (#1062).
@@ -947,32 +1154,58 @@ export class Debugger {
 
     stepOver() {
         const { pc, s } = this.cpu;
-        const [text, end, target] = this.disassemble(pc);
+        const { flow, next: end, target } = this.cpu.disassembler.instructionAt(pc);
         const next = end & 0xffff;
         const entry = this.resetEntry();
-        if (UnconditionalJump.test(text)) return this.step();
-        if (Branch.test(text) && target <= pc) {
+        if (NeverFallsThrough.has(flow)) return this.step();
+        if (flow === "branch" && target <= pc) {
             return this.runTo(() => notDeeper(this.cpu.s, s) && (this.cpu.pc < target || this.cpu.pc > pc), false);
         }
-        if (Branch.test(text)) {
+        if (flow === "branch") {
             return this.runTo(() => this.cpu.pc === next || this.cpu.pc === target, next === entry || target === entry);
         }
-        if (Call.test(text)) return this.runTo(() => this.cpu.pc === next && notDeeper(this.cpu.s, s), next === entry);
+        if (flow === "call") return this.runTo(() => this.cpu.pc === next && notDeeper(this.cpu.s, s), next === entry);
         this.runTo(() => this.cpu.pc === next, next === entry);
     }
 
     stepOut() {
-        const s = this.cpu.s;
-        let returning = ReturnOpcodes.has(this.cpu.peekmem(this.cpu.pc));
+        const { cpu } = this;
+        const s = cpu.s;
+        const returnsHere = () => cpu.disassembler.describeOpcode(cpu.peekmem(cpu.pc)).flow === "return";
+        let returning = returnsHere();
         this.runTo(() => {
             if (returning) return true;
-            returning = notDeeper(this.cpu.s, s) && ReturnOpcodes.has(this.cpu.peekmem(this.cpu.pc));
+            returning = notDeeper(cpu.s, s) && returnsHere();
             return false;
         }, false);
+    }
+
+    /** Runs the machine, from the debugger, until `stopsHere()` holds before an instruction; see runTo. */
+    runUntil(stopsHere) {
+        this._fromDebugger(() => this.runTo(stopsHere, false));
     }
 
     runToCursor() {
         const target = this._disassembly.cursor;
         this.runTo(() => this.cpu.pc === target, target === this.resetEntry());
+    }
+
+    /** Runs until `holds()` turns true: at an instruction it holds at, having not held at the one before. */
+    _runUntilTurns(holds) {
+        let held = holds();
+        this.runTo(() => {
+            const had = held;
+            held = holds();
+            return held && !had;
+        }, false);
+    }
+
+    runToVsync() {
+        this._runUntilTurns(() => this.cpu.video.beamPosition().inVSync);
+    }
+
+    /** Runs to the start of TV line `line` of a frame, the next frame's if the beam is on it now. */
+    runToLine(line) {
+        this._runUntilTurns(() => this.cpu.video.beamPosition().line === line);
     }
 }

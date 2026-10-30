@@ -95,7 +95,7 @@ describe("Key tables", () => {
     });
 
     it("makes Help's rows, a key cap for each key", () => {
-        const rows = helpRows([MemoryKeys]);
+        const rows = helpRows(MemoryKeys);
         expect(rows.map((row) => row.textContent)).toEqual([
             "u i U IMemory forward (u, U) or back (i, I), one row or eight",
         ]);

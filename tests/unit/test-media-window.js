@@ -1244,6 +1244,23 @@ describe("MediaWindow", () => {
             expect(event.defaultPrevented).toBe(false);
         });
 
+        it("leaves a drop to an element that takes its own, saying what it does there", async () => {
+            make();
+            const claimant = document.createElement("div");
+            claimant.dataset.dropWhat = "Drop a label file";
+            claimant.dataset.dropInto = "labels name addresses";
+            document.body.append(claimant);
+            dragEvent("dragenter");
+            dragEvent("dragover", claimant);
+            expect(text(zone())).toBe("Drop a label file labels name addresses");
+            dragEvent("dragover");
+            expect(text(zone())).toContain("Drop a disc, tape or save state");
+            dragEvent("drop", claimant);
+            await new Promise((resolve) => setTimeout(resolve, 0));
+            expect(zone().hidden).toBe(true);
+            expect(deps.media.openFile).not.toHaveBeenCalled();
+        });
+
         it("opens a dropped file into the aimed drive and says so", async () => {
             deps.media.openFile.mockResolvedValue({
                 kind: "disc",

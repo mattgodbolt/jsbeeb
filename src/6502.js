@@ -799,8 +799,13 @@ export class Cpu6502 extends Base6502 {
 
     /** The sideways bank ROMSEL pages in. */
     get pagedBank() {
+        return this.bankPagedBy(this.romsel);
+    }
+
+    /** The sideways bank a ROM number, as ROMSEL takes it, pages in. */
+    bankPagedBy(romNumber) {
         const { romSockets } = this.model;
-        return NumRomBanks - romSockets + (this.romsel & (romSockets - 1));
+        return NumRomBanks - romSockets + (romNumber & (romSockets - 1));
     }
 
     mapPages(start, end, stat, offset) {
@@ -1082,15 +1087,32 @@ export class Cpu6502 extends Base6502 {
     }
 
     peekmem(addr) {
+        return this._peekmemFor(this.memStatOffset, addr);
+    }
+
+    /**
+     * Reads as code outside &C000-&DFFF sees memory, whatever ran last: on a Master in a shadow mode, the view of the
+     * language, not of the VDU driver.
+     */
+    peekmemAsLanguage(addr) {
+        return this._peekmemFor(0, addr);
+    }
+
+    _peekmemFor(memStatOffset, addr) {
         // Callers read on past $ffff (an instruction's operand, a dump's end) where the 6502 wraps to $0000.
         addr &= 0xffff;
-        const statOffset = this.memStatOffset + (addr >>> 8);
+        const statOffset = memStatOffset + (addr >>> 8);
         if (this.memStat[statOffset]) {
             const offset = this.memLook[statOffset];
             return this.ramRomOs[offset + addr];
         } else {
             return this.peekDevice(addr);
         }
+    }
+
+    /** Whether `addr` is a device's, rather than memory, as the machine is paged now. */
+    isDevice(addr) {
+        return this.memStat[this.memStatOffset + ((addr & 0xffff) >>> 8)] === 0;
     }
 
     /**
@@ -1825,6 +1847,19 @@ export class Cpu6502 extends Base6502 {
 
     stop() {
         this.halted = true;
+    }
+
+    /** Runs `run` with every debug hook detached, so nothing it executes is seen by a hook or halts at one. */
+    withoutDebugHooks(run) {
+        const attached = [this._debugInstruction, this._debugRead, this._debugWrite];
+        this._debugInstruction = this._debugRead = this._debugWrite = null;
+        this.refreshLook();
+        try {
+            return run();
+        } finally {
+            [this._debugInstruction, this._debugRead, this._debugWrite] = attached;
+            this.refreshLook();
+        }
     }
 
     /** Changes the host key layout for the keyboard, and for every reset after it. */

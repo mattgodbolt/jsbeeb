@@ -5,6 +5,7 @@ import {
     Cpu65c02 as cpu65c02Opcodes,
     Cpu65c12 as cpu65c12Opcodes,
 } from "../../src/6502.opcodes.js";
+import { fake6502, fake65C02 } from "../../src/fake6502.js";
 
 describe("Disassemble6502", () => {
     const mem = new Uint8Array(0x10000);
@@ -75,6 +76,88 @@ describe("Disassemble6502", () => {
         it("keeps references out of the plain listing", () => {
             mem.set([0xb1, 0xf2], 0x2000);
             expect(disassembler.disassemble(0x2000, true)[0]).toBe("LDA ($f2),Y ; $eaea + Y");
+        });
+    });
+
+    describe("what an instruction does", () => {
+        const at = (mnemonic, mode, length, accesses, flow, extra) => ({
+            mnemonic,
+            mode,
+            length,
+            accesses,
+            flow,
+            next: 0x2000 + length,
+            ...extra,
+        });
+
+        it.each([
+            ["LDA #", cpu6502Opcodes, [0xa9, 0x41], at("LDA", "imm", 2, [], "next")],
+            ["LDA zp", cpu6502Opcodes, [0xa5, 0x41], at("LDA", "zp", 2, ["read"], "next", { address: 0x41 })],
+            [
+                "STA abs",
+                cpu6502Opcodes,
+                [0x8d, 0x40, 0xfe],
+                at("STA", "abs", 3, ["write"], "next", { address: 0xfe40 }),
+            ],
+            ["INC abs,X", cpu6502Opcodes, [0xfe, 0x40, 0xfe], at("INC", "abs,x", 3, ["read", "write"], "next")],
+            ["ASL A", cpu6502Opcodes, [0x0a], at("ASL", "A", 1, [], "next")],
+            ["*NOP zp,X", cpu6502Opcodes, [0x14, 0x41], at("NOP", "zp,x", 2, ["read"], "next")],
+            ["BNE", cpu6502Opcodes, [0xd0, 0xfe], at("BNE", "branch", 2, [], "branch", { target: 0x2000 })],
+            ["JMP abs", cpu6502Opcodes, [0x4c, 0xee, 0xff], at("JMP", "abs", 3, [], "jump", { target: 0xffee })],
+            ["JMP (abs)", cpu6502Opcodes, [0x6c, 0x0e, 0x02], at("JMP", "(abs)", 3, [], "jump")],
+            ["JSR", cpu6502Opcodes, [0x20, 0xee, 0xff], at("JSR", "abs", 3, [], "call", { target: 0xffee })],
+            ["RTS", cpu6502Opcodes, [0x60], at("RTS", "implied", 1, [], "return")],
+            ["RTI", cpu6502Opcodes, [0x40], at("RTI", "implied", 1, [], "return")],
+            ["BRK", cpu6502Opcodes, [0x00], at("BRK", "implied", 1, [], "interrupt")],
+            ["an unknown opcode", cpu6502Opcodes, [0x02], at("???", "implied", 1, [], "next")],
+            ["BRA", cpu65c12Opcodes, [0x80, 0x10], at("BRA", "branch", 2, [], "branch", { target: 0x2012 })],
+            ["RMB0", cpu65c02Opcodes, [0x07, 0x41], at("RMB0", "zp", 2, ["read", "write"], "next", { address: 0x41 })],
+            [
+                "BBR0",
+                cpu65c02Opcodes,
+                [0x0f, 0x41, 0x10],
+                at("BBR0", "zp,branch", 3, ["read"], "branch", { address: 0x41, target: 0x2013 }),
+            ],
+        ])("describes %s from the emulation's own tables", (_, opcodes, bytes, expected) => {
+            mem.set(bytes, 0x2000);
+            const dis = opcodes({ peekmem: (addr) => mem[addr & 0xffff] }).disassembler;
+            expect(dis.instructionAt(0x2000)).toEqual(expected);
+        });
+
+        it.each([
+            ["LDA abs,Y", fake6502, 0xb9, true],
+            ["TAX", fake6502, 0xaa, true],
+            ["CMP #", fake6502, 0xc9, true],
+            ["AND #", fake6502, 0x29, true],
+            ["*ANC #", fake6502, 0x0b, true],
+            ["SEC", fake6502, 0x38, true],
+            ["BEQ", fake6502, 0xf0, true],
+            ["STA zp,X", fake6502, 0x95, true],
+            ["SMB0", fake65C02, 0x87, true],
+            ["EOR #", fake6502, 0x49, false],
+            ["INX", fake6502, 0xe8, false],
+            ["ADC #", fake6502, 0x69, false],
+            ["ROL A", fake6502, 0x2a, false],
+            ["INC zp", fake6502, 0xe6, false],
+            ["PHA", fake6502, 0x48, false],
+            ["JSR", fake6502, 0x20, false],
+            ["*LAX (zp,X), whose load moves its own pointer", fake6502, 0xa3, false],
+            ["TSB zp", fake65C02, 0x04, false],
+            ["an unknown opcode", fake6502, 0x02, false],
+        ])("measures whether %s settles", (_, cpu, opcode, idempotent) => {
+            expect(cpu().disassembler.isIdempotent(opcode)).toBe(idempotent);
+        });
+
+        it("measures without touching the machine it measures", async () => {
+            const cpu = fake6502();
+            await cpu.initialise();
+            const machine = () =>
+                [cpu.a, cpu.x, cpu.y, cpu.s, cpu.pc, cpu.p.asByte()].concat(
+                    Array.from({ length: 0x10000 }, (_, address) => cpu.peekmem(address)),
+                );
+            const before = machine();
+            for (let opcode = 0; opcode < 256; opcode++) cpu.disassembler.isIdempotent(opcode);
+            expect(machine()).toEqual(before);
         });
     });
 

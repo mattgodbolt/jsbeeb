@@ -58,6 +58,10 @@ body {
   height: 600px;
 }
 
+#cub-monitor.finds-bytes {
+  cursor: crosshair;
+}
+
 .debug-panel {
   font-size: 8pt;
   font-family: monospace;
@@ -70,18 +74,6 @@ body {
 .debug-panel .btn {
   padding: 0 6px;
   font-size: 11px;
-}
-
-#peripherals-panel th,
-#peripherals-panel td {
-  padding: 0 2px 0 0;
-  line-height: 1.25;
-}
-
-.debug-panel h6.dbg {
-  margin: 4px 0 2px;
-  font-size: inherit;
-  font-weight: bold;
 }
 
 #toolbar-panel .panel-header {
@@ -146,6 +138,32 @@ body {
   vertical-align: top;
 }
 
+#memory-save-form:not([hidden]) {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+
+#memory-save-form .panel-field {
+  flex: 1 1 8em;
+  min-width: 4em;
+}
+
+#memory .mem-edit {
+  width: 2ch;
+  padding: 0;
+  border: none;
+  font: inherit;
+  color: inherit;
+  background-color: #444;
+  outline: 1px solid #80d0d0;
+}
+
+#memory .mem-edit.is-invalid {
+  outline-color: #f06060;
+}
+
 .goto-form {
   flex: 0 1 8em;
   min-width: 4em;
@@ -157,6 +175,7 @@ body {
   font-family: monospace;
 }
 
+.debug-labels,
 .debug-symbols,
 .panel-keys {
   flex: none;
@@ -165,10 +184,52 @@ body {
 }
 
 /* Fitted to the panel's width instead of setting it. */
+.debug-labels,
 .debug-symbols,
 .panel-keys {
   width: 0;
   min-width: 100%;
+}
+
+.label-file {
+  white-space: nowrap;
+}
+
+.label-bank {
+  margin-left: 2px;
+  padding: 0 4px;
+  border: 1px solid #555555;
+  border-radius: 3px;
+  background: #222222;
+  color: #dddddd;
+  font-size: inherit;
+}
+
+.label-banks.show {
+  display: grid;
+  grid-template-columns: repeat(4, auto);
+  min-width: 0;
+  font-size: 12px;
+}
+
+.label-banks .dropdown-item {
+  padding: 2px 10px;
+  text-align: center;
+}
+
+.label-banks .dropdown-item:first-child {
+  grid-column: 1 / -1;
+}
+
+.label-forget {
+  padding: 0 4px;
+  border: 0;
+  background: none;
+  color: #aaaaaa;
+}
+
+.label-forget:hover {
+  color: #ffffff;
 }
 
 /* One line however many sets it credits, so that the panels attached below keep their place as it changes. */
@@ -231,20 +292,9 @@ a.symbol:hover {
   text-decoration: underline;
 }
 
-h6.dbg {
-  text-align: center;
-}
-
-.via_regs,
-.crtc_regs,
-.crtc_state {
-  display: inline-block;
-  vertical-align: top;
-  margin-right: 1ch;
-}
-
 /* Bootstrap's warning icon would hide most of a box this narrow. */
-.goto-addr.is-invalid {
+.goto-addr.is-invalid,
+#memory-save-form .is-invalid {
   padding-right: 0.5rem;
   background-image: none;
 }
@@ -601,6 +651,27 @@ h6.dbg {
   background-color: #5a5040;
 }
 
+.help-tabs {
+  margin-left: 2rem;
+  border-bottom: 0;
+}
+
+/* Bootstrap's lg breakpoint, below which Help goes fullscreen and its tabs get a row of their own. */
+@media (max-width: 991.98px) {
+  .help-header {
+    flex-wrap: wrap;
+  }
+
+  .help-tabs {
+    order: 1;
+    flex: 0 0 100%;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    margin: 0.5rem 0 0;
+    white-space: nowrap;
+  }
+}
+
 .help td:first-child,
 .help th:first-child {
   white-space: nowrap;
@@ -755,9 +826,6 @@ div.modal-body > div:not(:first-child) {
   border: 1px solid #444;
 }
 
-.value {
-  color: #eee;
-}
 .changed {
   background-color: #772222;
 }
@@ -896,7 +964,8 @@ small {
   font-family: inherit;
 }
 
-#watch-menu {
+#watch-menu,
+.paging-menu {
   position: fixed;
   z-index: 20;
   display: flex;
@@ -909,27 +978,52 @@ small {
   font-size: 9pt;
 }
 
-#watch-menu[hidden] {
+#watch-menu[hidden],
+.paging-menu[hidden] {
   display: none;
 }
 
-#watch-menu .txt-btn {
+#watch-menu .txt-btn,
+.paging-menu .txt-btn {
   color: #cccccc;
   text-align: left;
   font-family: inherit;
   text-decoration-color: rgba(255, 255, 255, 0.45);
 }
 
-.watch-formats td {
+.watch-formats td,
+.watch-breaks td {
   padding-bottom: 4px;
   text-align: right;
 }
 
-.watch-formats .txt-btn {
+.watch-formats .txt-btn,
+.watch-breaks .txt-btn {
   font-family: inherit;
 }
 
-#watch-panel .txt-btn {
+.watch-breaks form {
+  display: inline-block;
+  width: 20ch;
+  margin-left: 4px;
+}
+
+#watch-panel .txt-btn.watch-break {
+  font-family: inherit;
+  white-space: nowrap;
+  color: #777777;
+}
+
+#watch-panel .txt-btn.watch-break.armed {
+  color: #ff6060;
+}
+
+#watch-panel .watch-fired td {
+  background: rgba(255, 96, 96, 0.25);
+}
+
+#watch-panel .txt-btn,
+#fdc-panel .txt-btn {
   color: #cccccc;
   text-decoration-color: rgba(255, 255, 255, 0.45);
 }
@@ -996,6 +1090,135 @@ small {
   width: 50ch;
 }
 
+.paging-registers .decoded-meaning {
+  width: 32ch;
+}
+
+/* Down the columns from the highest bank. */
+.paging-socket-grid {
+  display: grid;
+  grid-template-rows: repeat(8, auto);
+  grid-auto-flow: column;
+  grid-auto-columns: max-content;
+  column-gap: 2ch;
+}
+
+.paging-sockets-heading {
+  padding-left: 4px;
+}
+
+.paging-socket {
+  display: grid;
+  /* A fixed width for the title keeps a loaded ROM from resizing the panel. */
+  grid-template-columns: max-content max-content 20ch;
+  gap: 0 1ch;
+  padding: 0 4px;
+  line-height: 20px;
+  cursor: pointer;
+}
+
+.paging-socket:hover {
+  text-decoration: underline;
+}
+
+.paging-socket.paged {
+  color: #000000;
+  background: #80d0d0;
+}
+
+.paging-socket-bank {
+  color: #f0d080;
+}
+
+.paging-socket-kind {
+  color: #aaaaaa;
+}
+
+.paging-socket.paged span {
+  color: inherit;
+}
+
+.paging-socket-contents {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The Go to box gives way first; its full label is in its tooltip. */
+.paging-picker {
+  flex: none;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #aaaaaa;
+  font-family: monospace;
+  font-size: 11px;
+}
+
+.paging-picker.overridden {
+  color: #f0d080;
+}
+
+.paging-menu .paging-choice[aria-checked="true"] {
+  color: #f0d080;
+}
+
+.crtc-timing .decoded-meaning {
+  width: 40ch;
+}
+
+.crtc-screen .decoded-meaning {
+  width: 50ch;
+}
+
+.soundchip-registers .decoded-meaning {
+  width: 52ch;
+}
+
+.soundchip-mutes {
+  margin-top: 6px;
+  padding-left: 4px;
+  color: #aaaaaa;
+}
+
+.soundchip-mutes .decoded-bit,
+.fdc-log-heading .decoded-bit {
+  margin-left: 6px;
+}
+
+button.decoded-bit {
+  font: inherit;
+}
+
+button.decoded-bit:not(.lit) {
+  background: transparent;
+}
+
+.fdc-registers .decoded-meaning {
+  width: 62ch;
+}
+
+.fdc-drive .decoded-meaning {
+  width: 52ch;
+}
+
+.fdc-log-area {
+  grid-column: 1 / -1;
+}
+
+.fdc-log {
+  /* Anchoring would scroll the log back by every line dropped from its top, as if the reader had. */
+  overflow-anchor: none;
+  height: 192px;
+  line-height: 16px;
+  overflow: auto;
+  padding: 2px 4px;
+  background: #1a1a1a;
+  color: #cccccc;
+  white-space: pre;
+}
+
 .decoded-value,
 .decoded-bit {
   display: inline-block;
@@ -1020,10 +1243,158 @@ small {
   color: #777777;
 }
 
+/* Sized here, not by its variables, so that it stays still as they come and go; they scroll within it. */
+#basic-panel {
+  width: min(52ch, 90vw);
+  height: min(48em, 80vh);
+  font-family: monospace;
+  font-size: 9pt;
+}
+
+#basic-panel .panel-body,
+.basic-present {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.basic-absent {
+  color: #aaaaaa;
+}
+
+.basic-pointers {
+  color: #aaaaaa;
+  white-space: pre;
+}
+
+.basic-routines {
+  margin-top: 6px;
+  color: #f0d080;
+}
+
+.basic-line {
+  margin: 6px 0;
+  overflow-wrap: anywhere;
+}
+
+.basic-line-number {
+  margin-right: 1ch;
+  color: #f0d080;
+}
+
+.basic-running {
+  background: #444444;
+  color: #ffffff;
+}
+
+.basic-idle {
+  color: #aaaaaa;
+}
+
+.basic-residents {
+  display: grid;
+  grid-template-columns: repeat(3, 3ch minmax(11ch, 12ch));
+  column-gap: 1ch;
+  margin-bottom: 6px;
+}
+
+.basic-name {
+  color: #f0d080;
+}
+
+.basic-value {
+  color: #80d0d0;
+}
+
+.basic-variables {
+  flex: 1 1 auto;
+  min-height: 2em;
+  overflow-y: auto;
+}
+
+.basic-variables table {
+  table-layout: fixed;
+  width: 100%;
+}
+
+.basic-variables td {
+  padding: 0 1ch 0 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.basic-variables td.basic-name {
+  width: 16ch;
+}
+
 .decoded-bit.lit {
   border-color: #80d0d0;
   color: #000000;
   background: #80d0d0;
+}
+
+.videoula-palette {
+  display: grid;
+  grid-template-rows: repeat(8, auto);
+  grid-auto-flow: column;
+  grid-auto-columns: max-content;
+  column-gap: 12px;
+}
+
+.videoula-palette-entry {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  line-height: 20px;
+  height: 20px;
+}
+
+.videoula-palette-index {
+  width: 1ch;
+  color: #f0d080;
+}
+
+.videoula-palette-swatch {
+  width: 2ch;
+  height: 14px;
+  border: 1px solid #666666;
+}
+
+.videoula-ula-palette .videoula-palette-label {
+  width: 13ch;
+  color: #cccccc;
+}
+
+.videoula-nula-palette .videoula-palette-label {
+  width: 9ch;
+  color: #cccccc;
+}
+
+.videoula-ula-palette .videoula-palette-entries {
+  width: 7ch;
+  color: #888888;
+}
+
+.videoula-palette-entry.unused,
+.videoula-palette-view.unused {
+  visibility: hidden;
+}
+
+.videoula-palette.dimmed {
+  opacity: 0.4;
+}
+
+.txt-btn.videoula-palette-view {
+  color: #aaaaff;
+  font-family: inherit;
+  font-size: inherit;
+  margin-left: 1ch;
+}
+
+.videoula-control .decoded-meaning {
+  width: 38ch;
 }
 
 .key-matrix table {
@@ -1067,6 +1438,7 @@ small {
 }
 
 .txt-btn[data-opens],
+#registers .txt-btn,
 #toolbar-panel .tight-loop .txt-btn {
   color: #aaaaff;
   font-family: inherit;

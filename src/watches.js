@@ -23,7 +23,66 @@ export const WatchFormats = [
  * @param {WatchFormat} format
  */
 export function formatWatch(peek, address, format) {
+    const value = watchValue(peek, address, format);
+    return format.radix === 16 ? `$${value.toString(16).padStart(format.bytes * 2, "0")}` : String(value);
+}
+
+function watchValue(peek, address, format) {
     let value = 0;
     for (let i = format.bytes - 1; i >= 0; --i) value = value * 256 + peek((address + i) & 0xffff);
-    return format.radix === 16 ? `$${value.toString(16).padStart(format.bytes * 2, "0")}` : String(value);
+    return value;
+}
+
+const Comparisons = {
+    "=": (a, b) => a === b,
+    "!=": (a, b) => a !== b,
+    "<": (a, b) => a < b,
+    "<=": (a, b) => a <= b,
+    ">": (a, b) => a > b,
+    ">=": (a, b) => a >= b,
+};
+const ConditionPattern = /^(!=|<=|>=|==|=|<|>)?\s*(?:(?:\$|&|0x)([0-9a-f]+)|([0-9]+))$/i;
+
+/**
+ * @typedef {object} WatchCondition
+ * @property {string} text
+ * @property {(value: number) => boolean} holds
+ */
+
+/**
+ * A break's condition, such as `= 5`, `!= $20` or `> &7f`: decimal unless marked hex by `$`, `&` or `0x`. A bare
+ * value, such as `5`, means `= 5`, and `==` is `=`.
+ * @param {string} text
+ * @returns {WatchCondition | undefined}
+ */
+export function parseCondition(text) {
+    const match = ConditionPattern.exec(text.trim());
+    if (!match) return undefined;
+    const [, typed, hex, dec] = match;
+    const op = typed === undefined || typed === "==" ? "=" : typed;
+    const operand = hex === undefined ? parseInt(dec, 10) : parseInt(hex, 16);
+    const compare = Comparisons[op];
+    return {
+        text: `${op}${hex === undefined ? dec : `$${hex.toLowerCase()}`}`,
+        holds: (value) => compare(value, operand),
+    };
+}
+
+/**
+ * Whether the CPU writing `byte` to `address` stops a break on `watch`: a write that changes its value, to one its
+ * condition holds for if it has one. A write to a device stops it whatever it changes, testing the
+ * condition against the byte written, as a device register reads back the device's state rather than the write.
+ * @param {(address: number) => number} peek
+ * @param {{address: number, format: WatchFormat, condition: WatchCondition | null}} watch
+ * @param {number} address
+ * @param {number} byte
+ * @param {boolean} toRam
+ */
+export function writeStops(peek, watch, address, byte, toRam) {
+    const { format, condition } = watch;
+    if (((address - watch.address) & 0xffff) >= format.bytes) return false;
+    if (!toRam) return !condition || condition.holds(byte);
+    const after = watchValue((at) => (at === address ? byte : peek(at)), watch.address, format);
+    if (after === watchValue(peek, watch.address, format)) return false;
+    return !condition || condition.holds(after);
 }

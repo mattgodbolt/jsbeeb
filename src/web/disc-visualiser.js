@@ -30,6 +30,8 @@ const MarkOutline = "#0d0d0d";
 
 const ScanBudgetMs = 16;
 
+const HeadZoom = 6;
+
 /** A trackpad reports deltas in the tens, a mouse notch about 100. */
 const WheelZoomRate = 0.003;
 
@@ -245,6 +247,25 @@ export class DiscVisualiser {
     openOn(driveIndex) {
         this._select(driveIndex, false);
         this.open();
+        this.update();
+    }
+
+    /** Opens the panel on the side of the drive's disc under its head, zoomed in on the head where it is now. */
+    zoomToHead(driveIndex) {
+        const drive = this._fdc.drives[driveIndex];
+        this._select(driveIndex, drive.isSideUpper);
+        this.open();
+        const geometry = this._geometry;
+        if (geometry) {
+            const radius = geometry.radiusOf(Math.min(drive.track, geometry.numTracks - 1));
+            const angle = geometry.angleOf(drive.positionFraction);
+            const halfView = geometry.size / (2 * HeadZoom);
+            this._setViewport(
+                HeadZoom,
+                geometry.centre + radius * Math.cos(angle) - halfView,
+                geometry.centre + radius * Math.sin(angle) - halfView,
+            );
+        }
         this.update();
     }
 

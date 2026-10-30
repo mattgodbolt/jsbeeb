@@ -15,16 +15,6 @@ export function externalLink(url, text) {
     return link;
 }
 
-// Clone a template row, unhide it, append to parent, and remove the template class.
-export function cloneTemplate(container) {
-    const template = container.querySelector(".template");
-    const clone = template.cloneNode(true);
-    clone.classList.remove("template");
-    clone.style.display = "";
-    container.appendChild(clone);
-    return clone;
-}
-
 /** In px, a shortfall that layout rounding can leave, and that still counts as fitting. */
 const RoundingSlack = 0.5;
 
@@ -93,11 +83,11 @@ export class FittedRows {
 }
 
 /**
- * Has a panel's "Go to" box hand `go` the address its text resolves to, marking the box instead when it resolves to
- * none.
+ * Has a panel's "Go to" box hand `go` what its text resolves to, marking the box instead when it resolves to nothing.
+ * @template Target
  * @param {HTMLFormElement} form
- * @param {(text: string) => number | undefined} resolve
- * @param {(address: number) => void} go
+ * @param {(text: string) => Target | undefined} resolve
+ * @param {(target: Target) => void} go
  */
 export function bindGotoForm(form, resolve, go) {
     const addr = form.querySelector(".goto-addr");
@@ -106,10 +96,10 @@ export function bindGotoForm(form, resolve, go) {
         e.preventDefault();
         const text = addr.value.trim();
         if (!text) return;
-        const address = resolve(text);
-        addr.classList.toggle("is-invalid", address === undefined);
-        if (address === undefined) return;
-        go(address);
+        const target = resolve(text);
+        addr.classList.toggle("is-invalid", target === undefined);
+        if (target === undefined) return;
+        go(target);
         addr.value = "";
         addr.blur();
     });

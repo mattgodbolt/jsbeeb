@@ -82,7 +82,7 @@ const Registers = Object.freeze({
  * @readonly
  * @enum {Number}
  */
-const DriveOut = Object.freeze({
+export const DriveOut = Object.freeze({
     select_1: 0x80,
     select_0: 0x40,
     side: 0x20,
@@ -133,7 +133,7 @@ const Address = Object.freeze({
  * @readonly
  * @enum {Number}
  */
-const Result = Object.freeze({
+export const Result = Object.freeze({
     ok: 0x00,
     clockError: 0x08,
     lateDma: 0x0a,
@@ -152,7 +152,7 @@ const Result = Object.freeze({
  * @readonly
  * @enum {Number}
  */
-const Command = Object.freeze({
+export const Command = Object.freeze({
     scanData: 0,
     scanDataAndDeleted: 1,
     writeData: 2,
@@ -177,7 +177,7 @@ const Command = Object.freeze({
  * @readonly
  * @enum {Number}
  */
-const StatusFlag = Object.freeze({
+export const StatusFlag = Object.freeze({
     busy: 0x80,
     commandFull: 0x40,
     paramFull: 0x20,
@@ -228,7 +228,7 @@ const IndexPulse = Object.freeze({
  * @readonly
  * @enum {Number}
  */
-const TimerState = Object.freeze({
+export const TimerState = Object.freeze({
     none: 0,
     seekStep: 1,
     postSeek: 2,
@@ -240,7 +240,7 @@ const TimerState = Object.freeze({
  * @readonly
  * @enum {Number}
  */
-const State = Object.freeze({
+export const State = Object.freeze({
     null: 0,
     idle: 1,
     syncingForIdWait: 2,
@@ -267,6 +267,8 @@ const State = Object.freeze({
     formatDataCrc_3: 23,
     formatGap_4: 24,
 });
+
+const stateName = (state) => Object.keys(State).find((name) => State[name] === state);
 
 /**
  * Callback state machine.
@@ -312,6 +314,7 @@ export class IntelFdc {
         this._readyTimeoutTicks = (ReadyTimeoutCounts * cpu.peripheralCyclesPerSecond) / ReadyClockHz;
         /** @type {BaseDiscDrive} */
         this._currentDrive = null;
+        this._lastSelectedDrive = this._drives[0];
         this._scheduler = scheduler;
         this._ready = false;
         this._readyPulses = 0;
@@ -339,8 +342,10 @@ export class IntelFdc {
         this._crc = 0;
         this._onDiscCrc = 0;
 
-        this._logCommands = debugFlags ? !!debugFlags.logFdcCommands : false;
-        this._logStateChanges = debugFlags ? !!debugFlags.logFdcStateChanges : false;
+        this.logCommands = debugFlags ? !!debugFlags.logFdcCommands : false;
+        this.logStateChanges = debugFlags ? !!debugFlags.logFdcStateChanges : false;
+        /** @type {((line: string) => void) | null} where log lines go besides the console */
+        this.onLog = null;
 
         this._timerTask = scheduler.newTask(() => this._timerFired());
 
@@ -443,11 +448,13 @@ export class IntelFdc {
     }
 
     _log(message) {
-        console.log(`8271: ${message}`);
+        const line = `8271: ${message}`;
+        console.log(line);
+        this.onLog?.(line);
     }
 
     _logCommand(message) {
-        if (this._logCommands) this._log(message);
+        if (this.logCommands) this._log(message);
     }
 
     /**
@@ -1259,6 +1266,7 @@ export class IntelFdc {
 
         // LOAD HEAD gates each drive select (a 7438, IC79 on the Model B), so with it low no drive is selected
         this._currentDrive = driveOut & DriveOut.loadHead ? drive : null;
+        if (this._currentDrive) this._lastSelectedDrive = this._currentDrive;
 
         if (selectBits !== (this._driveOut & DriveOut.selectFlags)) {
             this._ready = false;
@@ -1280,8 +1288,8 @@ export class IntelFdc {
      * @param {State|Number} state
      */
     _setState(state) {
-        if (this._state !== state && this._logStateChanges) {
-            this._log(`State ${this._state} -> ${state}`);
+        if (this._state !== state && this.logStateChanges) {
+            this._log(`State ${stateName(this._state)} -> ${stateName(state)}`);
         }
         this._state = state;
         this._stateCount = 0;
@@ -1803,6 +1811,7 @@ export class IntelFdc {
         if (selectBits === DriveOut.select_0) this._currentDrive = this._drives[0];
         else if (selectBits === DriveOut.select_1) this._currentDrive = this._drives[1];
         if (!(this._driveOut & DriveOut.loadHead)) this._currentDrive = null;
+        if (this._currentDrive) this._lastSelectedDrive = this._currentDrive;
 
         // Restore timer
         this._timerTask.cancel();
@@ -1835,6 +1844,31 @@ export class IntelFdc {
 
     get drives() {
         return this._drives;
+    }
+
+    /** The registers the debugger shows, read without disturbing anything. */
+    inspect() {
+        const regs = this._regs;
+        return {
+            chip: "8271",
+            command: this._internalCommand,
+            params: [
+                Registers.internalParam_1,
+                Registers.internalParam_2,
+                Registers.internalParam_3,
+                Registers.internalParam_4,
+                Registers.internalParam_5,
+            ].map((reg) => regs[reg]),
+            status: this._status,
+            result: this._result,
+            state: this._state,
+            timerState: this._timerState,
+            awaitingParams: this._paramCallback !== ParamAccept.none,
+            driveOut: this._driveOut,
+            trackRegisters: [regs[Registers.trackDrive_0], regs[Registers.trackDrive_1]],
+            selectedDrive: this._currentDrive ? this._drives.indexOf(this._currentDrive) : null,
+            lastSelectedDrive: this._drives.indexOf(this._lastSelectedDrive),
+        };
     }
 }
 

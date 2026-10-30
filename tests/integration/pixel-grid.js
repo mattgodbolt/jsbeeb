@@ -1,36 +1,16 @@
 import { describe, it, expect } from "vitest";
 import { TestMachine } from "../../src/test-machine.js";
-import { Video } from "../../src/video.js";
+import { FbHeight, FbWidth, FrameCapturingVideo } from "../helpers/frame-capturing-video.js";
 import { decodeLineGrid, findBands } from "../helpers/line-grid.js";
 
-const FbWidth = 1024;
-const FbHeight = 625;
-
-/**
- * A Video that copies the next complete frame painted once one is wanted: read straight after a run,
- * `fb32` and `lineGrid` hold only as much of the raster as the beam had reached.
- */
-class FrameCapturingVideo extends Video {
-    constructor(isAtom) {
-        super(false, FbWidth * FbHeight, () => {}, { isAtom });
-        this.wanted = false;
-        this.frame = null;
-        this.paint_ext = () => {
-            if (!this.wanted) return;
-            this.wanted = false;
-            this.frame = { fb32: this.fb32.slice(), lineGrid: this.lineGrid.slice() };
-        };
-    }
-}
-
 async function render(model, program, { isAtom = false } = {}) {
-    const video = new FrameCapturingVideo(isAtom);
+    const video = new FrameCapturingVideo({ isMaster: false, isAtom });
     const machine = new TestMachine(model, { video });
     await machine.initialise();
     await machine.runUntilInput();
     for (const line of program) await machine.type(line);
     await machine.runUntilInput();
-    video.wanted = true;
+    video.frame = null;
     for (let attempt = 0; attempt < 10 && !video.frame; ++attempt) await machine.runFor(1000 * 1000);
     if (!video.frame) throw new Error("no complete frame was painted");
     return video.frame;
