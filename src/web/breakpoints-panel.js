@@ -1,4 +1,6 @@
 import { hexword } from "../hex.js";
+import { SidewaysEnd, SidewaysStart } from "../paging.js";
+import { textButton } from "./dom-utils.js";
 import { DebugGroup, FloatingPanel, panelShell } from "./floating-panel.js";
 import { EndEdge } from "./panel-layout.js";
 
@@ -6,8 +8,6 @@ const MinPanelSize = { w: 360, h: 100 };
 const StorageKey = "debugBreakpoints";
 const StoreVersion = 1;
 const SavedFields = ["kind", "start", "end", "bank", "condition", "hitCount", "enabled", "action", "label"];
-const SidewaysStart = 0x8000;
-const SidewaysEnd = 0xbfff;
 const Kinds = [
     { kind: "execute", short: "X", name: "Execute", title: "Acts before the CPU runs an instruction here" },
     { kind: "read", short: "R", name: "Read", title: "Acts after an instruction reads here, fetches included" },
@@ -16,16 +16,6 @@ const Kinds = [
 ];
 const KindOf = new Map(Kinds.map((kind) => [kind.kind, kind]));
 const RangeSeparator = /\s*-\s*/;
-
-function textButton(className, text, title) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = `txt-btn ${className}`;
-    button.textContent = text;
-    button.title = title;
-    button.tabIndex = -1;
-    return button;
-}
 
 function rangeText({ start, end }) {
     return start === end ? `$${hexword(start)}` : `$${hexword(start)}-$${hexword(end)}`;
@@ -241,7 +231,7 @@ export class BreakpointsPanel {
         this._nameCells.set(id, name);
         whereCell.append(name);
         if (owner !== "user") whereCell.append(` (from ${owner})`);
-        const sideways = !this._cpu.model.isAtom && start >= SidewaysStart && end <= SidewaysEnd;
+        const sideways = !this._cpu.model.isAtom && start >= SidewaysStart && end < SidewaysEnd;
         if (sideways || bank !== undefined) whereCell.append(this._bankButton(bank, change));
 
         const conditionButton = textButton(condition ? "" : "bp-placeholder", condition ?? "always", "");
