@@ -1,27 +1,13 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 
 import { SoundChip } from "../../src/soundchip.js";
+import { loadWorkletProcessor } from "../helpers/stub-audio-context.js";
 import { goertzelAmplitude } from "./helpers.js";
 
-// audio-renderer.js reads AudioWorklet globals at import time, so stub them
-// before dynamically importing it.
 let SoundChipProcessor;
 
 beforeAll(async () => {
-    vi.stubGlobal("sampleRate", 48000);
-    vi.stubGlobal("currentTime", 0);
-    vi.stubGlobal(
-        "AudioWorkletProcessor",
-        class {
-            constructor() {
-                this.port = { postMessage() {}, onmessage: null };
-            }
-        },
-    );
-    vi.stubGlobal("registerProcessor", (name, cls) => {
-        SoundChipProcessor = cls;
-    });
-    await import("../../src/web/audio-renderer.js");
+    SoundChipProcessor = await loadWorkletProcessor(() => import("../../src/web/audio-renderer.js"), OutputRate);
 });
 
 afterAll(() => {

@@ -33,10 +33,7 @@ describe("the media window against a real machine", () => {
         vi.stubGlobal("XMLHttpRequest", FileBackedXhr);
     });
 
-    afterEach(() => {
-        vi.unstubAllGlobals();
-        teardownDom();
-    });
+    afterEach(teardownDom);
 
     const setUp = async ({ search = "", driveTracks = [DriveTracks.auto, DriveTracks.auto] } = {}) => {
         const machine = new TestMachine();

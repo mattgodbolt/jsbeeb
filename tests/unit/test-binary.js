@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
     DataStream,
+    Fifo,
     readInt16,
     readInt32,
     signExtend,
@@ -183,6 +184,39 @@ describe("binary", () => {
             expect(() => {
                 stream.seek(20);
             }).toThrow(RangeError);
+        });
+    });
+
+    describe("Fifo", () => {
+        it("drops a put when full and gives back what it kept in order", () => {
+            const f = new Fifo(4);
+            expect(f.size).toBe(0);
+            f.put(123);
+            f.put(125);
+            f.put(126);
+            f.put(127);
+            expect(f.size).toBe(4);
+            f.put(100);
+            expect(f.size).toBe(4);
+            expect(f.get()).toBe(123);
+            expect(f.get()).toBe(125);
+            expect(f.get()).toBe(126);
+            expect(f.get()).toBe(127);
+            expect(f.size).toBe(0);
+        });
+
+        it("lists its pending contents oldest first, including once wrapped", () => {
+            const f = new Fifo(4);
+            expect(f.toArray()).toEqual([]);
+            f.put(1);
+            f.put(2);
+            f.put(3);
+            expect(f.toArray()).toEqual([1, 2, 3]);
+            expect(f.get()).toBe(1);
+            f.put(4);
+            f.put(5);
+            expect(f.toArray()).toEqual([2, 3, 4, 5]);
+            expect(f.size).toBe(4);
         });
     });
 });

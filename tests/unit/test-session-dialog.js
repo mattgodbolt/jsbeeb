@@ -17,10 +17,7 @@ describe("SessionDialog", () => {
         join = vi.fn();
     });
 
-    afterEach(() => {
-        vi.restoreAllMocks();
-        teardownDom();
-    });
+    afterEach(teardownDom);
 
     const dialog = () => document.getElementById("session-dialog");
     const find = (selector) => dialog().querySelector(selector);

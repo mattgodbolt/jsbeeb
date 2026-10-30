@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { analyticsLocation } from "../../src/web/analytics.js";
 import { Parameters } from "../../src/web/parameters.js";
 import { stitchHtml } from "../../tools/html-includes.js";
+import { teardownDom } from "./helpers.js";
 
 describe("analytics", () => {
     describe("the features index.html declares", () => {
@@ -117,12 +118,7 @@ describe("analytics", () => {
             );
         });
 
-        afterEach(() => {
-            vi.unstubAllEnvs();
-            vi.unstubAllGlobals();
-            vi.restoreAllMocks();
-            window.history.replaceState(null, "", "/");
-        });
+        afterEach(teardownDom);
 
         describe("without a measurement id", () => {
             it("sends nothing, even with gtag on the page", async () => {
