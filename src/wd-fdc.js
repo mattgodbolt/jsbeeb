@@ -3,10 +3,11 @@
 // eslint-disable-next-line no-unused-vars
 import { Cpu6502, NmiSource } from "./6502.js";
 // eslint-disable-next-line no-unused-vars
-import { attachDriveNoise, BaseDiscDrive, DiscDrive } from "./disc-drive.js";
+import { attachDriveNoise, DiscDrive } from "./disc-drive.js";
 import { IbmDiscFormat } from "./disc-format.js";
 // eslint-disable-next-line no-unused-vars
 import { Scheduler } from "./scheduler.js";
+import { DiscController } from "./fdc.js";
 import { hexbyte } from "./hex.js";
 
 /**
@@ -163,21 +164,15 @@ export const WdFdcVariant = Object.freeze({
     opusChallenger: "opusChallenger",
 });
 
-export class WdFdc {
+export class WdFdc extends DiscController {
     /**
      * @param {Cpu6502} cpu
      * @param {Scheduler} scheduler
-     * @param {BaseDiscDrive[] | undefined} drives
+     * @param {DiscDrive[] | undefined} drives
      * @param {WdFdcVariant} [variant]
      */
     constructor(cpu, scheduler, drives, variant = WdFdcVariant.wd1770) {
-        this._cpu = cpu;
-        if (drives) this._drives = drives;
-        else
-            this._drives = [
-                new DiscDrive(0, scheduler, cpu.peripheralCyclesPerSecond),
-                new DiscDrive(1, scheduler, cpu.peripheralCyclesPerSecond),
-            ];
+        super(cpu, scheduler, drives);
         this._cyclesPerUs = cpu.peripheralCyclesPerSecond / 1000000;
 
         this._isMaster = cpu.model.isMaster;
@@ -194,9 +189,6 @@ export class WdFdc {
         this._isDrq = false;
         this._doRaiseIntRq = false;
 
-        /** @type {BaseDiscDrive|null} */
-        this._currentDrive = null;
-        this._lastSelectedDrive = this._drives[0];
         this._isIndexPulse = false;
         this._isInterruptOnIndexPulse = false;
         this._isWriteTrackCrcSecondByte = false;
@@ -211,7 +203,6 @@ export class WdFdc {
         this._commandStepRateMs = 0;
         this._state = State.idle;
         this._timerState = TimerState.none;
-        this._timerTask = scheduler.newTask(() => this._timerFired());
         this._stateCount = 0;
         this._indexPulseCount = 0;
         this._markDetector = 0n;
@@ -225,17 +216,6 @@ export class WdFdc {
         this._onDiscLength = 0;
         this._onDiscCrc = 0;
         this._lastMfmBit = false;
-
-        this.logCommands = false;
-        this.logStateChanges = false;
-        /** @type {((entry: import("./fdc.js").FdcLogEntry) => void) | null} */
-        this.onLog = null;
-
-        for (const drive of this._drives) {
-            drive.setPulsesCallback((pulses, count) => {
-                if (drive === this._currentDrive) this._pulsesCallback(pulses, count);
-            });
-        }
 
         this.powerOnReset();
     }
@@ -287,19 +267,6 @@ export class WdFdc {
 
     get chip() {
         return this._is1772 ? "WD1772" : "WD1770";
-    }
-
-    _log(entry) {
-        this.onLog?.(entry);
-    }
-
-    _note(text) {
-        if (this.logCommands) this._log({ kind: "note", text });
-    }
-
-    _warn(text) {
-        console.warn(`${this.chip}: ${text}`);
-        this._log({ kind: "warning", text });
     }
 
     /** The registers a log entry shows as they stand. */
@@ -1383,7 +1350,6 @@ export class WdFdc {
     }
 
     snapshotState() {
-        const scheduler = this._timerTask.scheduler;
         return {
             controlRegister: this._controlRegister,
             statusRegister: this._statusRegister,
@@ -1420,7 +1386,7 @@ export class WdFdc {
             onDiscLength: this._onDiscLength,
             onDiscCrc: this._onDiscCrc,
             lastMfmBit: this._lastMfmBit,
-            timerTaskOffset: this._timerTask.scheduled() ? this._timerTask.expireEpoch - scheduler.epoch : null,
+            timerTaskOffset: this._timerTask.offset(),
             drives: this._drives.map((d) => d.snapshotState()),
         };
     }
@@ -1461,10 +1427,7 @@ export class WdFdc {
         this._onDiscCrc = state.onDiscCrc;
         this._lastMfmBit = state.lastMfmBit;
 
-        // Restore drives
-        for (let i = 0; i < this._drives.length; i++) {
-            this._drives[i].restoreState(state.drives[i]);
-        }
+        for (let i = 0; i < this._drives.length; i++) this._drives[i].restoreState(state.drives[i]);
 
         // Derive _currentDrive from _controlRegister
         this._currentDrive = null;
@@ -1475,36 +1438,9 @@ export class WdFdc {
         // A snapshot from before the drives shared the motor line has only the selected one turning.
         if (this._statusRegister & Status.motorOn) for (const drive of this._drives) drive.startSpinning();
 
-        // Restore timer
-        this._timerTask.cancel();
-        if (state.timerTaskOffset !== null) this._timerTask.schedule(state.timerTaskOffset);
+        this._timerTask.restoreOffset(state.timerTaskOffset);
 
         this._updateNmi();
-    }
-
-    /// jsbeeb compatibility stuff
-    /**
-     * @param {Number} drive
-     * @param {Disc} disc
-     */
-    /**
-     * @param {Number} drive
-     * @param {Disc} disc
-     * @param {Number} [tracksPerStep] where to leave the drive's 40/80 switch, which by default
-     *   follows the disc, since no drive can tell what pitch the disc in it was written at
-     */
-    loadDisc(drive, disc, tracksPerStep = disc?.is40Track ? 2 : 1) {
-        this._drives[drive].setDisc(disc);
-        this._drives[drive].tracksPerStep = tracksPerStep;
-    }
-
-    /** Each drive's activity light, which follows its select line: the controller's select gated by the motor. */
-    get motorOn() {
-        return [0, 1].map((i) => !!this._drives[i]?.spinning && this._drives[i] === this._currentDrive);
-    }
-
-    get drives() {
-        return this._drives;
     }
 
     /** The registers the debugger shows, read without disturbing anything. */

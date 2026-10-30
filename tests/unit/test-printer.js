@@ -10,7 +10,7 @@ const PcrCa2Low = 0x0c;
 const IntCa1 = 0x02;
 
 function makeUserVia() {
-    return new UserVia({ interrupt: 0 }, new Scheduler(), false, { read: () => 0xff, write: () => {} });
+    return new UserVia({ interrupt: 0 }, new Scheduler(), { read: () => 0xff, write: () => {} });
 }
 
 function print(uservia, text) {

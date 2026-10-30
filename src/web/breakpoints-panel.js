@@ -1,9 +1,10 @@
-import { hexword } from "../hex.js";
 import { SidewaysEnd, SidewaysStart } from "../paging.js";
 import { machineSheilaBlocks } from "../sheila.js";
-import { placePopup, popupBehaviour, textButton } from "./dom-utils.js";
-import { DebugGroup, FloatingPanel, MenuGroup, panelShell } from "./floating-panel.js";
+import { addressRange } from "./debug-dom.js";
+import { PopupMenu, setText, textButton } from "./dom-utils.js";
+import { DebugGroup, MenuGroup, panelShell } from "./floating-panel.js";
 import { EndEdge } from "./panel-layout.js";
+import { readStored, writeStored } from "./stored-json.js";
 
 const MinPanelSize = { w: 360, h: 100 };
 const StorageKey = "debugBreakpoints";
@@ -110,10 +111,6 @@ function presetStops(cpu) {
     return presets;
 }
 
-function rangeText({ start, end }) {
-    return start === end ? `$${hexword(start)}` : `$${hexword(start)}-$${hexword(end)}`;
-}
-
 /**
  * The Breakpoints panel: every breakpoint the CPU has, however it was set, each enabled or not, stopping or logging,
  * with its condition and hit count, and a form to add one. It saves the user's breakpoints in browser storage, and
@@ -149,8 +146,18 @@ export class BreakpointsPanel {
         this._rendering = false;
         this._newKind = AddressKinds[0];
 
-        const { panel, body } = panelShell({ id: "breakpoints", title: "Breakpoints", feature: "breakpoints" });
-        this.panel = panel;
+        const { floating, body } = panelShell({
+            id: "breakpoints",
+            title: "Breakpoints",
+            feature: "breakpoints",
+            menuGroup: MenuGroup.cpu,
+            group: DebugGroup,
+            place: () => ({ x: EndEdge, y: EndEdge }),
+            minSize: MinPanelSize,
+            arrangement,
+        });
+        this.floating = floating;
+        this.panel = floating.panel;
         body.innerHTML = `
             <table class="bp-list"><tbody></tbody></table>
             <div class="bp-empty">None set. Click beside an instruction in the disassembly, or add one here.</div>
@@ -169,48 +176,25 @@ export class BreakpointsPanel {
             this._showNewKind(AddressKinds[(AddressKinds.indexOf(this._newKind) + 1) % AddressKinds.length]),
         );
         this._stopOn = textButton("bp-stop-on", "Stop on…", "Add a stop that has no address, or a common one");
-        this._stopOn.setAttribute("aria-haspopup", "menu");
-        this._stopOn.setAttribute("aria-expanded", "false");
         form.append(this._stopOn);
-        this._stopMenu = document.createElement("div");
-        this._stopMenu.className = "bp-stop-menu";
-        this._stopMenu.setAttribute("role", "menu");
-        this._stopMenu.hidden = true;
-        document.body.append(this._stopMenu);
-        this._stopOn.addEventListener("click", () => this._showStopMenu(this._stopMenu.hidden));
-        popupBehaviour(
-            this._stopMenu,
-            () => (this._stopMenu.hidden ? null : [this._stopOn, this._stopMenu]),
-            () => this._showStopMenu(false),
-        );
         this._input.addEventListener("input", () => this._invalid(this._input, null));
         form.addEventListener("submit", (e) => {
             e.preventDefault();
             this._addTyped();
         });
 
-        this.floating = new FloatingPanel({
-            panel,
-            id: "breakpoints",
-            title: "Breakpoints",
-            menuGroup: MenuGroup.cpu,
-            group: DebugGroup,
-            place: () => ({ x: EndEdge, y: EndEdge }),
-            minSize: MinPanelSize,
-            reopens: true,
-            arrangement,
+        floating.whileOpen(() => this.update());
+        this._stopMenu = new PopupMenu({
+            opener: this._stopOn,
+            className: "bp-stop-menu",
+            floating: this.floating,
+            build: () => this._stopChoices(),
         });
-        const refresh = arrangement.refreshing(
-            () => this.floating.isOpen,
-            () => this.update(),
-        );
-        this.floating.addEventListener("open", () => refresh.drawNow());
-        this.floating.addEventListener("close", () => this._showStopMenu(false));
     }
 
     /** Shows `cpu`'s breakpoints, first putting back the ones saved on an earlier visit. */
     setCpu(cpu) {
-        this._showStopMenu(false);
+        this._stopMenu.show(false);
         this._cpu = cpu;
         this._breakpoints = cpu.breakpoints;
         this._restore();
@@ -233,10 +217,10 @@ export class BreakpointsPanel {
         for (const { id, start, bank, hits, hitCount, label } of this._breakpoints.list()) {
             const hitText = hitCount > 1 ? `${hits} of ${hitCount}` : `${hits}`;
             const hitCell = this._hitCells.get(id);
-            if (hitCell && hitCell.textContent !== hitText) hitCell.textContent = hitText;
+            if (hitCell) setText(hitCell, hitText);
             const nameText = label ?? (start === undefined ? undefined : this._nameOf(start, bank)) ?? "";
             const nameCell = this._nameCells.get(id);
-            if (nameCell && nameCell.textContent !== nameText) nameCell.textContent = nameText;
+            if (nameCell) setText(nameCell, nameText);
         }
     }
 
@@ -276,32 +260,26 @@ export class BreakpointsPanel {
         this._input.blur();
     }
 
-    _showStopMenu(show) {
-        if (show === !this._stopMenu.hidden) return;
-        this._stopMenu.hidden = !show;
-        this._stopOn.setAttribute("aria-expanded", String(show));
-        if (!show) return;
+    _stopChoices() {
         const choice = ({ name, title }, add) => {
             const button = textButton("bp-stop-choice", name, title);
             button.setAttribute("role", "menuitem");
             button.addEventListener("click", () => {
-                this._showStopMenu(false);
+                this._stopMenu.show(false);
                 add();
                 this._input.blur();
             });
             return button;
         };
+        const presets = presetStops(this._cpu);
         const rule = document.createElement("hr");
         rule.className = "bp-stop-rule";
-        this._stopMenu.replaceChildren(
+        rule.hidden = presets.length === 0;
+        return [
             ...EventKinds.map((kind) => choice(kind, () => this._addEvent(kind.kind))),
             rule,
-            ...presetStops(this._cpu).map((preset) => choice(preset, () => this._breakpoints.add(preset.spec))),
-        );
-        rule.hidden = rule.nextSibling === null;
-        const { left, top, bottom } = this._stopOn.getBoundingClientRect();
-        const height = this._stopMenu.offsetHeight;
-        placePopup(this._stopMenu, left, bottom + height <= window.innerHeight ? bottom : top - height);
+            ...presets.map((preset) => choice(preset, () => this._breakpoints.add(preset.spec))),
+        ];
     }
 
     _addEvent(kind) {
@@ -385,7 +363,7 @@ export class BreakpointsPanel {
                 whereCell.append(" ", this._orEditing(line, id, "line"));
             }
         } else {
-            const where = textButton("bp-where", rangeText(breakpoint), `Show ${rangeText(breakpoint)}`);
+            const where = textButton("bp-where", addressRange(breakpoint), `Show ${addressRange(breakpoint)}`);
             where.addEventListener("click", () =>
                 kind === "execute" ? this._showCode(start, bank) : this._showMemory(start, bank),
             );
@@ -427,7 +405,7 @@ export class BreakpointsPanel {
         cell("", actionButton);
 
         const what =
-            start === undefined ? `the ${eventWhere} breakpoint` : `the breakpoint at ${rangeText(breakpoint)}`;
+            start === undefined ? `the ${eventWhere} breakpoint` : `the breakpoint at ${addressRange(breakpoint)}`;
         const remove = textButton("bp-remove", "×", `Remove ${what}`);
         remove.setAttribute("aria-label", remove.title);
         remove.addEventListener("click", () => this._breakpoints.remove(id));
@@ -486,14 +464,7 @@ export class BreakpointsPanel {
     }
 
     _restore() {
-        if (!this._storage) return;
-        let saved;
-        try {
-            saved = JSON.parse(this._storage().getItem(StorageKey) ?? "null");
-        } catch (error) {
-            console.warn(`Could not read the saved breakpoints: ${error}`);
-            return;
-        }
+        const saved = readStored(this._storage, StorageKey, "the saved breakpoints");
         if (saved?.version !== StoreVersion || !Array.isArray(saved.breakpoints)) return;
         for (const spec of saved.breakpoints) {
             try {
@@ -521,18 +492,11 @@ export class BreakpointsPanel {
     }
 
     _save() {
-        if (!this._storage) return;
         const breakpoints = this._breakpoints
             .list()
             .filter(({ owner }) => owner === "user")
             .map((breakpoint) => this._specOf(breakpoint));
-        try {
-            this._storage().setItem(
-                StorageKey,
-                JSON.stringify({ version: StoreVersion, breakpoints: [...breakpoints, ...this._unrestored] }),
-            );
-        } catch (error) {
-            console.warn(`Could not save the breakpoints: ${error}`);
-        }
+        const saved = { version: StoreVersion, breakpoints: [...breakpoints, ...this._unrestored] };
+        writeStored(this._storage, StorageKey, saved, "the breakpoints");
     }
 }

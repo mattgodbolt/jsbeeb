@@ -1,24 +1,12 @@
-import { createServer } from "vite";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { repoPath } from "../../../tools/html-includes.js";
 import { htmlIncludesPlugin } from "../../../tools/vite-plugin-html-includes.js";
+import { htmlThroughPlugin } from "../../helpers/vite-page.js";
 
 describe("htmlIncludesPlugin", () => {
-    let server;
-
-    afterEach(async () => {
-        await server?.close();
-    });
-
     it("expands includes in the page it serves", async () => {
-        server = await createServer({
-            configFile: false,
-            logLevel: "silent",
-            plugins: [htmlIncludesPlugin()],
-            server: { middlewareMode: true, hmr: false, ws: false },
-        });
-        const html = await server.transformIndexHtml("/index.html", "<!-- include: html/help.html -->\n");
+        const html = await htmlThroughPlugin(htmlIncludesPlugin(), "<!-- include: html/help.html -->\n");
         expect(html).toContain('id="help"');
     });
 

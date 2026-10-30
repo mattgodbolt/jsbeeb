@@ -11,6 +11,7 @@ import { newBenchmarkMachine } from "../src/benchmark-machine.js";
 import { WorkloadsDir } from "../src/benchmark-workloads.js";
 import { DiscLayout } from "../src/disc.js";
 import * as fdc from "../src/fdc.js";
+import { loadData } from "../src/loader.js";
 import { BBC } from "../src/keymap.js";
 import { createSnapshot, snapshotToJSON } from "../src/snapshot.js";
 import { RepoRoot } from "../src/test-machine.js";
@@ -51,7 +52,7 @@ async function pressKey(machine, key) {
 }
 
 async function insertBuiltInDisc(machine, name) {
-    const disc = fdc.discFor(name, await fdc.load(`discs/${name}`));
+    const disc = fdc.discFor(name, await loadData(`discs/${name}`));
     machine.processor.fdc.loadDisc(0, disc);
     return {
         disc1: name,
@@ -201,7 +202,6 @@ async function manifestFor(workloads) {
     return prettier.format(JSON.stringify({ workloads: entries }), { ...options, filepath: ManifestPath });
 }
 
-const sameBytes = (a, b) => a.length === b.length && a.every((byte, index) => byte === b[index]);
 const isObject = (value) => typeof value === "object" && value !== null;
 
 function differingPaths(expected, actual, at) {
@@ -232,7 +232,7 @@ async function main() {
             console.log(`${relative}: ${bytes.length} bytes`);
         } else {
             const checkedIn = readFileSync(file);
-            if (sameBytes(checkedIn, bytes)) continue;
+            if (checkedIn.equals(bytes)) continue;
             console.log(
                 `${relative} differs from what this script builds, ${describeDifference(file, checkedIn, bytes)}`,
             );

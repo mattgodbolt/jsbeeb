@@ -1,5 +1,6 @@
 import { IbmDiscFormat } from "../disc-format.js";
 import { discReport } from "../disc.js";
+import { setText } from "./dom-utils.js";
 import { FloatingPanel, MenuGroup } from "./floating-panel.js";
 import { EndEdge, StartEdge } from "./panel-layout.js";
 import {
@@ -66,11 +67,6 @@ const Views = {
         legend: () => RegionStyles.map(({ hex, name }) => swatch(hex, name)).join("") + swatch(ErrorHex, "CRC error"),
     },
 };
-
-/** These lines are rewritten every frame, so skip the ones that have not changed. */
-function setText(element, text) {
-    if (element.textContent !== text) element.textContent = text;
-}
 
 /** One atomic legend entry, so a swatch never gets orphaned from its label by a line break. */
 function swatch(colour, label) {
@@ -141,14 +137,11 @@ export class DiscVisualiser {
             group: null,
             place: () => ({ x: EndEdge, y: StartEdge }),
             minSize: MinPanelSize,
-            reopens: true,
             arrangement,
         });
-        this._refresh = arrangement.refreshing(
-            () => this.isOpen,
-            () => this.update(),
-        );
+        // Before the first draw, which needs the canvas sized.
         this.floating.addEventListener("open", () => this._start());
+        this._refresh = this.floating.whileOpen(() => this.update());
         this.floating.addEventListener("close", () => this._stop());
         this._bindChoice("[data-drive]", (button) => this._select(Number(button.dataset.drive), this._isSideUpper));
         this._bindChoice("[data-side]", (button) => this._select(this._driveIndex, button.dataset.side === "1"));
@@ -237,22 +230,6 @@ export class DiscVisualiser {
             });
     }
 
-    get isOpen() {
-        return this.floating.isOpen;
-    }
-
-    toggle() {
-        this.floating.toggle();
-    }
-
-    open() {
-        this.floating.open();
-    }
-
-    close() {
-        this.floating.close();
-    }
-
     /** Draws again at the next frame, for a disc put in or taken out while the machine stands still. */
     redraw() {
         this._refresh.drawSoon();
@@ -261,7 +238,7 @@ export class DiscVisualiser {
     /** Opens the panel showing the given drive's lower side. */
     openOn(driveIndex) {
         this._select(driveIndex, false);
-        this.open();
+        this.floating.open();
         this.update();
     }
 
@@ -275,7 +252,7 @@ export class DiscVisualiser {
     zoomToHead(driveIndex) {
         const drive = this._fdc.drives[driveIndex];
         this._select(driveIndex, drive.isSideUpper);
-        this.open();
+        this.floating.open();
         this._zoomTo(drive.track, drive.positionFraction);
         this.update();
     }
@@ -344,7 +321,6 @@ export class DiscVisualiser {
         window.addEventListener("resize", this._onResize);
         this._resizeObserver.observe(this.surfaceCanvas);
         this._resize();
-        this._refresh.drawNow();
     }
 
     _stop() {
@@ -358,7 +334,7 @@ export class DiscVisualiser {
 
     /** Cheap enough to call every frame. */
     update() {
-        if (!this.isOpen || !this._geometry) return;
+        if (!this.floating.isOpen || !this._geometry) return;
         const disc = this._drive?.disc ?? null;
         if (this._isSideUpper && !disc?.isDoubleSided) this._select(this._driveIndex, false);
         if (disc !== this._disc) this._attach(disc);

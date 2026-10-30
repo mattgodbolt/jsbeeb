@@ -2,20 +2,14 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { fake6502 } from "../../src/fake6502.js";
 import { NmiSource } from "../../src/6502.js";
 import { Econet } from "../../src/econet.js";
-import { Video, FakeVideo } from "../../src/video.js";
-import { SoundChip } from "../../src/soundchip.js";
+import { FakeVideo } from "../../src/video.js";
 import { Music5000 } from "../../src/music5000.js";
 import { machineSpec, nullIo } from "../../src/machine-spec.js";
 import { findModel, TEST_6502, TEST_65C02 } from "../../src/models.js";
 import { setNodeBasePath } from "../../src/loader.js";
 import { hexbyte, hexword } from "../../src/hex.js";
 import { expectSnapshotRoundTrips } from "../helpers/snapshot-round-trip.js";
-
-function makeCpu(model = TEST_6502) {
-    const video = new Video(false, 1024 * 768, () => {});
-    const soundChip = new SoundChip(() => {});
-    return new model.Cpu(model, { ...nullIo({ video, soundChip }), config: machineSpec() });
-}
+import { machineWithRealChips } from "./helpers.js";
 
 const SeekDrive1 = 0x69;
 const WriteSpecialRegister = 0x3a;
@@ -95,14 +89,14 @@ describe("Cpu6502 snapshotState / restoreState", () => {
     let cpu;
 
     beforeEach(async () => {
-        cpu = makeCpu();
+        cpu = machineWithRealChips(TEST_6502);
         await cpu.initialise();
     });
 
     it("round-trips a machine part way through a program, its FDC holding an NMI", async () => {
         await expectSnapshotRoundTrips(
             async () => {
-                const machine = makeCpu();
+                const machine = machineWithRealChips(TEST_6502);
                 await machine.initialise();
                 return machine;
             },
@@ -124,7 +118,7 @@ describe("Cpu6502 snapshotState / restoreState", () => {
         cpu.halted = true;
 
         const snapshot = cpu.snapshotState();
-        const cpu2 = makeCpu();
+        const cpu2 = machineWithRealChips(TEST_6502);
         await cpu2.initialise();
         cpu2.restoreState(snapshot);
 
@@ -139,7 +133,7 @@ describe("Cpu6502 snapshotState / restoreState", () => {
         expect(cpu.nmi).toBe(true);
 
         const snapshot = cpu.snapshotState();
-        const cpu2 = makeCpu();
+        const cpu2 = machineWithRealChips(TEST_6502);
         cpu2.restoreState(snapshot);
 
         expect(cpu2.nmi).toBe(true);
@@ -150,7 +144,7 @@ describe("Cpu6502 snapshotState / restoreState", () => {
         takesNmi(cpu);
 
         const snapshot = cpu.snapshotState();
-        const cpu2 = makeCpu();
+        const cpu2 = machineWithRealChips(TEST_6502);
         cpu2.restoreState(snapshot);
 
         expect(cpu2.nmi).toBe(true);
@@ -165,7 +159,7 @@ describe("Cpu6502 snapshotState / restoreState", () => {
         expect(cpu.interrupt & SysViaIrq).toBe(SysViaIrq);
 
         const snapshot = cpu.snapshotState();
-        const cpu2 = makeCpu();
+        const cpu2 = machineWithRealChips(TEST_6502);
         cpu2.restoreState(snapshot);
 
         expect(cpu2.interrupt & SysViaIrq).toBe(SysViaIrq);
@@ -179,7 +173,7 @@ describe("Cpu6502 snapshotState / restoreState", () => {
     it("restores the first 64KB of an older snapshot's 128KB ram and leaves the ROMs alone", async () => {
         const oldRam = new Uint8Array(128 * 1024).fill(0xa5);
         oldRam.fill(0x5a, 64 * 1024);
-        const cpu2 = makeCpu();
+        const cpu2 = machineWithRealChips(TEST_6502);
         await cpu2.initialise();
         cpu2.ramRomOs.fill(0x33, cpu2.romOffset);
         const romsBefore = cpu2.ramRomOs.slice(cpu2.romOffset);
@@ -199,24 +193,32 @@ describe("Cpu6502 NMI lines", () => {
         cpu = fake6502();
     });
 
-    it("takes an NMI when the first source rises", () => {
-        cpu.setNmi(NmiSource.fdc, true);
+    // The line is the OR of its sources, and an NMI is taken on its rising edge.
+    it.each([
+        ["the first source rising", [["fdc", true]], true],
+        ["a source rising while another is held", [["fdc", true], "take", ["econet", true]], false],
+        [
+            "a source pulsing while another is held",
+            [["fdc", true], ["econet", true], "take", ["fdc", false], ["fdc", true]],
+            false,
+        ],
+        [
+            "a source rising once every source has dropped",
+            [["fdc", true], ["econet", true], "take", ["fdc", false], ["econet", false], ["econet", true]],
+            true,
+        ],
+    ])("after %s, takes an NMI: %s", (_name, steps, taken) => {
+        for (const step of steps) {
+            if (step === "take") takesNmi(cpu);
+            else cpu.setNmi(NmiSource[step[0]], step[1]);
+        }
 
-        expect(cpu.nmi).toBe(true);
-        expect(takesNmi(cpu)).toBe(true);
-    });
-
-    it("does not take a second NMI for a source rising while another is held", () => {
-        cpu.setNmi(NmiSource.fdc, true);
-        takesNmi(cpu);
-
-        cpu.setNmi(NmiSource.econet, true);
-
-        expect(takesNmi(cpu)).toBe(false);
+        expect(takesNmi(cpu)).toBe(taken);
     });
 
     it("holds the line until every source has dropped", () => {
         cpu.setNmi(NmiSource.fdc, true);
+        expect(cpu.nmi).toBe(true);
         cpu.setNmi(NmiSource.econet, true);
 
         cpu.setNmi(NmiSource.fdc, false);
@@ -224,29 +226,6 @@ describe("Cpu6502 NMI lines", () => {
 
         cpu.setNmi(NmiSource.econet, false);
         expect(cpu.nmi).toBe(false);
-    });
-
-    it("does not take an NMI for a source pulsing while another is held", () => {
-        cpu.setNmi(NmiSource.fdc, true);
-        cpu.setNmi(NmiSource.econet, true);
-        takesNmi(cpu);
-
-        cpu.setNmi(NmiSource.fdc, false);
-        cpu.setNmi(NmiSource.fdc, true);
-
-        expect(takesNmi(cpu)).toBe(false);
-    });
-
-    it("takes another NMI once every source has dropped and one rises again", () => {
-        cpu.setNmi(NmiSource.fdc, true);
-        cpu.setNmi(NmiSource.econet, true);
-        takesNmi(cpu);
-        cpu.setNmi(NmiSource.fdc, false);
-        cpu.setNmi(NmiSource.econet, false);
-
-        cpu.setNmi(NmiSource.econet, true);
-
-        expect(takesNmi(cpu)).toBe(true);
     });
 
     it("tells each source whether its own line is up", () => {
@@ -661,7 +640,7 @@ describe("peeking at the hardware", () => {
     });
 
     it("shows the CRTC's readable registers", () => {
-        const cpu = makeCpu();
+        const cpu = machineWithRealChips(TEST_6502);
         cpu.writemem(CrtcAddress, CrtcStartAddressLow);
         cpu.writemem(CrtcData, StartAddressLow);
         expect(cpu.peekmem(CrtcData)).toBe(StartAddressLow);
@@ -731,7 +710,7 @@ describe("Cpu6502 debug hooks", () => {
         ["6502", TEST_6502],
         ["65C02", TEST_65C02],
     ])("is given the value each read on the %s returns", async (_name, model) => {
-        const cpu = makeCpu(model);
+        const cpu = machineWithRealChips(model);
         await cpu.initialise();
         Program.forEach((byte, i) => cpu.writemem(ProgramAddress + i, byte));
         cpu.writemem(SubroutineAddress, 0x60); // RTS
@@ -754,7 +733,7 @@ describe("Cpu6502 debug hooks", () => {
     });
 
     async function cpuRunningStoringLoop() {
-        const cpu = makeCpu();
+        const cpu = machineWithRealChips(TEST_6502);
         await cpu.initialise();
         StoringLoop.forEach((byte, i) => cpu.writemem(ProgramAddress + i, byte));
         cpu.writemem(AbsoluteAddress, 0x99);

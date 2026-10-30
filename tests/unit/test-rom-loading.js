@@ -2,10 +2,7 @@ import { afterEach, describe, it, expect, vi } from "vitest";
 import { readFileSync } from "fs";
 import { findModel, TEST_6502 } from "../../src/models.js";
 import { machineSpec, nullIo } from "../../src/machine-spec.js";
-
-function makeCpu() {
-    return new TEST_6502.Cpu(TEST_6502, { ...nullIo(), config: machineSpec() });
-}
+import { fake6502 } from "../../src/fake6502.js";
 
 const romTitle = (cpu, bank) => String.fromCharCode(...cpu.romBank(bank).subarray(9, 12));
 
@@ -14,12 +11,12 @@ const NumFreeRomBanks = 8;
 
 describe("Cpu6502 extra ROM loading", () => {
     it("loads extra ROMs into every free sideways bank", async () => {
-        const cpu = makeCpu();
+        const cpu = fake6502(TEST_6502);
         await cpu.loadOs("os.rom", ...Array(NumFreeRomBanks).fill("BASIC.ROM"));
     });
 
     it("throws when extra ROMs exceed the free sideways banks", async () => {
-        const cpu = makeCpu();
+        const cpu = fake6502(TEST_6502);
         await expect(cpu.loadOs("os.rom", ...Array(NumFreeRomBanks + 1).fill("BASIC.ROM"))).rejects.toThrow(
             "Too many extra ROMs",
         );

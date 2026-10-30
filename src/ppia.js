@@ -1,5 +1,5 @@
 import { ATOM, getKeyMapAtom } from "./keymap-atom.js";
-import { ShiftOverride } from "./keymap.js";
+import { WithKeyMatrix } from "./keymap.js";
 
 // 8255 Programmable Peripheral Interface Adapter for the Acorn Atom.
 // Reference: http://mdfs.net/Docs/Comp/Acorn/Atom/atap25.htm
@@ -207,36 +207,27 @@ class PPIA {
     portCUpdated() {}
 }
 
+const AtomKeyColumns = 10;
+
 // On the atom, the PPIA does the keyboard, speaker and tape.
 // On the BBC, sysVIA does the keyboard and pokes the soundchip
 // and the ACIA does the tape
-export class AtomPPIA extends PPIA {
+export class AtomPPIA extends WithKeyMatrix(PPIA) {
     constructor(cpu, initialLayout, scheduler) {
         super(cpu);
 
-        this.keys = [];
-        for (let i = 0; i < 16; ++i) {
-            this.keys[i] = new Uint8Array(16);
-        }
-
+        this._initKeyMatrix(ATOM.SHIFT, AtomKeyColumns);
         this.setKeyLayout(initialLayout);
-        this.shift = new ShiftOverride(ATOM.SHIFT);
-
-        this.keyboardEnabled = true;
         // The Atom has no lock lights. Report caps lock as "on" and shift
         // lock as "off" so the paste routine's lock-toggle logic is never
         // triggered (it toggles CAPSLOCK when !capsLockLight, and SHIFTLOCK
         // when shiftLockLight).
         this.capsLockLight = true;
         this.shiftLockLight = false;
-        this.tapeCarrierCount = 0;
-        this.tapeDcdLineLevel = false;
         this.motorOn = false;
 
         this.reset();
 
-        // from ACIA; compat ignores parameters as shadowing, so takes our Scheduler for the browser's global.
-        // eslint-disable-next-line compat/compat
         this.runTapeTask = scheduler.newTask(() => this.runTape());
     }
 
@@ -247,84 +238,6 @@ export class AtomPPIA extends PPIA {
 
     setKeyLayout(map) {
         this.keycodeToRowCol = getKeyMapAtom(map);
-    }
-
-    // from SysVIA
-    clearKeys() {
-        for (let i = 0; i < this.keys.length; ++i) {
-            for (let j = 0; j < this.keys[i].length; ++j) {
-                this.keys[i][j] = 0;
-            }
-        }
-        this.shift.clear();
-        this.updateKeys();
-    }
-
-    // from SysVIA
-    disableKeyboard() {
-        this.keyboardEnabled = false;
-        this.clearKeys();
-    }
-
-    // from SysVIA
-    enableKeyboard() {
-        this.keyboardEnabled = true;
-        this.clearKeys();
-    }
-
-    // from SysVIA
-    set(key, val, shiftDown) {
-        if (!this.keyboardEnabled) return;
-        const colrow = this.keycodeToRowCol[!!shiftDown][key];
-        if (!colrow) return;
-        this.shift.setMapped(this.keys, colrow, val);
-        this.updateKeys();
-    }
-
-    // from SysVIA
-    keyDown(key, shiftDown) {
-        this.set(key, 1, shiftDown);
-    }
-
-    // from SysVIA
-    keyUp(key) {
-        // set up for both keymaps
-        // (with and without shift)
-        this.set(key, 0, true);
-        this.set(key, 0, false);
-    }
-
-    // from SysVIA
-    keyDownRaw(colrow) {
-        this.keys[colrow[0]][colrow[1]] = 1;
-        this.updateKeys();
-    }
-
-    // from SysVIA
-    keyUpRaw(colrow) {
-        this.keys[colrow[0]][colrow[1]] = 0;
-        this.updateKeys();
-    }
-
-    // from SysVIA
-    keyToggleRaw(colrow) {
-        this.keys[colrow[0]][colrow[1]] = 1 - this.keys[colrow[0]][colrow[1]];
-        this.updateKeys();
-    }
-
-    // from SysVIA
-    hasAnyKeyDown() {
-        // 10 for ATOM
-        const numCols = 10;
-
-        for (let i = 0; i < numCols; ++i) {
-            for (let j = 0; j < 8; ++j) {
-                if (this.keys[i][j]) {
-                    return true;
-                }
-            }
-        }
-        return false;
     }
 
     // nothing on ATOM
@@ -363,29 +276,8 @@ export class AtomPPIA extends PPIA {
         else toneGen.tone(freq);
     }
 
-    // nothing on ATOM
-    dcdLineUpdated() {}
-
-    // set by TAPE
-    setTapeCarrier(level) {
-        if (!level) {
-            this.tapeCarrierCount = 0;
-            this.tapeDcdLineLevel = false;
-        } else {
-            this.tapeCarrierCount++;
-            // The tape hardware doesn't raise DCD until the carrier tone
-            // has persisted for a while. The BBC service manual opines,
-            // "The DCD flag in the 6850 should change 0.1 to 0.4 seconds
-            // after a continuous tone appears".
-            // Star Drifter doesn't load without this.
-            // We use 0.174s, measured on an issue 3 model B.
-            // Testing on real hardware, DCD is blipped, it lowers about
-            // 210us after it raises, even though the carrier tone
-            // may be continuing.
-            this.tapeDcdLineLevel = this.tapeCarrierCount === 209;
-        }
-        this.dcdLineUpdated();
-    }
+    // The Atom has no carrier detect.
+    setTapeCarrier() {}
 
     // Receive bits from tape (called by tape.poll via PPIA, not ACIA like BBC).
     // Called once every ~208 clock cycles (208us at 1 MHz).
@@ -442,7 +334,6 @@ export class AtomPPIA extends PPIA {
             const toneGen = this.cpu.soundChip.toneGenerator;
             toneGen.mute();
             this.runTapeTask.cancel();
-            this.setTapeCarrier(false);
         }
     }
 

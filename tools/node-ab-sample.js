@@ -3,7 +3,7 @@
 // then time tick-sized execute() calls. The result goes back over the IPC channel, so a --trace-deopt log
 // can have stdout to itself.
 import path from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 
 import { sampleWorkload } from "./ab-sample.js";
@@ -28,7 +28,7 @@ async function main() {
     });
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (import.meta.main) {
     main().then(
         (result) => process.send({ result }, () => process.exit(0)),
         (error) => process.send({ error: error.stack ?? String(error) }, () => process.exit(1)),

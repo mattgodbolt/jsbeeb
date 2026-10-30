@@ -1,11 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { UrlState } from "../../src/web/url-state.js";
-import { FloatingPanel } from "../../src/web/floating-panel.js";
+import { panelShell } from "../../src/web/floating-panel.js";
 import { StartEdge } from "../../src/web/panel-layout.js";
 import { stitchHtml } from "../../tools/html-includes.js";
 import { RomBankBytes } from "../../src/6502.js";
 import { findModel } from "../../src/models.js";
+import { fake6502 } from "../../src/fake6502.js";
+import { Video } from "../../src/video.js";
+import { SoundChip } from "../../src/soundchip.js";
 
 let indexHtmlDoc = null;
 
@@ -201,24 +204,25 @@ export async function teardownDom() {
     window.sessionStorage.clear();
 }
 
-/** A FloatingPanel on a bare element of its own, offered in menus as `title` under `menuGroup` (or not, for null). */
+/** Whether a mouse press on `target` is kept from moving the keyboard focus. */
+export function pressKeepsFocus(target) {
+    const press = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
+    target.dispatchEvent(press);
+    return press.defaultPrevented;
+}
+
+/** A FloatingPanel with an empty body, offered in menus as `title` under `menuGroup` (or not, for null). */
 export function bareFloatingPanel(arrangement, id, title, menuGroup) {
-    document.body.insertAdjacentHTML(
-        "beforeend",
-        `<div id="${id}" hidden><div class="panel-header"><button class="panel-close"></button></div></div>`,
-    );
-    const element = document.getElementById(id);
-    return new FloatingPanel({
-        panel: element,
+    return panelShell({
         id,
         title,
+        feature: id,
         menuGroup,
         group: null,
         place: () => ({ x: StartEdge, y: StartEdge }),
         minSize: { w: 100, h: 50 },
-        reopens: false,
         arrangement,
-    });
+    }).floating;
 }
 
 /**
@@ -303,4 +307,15 @@ export function fitRomHeader(cpu, bank, title, version) {
 export function romless(name) {
     const model = findModel(name);
     return Object.assign(Object.create(Object.getPrototypeOf(model)), model, { os: [] });
+}
+
+const FramebufferPixels = 1024 * 768;
+
+/** A fake6502 machine with a real Video and SoundChip, so their state goes into its snapshots. */
+export function machineWithRealChips(model, options) {
+    return fake6502(model, {
+        ...options,
+        video: new Video(false, FramebufferPixels, () => {}),
+        soundChip: new SoundChip(() => {}),
+    });
 }

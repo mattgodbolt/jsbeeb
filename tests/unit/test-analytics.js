@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { analyticsLocation } from "../../src/web/analytics.js";
 import { Parameters } from "../../src/web/parameters.js";
 import { stitchHtml } from "../../tools/html-includes.js";
+import { teardownDom } from "./helpers.js";
 
 describe("analytics", () => {
     describe("the features index.html declares", () => {
@@ -117,12 +118,7 @@ describe("analytics", () => {
             );
         });
 
-        afterEach(() => {
-            vi.unstubAllEnvs();
-            vi.unstubAllGlobals();
-            vi.restoreAllMocks();
-            window.history.replaceState(null, "", "/");
-        });
+        afterEach(teardownDom);
 
         describe("without a measurement id", () => {
             it("sends nothing, even with gtag on the page", async () => {
@@ -223,8 +219,6 @@ describe("analytics", () => {
                 gtag.mock.calls.filter(([command, event]) => command === "event" && event === name).map(([, , p]) => p);
 
             describe("noteFeature", () => {
-                afterEach(() => (document.body.innerHTML = ""));
-
                 it("names the feature by the data-feature its element is or is inside", async () => {
                     const { noteFeature } = await loadWithMeasurementId(measurementId);
                     document.body.innerHTML = '<div data-feature="rewind"><button>x</button></div><p>none</p>';

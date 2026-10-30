@@ -1,7 +1,5 @@
 import { replaceOrAddExtension } from "../archive.js";
 
-// Minimal DOM helpers to replace jQuery usage.
-
 export function toggle(el, visible) {
     el.style.display = visible ? "" : "none";
 }
@@ -43,6 +41,11 @@ export function downloadBlob(blob, fileName) {
 export function downloadDriveData(data, name, extension) {
     const blob = new Blob([data], { type: "application/octet-stream" });
     downloadBlob(blob, replaceOrAddExtension(name, extension));
+}
+
+/** For text rewritten every frame: a write that changes nothing would still cost the page a layout. */
+export function setText(element, text) {
+    if (element.textContent !== text) element.textContent = text;
 }
 
 /** A button drawn as text, out of the tab order, so that Tab from a panel's text box can't reach it. */
@@ -94,4 +97,47 @@ export function popupBehaviour(popup, inside, dismiss) {
 export function placePopup(popup, x, y) {
     popup.style.left = `${Math.max(0, Math.min(x, window.innerWidth - popup.offsetWidth))}px`;
     popup.style.top = `${Math.max(0, Math.min(y, window.innerHeight - popup.offsetHeight))}px`;
+}
+
+/**
+ * A menu fixed on the page under the button that opens it, or above it when there is no room below, built afresh
+ * by `build` each time it opens, and closed as any popup is or when its panel closes.
+ */
+export class PopupMenu {
+    /**
+     * @param {object} options
+     * @param {HTMLElement} options.opener - the button that opens and closes it
+     * @param {string} options.className
+     * @param {import("./floating-panel.js").FloatingPanel} options.floating - the panel it belongs to
+     * @param {() => HTMLElement[]} options.build - its contents
+     */
+    constructor({ opener, className, floating, build }) {
+        this._opener = opener;
+        this._build = build;
+        opener.setAttribute("aria-haspopup", "menu");
+        opener.setAttribute("aria-expanded", "false");
+        this._menu = document.createElement("div");
+        this._menu.className = className;
+        this._menu.setAttribute("role", "menu");
+        this._menu.hidden = true;
+        document.body.append(this._menu);
+        opener.addEventListener("click", () => this.show(this._menu.hidden));
+        popupBehaviour(
+            this._menu,
+            () => (this._menu.hidden ? null : [opener, this._menu]),
+            () => this.show(false),
+        );
+        floating.addEventListener("close", () => this.show(false));
+    }
+
+    show(on) {
+        if (on === !this._menu.hidden) return;
+        this._menu.hidden = !on;
+        this._opener.setAttribute("aria-expanded", String(on));
+        if (!on) return;
+        this._menu.replaceChildren(...this._build());
+        const { left, top, bottom } = this._opener.getBoundingClientRect();
+        const height = this._menu.offsetHeight;
+        placePopup(this._menu, left, bottom + height <= window.innerHeight ? bottom : top - height);
+    }
 }

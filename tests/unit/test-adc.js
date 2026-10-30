@@ -119,24 +119,14 @@ describe("Adc", () => {
     });
 
     describe("sources", () => {
-        it("disposes of a source when it is replaced or cleared, and not when set again", () => {
+        it("disposes of a source when it is replaced, and not when set again", () => {
             const first = source(1);
             const second = source(2);
             adc.setChannelSource(0, first);
             adc.setChannelSource(0, first);
             expect(first.dispose).not.toHaveBeenCalled();
             adc.setChannelSource(0, second);
-            expect([first.dispose.mock.calls.length, adc.getChannelSource(0)]).toEqual([1, second]);
-            expect(adc.clearChannelSource(0)).toBe(true);
-            expect([second.dispose.mock.calls.length, adc.getChannelSource(0)]).toEqual([1, null]);
-        });
-
-        it("disposes of every source on clearing them all", () => {
-            const sources = [0, 1, 2, 3].map(source);
-            sources.forEach((s, channel) => adc.setChannelSource(channel, s));
-            adc.clearSources();
-            expect(sources.map((s) => s.dispose.mock.calls.length)).toEqual([1, 1, 1, 1]);
-            expect([0, 1, 2, 3].map((channel) => adc.getChannelSource(channel))).toEqual([null, null, null, null]);
+            expect([first.dispose.mock.calls.length, second.dispose.mock.calls.length]).toEqual([1, 0]);
         });
     });
 

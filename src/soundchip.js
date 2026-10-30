@@ -19,7 +19,7 @@ const EventProgressCycles = 4000;
 // The tone counters are 10 bits wide and wrap, so a period of 0 counts this many steps.
 export const ToneCounterSteps = 1024;
 
-const volumeTable = new Float32Array(16);
+export const volumeTable = new Float32Array(16);
 (() => {
     let f = 1.0;
     for (let i = 0; i < 15; ++i) {
@@ -214,20 +214,6 @@ export class SoundChip {
             if (this._doChannelStep(channel, add)) this.shiftLfsr();
             out[i + offset] += (this.lfsr & 1) * vol;
         }
-    }
-
-    debugPokeAll(c0, v0, c1, v1, c2, v2, c3, v3) {
-        this.catchUp();
-        this.registers[0] = c0 & 0xffffff;
-        this.registers[1] = c1 & 0xffffff;
-        this.registers[2] = c2 & 0xffffff;
-        this.registers[3] = c3 & 0xffffff;
-        this.volume[0] = volumeTable[v0];
-        this.volume[1] = volumeTable[v1];
-        this.volume[2] = volumeTable[v2];
-        this.volume[3] = volumeTable[v3];
-        this.noisePoked();
-        this._emit("state", this.snapshotState());
     }
 
     generate(out, offset, length) {
@@ -598,16 +584,6 @@ export class InstrumentedSoundChip extends SoundChip {
         return this._capturedWrites;
     }
 
-    /** Get the captured writes without stopping. */
-    getCapturedWrites() {
-        return this._capturedWrites;
-    }
-
-    /** Clear captured writes. */
-    clearCapture() {
-        this._capturedWrites = [];
-    }
-
     /** Track total cycles for timestamps. Called by the scheduler. */
     advance(cycles) {
         this._totalCycles += cycles;
@@ -658,7 +634,5 @@ export class FakeSoundChip {
         return {};
     }
 
-    restoreState() {
-        this._speakerCycleOffset = 0;
-    }
+    restoreState() {}
 }

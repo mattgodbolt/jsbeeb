@@ -81,6 +81,7 @@ describe("MediaWindow", () => {
         urlState = fakeUrlState();
         const drives = new Drives({
             fdc,
+            hasDiscDrives: true,
             driveTracks: [DriveTracks.auto, DriveTracks.auto],
             confirm: vi.fn(),
             urlState,
@@ -96,7 +97,7 @@ describe("MediaWindow", () => {
             setAutoboot: vi.fn((on) => urlState.set({ autoboot: on ? true : undefined })),
         });
         media.slots = new MediaSlots({ loader: media, drives, processor, urlState });
-        const model = { isAtom: false };
+        const model = { isAtom: false, hasDiscDrives: true };
         confirm = vi.fn();
         deps = {
             media,
@@ -169,12 +170,15 @@ describe("MediaWindow", () => {
         Object.defineProperty(input, "files", { value: [fileNamed(name)] });
         input.dispatchEvent(new Event("change"));
     };
-    const dragEvent = (type, target = document.body) => {
-        const event = new Event(type, { bubbles: true, cancelable: true });
-        Object.defineProperty(event, "dataTransfer", { value: { types: ["Files"], files: [], dropEffect: "" } });
-        target.dispatchEvent(event);
-        return event;
-    };
+    const dragCarrying =
+        (types) =>
+        (type, target = document.body) => {
+            const event = new Event(type, { bubbles: true, cancelable: true });
+            Object.defineProperty(event, "dataTransfer", { value: { types, files: [], dropEffect: "" } });
+            target.dispatchEvent(event);
+            return event;
+        };
+    const dragEvent = dragCarrying(["Files"]);
     const dropFile = (name) => {
         const event = new Event("drop", { bubbles: true, cancelable: true });
         Object.defineProperty(event, "dataTransfer", { value: { types: ["Files"], files: [fileNamed(name)] } });
@@ -541,12 +545,6 @@ describe("MediaWindow", () => {
             expect(byId("deck-hide").hidden).toBe(true);
             slots().eject(slots().deck);
             expect(byId("deck-hide").hidden).toBe(false);
-        });
-
-        it("starts unfolded on an Atom", () => {
-            deps.model.isAtom = true;
-            make();
-            expect(panel().classList.contains("deck-collapsed")).toBe(false);
         });
     });
 
@@ -1256,13 +1254,17 @@ describe("MediaWindow", () => {
             expect(zone().hidden).toBe(true);
         });
 
-        it("ignores a drag that carries no files", () => {
+        it("takes a drag of files, and refuses one that carries none so a dropped link cannot replace the page", () => {
             make();
-            const event = new Event("dragenter", { bubbles: true, cancelable: true });
-            Object.defineProperty(event, "dataTransfer", { value: { types: ["text/plain"], files: [] } });
-            document.body.dispatchEvent(event);
+            expect(dragEvent("dragover").dataTransfer.dropEffect).toBe("copy");
+            const notFiles = dragCarrying(["text/uri-list"]);
+            expect(notFiles("dragenter").defaultPrevented).toBe(false);
             expect(zone().hidden).toBe(true);
-            expect(event.defaultPrevented).toBe(false);
+            const over = notFiles("dragover");
+            expect(over.defaultPrevented).toBe(true);
+            expect(over.dataTransfer.dropEffect).toBe("none");
+            expect(notFiles("drop").defaultPrevented).toBe(true);
+            expect(deps.media.openFile).not.toHaveBeenCalled();
         });
 
         it("leaves a drop to an element that takes its own, saying what it does there", async () => {
@@ -1442,31 +1444,25 @@ describe("MediaWindow", () => {
         });
     });
 
-    describe("on the Atom, which has no drives", () => {
-        beforeEach(() => {
-            deps.model.isAtom = true;
-            deps.processor.fdc = undefined;
-        });
-
-        it("shows only the deck, and aims at it however it is opened", () => {
-            const window = make();
-            expect(document.querySelector("#media-panel .media-case").hidden).toBe(true);
-            expect(document.querySelector('#media-into [data-target="0"]').hidden).toBe(true);
-            expect(document.querySelector('#media-into [data-target="tape"]').hidden).toBe(false);
-            window.open();
-            expect(byId("deck-window").classList.contains("target")).toBe(true);
-            window.close();
-            window.openFor(0);
-            expect(byId("deck-window").classList.contains("target")).toBe(true);
-            expect(byId("media-search").placeholder).toBe("Search for a tape for the deck");
-        });
-
-        it("offers no discs, whatever the sources list", async () => {
-            await openWith([elite, chuckie]);
-            expect(rowTitles()).toEqual(["Chuckie"]);
-            const chips = [...document.querySelectorAll("#media-chips .media-chip")].map((c) => c.textContent);
-            expect(chips).not.toContain("Discs");
-        });
+    it("offers only the deck, unfolded, and tapes on a machine without disc drives", async () => {
+        deps.model.hasDiscDrives = false;
+        putDiscIn(0, ssd());
+        const window = await openWith([elite, chuckie]);
+        expect(panel().querySelector(".media-case").hidden).toBe(true);
+        expect(panel().classList.contains("deck-collapsed")).toBe(false);
+        expect(document.querySelector('#media-into [data-target="0"]').hidden).toBe(true);
+        expect(byId("media-new-disc").hidden).toBe(true);
+        expect(byId("media-connect-drive").hidden).toBe(true);
+        expect(rowTitles()).toEqual(["Chuckie"]);
+        const chips = [...document.querySelectorAll("#media-chips .media-chip")].map((c) => c.textContent);
+        expect(chips).toEqual(["All", "STH archive 1", "Tapes"]);
+        expect(byId("media-count").textContent).toBe("1 of 1");
+        expect(byId("media-summary").textContent).toBe("tape: empty");
+        window.close();
+        window.openFor(0);
+        expect(byId("deck-window").classList.contains("target")).toBe(true);
+        expect(byId("media-search").placeholder).toBe("Search for a tape for the deck");
+        expect(byId("media-open-label").title).toBe("Open a tape image from this computer");
     });
 
     describe("what a slot is called", () => {

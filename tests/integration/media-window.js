@@ -14,7 +14,8 @@ import { describeRef } from "../../src/web/media-catalogue.js";
 import { DriveTracks } from "../../src/url-params.js";
 import { TestMachine } from "../../src/test-machine.js";
 import { domFromIndexHtml, fakeUrlState, teardownDom } from "../unit/helpers.js";
-import { FileBackedXhr, RepoRoot } from "./helpers.js";
+import { FileBackedXhr } from "../helpers/file-backed-xhr.js";
+import { RepoRoot } from "./helpers.js";
 
 describe("the media window against a real machine", () => {
     beforeEach(() => {
@@ -33,10 +34,7 @@ describe("the media window against a real machine", () => {
         vi.stubGlobal("XMLHttpRequest", FileBackedXhr);
     });
 
-    afterEach(() => {
-        vi.unstubAllGlobals();
-        teardownDom();
-    });
+    afterEach(teardownDom);
 
     const setUp = async ({ search = "", driveTracks = [DriveTracks.auto, DriveTracks.auto] } = {}) => {
         const machine = new TestMachine();
@@ -44,6 +42,7 @@ describe("the media window against a real machine", () => {
         const urlState = fakeUrlState(search);
         const drives = new Drives({
             fdc: machine.processor.fdc,
+            hasDiscDrives: machine.model.hasDiscDrives,
             driveTracks,
             confirm: async () => false,
             urlState,

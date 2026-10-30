@@ -28,6 +28,7 @@ class Model {
         cpuModel,
         isMaster,
         isAtom,
+        hasDiscDrives,
         swram,
         romSockets,
         fdc,
@@ -36,6 +37,7 @@ class Model {
         clockMhz,
         idleAddress,
         vsyncAddress,
+        isTest,
     } = {}) {
         if (!(clockMhz > 0)) throw new Error(`Model ${name} has no clock speed`);
         this.name = name;
@@ -66,11 +68,13 @@ class Model {
         // twice before it takes the next.
         this.pasteReleaseGapMs = this.isAtom ? 40 : 0;
         this.Fdc = fdc;
+        // Every model is built with a disc controller; an Atom has drives on it only with the DOS ROM.
+        this.hasDiscDrives = hasDiscDrives ?? !this.isAtom;
         this.swram = swram;
         // How many sockets ROMSEL decodes: they fill the top banks, and every bank number pages the socket its low
         // bits pick. A Model B without a sideways board decodes two bits, for four.
         this.romSockets = romSockets ?? NumRomBanks;
-        this.isTest = false;
+        this.isTest = !!isTest;
         this.cmosOverride = cmosOverride;
     }
 
@@ -100,22 +104,20 @@ class Model {
     }
 }
 
-function pickAdfs(cmos) {
-    cmos[19] = (cmos[19] & 0xf0) | 13;
-    return cmos;
+const FilingSystemCmosByte = 19;
+const MasterAnfsRom = 8;
+const MasterDfsRom = 9;
+const MasterAdfsRom = 13;
+
+// The low nibble of the filing system byte is the ROM the Master boots its filing system from.
+function bootFilingSystemRom(rom) {
+    return (cmos) => {
+        cmos[FilingSystemCmosByte] = (cmos[FilingSystemCmosByte] & 0xf0) | rom;
+        return cmos;
+    };
 }
 
-function pickAnfs(cmos) {
-    cmos[19] = (cmos[19] & 0xf0) | 8;
-    return cmos;
-}
-
-function pickDfs(cmos) {
-    cmos[19] = (cmos[19] & 0xf0) | 9;
-    return cmos;
-}
-
-function atomModel({ name, synonyms, os, banks }) {
+function atomModel({ name, synonyms, os, banks, hasDiscDrives }) {
     return new Model({
         name,
         shortName: "Atom",
@@ -128,183 +130,124 @@ function atomModel({ name, synonyms, os, banks }) {
         swram: noSwram,
         fdc: NoiseAwareIntelFdc,
         banks,
+        hasDiscDrives,
     });
 }
 
 // A convenience layout for the expanded B models, not any real board's: all sixteen banks decoded, and RAM in 0-7
-// written through ROMSEL. Real boards: #1539.
-const beebSwram = [
-    true,
-    true,
-    true,
-    true, // Dunjunz variants. Exile (not picky).
-    true,
-    true,
-    true,
-    true, // Crazee Rider.
-    false,
-    false,
-    false,
-    false,
-    false,
-    false,
-    false,
-    false,
-];
-const noSwram = Array(16).fill(false);
-const masterSwram = [
-    false,
-    false,
-    false,
-    false,
-    true,
-    true,
-    true,
-    true,
-    false,
-    false,
-    false,
-    false,
-    false,
-    false,
-    false,
-    false,
-];
+// written through ROMSEL (0-3 for the Dunjunz variants, 4-7 for Crazee Rider; Exile is not picky). Real boards: #1539.
+const beebSwram = Array.from({ length: NumRomBanks }, (_, bank) => bank < 8);
+const noSwram = Array(NumRomBanks).fill(false);
+const masterSwram = Array.from({ length: NumRomBanks }, (_, bank) => bank >= 4 && bank < 8);
+
+function bbcBModel(fields) {
+    return new Model({
+        shortName: "BBC B",
+        cpuModel: CpuModel.MOS6502,
+        isMaster: false,
+        clockMhz: 2,
+        swram: beebSwram,
+        fdc: NoiseAwareIntelFdc,
+        ...fields,
+    });
+}
+
+function masterModel(fields) {
+    return new Model({
+        shortName: "Master 128",
+        os: ["master/mos3.20"],
+        cpuModel: CpuModel.CMOS65C12,
+        isMaster: true,
+        clockMhz: 2,
+        swram: masterSwram,
+        fdc: NoiseAwareWdFdc,
+        ...fields,
+    });
+}
+
+function testModel(cpuModel, swram) {
+    return new Model({
+        name: "TEST",
+        synonyms: ["TEST"],
+        os: [],
+        clockMhz: 2,
+        cpuModel,
+        isMaster: false,
+        swram,
+        fdc: NoiseAwareIntelFdc,
+        isTest: true,
+    });
+}
 
 export const allModels = [
-    new Model({
+    bbcBModel({
         name: "BBC B with 8271 (DFS 1.2)",
-        shortName: "BBC B",
         synonyms: ["B-DFS1.2", "BBC B with DFS 1.2"],
         os: ["os.rom", "BASIC.ROM", "b/DFS-1.2.rom"],
-        cpuModel: CpuModel.MOS6502,
-        isMaster: false,
-        clockMhz: 2,
-        swram: beebSwram,
-        fdc: NoiseAwareIntelFdc,
     }),
-    new Model({
+    bbcBModel({
         name: "BBC B with 8271 (DFS 0.9)",
-        shortName: "BBC B",
         synonyms: ["B-DFS0.9", "B", "BBC B with DFS 0.9"],
         os: ["os.rom", "BASIC.ROM", "b/DFS-0.9.rom"],
-        cpuModel: CpuModel.MOS6502,
-        isMaster: false,
-        clockMhz: 2,
-        swram: beebSwram,
-        fdc: NoiseAwareIntelFdc,
     }),
-    new Model({
+    bbcBModel({
         name: "BBC B with 1770 (DFS)",
-        shortName: "BBC B",
         synonyms: ["B1770"],
         os: ["os.rom", "BASIC.ROM", "b1770/dfs1770.rom", "b1770/zADFS.ROM"],
-        cpuModel: CpuModel.MOS6502,
-        isMaster: false,
-        clockMhz: 2,
-        swram: beebSwram,
         fdc: NoiseAwareWdFdc,
     }),
     // putting ADFS in a higher ROM slot gives it priority
-    new Model({
+    bbcBModel({
         name: "BBC B with 1770 (ADFS)",
-        shortName: "BBC B",
         synonyms: ["B1770A"],
         os: ["os.rom", "BASIC.ROM", "b1770/zADFS.ROM", "b1770/dfs1770.rom"],
-        cpuModel: CpuModel.MOS6502,
-        isMaster: false,
-        clockMhz: 2,
-        swram: beebSwram,
         fdc: NoiseAwareWdFdc,
     }),
-    new Model({
+    bbcBModel({
         name: "BBC B (stock)",
-        shortName: "BBC B",
         synonyms: ["B-stock"],
         // The unexpanded machine, fitted per the board's legends: IC101 and IC100 "AUX ROM" (15, 14),
         // IC88 "DISC&NET ROM" (13), IC52 "BASIC ROM" (12).
         os: ["os.rom", "", "", "b/DFS-1.2.rom", "BASIC.ROM"],
-        cpuModel: CpuModel.MOS6502,
-        isMaster: false,
-        clockMhz: 2,
         swram: noSwram,
         romSockets: 4,
-        fdc: NoiseAwareIntelFdc,
     }),
-    new Model({
+    bbcBModel({
         name: "BBC B (US)",
-        shortName: "BBC B",
         synonyms: ["B-US"],
         os: ["usmos.rom", "us/USBASIC.rom", "us/USDNFS.rom"],
         idleAddress: 0xe556,
         vsyncAddress: 0xdcec,
-        cpuModel: CpuModel.MOS6502,
-        isMaster: false,
-        clockMhz: 2,
-        swram: beebSwram,
-        fdc: NoiseAwareIntelFdc,
     }),
-    new Model({
+    bbcBModel({
         name: "BBC B (German)",
-        shortName: "BBC B",
         synonyms: ["B-German"],
         os: ["deos.rom", "BASIC.ROM", "b/DFS-1.2.rom"],
-        cpuModel: CpuModel.MOS6502,
-        isMaster: false,
-        clockMhz: 2,
-        swram: beebSwram,
-        fdc: NoiseAwareIntelFdc,
     }),
-    new Model({
+    bbcBModel({
         name: "BBC B (MOS 0.10)",
-        shortName: "BBC B",
         synonyms: ["B-MOS0.10"],
         // MOS 0.10 looks for a language only at ROMSEL 0 to 3, which the four sockets alias, and has no DFS.
         os: ["os01.rom", "", "", "", "a01/BASIC1.rom"],
         idleAddress: 0xe598,
         vsyncAddress: 0xdf12,
-        cpuModel: CpuModel.MOS6502,
-        isMaster: false,
-        clockMhz: 2,
         swram: noSwram,
         romSockets: 4,
-        fdc: NoiseAwareIntelFdc,
     }),
-    new Model({
+    masterModel({
         name: "BBC Master 128 (DFS)",
-        shortName: "Master 128",
         synonyms: ["Master"],
-        os: ["master/mos3.20"],
-        cpuModel: CpuModel.CMOS65C12,
-        isMaster: true,
-        clockMhz: 2,
-        swram: masterSwram,
-        fdc: NoiseAwareWdFdc,
-        cmosOverride: pickDfs,
+        cmosOverride: bootFilingSystemRom(MasterDfsRom),
     }),
-    new Model({
+    masterModel({
         name: "BBC Master 128 (ADFS)",
-        shortName: "Master 128",
         synonyms: ["MasterADFS"],
-        os: ["master/mos3.20"],
-        cpuModel: CpuModel.CMOS65C12,
-        isMaster: true,
-        clockMhz: 2,
-        swram: masterSwram,
-        fdc: NoiseAwareWdFdc,
-        cmosOverride: pickAdfs,
+        cmosOverride: bootFilingSystemRom(MasterAdfsRom),
     }),
-    new Model({
+    masterModel({
         name: "BBC Master 128 (ANFS)",
-        shortName: "Master 128",
         synonyms: ["MasterANFS"],
-        os: ["master/mos3.20"],
-        cpuModel: CpuModel.CMOS65C12,
-        isMaster: true,
-        clockMhz: 2,
-        swram: masterSwram,
-        fdc: NoiseAwareWdFdc,
-        cmosOverride: pickAnfs,
+        cmosOverride: bootFilingSystemRom(MasterAnfsRom),
     }),
     // Atom OS ROM layout: Block F (kernel), E (DOS/MMC), D (FP), C (BASIC).
     // Empty strings represent unpopulated ROM slots.
@@ -330,6 +273,7 @@ export const allModels = [
         name: "Acorn Atom (DOS)",
         synonyms: ["Atom-DOS"],
         os: ["atom/Atom_Kernel.rom", "atom/Atom_DOS.rom", "atom/Atom_FloatingPoint.rom", "atom/Atom_Basic.rom"],
+        hasDiscDrives: true,
     }),
     // Neither can be selected as a model: they are fitted to one, by the configuration builder later.
     new Model({
@@ -355,62 +299,16 @@ export const allModels = [
 
 export function findModel(name) {
     name = name.toLowerCase();
-    for (let i = 0; i < allModels.length; ++i) {
-        const model = allModels[i];
-        if (model.name.toLowerCase() === name) return model;
-        for (let j = 0; j < model.synonyms.length; ++j) {
-            if (model.synonyms[j].toLowerCase() === name) return model;
-        }
-    }
-    return null;
+    return allModels.find((model) => [model.name, ...model.synonyms].some((n) => n.toLowerCase() === name)) ?? null;
 }
 
 export const DefaultModel = findModel("B-DFS1.2");
 
-export const TEST_6502 = new Model({
-    name: "TEST",
-    synonyms: ["TEST"],
-    os: [],
-    clockMhz: 2,
-    cpuModel: CpuModel.MOS6502,
-    isMaster: false,
-    swram: beebSwram,
-    fdc: NoiseAwareIntelFdc,
-});
-TEST_6502.isTest = true;
-export const TEST_65C02 = new Model({
-    name: "TEST",
-    synonyms: ["TEST"],
-    os: [],
-    clockMhz: 2,
-    cpuModel: CpuModel.CMOS65C02,
-    isMaster: false,
-    swram: masterSwram,
-    fdc: NoiseAwareIntelFdc,
-});
-TEST_65C02.isTest = true;
-export const TEST_65C12 = new Model({
-    name: "TEST",
-    synonyms: ["TEST"],
-    os: [],
-    clockMhz: 2,
-    cpuModel: CpuModel.CMOS65C12,
-    isMaster: false,
-    swram: masterSwram,
-    fdc: NoiseAwareIntelFdc,
-});
-TEST_65C12.isTest = true;
+export const TEST_6502 = testModel(CpuModel.MOS6502, beebSwram);
+export const TEST_65C02 = testModel(CpuModel.CMOS65C02, masterSwram);
+export const TEST_65C12 = testModel(CpuModel.CMOS65C12, masterSwram);
 
-export const basicOnly = new Model({
-    name: "Basic only",
-    clockMhz: 2,
-    synonyms: ["Basic only"],
-    os: ["master/mos3.20"],
-    cpuModel: CpuModel.CMOS65C12,
-    isMaster: true,
-    swram: masterSwram,
-    fdc: NoiseAwareWdFdc,
-});
+export const basicOnly = masterModel({ name: "Basic only", shortName: "Basic only", synonyms: ["Basic only"] });
 
 /**
  * The second processors jsbeeb emulates: the external 3MHz box, and the Master Turbo's
@@ -426,7 +324,6 @@ export function tubeModelFor(model) {
     return model.isMaster ? TurboTubeModel : TubeModel;
 }
 
-// After the isTest assignments above, so those still apply.
 for (const model of [...allModels, TEST_6502, TEST_65C02, TEST_65C12, basicOnly]) {
     Object.freeze(model.os);
     Object.freeze(model.synonyms);

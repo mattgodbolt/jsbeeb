@@ -162,6 +162,17 @@ class ScheduledTask {
         this.scheduler.cancel(this);
     }
 
+    /** @returns {number|null} cycles until the task expires, or null if it is not scheduled */
+    offset() {
+        return this._scheduled ? this.expireEpoch - this.scheduler.epoch : null;
+    }
+
+    /** @param {number|null|undefined} offset from offset(); null or a missing value leaves the task unscheduled */
+    restoreOffset(offset) {
+        this.cancel();
+        if (offset !== null && offset !== undefined) this.schedule(offset);
+    }
+
     /**
      * @param {boolean} state
      * @param {number} delay

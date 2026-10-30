@@ -1,28 +1,15 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { createSnapshot, restoreSnapshot, snapshotToJSON, snapshotFromJSON, isSameModel } from "../../src/snapshot.js";
-import { Video } from "../../src/video.js";
-import { SoundChip } from "../../src/soundchip.js";
-import { machineSpec, nullIo } from "../../src/machine-spec.js";
-import { TEST_6502, TEST_65C12, TubeModel } from "../../src/models.js";
-import { Disc, DiscConfig, loadSsd } from "../../src/disc.js";
-import { typedArrayToBase64 } from "../../src/state-utils.js";
+import { TEST_6502, TEST_65C12 } from "../../src/models.js";
+import { ssdDisc } from "../helpers/disc-builders.js";
 import { RomBankBytes } from "../../src/6502.js";
-
-function makeCpuOf(model, config) {
-    const video = new Video(false, 1024 * 768, () => {});
-    const soundChip = new SoundChip(() => {});
-    return new model.Cpu(model, { ...nullIo({ video, soundChip }), config: machineSpec(config) });
-}
-
-function makeCpu(config = {}) {
-    return makeCpuOf(TEST_6502, config);
-}
+import { machineWithRealChips } from "./helpers.js";
 
 const TrackBytes = 256 * 10;
 
 function discOf(tracks, doubleSided = false) {
     const image = new Uint8Array(TrackBytes * tracks * (doubleSided ? 2 : 1)).map((_, i) => i * 7);
-    return loadSsd(new Disc(true, new DiscConfig(), "test.ssd"), image, doubleSided);
+    return ssdDisc(image, { isDsd: doubleSided });
 }
 
 describe("Snapshot coordinator", () => {
@@ -30,7 +17,7 @@ describe("Snapshot coordinator", () => {
     const model = TEST_6502;
 
     beforeEach(async () => {
-        cpu = makeCpu();
+        cpu = machineWithRealChips(TEST_6502);
         await cpu.initialise();
     });
 
@@ -47,7 +34,7 @@ describe("Snapshot coordinator", () => {
 
     describe("restoreSnapshot", () => {
         const host = () => cpu;
-        const withCoProcessor = () => makeCpu({ tube: TubeModel });
+        const withCoProcessor = () => machineWithRealChips(TEST_6502, { tube: true });
 
         it.each([
             ["a different model", { restoreModel: { name: "Completely Different Machine" } }, /Model mismatch/],
@@ -102,7 +89,7 @@ describe("Snapshot coordinator", () => {
             loadDisc(cpu);
             const snapshot = createSnapshot(cpu, model);
             mutate(snapshot);
-            const restored = makeCpu(config);
+            const restored = machineWithRealChips(TEST_6502, config);
             await restored.initialise();
             loadDisc(restored);
 
@@ -120,7 +107,7 @@ describe("Snapshot coordinator", () => {
             cpu.sysvia.write(0x01, 0x55);
             const saved = createSnapshot(cpu, model);
 
-            const cpu2 = makeCpu();
+            const cpu2 = machineWithRealChips(TEST_6502);
             restoreSnapshot(cpu2, model, snapshotFromJSON(snapshotToJSON(saved)));
 
             const stateOf = (machine) => JSON.parse(snapshotToJSON(createSnapshot(machine, model).state));
@@ -144,6 +131,7 @@ describe("Snapshot coordinator", () => {
 
         it("round-trips plain and deflated arrays of every element size", () => {
             const original = {
+                empty: new Uint8Array(0),
                 small: patterned(Uint16Array, 8),
                 bytes: patterned(Uint8Array, 4096),
                 halves: patterned(Uint16Array, 1000),
@@ -168,15 +156,27 @@ describe("Snapshot coordinator", () => {
             const snapshot = { ...createSnapshot(cpu, model), version: 3 };
             const v3Json = JSON.stringify(snapshot, (key, value) =>
                 ArrayBuffer.isView(value)
-                    ? { __typedArray: true, type: value.constructor.name, data: typedArrayToBase64(value) }
+                    ? {
+                          __typedArray: true,
+                          type: value.constructor.name,
+                          data: Buffer.from(value.buffer, value.byteOffset, value.byteLength).toString("base64"),
+                      }
                     : value,
             );
 
-            const cpu2 = makeCpu();
+            const cpu2 = machineWithRealChips(TEST_6502);
             restoreSnapshot(cpu2, model, snapshotFromJSON(v3Json));
 
             expect(cpu2.a).toBe(0x42);
             expect(cpu2.ramRomOs[0x200]).toBe(0xdd);
+        });
+
+        it("refuses data that does not fill a whole number of elements", () => {
+            const json = JSON.stringify({
+                words: { __typedArray: true, type: "Uint32Array", data: btoa("\x01\x02\x03") },
+            });
+
+            expect(() => snapshotFromJSON(json)).toThrow(/not a multiple/);
         });
 
         it("refuses an encoding it does not know", () => {
@@ -197,7 +197,7 @@ describe("Snapshot coordinator", () => {
             selectPollingMode(cpu);
             const snapshot = snapshotFromJSON(snapshotToJSON(createSnapshot(cpu, model)));
 
-            const cpu2 = makeCpu();
+            const cpu2 = machineWithRealChips(TEST_6502);
             restoreSnapshot(cpu2, model, snapshot);
             cpu2.touchScreen.onMouse(0.5, 0.5, true);
             cpu2.scheduler.polltime(cpu2.touchScreen.pollCycles);
@@ -237,7 +237,7 @@ describe("Snapshot coordinator", () => {
             ["a B", TEST_6502, 0x00ff, 8],
             ["a Master", TEST_65C12, 0x00f0, 4],
         ])("packs only the banks %s has as sideways RAM", (_, cpuModel, bankMask, banks) => {
-            const { swram, swramBankMask } = makeCpuOf(cpuModel, {}).snapshotState();
+            const { swram, swramBankMask } = machineWithRealChips(cpuModel).snapshotState();
 
             expect(swramBankMask).toBe(bankMask);
             expect(swram.length).toBe(banks * RomBankBytes);
@@ -273,7 +273,7 @@ describe("Snapshot coordinator", () => {
         });
 
         it("records a fitted co-processor and its state", () => {
-            const tubeCpu = makeCpu({ tube: TubeModel });
+            const tubeCpu = machineWithRealChips(TEST_6502, { tube: true });
             const snapshot = createSnapshot(tubeCpu, model);
 
             expect(snapshot.coProcessor).toBe(true);
@@ -292,14 +292,14 @@ describe("Snapshot coordinator", () => {
         });
 
         it("round-trips the fitted adaptor's channel and frame buffer", async () => {
-            const withAdaptor = makeCpu({ hasTeletextAdaptor: true });
+            const withAdaptor = machineWithRealChips(TEST_6502, { hasTeletextAdaptor: true });
             await withAdaptor.initialise();
             withAdaptor.teletextAdaptor.write(StatusRegister, 0x04 | 2); // Teletext enable, channel 2
             withAdaptor.teletextAdaptor.write(RowRegister, 3);
             withAdaptor.teletextAdaptor.write(DataRegister, 0xaa);
 
             const snapshot = createSnapshot(withAdaptor, model);
-            const restored = makeCpu({ hasTeletextAdaptor: true });
+            const restored = machineWithRealChips(TEST_6502, { hasTeletextAdaptor: true });
             await restored.initialise();
             restoreSnapshot(restored, model, snapshot);
 
@@ -317,7 +317,7 @@ describe("Snapshot coordinator", () => {
         const savedDisc = (machine) =>
             snapshotFromJSON(snapshotToJSON(createSnapshot(machine, model))).state.fdc.drives[0].disc;
         const machineWith = (disc) => {
-            const machine = makeCpu();
+            const machine = machineWithRealChips(TEST_6502);
             machine.fdc.loadDisc(0, disc);
             return machine;
         };

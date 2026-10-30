@@ -14,7 +14,8 @@ import {
 } from "../basic-state.js";
 import { hexword } from "../hex.js";
 import { bindGotoForm } from "./debug-dom.js";
-import { DebugGroup, FloatingPanel, MenuGroup, panelShell } from "./floating-panel.js";
+import { setText } from "./dom-utils.js";
+import { DebugGroup, MenuGroup, panelShell } from "./floating-panel.js";
 import { keyLine } from "./panel-keys.js";
 import { Centred, StartEdge } from "./panel-layout.js";
 
@@ -69,7 +70,18 @@ export class BasicPanel {
         /** @type {{bank: number, title: string, basic: ReturnType<typeof basicRom>} | null} */
         this._language = null;
         this._shown = { line: "", variables: "" };
-        const { panel, body } = panelShell({ id: "basic", title: "BASIC", feature: "basic" });
+        const { floating, body } = panelShell({
+            id: "basic",
+            title: "BASIC",
+            feature: "basic",
+            menuGroup: MenuGroup.software,
+            group: DebugGroup,
+            place: () => ({ x: Centred, y: StartEdge }),
+            minSize: MinPanelSize,
+            arrangement,
+        });
+        this.floating = floating;
+        const { panel } = floating;
         panel.classList.add("debug-panel");
         const header = panel.querySelector(".panel-header");
         this._controls = this._makeControls();
@@ -97,22 +109,7 @@ export class BasicPanel {
         });
         body.querySelector(".panel-keys").textContent = keyLine(BasicKeys);
 
-        this.floating = new FloatingPanel({
-            panel,
-            id: "basic",
-            title: "BASIC",
-            menuGroup: MenuGroup.software,
-            group: DebugGroup,
-            place: () => ({ x: Centred, y: StartEdge }),
-            minSize: MinPanelSize,
-            reopens: true,
-            arrangement,
-        });
-        const refresh = arrangement.refreshing(
-            () => this.floating.isOpen,
-            () => this.update(),
-        );
-        this.floating.addEventListener("open", () => refresh.drawNow());
+        floating.whileOpen(() => this.update());
         keys.register({
             table: BasicKeys,
             actions: { stepStatement: () => this.stepStatement() },
@@ -218,7 +215,7 @@ export class BasicPanel {
             .join("  ");
         this._showLine(lineHolding(peek, pointers.page, pointers.reading), pointers.reading, basic.keywords);
         readResidentIntegers(peek).forEach(({ value }, i) => {
-            if (this._residents[i].textContent !== value) this._residents[i].textContent = value;
+            setText(this._residents[i], value);
         });
         this._showVariables(readVariables(peek));
     }

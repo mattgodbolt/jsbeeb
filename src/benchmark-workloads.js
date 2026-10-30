@@ -1,4 +1,4 @@
-import { crc32, ungzip } from "./archive.js";
+import { crc32, isGzip, ungzip } from "./archive.js";
 import * as fdc from "./fdc.js";
 import { loadData } from "./loader.js";
 import { assertSnapshotFits, restoreSnapshot, snapshotFromJSON } from "./snapshot.js";
@@ -13,10 +13,6 @@ const HexRadix = 16;
 const CheckCycles = 1000 * 1000;
 
 const AllBits = 0xff;
-const GzipMagic = [0x1f, 0x8b];
-
-// Vite's preview server sends a .gz file with Content-Encoding: gzip, so the browser has already inflated it.
-const isGzip = (bytes) => GzipMagic.every((byte, index) => bytes[index] === byte);
 const hex = (value) => `&${value.toString(HexRadix).toUpperCase()}`;
 
 /**
@@ -43,6 +39,7 @@ export async function readWorkload(name) {
         throw new Error(`No benchmark workload "${name}"; the workloads are ${known}`);
     }
     const bytes = await loadData(`${WorkloadsDir}/${workload.snapshot}`);
+    // Vite's preview server sends a .gz file with Content-Encoding: gzip, so the browser has already inflated it.
     const json = isGzip(bytes) ? await ungzip(bytes) : bytes;
     const snapshot = snapshotFromJSON(new TextDecoder().decode(json));
     return { ...workload, snapshot };
@@ -66,7 +63,7 @@ async function readDiscImages(media = {}) {
             images.push(null);
             continue;
         }
-        const data = await fdc.load(`discs/${name}`);
+        const data = await loadData(`discs/${name}`);
         if (crc32(data) !== media[`${key}Crc32`]) {
             throw new Error(`discs/${name} is not the disc the workload was made with`);
         }

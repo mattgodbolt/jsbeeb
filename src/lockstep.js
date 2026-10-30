@@ -7,7 +7,7 @@
 
 import { RomBankBytes } from "./6502.js";
 import { Disc, DiscConfig } from "./disc.js";
-import { KeyMatrixSize } from "./via.js";
+import { KeyMatrixSize } from "./keymap.js";
 
 const HashIntervalSeconds = 1;
 // A guest more than MaxGuestLagSeconds behind the host catches up by running up to MaxCatchUpSeconds per execute

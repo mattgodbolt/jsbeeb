@@ -16,8 +16,8 @@ import {
     TimerState as WdTimerState,
 } from "../wd-fdc.js";
 import { decodedPanel, DecodedRegisters, fixed, lit, register, spelt } from "./decoded-registers.js";
-import { MenuGroup } from "./floating-panel.js";
 import { Centred, StartEdge } from "./panel-layout.js";
+import { readStored, writeStored } from "./stored-json.js";
 
 const MinPanelSize = { w: 240, h: 160 };
 const MaxLogLines = 10000;
@@ -485,10 +485,9 @@ export class FdcPanel {
     constructor({ cpu, arrangement, visualiser, storage }) {
         this._fdc = cpu.fdc;
         this._storage = storage;
-        const { floating, body } = decodedPanel({
+        const { floating, body, part } = decodedPanel({
             id: "fdc",
             title: "Disc controller",
-            menuGroup: MenuGroup.hardware,
             feature: "disc_controller",
             place: () => ({ x: Centred, y: StartEdge }),
             minSize: MinPanelSize,
@@ -520,7 +519,6 @@ export class FdcPanel {
                 </div>
                 <div class="fdc-log"></div>
             </div>`;
-        const part = (className) => body.querySelector(`.${className}`);
         const { chip } = this._fdc.inspect();
         const sections = chip === "8271" ? IntelSections : WdSections;
         this._logLine = chip === "8271" ? intelLogLine : wdLogLine;
@@ -617,24 +615,13 @@ export class FdcPanel {
 
     _restoreLogging() {
         if (!this._storage) return;
-        let saved;
-        try {
-            saved = JSON.parse(this._storage().getItem(LogStorageKey) ?? "null");
-        } catch (error) {
-            console.warn(`Could not read the disc controller's log switches: ${error}`);
-            return;
-        }
+        const saved = readStored(this._storage, LogStorageKey, "the disc controller's log switches");
         for (const { name, set } of this._logToggles) set(saved?.[name] === true);
     }
 
     _saveLogging() {
-        if (!this._storage) return;
         const saved = Object.fromEntries(this._logToggles.map(({ name, isOn }) => [name, isOn()]));
-        try {
-            this._storage().setItem(LogStorageKey, JSON.stringify(saved));
-        } catch (error) {
-            console.warn(`Could not save the disc controller's log switches: ${error}`);
-        }
+        writeStored(this._storage, LogStorageKey, saved, "the disc controller's log switches");
     }
 
     _shows(line) {

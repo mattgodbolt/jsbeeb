@@ -1,5 +1,6 @@
 import { hexbyte, hexword } from "../hex.js";
-import { DebugGroup, FloatingPanel, panelShell } from "./floating-panel.js";
+import { setText } from "./dom-utils.js";
+import { DebugGroup, MenuGroup, panelShell } from "./floating-panel.js";
 
 /**
  * @typedef {object} Meaning one piece of what a register's value means
@@ -72,7 +73,7 @@ export class DecodedRegisters {
             const { register } = row;
             const value = register.value(state);
             const hex = register.bits === 16 ? hexword(value) : hexbyte(value);
-            if (row.hex.textContent !== hex) row.hex.textContent = hex;
+            setText(row.hex, hex);
             const meanings = register.decode(value, state);
             const shown = meanings
                 .map(({ text, title, lit, width }) => `${text}\u0000${title}\u0000${lit}\u0000${width}`)
@@ -124,30 +125,27 @@ export function namedBits(names) {
  * @param {object} options
  * @param {string} options.id
  * @param {string} options.title
- * @param {string} options.menuGroup
  * @param {string} options.feature what analytics calls it
  * @param {function(): {x: object, y: object}} options.place
  * @param {{w: number, h: number}} options.minSize
  * @param {import("./floating-panel.js").PanelArrangement} options.arrangement
  * @param {function(): void} options.draw
- * @returns {{floating: FloatingPanel, body: HTMLElement}}
+ * @returns {{floating: import("./floating-panel.js").FloatingPanel, body: HTMLElement,
+ * part: (className: string) => HTMLElement}}
  */
-export function decodedPanel({ id, title, menuGroup, feature, place, minSize, arrangement, draw }) {
-    const { panel, body } = panelShell({ id, title, feature });
-    panel.classList.add("decoded-panel");
-    body.classList.add("decoded-columns");
-    const floating = new FloatingPanel({
-        panel,
+export function decodedPanel({ id, title, feature, place, minSize, arrangement, draw }) {
+    const { floating, body } = panelShell({
         id,
         title,
-        menuGroup,
+        feature,
+        menuGroup: MenuGroup.hardware,
         group: DebugGroup,
         place,
         minSize,
-        reopens: true,
         arrangement,
     });
-    const refresh = arrangement.refreshing(() => floating.isOpen, draw);
-    floating.addEventListener("open", () => refresh.drawNow());
-    return { floating, body };
+    floating.panel.classList.add("decoded-panel");
+    body.classList.add("decoded-columns");
+    floating.whileOpen(draw);
+    return { floating, body, part: (className) => body.querySelector(`.${className}`) };
 }

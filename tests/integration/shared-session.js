@@ -97,7 +97,7 @@ async function sessionOf(guestCount) {
         for (const { machine } of rest) {
             expect(cycleCount(machine.processor)).toBe(cycleCount(first.machine.processor));
             expect(stateHash(machine.processor)).toBe(stateHash(first.machine.processor));
-            expect(Buffer.compare(machine.processor.ramRomOs, first.machine.processor.ramRomOs)).toBe(0);
+            expect(machine.processor.ramRomOs).toEqual(first.machine.processor.ramRomOs);
         }
     }
 

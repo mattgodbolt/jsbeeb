@@ -5,7 +5,6 @@ import { makeFast32 } from "./binary.js";
 const VDISPENABLE = 1 << 0,
     HDISPENABLE = 1 << 1,
     FRAMESKIPENABLE = 1 << 5;
-// , EVERYTHINGENABLED = VDISPENABLE | HDISPENABLE | FRAMESKIPENABLE
 /*
 http://mdfs.net/Docs/Comp/Acorn/Atom/atap25.htm
 
@@ -103,11 +102,6 @@ and the last 2 or 3 bits are used for colour
 only 1 bit is used of SG6 - to get yellow/red, cyan/orange
 */
 
-// const MODE_AG = 0x80,
-//     MODE_GM2  = 0x40,
-//     MODE_GM1  = 0x20,
-//     MODE_GM0  = 0x10;
-
 // constant for the graphics mode
 const MODE_AG = 0x10; // graphics mode
 
@@ -129,9 +123,6 @@ export class Video6847 {
         this.video = video;
         this.ppia = null; // set during reset
 
-        this.levelDEW = false;
-        this.levelDISPTMG = false;
-
         // 8 colours (alpha on MSB)
         //
         this.collook = makeFast32(
@@ -151,25 +142,11 @@ export class Video6847 {
             ]),
         );
 
-        // { 0,  0,  0  }, /*Black 0*/
-        // { 0,  63, 0  }, /*Green 1*/
-        // { 63, 63, 0  }, /*Yellow 2*/
-        // { 0,  0,  63 }, /*Blue 3 */
-        // { 63, 0,  0  }, /*Red 4 */
-        // { 63, 63, 63 }, /*Buff 5*/
-        // { 0,  63, 63 }, /*Cyan 6*/
-        // { 63, 0,  63 }, /*Magenta 7*/
-        // { 63, 32,  0  }, /*Orange 8 - can be red on the Atom*/
-
-        // /* dark green 9 */
-        // /* dark orange 10 */
-
         this.interlacedSyncAndVideo = false;
         // The 6847 blitters always write two framebuffer lines per pixel row,
         // so Video.clearPaintBuffer() must clear both lines.
         this.doubledScanlines = true;
 
-        this.regs = new Uint8Array(32);
         this.bitmapX = 0;
         this.bitmapY = 0;
         this.frameCount = 0;
@@ -217,23 +194,17 @@ export class Video6847 {
 
         this.lastmode = 0xff;
 
-        this.lastseconds = 0;
-
         this.vdg_cycles = 0;
         this.charTime = 0;
 
         this.bordercolour = 0x00; // 0x00 black   0x01 // green or orange depending on CSS
 
-        this.init();
+        this.curGlyphs = fontData.makeCharsAtom();
 
         this.reset(null, null); // bit daft but it creates the members.
 
         this.clearPaintBuffer();
         this.paint();
-    }
-
-    init() {
-        this.curGlyphs = fontData.makeCharsAtom();
     }
 
     reset(cpu, ppia) {
@@ -529,16 +500,6 @@ export class Video6847 {
             if (vSyncStarting || vSyncEnding) {
                 this.ppia.setVBlankInt(this.inVSync);
 
-                // if (vSyncEnding)
-                // {
-                //     let seconds = this.cpu.cycleSeconds+this.cpu.currentCycles/1000000.0;
-                //     let diff = seconds - this.lastseconds;
-                //     $("#vdg_text").html(
-                //         "FPS "+(1/diff).toFixed(5)+"   ("+diff.toFixed(5)+")<br>"
-                //     );
-                //     this.lastseconds = seconds ?? 0;
-                // }
-
                 // fix the border colour at the end/start of a frame
                 // it won't change within a frame
                 let AGM = (mode & MODE_AG) === 0;
@@ -591,7 +552,6 @@ export class Video6847 {
                 this.scanlineCounter += 1;
 
                 if (completedCharVertical) {
-                    // this.hadVSyncThisRow = false;
                     this.scanlineCounter = 0;
                 }
 
@@ -607,20 +567,6 @@ export class Video6847 {
             } else {
                 this.horizCounter = (this.horizCounter + 1) & 0xff;
             }
-
-            // // dump some data to CSV
-            // let a = this.cpu.cycleSeconds*1000000.0+this.cpu.currentCycles;
-            // let b = this.horizCounter;
-            // let c = this.vertCounter;
-            // let d = this.inVSync;
-            // let e = css;
-
-            // //using template literals for strings substitution
-            // if (this.cpu.cycleSeconds==10 && this.cpu.currentCycles<60000 && this.horizCounter == 0)
-            // {
-            //     $("#csv_output").append(
-            //         `<br>${a},${b},${c},${d},${e}`);
-            // }
         } // matches while
     }
 

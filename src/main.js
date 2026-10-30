@@ -57,7 +57,8 @@ import { PageActions } from "./web/page-actions.js";
 import { processDriveTrackParams } from "./url-params.js";
 import { processInputParams, takenFromHostValues } from "./web/parameters.js";
 import { hostKeyCodes, userKeymap } from "./keymap.js";
-import { gzipCodec, hostSession, joinLink, sessionRefusal, startSessionFromUrl } from "./web/shared-session.js";
+import { hostSession, joinLink, sessionRefusal, startSessionFromUrl } from "./web/shared-session.js";
+import { gzipCodec } from "./archive.js";
 import { SessionDialog } from "./web/session-dialog.js";
 import { sessionPage } from "./web/session-page.js";
 import { webRtcTransport } from "./web/session-transport.js";
@@ -88,12 +89,7 @@ labelPageShortcuts();
 const plan = startupPlan(parsedQuery);
 const { settings: driveTracks, warnings: driveTrackWarnings } = processDriveTrackParams(parsedQuery);
 
-const extraRoms = [];
-if (Array.isArray(parsedQuery.rom)) {
-    parsedQuery.rom.forEach((romPath) => {
-        if (romPath) extraRoms.push(romPath);
-    });
-}
+const extraRoms = (parsedQuery.rom ?? []).filter(Boolean);
 
 const cpuMultiplier = parsedQuery.cpuMultiplier ?? 1;
 const noSeek = !!parsedQuery.noseek;
@@ -282,7 +278,13 @@ const { keyboard } = new KeyboardSetup({
 const modals = new Modals({ loop });
 openHelpOnTheTabForNow(() => loop.isPaused() || loop.mode === RunMode.debugging);
 
-const drives = new Drives({ fdc: processor.fdc, driveTracks, confirm: modals.confirm.bind(modals), urlState });
+const drives = new Drives({
+    fdc: processor.fdc,
+    hasDiscDrives: model.hasDiscDrives,
+    driveTracks,
+    confirm: modals.confirm.bind(modals),
+    urlState,
+});
 const media = new MediaLoader({
     processor,
     model,
@@ -511,7 +513,6 @@ exposeConsoleSurface(window, { loop, processor, video, audioHandler });
 electron({
     settings,
     media,
-    drives,
     modals,
     loadStateFile: snapshots.loadStateFromFile.bind(snapshots),
     panels: panelArrangement,

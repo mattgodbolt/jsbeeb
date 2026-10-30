@@ -32,7 +32,7 @@ class Slot {
 
     get media() {
         const { processor } = this.slots;
-        return this.isDeck ? processor.tapeInterface.tape : processor.fdc?.drives[this.index]?.disc;
+        return this.isDeck ? processor.tapeInterface.tape : processor.fdc.drives[this.index].disc;
     }
 
     /** The URL parameters that name this slot's media, cleared when it is unnamed or empty. */
@@ -85,11 +85,6 @@ export class MediaSlots extends EventTarget {
 
     drive(index) {
         return this.driveSlots[index];
-    }
-
-    /** The slot the window's targets name: a drive index, or "tape". */
-    slotFor(target) {
-        return target === "tape" ? this.deck : this.driveSlots[target];
     }
 
     /** What a slot holds, by the reference it is known by. */

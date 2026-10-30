@@ -3,7 +3,7 @@ import { afterEach, describe, it, expect, vi } from "vitest";
 import { Scheduler } from "../../src/scheduler.js";
 import { WdFdc, WdFdcVariant } from "../../src/wd-fdc.js";
 import { DiscDrive } from "../../src/disc-drive.js";
-import { Disc, DiscConfig, loadSsd } from "../../src/disc.js";
+import { Disc, DiscConfig } from "../../src/disc.js";
 import { IbmDiscFormat } from "../../src/disc-format.js";
 import { fake6502 } from "../../src/fake6502.js";
 import { expectSnapshotRoundTrips } from "../helpers/snapshot-round-trip.js";
@@ -14,6 +14,7 @@ import {
     appendFmSector,
     appendMfmSector,
     blankDisc,
+    ssdDisc,
     fmDiscWithSector,
     mfmDiscWithSector,
     sectorData,
@@ -704,7 +705,7 @@ describe("WD1770 FDC tests", () => {
     describe("an SSD's track skew", () => {
         it("reaches the next track's first sector well within a revolution of this track's last", () => {
             const SsdSectorsPerTrack = 10;
-            const disc = loadSsd(blankDisc(), new Uint8Array(2 * SsdSectorsPerTrack * SectorBytes), false, null);
+            const disc = ssdDisc(new Uint8Array(2 * SsdSectorsPerTrack * SectorBytes));
             const { scheduler, fdc } = makeFdc({ disc, control: ControlRunningDrive0Fm });
             fdc.write(SectorRegister, SsdSectorsPerTrack - 1);
             runCommand(fdc, scheduler, ReadSectorCommand & ~SpinUpWaitFlag);

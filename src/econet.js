@@ -108,19 +108,6 @@ export class Econet {
         destination.buffer = source.buffer.slice();
     }
 
-    sniffBuffer(data) {
-        // Construct a debug string describing the first bytes of the frame
-        let length = Math.min(30, data.pointer);
-        let outputString = "";
-
-        for (let i = 0; i < length; i++) {
-            outputString += (data.buffer[i] < 16 ? "0" : "") + data.buffer[i].toString(16) + " ";
-        }
-
-        outputString += "(" + data.pointer + " bytes)";
-        return outputString;
-    }
-
     deleteReceiveBlock(id) {
         let pos = this.receiveBlocks.findIndex((e) => e.id === id);
         if (pos >= 0) {
@@ -390,15 +377,6 @@ export class Econet {
                     // TxLast set
                     this.beebTx.bytesInBuffer = this.beebTx.pointer;
 
-                    /*console.log(
-                        "Econet: " +
-                            this.stationId +
-                            " TX->" +
-                            this.beebTx.buffer[0] +
-                            ": " +
-                            this.sniffBuffer(this.beebTx)
-                    );*/
-
                     // Is this an immediate operation ? Assume it is a machine peek
                     if (
                         this.beebTx.bytesInBuffer === 10 &&
@@ -485,15 +463,6 @@ export class Econet {
                     if (this.beebRx.pointer >= this.beebRx.bytesInBuffer) {
                         // that was last byte!
                         this.ADLC.rxffc |= 1; // set FV flag (this was last byte of frame)
-
-                        /*console.log(
-                            "Econet: " +
-                                this.stationId +
-                                " RX<-" +
-                                this.beebRx.buffer[2] +
-                                ": " +
-                                this.sniffBuffer(this.beebRx)
-                        );*/
 
                         this.beebRx.pointer = 0; // Reset read for next packet
                         this.beebRx.bytesInBuffer = 0;

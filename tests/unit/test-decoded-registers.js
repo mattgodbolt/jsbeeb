@@ -33,7 +33,6 @@ describe("decoded panels", () => {
         const { floating } = decodedPanel({
             id: "device",
             title: "Device",
-            menuGroup: MenuGroup.hardware,
             feature: "device",
             place: () => ({ x: StartEdge, y: StartEdge }),
             minSize: { w: 100, h: 100 },
@@ -41,7 +40,9 @@ describe("decoded panels", () => {
             draw,
         });
         expect(arrangement.panelsIn(DebugGroup)).toEqual([floating]);
-        expect(arrangement.listed().map(({ title }) => title)).toEqual(["Device"]);
+        expect(arrangement.listed().map(({ title, menuGroup }) => [title, menuGroup])).toEqual([
+            ["Device", MenuGroup.hardware],
+        ]);
         floating.open();
         expect(draw).toHaveBeenCalledTimes(1);
         frames.run();
@@ -69,7 +70,7 @@ describe("decoded panels", () => {
                     isMaster: false,
                     initialLayout: "physical",
                 }),
-                uservia: new UserVia({ interrupt: 0 }, scheduler, false, { read: () => 0xff, write: () => {} }),
+                uservia: new UserVia({ interrupt: 0 }, scheduler, { read: () => 0xff, write: () => {} }),
             };
             via = cpu[id];
             panel = new Panel({ cpu, arrangement });
