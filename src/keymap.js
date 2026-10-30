@@ -230,6 +230,8 @@ const UnshiftedCharacters = {
  * @param {string} str
  * @param {function(string): ?{key: number[], shift: boolean, upperCase?: boolean}} keyForCharacter where
  *     `upperCase` is left out for a character the lock does not change
+ * @param {number[]} shiftKey
+ * @param {number[]} lockKey
  */
 export function stringToKeys(str, keyForCharacter, shiftKey, lockKey) {
     const array = [];
@@ -431,11 +433,9 @@ export function isUserRemapped(code) {
 const Letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
 /**
- * What both machines' key maps are built with, the letters already bound. `map(code, colRow, shiftDown)` binds a host
- * key code to a matrix position with SHIFT down, up, or either when `shiftDown` is undefined, warning of a clash.
- * `finish()` applies the `KEY.` URL parameters last, so they win, and returns the map, indexed by whether SHIFT is
- * down and then by host key code. The parameters are not consumed: a map is rebuilt on layout and model changes, and
- * the user's mapping has to survive that.
+ * What both machines' key maps are built with, the letters already bound. `finish()` applies the `KEY.` URL
+ * parameters last, so they win, without consuming them: a map is rebuilt on layout and model changes, and the user's
+ * mapping has to survive that.
  * @param {Object<string, number[]>} machineKeys the machine's keys by name, BBC or ATOM
  */
 export function keyMapBuilder(machineKeys) {
