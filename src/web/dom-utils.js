@@ -1,7 +1,5 @@
 import { replaceOrAddExtension } from "../archive.js";
 
-// Minimal DOM helpers to replace jQuery usage.
-
 export function toggle(el, visible) {
     el.style.display = visible ? "" : "none";
 }

@@ -88,12 +88,7 @@ labelPageShortcuts();
 const plan = startupPlan(parsedQuery);
 const { settings: driveTracks, warnings: driveTrackWarnings } = processDriveTrackParams(parsedQuery);
 
-const extraRoms = [];
-if (Array.isArray(parsedQuery.rom)) {
-    parsedQuery.rom.forEach((romPath) => {
-        if (romPath) extraRoms.push(romPath);
-    });
-}
+const extraRoms = (parsedQuery.rom ?? []).filter(Boolean);
 
 const cpuMultiplier = parsedQuery.cpuMultiplier ?? 1;
 const noSeek = !!parsedQuery.noseek;

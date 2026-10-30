@@ -221,12 +221,12 @@ describe("SnapshotUI", () => {
             await fail(make());
             expect(loop.isRunning()).toBe(false);
             await vi.runAllTimersAsync();
-            expect(modals.anyVisible()).toBe(true);
+            expect(document.querySelector(".modal.show")).not.toBeNull();
             expect(document.querySelector("#error-dialog .context").textContent).toBe(doing);
             expect(loop.isRunning()).toBe(false);
             modals.hide("error-dialog");
             await vi.runAllTimersAsync();
-            expect(modals.anyVisible()).toBe(false);
+            expect(document.querySelector(".modal.show")).toBeNull();
             expect(loop.isRunning()).toBe(true);
         });
     });

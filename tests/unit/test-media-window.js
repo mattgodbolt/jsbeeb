@@ -169,12 +169,15 @@ describe("MediaWindow", () => {
         Object.defineProperty(input, "files", { value: [fileNamed(name)] });
         input.dispatchEvent(new Event("change"));
     };
-    const dragEvent = (type, target = document.body) => {
-        const event = new Event(type, { bubbles: true, cancelable: true });
-        Object.defineProperty(event, "dataTransfer", { value: { types: ["Files"], files: [], dropEffect: "" } });
-        target.dispatchEvent(event);
-        return event;
-    };
+    const dragCarrying =
+        (types) =>
+        (type, target = document.body) => {
+            const event = new Event(type, { bubbles: true, cancelable: true });
+            Object.defineProperty(event, "dataTransfer", { value: { types, files: [], dropEffect: "" } });
+            target.dispatchEvent(event);
+            return event;
+        };
+    const dragEvent = dragCarrying(["Files"]);
     const dropFile = (name) => {
         const event = new Event("drop", { bubbles: true, cancelable: true });
         Object.defineProperty(event, "dataTransfer", { value: { types: ["Files"], files: [fileNamed(name)] } });
@@ -1256,13 +1259,17 @@ describe("MediaWindow", () => {
             expect(zone().hidden).toBe(true);
         });
 
-        it("ignores a drag that carries no files", () => {
+        it("takes a drag of files, and refuses one that carries none so a dropped link cannot replace the page", () => {
             make();
-            const event = new Event("dragenter", { bubbles: true, cancelable: true });
-            Object.defineProperty(event, "dataTransfer", { value: { types: ["text/plain"], files: [] } });
-            document.body.dispatchEvent(event);
+            expect(dragEvent("dragover").dataTransfer.dropEffect).toBe("copy");
+            const notFiles = dragCarrying(["text/uri-list"]);
+            expect(notFiles("dragenter").defaultPrevented).toBe(false);
             expect(zone().hidden).toBe(true);
-            expect(event.defaultPrevented).toBe(false);
+            const over = notFiles("dragover");
+            expect(over.defaultPrevented).toBe(true);
+            expect(over.dataTransfer.dropEffect).toBe("none");
+            expect(notFiles("drop").defaultPrevented).toBe(true);
+            expect(deps.media.openFile).not.toHaveBeenCalled();
         });
 
         it("leaves a drop to an element that takes its own, saying what it does there", async () => {
