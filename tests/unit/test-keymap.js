@@ -222,11 +222,19 @@ describe("The Atom's key map", function () {
         expect(keyMap[false][keyCodes.SHIFT_LEFT]).toEqual(ATOM.CTRL);
     });
 
-    it("keeps the gaming layout's digits, caps lock and delete", function () {
+    it("keeps the gaming layout's digits and caps lock", function () {
         const keyMap = getKeyMapAtom("gaming");
         expect(keyMap[false][keyCodes.K0]).toEqual(ATOM.K0);
         expect(keyMap[false][keyCodes.CAPSLOCK]).toEqual(ATOM.CTRL);
-        expect(keyMap[false][keyCodes.MENU]).toEqual(ATOM.DELETE);
+    });
+
+    it.each([
+        ["physical", [keyCodes.BACKSPACE, keyCodes.DELETE]],
+        ["natural", [keyCodes.BACKSPACE, keyCodes.DELETE]],
+        ["gaming", [keyCodes.MENU]],
+    ])("reaches DELETE in the %s layout", function (layout, codes) {
+        const keyMap = getKeyMapAtom(layout);
+        for (const code of codes) expect(keyMap[false][code]).toEqual(ATOM.DELETE);
     });
 });
 
