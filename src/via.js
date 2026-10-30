@@ -663,8 +663,6 @@ export class SysVia extends WithKeyMatrix(Via) {
         super(cpu, scheduler, 0x01);
 
         this.IC32 = 0;
-        this.capsLockLight = false;
-        this.shiftLockLight = false;
         this._initKeyMatrix(BBC.SHIFT, KeyboardColumns);
         // Mouse joystick button state
         this.mouseButton1 = false;
@@ -703,8 +701,6 @@ export class SysVia extends WithKeyMatrix(Via) {
         return {
             ...super.snapshotState(),
             IC32: this.IC32,
-            capsLockLight: this.capsLockLight,
-            shiftLockLight: this.shiftLockLight,
             keyScanTaskOffset: this.keyScanTask.offset(),
         };
     }
@@ -730,16 +726,20 @@ export class SysVia extends WithKeyMatrix(Via) {
         super.restoreState(state);
         this.keyScanTask.restoreOffset(state.keyScanTaskOffset);
         this.IC32 = state.IC32;
-        this.capsLockLight = state.capsLockLight;
-        this.shiftLockLight = state.shiftLockLight;
         // Re-apply IC32 side effects (sound chip data bus, CMOS, port A)
         // Must call portBUpdated directly (not recalculatePortBPins which
         // overwrites IC32 based on portbpins) and then re-set IC32.
         this.portBUpdated();
         this.IC32 = state.IC32;
-        this.capsLockLight = state.capsLockLight;
-        this.shiftLockLight = state.shiftLockLight;
         this.recalculatePortAPins();
+    }
+
+    get capsLockLight() {
+        return !(this.IC32 & 0x40);
+    }
+
+    get shiftLockLight() {
+        return !(this.IC32 & 0x80);
     }
 
     setKeyLayout(map) {
@@ -869,9 +869,6 @@ export class SysVia extends WithKeyMatrix(Via) {
         else this.IC32 &= ~(1 << (portbpins & 7));
         // CA2 rests low between the scan's pulses, so switching scan mode starts from there.
         if ((wasAutoscanning ^ this.IC32) & 8) this.ca2 = false;
-
-        this.capsLockLight = !(this.IC32 & 0x40);
-        this.shiftLockLight = !(this.IC32 & 0x80);
 
         this.video.setScreenHwScroll((this.IC32 >> 4) & 3);
 

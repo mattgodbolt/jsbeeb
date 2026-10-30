@@ -67,8 +67,7 @@ export function importedViaState(via, ic32) {
         lastPolltime: 0,
         taskOffset: 1,
     };
-    if (ic32 === undefined) return state;
-    return { ...state, IC32: ic32, capsLockLight: !(ic32 & 0x40), shiftLockLight: !(ic32 & 0x80) };
+    return ic32 === undefined ? state : { ...state, IC32: ic32 };
 }
 
 /**
