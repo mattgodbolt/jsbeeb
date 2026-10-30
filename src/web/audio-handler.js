@@ -30,7 +30,7 @@ export class AudioHandler {
         cpuSpeed,
         isAtom,
         hasMusic5000,
-    } = {}) {
+    }) {
         this.cpuSpeed = cpuSpeed;
         this.isAtom = isAtom;
         this.audioLatencyMs = audioLatencyMs ?? DefaultTargetLatencyMs;

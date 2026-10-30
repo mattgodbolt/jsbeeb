@@ -29,19 +29,6 @@ export class PageActions {
         );
         window.addEventListener("focus", () => loop.setEmulationLead(audioHandler.setWindowFocused(true)), { signal });
 
-        // Files are the media window's to take; anything else dropped on the page would replace it.
-        const carriesFiles = (event) => [...(event.dataTransfer?.types ?? [])].includes("Files");
-        document.addEventListener(
-            "dragover",
-            (event) => {
-                if (carriesFiles(event)) return;
-                event.preventDefault();
-                event.dataTransfer.dropEffect = "none";
-            },
-            { signal },
-        );
-        document.addEventListener("drop", (event) => event.preventDefault(), { signal });
-
         window.addEventListener(
             "beforeunload",
             (event) => {

@@ -1256,13 +1256,22 @@ describe("MediaWindow", () => {
             expect(zone().hidden).toBe(true);
         });
 
-        it("ignores a drag that carries no files", () => {
+        it("takes a drag of files, and refuses one that carries none so a dropped link cannot replace the page", () => {
             make();
-            const event = new Event("dragenter", { bubbles: true, cancelable: true });
-            Object.defineProperty(event, "dataTransfer", { value: { types: ["text/plain"], files: [] } });
-            document.body.dispatchEvent(event);
+            expect(dragEvent("dragover").dataTransfer.dropEffect).toBe("copy");
+            const notFiles = (type) => {
+                const event = new Event(type, { bubbles: true, cancelable: true });
+                Object.defineProperty(event, "dataTransfer", { value: { types: ["text/uri-list"], files: [] } });
+                document.body.dispatchEvent(event);
+                return event;
+            };
+            expect(notFiles("dragenter").defaultPrevented).toBe(false);
             expect(zone().hidden).toBe(true);
-            expect(event.defaultPrevented).toBe(false);
+            const over = notFiles("dragover");
+            expect(over.defaultPrevented).toBe(true);
+            expect(over.dataTransfer.dropEffect).toBe("none");
+            expect(notFiles("drop").defaultPrevented).toBe(true);
+            expect(deps.media.openFile).not.toHaveBeenCalled();
         });
 
         it("leaves a drop to an element that takes its own, saying what it does there", async () => {

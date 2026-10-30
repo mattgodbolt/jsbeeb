@@ -62,7 +62,7 @@ export class Keyboard extends EventTarget {
         this.input = this.directInput();
 
         // State
-        this.emuKeyHandlers = {};
+        this.altKeyHandlers = new Map();
         this.keyLayout = keyLayout;
         this.saidCapsLockIsTapped = false;
         this.releases = new Map();
@@ -124,22 +124,12 @@ export class Keyboard extends EventTarget {
     }
 
     /**
-     * Registers a handler for a specific key with optional modifiers
+     * Registers a handler for Alt and a key, held without Ctrl.
      * @param {string} keyCode - The host key, by physical position
      * @param {Function} handler - Called as (down, code, shiftKey) on the way down and up
-     * @param {Object} [options] - Options for this handler
-     * @param {boolean} [options.alt=true] - Whether this handler requires the Alt key
-     * @param {boolean} [options.ctrl=false] - Whether this handler requires the Ctrl key
      */
-    registerKeyHandler(keyCode, handler, options = { alt: true, ctrl: false }) {
-        // Generate a unique key that includes modifiers
-        const handlerKey = `${options.alt ? "alt:" : ""}${options.ctrl ? "ctrl:" : ""}${keyCode}`;
-        this.emuKeyHandlers[handlerKey] = {
-            handler,
-            alt: !!options.alt,
-            ctrl: !!options.ctrl,
-            keyCode,
-        };
+    registerAltKeyHandler(keyCode, handler) {
+        this.altKeyHandlers.set(keyCode, handler);
     }
 
     /**
@@ -151,24 +141,6 @@ export class Keyboard extends EventTarget {
         this.clearKeys();
         this.keyLayout = layout;
         this.processor.setKeyLayout(layout);
-    }
-
-    /**
-     * Find a matching key handler for the given key event
-     * @param {string} keyCode - The host key, by physical position
-     * @param {boolean} altKey - Whether Alt is pressed
-     * @param {boolean} ctrlKey - Whether Ctrl is pressed
-     * @returns {Object|null} The handler object or null if none found
-     * @private
-     */
-    _findKeyHandler(keyCode, altKey, ctrlKey) {
-        // Try to find a handler with exact modifier match first
-        const exactModKey = `${altKey ? "alt:" : ""}${ctrlKey ? "ctrl:" : ""}${keyCode}`;
-        if (this.emuKeyHandlers[exactModKey]) {
-            return this.emuKeyHandlers[exactModKey];
-        }
-
-        return null;
     }
 
     /**
@@ -196,7 +168,8 @@ export class Keyboard extends EventTarget {
     }
 
     _shortcutFor(evt, code) {
-        return this.shortcutsBlockedFunction() ? null : this._findKeyHandler(code, evt.altKey, evt.ctrlKey);
+        if (!evt.altKey || evt.ctrlKey || this.shortcutsBlockedFunction()) return null;
+        return this.altKeyHandlers.get(code) ?? null;
     }
 
     /** @returns {(() => void)|null} how to undo the press, or null if there is nothing to undo */
@@ -205,8 +178,8 @@ export class Keyboard extends EventTarget {
         const handler = this._shortcutFor(evt, code);
         if (handler) {
             evt.preventDefault();
-            handler.handler(true, code, evt.shiftKey);
-            return () => handler.handler(false, code);
+            handler(true, code, evt.shiftKey);
+            return () => handler(false, code);
         }
 
         if (this.inputEnabledFunction() || !this.runningFunction()) return null;

@@ -52,10 +52,6 @@ export class Modals {
         });
     }
 
-    anyVisible() {
-        return document.querySelectorAll(".modal.show").length !== 0;
-    }
-
     show(id) {
         const el = document.getElementById(id);
         if (el) bootstrap.Modal.getOrCreateInstance(el).show();
