@@ -1014,7 +1014,7 @@ test.describe("on a phone", () => {
         await expect(page.locator('#touch-keyboard .tk-layer[data-name="more"]')).toBeVisible();
     });
 
-    test("the on-screen keyboard's legends load Open Gorton, which carries the function keys' f, the slashed zero and the cursor keys' arrows", async ({
+    test("the on-screen keyboard's legends load Open Gorton, which carries the function keys' f and the cursor keys' arrows", async ({
         beeb,
         page,
     }) => {
@@ -1025,7 +1025,7 @@ test.describe("on a phone", () => {
                 () => [...document.fonts].find((face) => face.family.replaceAll('"', "") === "Open Gorton")?.status,
             );
         await expect.poll(gortonStatus).toBe("loaded");
-        // The advances tools/make-touch-keyboard-font.py gives them, in thousandths of an em; a fallback font's differ.
+        // The advances in tools/make-touch-keyboard-font.py's output, in thousandths of an em; a fallback font's differ.
         const advances = await page.evaluate(() => {
             const context = document.createElement("canvas").getContext("2d");
             context.font = '1000px "Open Gorton"';
