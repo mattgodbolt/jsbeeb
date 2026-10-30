@@ -1,0 +1,89 @@
+<div class="modal fade" id="info" tabindex="-1" aria-labelledby="infoModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="infoModalLabel">About jsbeeb</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div>
+          By <a href="https://xania.org/">Matt Godbolt</a>, based on Sarah Walker's
+          <a href="http://b-em.bbcmicro.com/">b-em</a>: huge thanks to her for open sourcing it, and to Richard
+          Talbot-Watkins for his help and support. The Acorn Atom emulation is
+          <a href="https://github.com/CommanderCoder">Andrew Hague</a>'s. The cycle-accurate emulation owes a great deal
+          to the fantastic <a href="http://www.visual6502.org/">Visual 6502</a> project, who are well worth a donation.
+          The disc loaded by default is the amazing Elite, made available by
+          <a href="http://www.iancgbell.clara.net/elite/bbc/">Ian Bell</a>.
+        </div>
+        <div>
+          <a href="https://github.com/mattgodbolt/jsbeeb">Source on GitHub</a>. For more on the BBC, and people to talk
+          to about it, try the <a href="http://www.stardot.org.uk/forums/">StarDot forums</a>. Works best in Chrome or
+          Firefox. Icons are from <a href="https://icons.getbootstrap.com/">Bootstrap Icons</a> (MIT).
+        </div>
+      </div>
+      <div class="modal-footer">
+        <span class="text-muted me-auto" id="jsbeeb-version"></span>
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="pp-tos" tabindex="-1" aria-labelledby="ppModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="ppModalLabel">Privacy Policy &amp; Terms of Service</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <ul>
+          <li>
+            jsbeeb uses Google Analytics, which sets cookies, to count how the site is used and to find what goes wrong.
+            There are no server logs and nothing is kept on the jsbeeb servers; this is a static page served from an AWS
+            bucket. What is sent:
+            <ul>
+              <li>
+                the page's address, with anything of your own taken out: a disc from your Google Drive, this browser or
+                your computer is named only by where it came from, and a shared session's room and names are removed;
+              </li>
+              <li>
+                each disc or tape loaded: where from, how it was picked, and whether it loaded or why not in general
+                terms. Public discs are named; your own are not;
+              </li>
+              <li>
+                how the emulator started: the machine model, keyboard layout, whether it is embedded in another page,
+                how it was asked to boot, and whether WebGL and sound are working;
+              </li>
+              <li>which parts of jsbeeb are used, such as the media window, the debugger, rewind or Help;</li>
+              <li>
+                errors in jsbeeb itself: the start of the message, with quoted text and addresses removed, and where in
+                jsbeeb's code it happened;
+              </li>
+              <li>shared sessions being hosted, joined, failing and ending, and roughly how many took part;</li>
+              <li>pressing Break, and a few of jsbeeb's shortcut keys.</li>
+            </ul>
+            Not sent: what you type into the emulator, the contents of any disc or tape, or the names of your own files.
+            Google Analytics also records what it records on any site, such as your browser, device type and rough
+            location.
+          </li>
+          <li>
+            No personal information is kept. Logging in to Google Drive stores only what is needed to reach your own
+            discs, and that is never shared with the jsbeeb developers.
+          </li>
+          <li>
+            Use of jsbeeb is at your own risk, for whatever lawful purpose you wish. Reasonable efforts are used to keep
+            the site up to date and working.
+          </li>
+        </ul>
+        <div>
+          Would you rather run your own copy? The source is on
+          <a href="https://github.com/mattgodbolt/jsbeeb">GitHub</a>.
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>

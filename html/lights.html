@@ -1,0 +1,64 @@
+<div id="leds">
+  <div class="slot-readouts" role="group" aria-label="What is loaded">
+    <button type="button" class="slot-readout media-window-open bbc-only" data-slot="0">
+      <span class="hdr">drive 0/2</span>
+      <span class="line"><span class="led disc" id="drive0"></span><span class="name"></span></span>
+    </button>
+    <button type="button" class="slot-readout media-window-open bbc-only" data-slot="1">
+      <span class="hdr">drive 1/3</span>
+      <span class="line"><span class="led disc" id="drive1"></span><span class="name"></span></span>
+    </button>
+    <button type="button" class="slot-readout media-window-open" data-slot="tape">
+      <span class="hdr">cassette motor</span>
+      <span class="line"
+        ><span class="led tape" id="motorlight"></span><span class="name"></span><span class="counter"></span
+      ></span>
+    </button>
+  </div>
+  <div class="lights">
+    <div class="cell bbc-only" title="Caps lock">
+      <span class="hdr">caps<br />lock</span>
+      <span class="led keyboard" id="capslight"></span>
+    </div>
+    <div class="cell bbc-only" title="Shift lock">
+      <span class="hdr">shift<br />lock</span>
+      <span class="led keyboard" id="shiftlight"></span>
+    </div>
+    <div class="cell bbc-only econet" title="Econet activity">
+      <span class="hdr">econet<br />tx/rx</span>
+      <span class="led disc" id="networklight"></span>
+    </div>
+    <div class="cell" title="Emulated processor speed">
+      <span class="hdr">virtual<br />MHz</span>
+      <span class="speed">
+        <span
+          id="speed-normal"
+          data-icon="play-fill"
+          role="img"
+          title="Normal speed. Alt-T turns turbo on and off, outside a shared session."
+        ></span>
+        <span
+          id="speed-turbo"
+          data-icon="fast-forward-fill"
+          role="img"
+          title="Turbo: as fast as it can go, from Alt-T until it is pressed again, or from fast tape while the cassette motor runs."
+          hidden
+        ></span>
+        <span class="virtualMHz"></span>
+      </span>
+    </div>
+  </div>
+  <div class="session-readout" id="session-panel" hidden>
+    <button
+      type="button"
+      class="slot-readout"
+      aria-controls="session-pane"
+      aria-expanded="false"
+      title="Shared session: who is connected, and how well"
+    >
+      <span class="hdr session-heading">session</span>
+      <span class="name session-summary"></span>
+      <span class="session-peers"></span>
+    </button>
+  </div>
+</div>
