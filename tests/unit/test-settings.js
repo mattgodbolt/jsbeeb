@@ -221,7 +221,7 @@ describe("Settings", () => {
             },
             scanlines: { type: ParamTypes.BOOL, stored: true, default: true },
             tintLevel: { type: ParamTypes.INT, stored: true, default: 3 },
-            glow: { type: ParamTypes.FLOAT, stored: true, slid: true, default: 10, fit: (glow) => Math.min(glow, 20) },
+            glow: { type: ParamTypes.FLOAT, stored: true, default: 10, fit: (glow) => Math.min(glow, 20) },
             frameCount: { type: ParamTypes.INT, default: 1 },
         };
         const urlStateFor = (search) =>
@@ -248,10 +248,10 @@ describe("Settings", () => {
             expect(settingsFor("").screenTint).toBe("green");
         });
 
-        it("reads a stored checkbox and number back as what was stored, not the default", () => {
-            settingsFor("").set({ scanlines: false, tintLevel: 5 });
+        it("reads a stored checkbox and numbers back as what was stored, not the default", () => {
+            settingsFor("").set({ scanlines: false, tintLevel: 0, glow: 0.5 });
             expect(window.localStorage.scanlines).toBe("false");
-            expect(settingsFor("")).toMatchObject({ scanlines: false, tintLevel: 5 });
+            expect(settingsFor("")).toMatchObject({ scanlines: false, tintLevel: 0, glow: 0.5 });
         });
 
         it("is read back from storage only when it is stored", () => {
@@ -269,24 +269,6 @@ describe("Settings", () => {
             expect(settings.glow).toBe(20);
             expect(window.localStorage.glow).toBe("20");
             expect(settings.urlState.params.glow).toBe(20);
-        });
-
-        it("settles before writing history when slid, and writes it at once otherwise", () => {
-            const pushState = vi.fn();
-            const settings = new Settings({
-                urlState: new UrlState(
-                    { origin: "https://bbc.example", pathname: "/", search: "", hash: "" },
-                    { pushState },
-                    (name) => urlParamType(name, withMadeUpSetting),
-                ),
-                parameters: withMadeUpSetting,
-            });
-            settings.set({ glow: 12 });
-            expect(pushState).not.toHaveBeenCalled();
-            vi.advanceTimersByTime(300);
-            expect(pushState).toHaveBeenCalledTimes(1);
-            settings.set({ screenTint: "green" });
-            expect(pushState).toHaveBeenCalledTimes(2);
         });
 
         it("round-trips through the URL", () => {

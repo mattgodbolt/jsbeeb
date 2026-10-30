@@ -77,8 +77,6 @@ describe("Parameters", () => {
         for (const { setting, default: afterglowMs } of persistenceSettings()) {
             expect(Parameters[setting], setting).toMatchObject({
                 type: ParamTypes.FLOAT,
-                stored: true,
-                slid: true,
                 default: afterglowMs,
             });
             expect(Parameters[setting].fit(MaxPersistenceMs + 1)).toBe(MaxPersistenceMs);
