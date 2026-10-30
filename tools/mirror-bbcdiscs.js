@@ -9,7 +9,17 @@
 
 import { createHash } from "node:crypto";
 import { brotliCompress, brotliDecompress, constants as zlibConstants } from "node:zlib";
-import { access, constants as fsConstants, mkdir, readdir, readFile, rm, stat } from "node:fs/promises";
+import {
+    access,
+    constants as fsConstants,
+    mkdir,
+    readdir,
+    readFile,
+    rename,
+    rm,
+    stat,
+    writeFile,
+} from "node:fs/promises";
 import { basename, dirname, extname, join } from "node:path";
 import { argv, env, exit, stderr, stdin, stdout } from "node:process";
 import { createInterface } from "node:readline/promises";
@@ -24,7 +34,6 @@ import {
     fileSize,
     forEachConcurrently,
     RetryDelayMs,
-    writeAtomically,
     writeJson,
 } from "./mirror-common.js";
 
@@ -310,6 +319,17 @@ function checkIsHfe(bytes, what) {
     const magic = Buffer.from(bytes.subarray(0, 8)).toString("latin1");
     if (!HfeMagics.includes(magic))
         throw new Error(`${what}: expected an HFE image, got ${bytes.length} bytes starting ${JSON.stringify(magic)}`);
+}
+
+let nextTemp = 0;
+
+// So an interrupted run never leaves a truncated file that a later run would
+// mistake for complete. The name is unique per write because two discs with
+// the same bytes are published under the same name, by two workers at once.
+async function writeAtomically(dest, bytes) {
+    const partial = `${dest}.${nextTemp++}.part`;
+    await writeFile(partial, bytes);
+    await rename(partial, dest);
 }
 
 async function fetchDisc(entry, cacheDir) {
@@ -782,7 +802,7 @@ async function main() {
 }
 
 // Only run the mirror when invoked as a script, so the parsers can be tested.
-if (basename(argv[1] ?? "") === "mirror-bbcdiscs.js") {
+if (import.meta.main) {
     main().catch((error) => {
         stderr.write(`\nERROR: ${error.stack ?? error.message ?? error}\n`);
         exit(1);

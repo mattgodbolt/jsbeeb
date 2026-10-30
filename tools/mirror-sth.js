@@ -6,7 +6,7 @@
  * See tools/README-sth-mirror.md for the manifest format and upload steps.
  */
 
-import { mkdir } from "node:fs/promises";
+import { mkdir, rename, writeFile } from "node:fs/promises";
 import { dirname, join, posix } from "node:path";
 import { argv, exit, stderr, stdout } from "node:process";
 
@@ -19,7 +19,6 @@ import {
     HttpError,
     RetryDelayMs,
     sleep,
-    writeAtomically,
     writeJson,
 } from "./mirror-common.js";
 
@@ -164,10 +163,14 @@ async function waitForTurn() {
 
 const fetchFromSth = (url) => fetchWithRetry(url, RetryDelayMs, waitForTurn);
 
+// Download to a temporary name and rename into place, so an interrupted run
+// never leaves a truncated file that a later run would mistake for complete.
 async function download(url, dest) {
     await mkdir(dirname(dest), { recursive: true });
     const response = await fetchFromSth(url);
-    await writeAtomically(dest, Buffer.from(await response.arrayBuffer()));
+    const partial = `${dest}.part`;
+    await writeFile(partial, Buffer.from(await response.arrayBuffer()));
+    await rename(partial, dest);
 }
 
 async function index(category) {
@@ -281,7 +284,7 @@ async function main() {
 }
 
 // Only run the mirror when invoked as a script, so the parser can be tested.
-if (argv[1]?.endsWith("mirror-sth.js")) {
+if (import.meta.main) {
     main().catch((error) => {
         stderr.write(`\nERROR: ${error.stack ?? error.message ?? error}\n`);
         if (error instanceof HttpError && error.status === 404)

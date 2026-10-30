@@ -1,10 +1,10 @@
 /** What the archive mirror tools share: polite fetching with retries, a worker pool, and safe file writes. */
 
-import { mkdir, rename, stat, writeFile } from "node:fs/promises";
+import { mkdir, stat, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { exit, stderr } from "node:process";
 
-export const UserAgent = "jsbeeb-mirror (+https://github.com/mattgodbolt/jsbeeb)";
+const UserAgent = "jsbeeb-mirror (+https://github.com/mattgodbolt/jsbeeb)";
 export const DefaultConcurrency = 4;
 export const RetryDelayMs = 1000;
 const MaxRetries = 3;
@@ -61,17 +61,6 @@ export async function fileSize(path) {
     } catch {
         return null;
     }
-}
-
-let nextTemp = 0;
-
-// So an interrupted run never leaves a truncated file that a later run would
-// mistake for complete. The name is unique per write because two writes to the
-// same destination can be in flight at once, from two workers.
-export async function writeAtomically(dest, bytes) {
-    const partial = `${dest}.${nextTemp++}.part`;
-    await writeFile(partial, bytes);
-    await rename(partial, dest);
 }
 
 export async function writeJson(dest, value) {

@@ -8,7 +8,7 @@ describe("fetchWithRetry", () => {
 
     const respond = (status) => ({ ok: status >= 200 && status < 300, status });
 
-    it("does not retry a 404 — a file the index promised is a fault to report, not a blip", async () => {
+    it("does not retry a 404, a file the index promised being a fault to report rather than a blip", async () => {
         const fetch = vi.spyOn(globalThis, "fetch").mockResolvedValue(respond(404));
 
         await expect(fetchWithRetry("https://example.com/gone.zip", 0, null)).rejects.toThrow("HTTP 404");
@@ -34,6 +34,20 @@ describe("fetchWithRetry", () => {
 
         await expect(fetchWithRetry("https://example.com/slow.zip", 0, null)).resolves.toMatchObject({ status: 200 });
         expect(fetch).toHaveBeenCalledTimes(2);
+    });
+
+    it("waits its turn before every attempt", async () => {
+        const calls = [];
+        vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
+            calls.push("fetch");
+            return respond(calls.length < 4 ? 503 : 200);
+        });
+
+        await fetchWithRetry("https://example.com/flaky.zip", 0, async () => {
+            calls.push("turn");
+        });
+
+        expect(calls).toEqual(["turn", "fetch", "turn", "fetch"]);
     });
 
     it("gives up rather than hammering a server that stays broken", async () => {
