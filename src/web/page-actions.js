@@ -6,8 +6,8 @@ const UnloadWarning =
 
 /**
  * The page around the emulator: the reset menu items and the filestore
- * download, what focus and unload do to the machine, the drop guard, the
- * dialogs a URL can ask for, and the version stamp.
+ * download, what focus and unload do to the machine, the dialogs a URL
+ * can ask for, and the version stamp.
  */
 export class PageActions {
     constructor({ loop, processor, keyboard, audioHandler, rewindUI, modals, parsedQuery, version }) {

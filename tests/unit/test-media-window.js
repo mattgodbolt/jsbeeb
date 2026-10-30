@@ -169,12 +169,15 @@ describe("MediaWindow", () => {
         Object.defineProperty(input, "files", { value: [fileNamed(name)] });
         input.dispatchEvent(new Event("change"));
     };
-    const dragEvent = (type, target = document.body) => {
-        const event = new Event(type, { bubbles: true, cancelable: true });
-        Object.defineProperty(event, "dataTransfer", { value: { types: ["Files"], files: [], dropEffect: "" } });
-        target.dispatchEvent(event);
-        return event;
-    };
+    const dragCarrying =
+        (types) =>
+        (type, target = document.body) => {
+            const event = new Event(type, { bubbles: true, cancelable: true });
+            Object.defineProperty(event, "dataTransfer", { value: { types, files: [], dropEffect: "" } });
+            target.dispatchEvent(event);
+            return event;
+        };
+    const dragEvent = dragCarrying(["Files"]);
     const dropFile = (name) => {
         const event = new Event("drop", { bubbles: true, cancelable: true });
         Object.defineProperty(event, "dataTransfer", { value: { types: ["Files"], files: [fileNamed(name)] } });
@@ -1259,12 +1262,7 @@ describe("MediaWindow", () => {
         it("takes a drag of files, and refuses one that carries none so a dropped link cannot replace the page", () => {
             make();
             expect(dragEvent("dragover").dataTransfer.dropEffect).toBe("copy");
-            const notFiles = (type) => {
-                const event = new Event(type, { bubbles: true, cancelable: true });
-                Object.defineProperty(event, "dataTransfer", { value: { types: ["text/uri-list"], files: [] } });
-                document.body.dispatchEvent(event);
-                return event;
-            };
+            const notFiles = dragCarrying(["text/uri-list"]);
             expect(notFiles("dragenter").defaultPrevented).toBe(false);
             expect(zone().hidden).toBe(true);
             const over = notFiles("dragover");

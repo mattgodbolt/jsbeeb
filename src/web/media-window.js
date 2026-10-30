@@ -1037,8 +1037,9 @@ export class MediaWindow {
             bay.status.textContent = loadingWords(busy);
             bay.kept.textContent = "";
         } else if (!disc) {
-            bay.eject.title =
-                bay.slot.title = `Drive ${driveIndex} is empty; click to pick a disc for it from the list`;
+            const pickOne = `Drive ${driveIndex} is empty; click to pick a disc for it from the list`;
+            bay.eject.title = pickOne;
+            bay.slot.title = pickOne;
             bay.status.textContent = drive
                 ? `nothing loaded · reads ${tracksLabel(drive.tracksPerStep)} track discs`
                 : "no drive";
