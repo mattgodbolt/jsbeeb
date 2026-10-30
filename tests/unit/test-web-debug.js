@@ -490,11 +490,16 @@ describe("Debugger", () => {
                 expect(operand()).toBe(before);
             });
 
-            it("catch up with a change to the machine that takes no cycles, such as a soft reset", () => {
+            it("catch up with a change to the machine that takes no cycles, a reset or a state load", () => {
+                const shownPc = () => document.getElementById("cpu6502_pc").textContent;
+                const before = cpu.snapshotState();
                 frames.run();
                 cpu.reset(false);
                 frames.run();
-                expect(document.getElementById("cpu6502_pc").textContent).toBe(hexword(dbgr.resetEntry()));
+                expect(shownPc()).toBe(hexword(dbgr.resetEntry()));
+                cpu.restoreState(before);
+                frames.run();
+                expect(shownPc()).toBe("2000");
             });
 
             it("read nothing once closed", () => {

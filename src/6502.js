@@ -732,8 +732,7 @@ export class Cpu6502 extends Base6502 {
         this.oldYArray = new Uint8Array(256);
         this.oldPcIndex = 0;
         this.resetLine = true;
-        // Resets and state loads, counted for machineMoment in lockstep.js.
-        this.stateJumps = 0;
+        this.resetsAndLoads = 0;
         this.cpuMultiplier = this.config.cpuMultiplier;
         this.videoCyclesBatch = this.config.videoCyclesBatch | 0;
         this.peripheralCyclesPerSecond = model.cyclesPerSecond;
@@ -1562,7 +1561,7 @@ export class Cpu6502 extends Base6502 {
     }
 
     restoreState(state) {
-        ++this.stateJumps;
+        ++this.resetsAndLoads;
         // 1. Scheduler epoch first (so task offsets resolve correctly)
         this.scheduler.restoreState(state.scheduler);
 
@@ -1694,7 +1693,7 @@ export class Cpu6502 extends Base6502 {
 
     // Universal CPU state reset. Shared by all machine types.
     resetCpuState(hard) {
-        ++this.stateJumps;
+        ++this.resetsAndLoads;
         this.tube.reset(hard);
         if (hard) {
             this.targetCycles = 0;

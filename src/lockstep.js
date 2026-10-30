@@ -29,7 +29,7 @@ export function cycleCount(cpu) {
 
 /** Changes whenever the machine does: as its cycle count moves, and at a reset or state load, which need not move it. */
 export function machineMoment(cpu) {
-    return `${cpu.stateJumps}:${cycleCount(cpu)}`;
+    return `${cpu.resetsAndLoads}:${cycleCount(cpu)}`;
 }
 
 // The CPU runs whole instructions until it reaches its target, so asking for a
