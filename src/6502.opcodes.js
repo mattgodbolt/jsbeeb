@@ -1042,7 +1042,7 @@ function runOnStandIn(cpu, instruction, { a, x, y, s, flags, fill, memory }) {
     return { a: standIn.a, x: standIn.x, y: standIn.y, s: standIn.s, flags: p.asByte(), fill, memory: written };
 }
 
-function settles(cpu, instruction) {
+function measureIdempotence(cpu, instruction) {
     return ProbeStates.every((state) => {
         const once = runOnStandIn(cpu, instruction, state);
         const twice = runOnStandIn(cpu, instruction, once);
@@ -1090,7 +1090,7 @@ class Disassemble6502 {
         this.undocumented = undocumented;
         this.descriptions = describeOpcodes(opcodes);
         this.compile = compile;
-        this.settled = [];
+        this.idempotence = [];
     }
 
     /**
@@ -1099,8 +1099,8 @@ class Disassemble6502 {
      */
     isIdempotent(opcode) {
         if (!(opcode in this.opcodes)) return false;
-        this.settled[opcode] ??= settles(this.cpu, this.compile(this.opcodes[opcode]));
-        return this.settled[opcode];
+        this.idempotence[opcode] ??= measureIdempotence(this.cpu, this.compile(this.opcodes[opcode]));
+        return this.idempotence[opcode];
     }
 
     /** @returns {OpcodeDescription} */
