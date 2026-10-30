@@ -566,7 +566,6 @@ test("a panel's keys act only while the machine is stopped, and every other key 
 }) => {
     await beeb.open();
     await beeb.expectScreenText(">");
-    await beeb.disableAutoRepeat();
     await page.keyboard.press("Alt+D");
     const memoryAt = page.locator("#memory .highlight .dis_addr");
     await expect(memoryAt).toHaveText("0000");
