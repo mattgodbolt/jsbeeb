@@ -109,10 +109,13 @@ export function viewDiffers(cpu, view, address) {
     return cpu.memLook[cpu.memStatOffset + (address >>> 8)] + address !== offset;
 }
 
-/** The view showing the RAM the video reads at screen `address`: the paged one wherever the CPU reads the same. */
+/**
+ * The view showing the RAM the video reads at screen `address`, &3000 to &7FFF: shadow whenever ACCCON's D bit has
+ * the video reading it, since the CPU's paging of it changes with X, E and the program counter.
+ */
 export function screenView(cpu, address) {
-    const view = cpu.videoDisplayPage ? ShadowView : MainView;
-    return viewDiffers(cpu, view, address) ? view : PagedView;
+    if (cpu.videoDisplayPage) return ShadowView;
+    return viewDiffers(cpu, MainView, address) ? MainView : PagedView;
 }
 
 function text(peek, from, to) {

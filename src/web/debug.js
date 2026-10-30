@@ -1036,8 +1036,8 @@ export class Debugger {
 
     /**
      * While the machine is stopped in the debugger, opens the memory panel at the byte drawn at a point of the
-     * screen, 0 to 1 across and down it, in the RAM it is drawn from, and takes the click; otherwise, or while the on-screen keyboard shows,
-     * the click is the machine's.
+     * screen, 0 to 1 across and down it, in the RAM it is drawn from, and takes the click; otherwise, or while the
+     * on-screen keyboard shows, the click is the machine's.
      */
     showScreenByteAt(x, y) {
         if (!this._inDebugger || this._touchKeyboardShown()) return false;

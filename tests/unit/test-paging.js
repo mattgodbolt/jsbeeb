@@ -56,7 +56,7 @@ describe("paging views", () => {
         [Master, 0, PagedView],
         [Master, AccconD, ShadowView],
         [Master, AccconX, MainView],
-        [Master, AccconX | AccconD, PagedView],
+        [Master, AccconX | AccconD, ShadowView],
         [ModelB, 0, PagedView],
     ])("shows the RAM a %s's video reads with ACCCON %i", async (model, acccon, view) => {
         const cpu = await machine(model);
