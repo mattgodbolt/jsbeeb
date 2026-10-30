@@ -214,13 +214,20 @@ describe("MachineSession watching execution", () => {
         expect(session.hitBreakpoint()).toEqual({ id, type: "write", address: Counter, value: 0x42 });
     });
 
-    it("stops as the machine takes an IRQ with the vsync flag set, at the handler the vector names", async () => {
+    it("stops only as the machine takes an IRQ with the vsync flag set, at the handler the vector names", async () => {
         const IrqVector = 0xfffe;
+        const SysViaIfr = 0xfe4d;
+        const VsyncFlag = 0x02;
+        // The System VIA's timer 1 interrupts twice as often as vsync, so most IRQs are not vsync's.
+        const Stops = 4;
         const id = session.addBreakpoint("irq", undefined, { condition: "?&FE4D AND 2" });
 
-        await session.runFor(CyclesPerInterlacedFrame);
-
-        expect(session.hitBreakpoint()).toEqual({ id, type: "irq", address: vectorAt(session, IrqVector) });
+        for (let stop = 0; stop < Stops; stop++) {
+            await session.runFor(CyclesPerInterlacedFrame);
+            expect(session.hitBreakpoint()).toEqual({ id, type: "irq", address: vectorAt(session, IrqVector) });
+            expect(session.readMemory(SysViaIfr, 1)[0] & VsyncFlag).toBe(VsyncFlag);
+            session.resetBreakpointHits();
+        }
         expect(session.listBreakpoints()).toEqual([expect.objectContaining({ id, type: "irq", address: undefined })]);
     });
 

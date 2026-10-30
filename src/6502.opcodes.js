@@ -1130,7 +1130,10 @@ class Disassemble6502 {
     }
 
     isDocumented(addr) {
-        const op = this.cpu.peekmem(addr);
+        return this.isDocumentedOpcode(this.cpu.peekmem(addr));
+    }
+
+    isDocumentedOpcode(op) {
         return op in this.opcodes && !this.undocumented.has(op);
     }
 

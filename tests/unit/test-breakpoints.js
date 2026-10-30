@@ -255,6 +255,7 @@ describe("Breakpoints", () => {
             breakpoints.add({ kind: "nmi" });
             breakpoints.add({ kind: "execute", start: NmiHandler });
             expect(runField()).toBe(false);
+            expect(cpu.snapshotState().stoppedAtBreakpoint).toBe(true);
             expect(runField()).toBe(true);
             expect(hits.map((hit) => hit.kind)).toEqual(["nmi"]);
         });

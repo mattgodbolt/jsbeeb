@@ -112,32 +112,32 @@ No `encoding` field means plain base64, which is how every array before v4 and e
 
 ### CPU (`state.*`)
 
-| Field                 | Type       | Description                                                                                                                                           |
-| --------------------- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `a`                   | number     | Accumulator (0-255)                                                                                                                                   |
-| `x`                   | number     | X register (0-255)                                                                                                                                    |
-| `y`                   | number     | Y register (0-255)                                                                                                                                    |
-| `s`                   | number     | Stack pointer (0-255)                                                                                                                                 |
-| `pc`                  | number     | Program counter (0-65535)                                                                                                                             |
-| `p`                   | number     | Processor flags byte (bits 4-5 always set)                                                                                                            |
-| `nmiLevel`            | boolean    | NMI line level, the OR of every device's line (see below)                                                                                             |
-| `nmiEdge`             | boolean    | NMI edge detected (pending)                                                                                                                           |
-| `halted`              | boolean    | CPU halted state                                                                                                                                      |
-| `takeInt`             | boolean    | Interrupt pending                                                                                                                                     |
-| `stoppedAtBreakpoint` | boolean    | _(Optional)_ A debug stop at `pc`: an instruction hook's (an execute breakpoint, a run-until) or an interrupt breakpoint's at its handler (see below) |
-| `romsel`              | number     | ROM bank select register (&FE30)                                                                                                                      |
-| `acccon`              | number     | ACCCON register (&FE34, Master only)                                                                                                                  |
-| `videoDisplayPage`    | number     | Video display page offset (0 or 0x8000)                                                                                                               |
-| `currentCycles`       | number     | Current cycle counter                                                                                                                                 |
-| `targetCycles`        | number     | Target cycle counter                                                                                                                                  |
-| `cycleSeconds`        | number     | Elapsed seconds (float)                                                                                                                               |
-| `peripheralCycles`    | number     | Peripheral cycle accumulator                                                                                                                          |
-| `videoCycles`         | number     | Video cycle accumulator                                                                                                                               |
-| `music5000PageSel`    | number     | Music 5000 page select                                                                                                                                |
-| `ram`                 | Uint8Array | RAM contents (64KB; on a Master, ANDY at 0x8000, HAZEL at 0x9000 and LYNNE at 0xB000)                                                                 |
-| `roms`                | Uint8Array | _(Optional)_ ROM contents (256KB, 16 x 16KB banks). Present in b-em imports and shared session joins.                                                 |
-| `swram`               | Uint8Array | _(Optional)_ Sideways RAM banks, 16KB each, back to back in ascending bank order (see below)                                                          |
-| `swramBankMask`       | number     | _(Optional)_ Which banks `swram` holds: bit n set for bank n                                                                                          |
+| Field                 | Type       | Description                                                                                                   |
+| --------------------- | ---------- | ------------------------------------------------------------------------------------------------------------- |
+| `a`                   | number     | Accumulator (0-255)                                                                                           |
+| `x`                   | number     | X register (0-255)                                                                                            |
+| `y`                   | number     | Y register (0-255)                                                                                            |
+| `s`                   | number     | Stack pointer (0-255)                                                                                         |
+| `pc`                  | number     | Program counter (0-65535)                                                                                     |
+| `p`                   | number     | Processor flags byte (bits 4-5 always set)                                                                    |
+| `nmiLevel`            | boolean    | NMI line level, the OR of every device's line (see below)                                                     |
+| `nmiEdge`             | boolean    | NMI edge detected (pending)                                                                                   |
+| `halted`              | boolean    | CPU halted state                                                                                              |
+| `takeInt`             | boolean    | Interrupt pending                                                                                             |
+| `stoppedAtBreakpoint` | boolean    | _(Optional)_ A debug stop (a breakpoint, a run-until, an interrupt stop) left the machine at `pc` (see below) |
+| `romsel`              | number     | ROM bank select register (&FE30)                                                                              |
+| `acccon`              | number     | ACCCON register (&FE34, Master only)                                                                          |
+| `videoDisplayPage`    | number     | Video display page offset (0 or 0x8000)                                                                       |
+| `currentCycles`       | number     | Current cycle counter                                                                                         |
+| `targetCycles`        | number     | Target cycle counter                                                                                          |
+| `cycleSeconds`        | number     | Elapsed seconds (float)                                                                                       |
+| `peripheralCycles`    | number     | Peripheral cycle accumulator                                                                                  |
+| `videoCycles`         | number     | Video cycle accumulator                                                                                       |
+| `music5000PageSel`    | number     | Music 5000 page select                                                                                        |
+| `ram`                 | Uint8Array | RAM contents (64KB; on a Master, ANDY at 0x8000, HAZEL at 0x9000 and LYNNE at 0xB000)                         |
+| `roms`                | Uint8Array | _(Optional)_ ROM contents (256KB, 16 x 16KB banks). Present in b-em imports and shared session joins.         |
+| `swram`               | Uint8Array | _(Optional)_ Sideways RAM banks, 16KB each, back to back in ascending bank order (see below)                  |
+| `swramBankMask`       | number     | _(Optional)_ Which banks `swram` holds: bit n set for bank n                                                  |
 
 `swram` holds every bank the model has as sideways RAM (banks 0-7 on a B, mask `0x00FF`; 4-7 on a Master, mask `0x00F0`; none on a stock B or an Atom). The mask is saved rather than read from the model, so a later change to a model's banks cannot misplace an older file's. Both fields are left out when `roms` already carries every bank. On restore each bank in the mask overwrites only that bank, so the ROMs jsbeeb has loaded stay as they are. Snapshots from before sideways RAM was saved have neither field, and then sideways RAM keeps its current contents, so it needed no format version bump.
 

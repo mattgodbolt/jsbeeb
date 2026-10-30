@@ -45,7 +45,10 @@ const EventKinds = new Map([
     ["brk", { access: "execute", firesOn: () => (cpu, entry, address, opcode) => opcode === BrkOpcode }],
     [
         "undocumented",
-        { access: "execute", firesOn: () => (cpu, entry, address) => !cpu.disassembler.isDocumented(address) },
+        {
+            access: "execute",
+            firesOn: () => (cpu, entry, address, opcode) => !cpu.disassembler.isDocumentedOpcode(opcode),
+        },
     ],
     ["irq", { access: "interrupt", firesOn: () => takenIs }],
     ["nmi", { access: "interrupt", firesOn: () => takenIs }],
