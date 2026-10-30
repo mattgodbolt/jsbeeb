@@ -2,7 +2,7 @@
 
 Takes OpenGorton-Regular.otf from https://github.com/dakotafelder/open-gorton and:
 - keeps only printable ASCII less the lowercase letters, which the font maps to its capitals
-- makes the zero a slashed O, as the BBC Micro's keycaps print it
+- slashes the zero, as the BBC Micro's keycaps print it
 - adds the function keys' f at U+0066 and the cursor keys' arrows at U+2190 to U+2193, drawn as the keycaps print them
 
 Needs fontTools with WOFF2 support (`pip install 'fonttools[woff]'`):
@@ -22,9 +22,8 @@ from fontTools.ttLib import TTFont
 Output = Path(__file__).resolve().parent.parent / "public" / "fonts" / "open-gorton" / "OpenGorton-Regular.woff2"
 KeptCodepoints = [c for c in range(0x20, 0x7F) if not ord("a") <= c <= ord("z")]
 Kappa = 0.5523
-# The keycaps' zero is the round O, slashed at about 45 degrees from corner to corner, its ends a quarter of the
-# radius past the ring.
-SlashAngle = 45
+# The keycaps' zero is Gorton's own oval zero, slashed from corner to corner of its bounds, the slash's ends a quarter
+# of the way again past the ring.
 SlashReach = 1.25
 
 # The function keys' f: a plain f leaning 10 degrees, standing on the baseline, 850 units tall with a stroke of 86
@@ -112,20 +111,21 @@ def slash_zero(font):
     glyph_set = font.getGlyphSet()
     stem_xmin, _, stem_xmax, _ = bounds(glyph_set, "I")
     half_width = (stem_xmax - stem_xmin) / 2
-    letter_o = glyph_set["O"]
+    zero = glyph_set["zero"]
     recording = RecordingPen()
-    letter_o.draw(recording)
-    pen = glyph_pen(font, letter_o.width)
+    zero.draw(recording)
+    pen = glyph_pen(font, zero.width)
     recording.replay(pen)
 
-    xmin, ymin, xmax, ymax = bounds(glyph_set, "O")
+    xmin, ymin, xmax, ymax = bounds(glyph_set, "zero")
     cx, cy = (xmin + xmax) / 2, (ymin + ymax) / 2
-    reach = SlashReach * (xmax - xmin) / 2 - half_width
-    ux, uy = math.cos(math.radians(SlashAngle)), math.sin(math.radians(SlashAngle))
+    diagonal = math.hypot(xmax - xmin, ymax - ymin)
+    # An ellipse crosses its bounds' diagonal at parameter 45 degrees, half the diagonal over root 2 from its centre.
+    reach = SlashReach * diagonal / 2 / math.sqrt(2) - half_width
+    ux, uy = (xmax - xmin) / diagonal, (ymax - ymin) / diagonal
     capsule(pen, (cx - ux * reach, cy - uy * reach), (cx + ux * reach, cy + uy * reach), half_width)
 
     font["CFF "].cff.topDictIndex[0].CharStrings["zero"] = charstring(font, pen)
-    font["hmtx"]["zero"] = font["hmtx"]["O"]
 
 
 def add_f(font):
