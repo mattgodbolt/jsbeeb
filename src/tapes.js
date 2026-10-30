@@ -1,6 +1,6 @@
 import { DataStream, stringToUint8Array } from "./binary.js";
 import { ungzip } from "./archive.js";
-import { hexword } from "./hex.js";
+import { hexbyte, hexword } from "./hex.js";
 
 function secsToClocks(secs, cpuSpeed) {
     return (cpuSpeed * secs) | 0;
@@ -317,7 +317,7 @@ class TapefileTape {
                 // Simulate 5 seconds of carrier.
                 return secsToClocks(5, this.cpuSpeed);
             } else if (byte !== 0xff) {
-                throw new Error(`Unexpected byte ${byte} in the tape`);
+                throw new Error(`Unexpected byte ${hexbyte(byte)} in the tape`);
             }
         }
         acia.receive(byte);

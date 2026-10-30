@@ -485,7 +485,7 @@ class Via {
             case IFR:
                 return this.ifr;
             default:
-                throw new Error(`Unknown VIA read of register ${addr & 0xf}`);
+                throw new Error("Unknown VIA read");
         }
     }
 
