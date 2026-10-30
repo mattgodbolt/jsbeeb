@@ -1,5 +1,23 @@
 # Changelog
 
+## [2.14.0](https://github.com/mattgodbolt/jsbeeb/compare/v2.13.0...v2.14.0) (2026-10-30)
+
+
+### Features
+
+* a BASIC panel showing BASIC's memory, the line running and its variables, with run to a line and step a statement ([#1670](https://github.com/mattgodbolt/jsbeeb/issues/1670)) ([d2c9645](https://github.com/mattgodbolt/jsbeeb/commit/d2c96458601efeb2aa4ea91c88d8279bf14b960c))
+* a Breakpoints panel listing every breakpoint, remembered between visits ([#1674](https://github.com/mattgodbolt/jsbeeb/issues/1674)) ([8f02ff3](https://github.com/mattgodbolt/jsbeeb/commit/8f02ff373fc9ea6daef7f5d73c5e3b2d35c1e3fa))
+* a paging and ROM panel, and a bank override on the memory and disassembly panels ([#1669](https://github.com/mattgodbolt/jsbeeb/issues/1669)) ([1353d2d](https://github.com/mattgodbolt/jsbeeb/commit/1353d2d2fb5dceac37d96ae6e0bbad33e2aac9c0))
+* one breakpoint model for the debugger, the console and MachineSession ([#1668](https://github.com/mattgodbolt/jsbeeb/issues/1668)) ([ba512b7](https://github.com/mattgodbolt/jsbeeb/commit/ba512b735ea2d4dc02cfbf7b624c3a164bc4aabe))
+* the debugger says when the machine is stopped in a tight loop, and what it polls ([#1653](https://github.com/mattgodbolt/jsbeeb/issues/1653)) ([61eea49](https://github.com/mattgodbolt/jsbeeb/commit/61eea49ee8ef701eea2b943319bb14a18e930044))
+
+
+### Bug Fixes
+
+* a screen click shows the RAM the video is drawing from ([#1682](https://github.com/mattgodbolt/jsbeeb/issues/1682)) ([c85ae94](https://github.com/mattgodbolt/jsbeeb/commit/c85ae948e1ba49d91fb5307bd64a4175a420f127))
+* rewind previews and thumbnails run past breakpoints and watches ([#1672](https://github.com/mattgodbolt/jsbeeb/issues/1672)) ([bed8e82](https://github.com/mattgodbolt/jsbeeb/commit/bed8e82ca915b3543ad04e76c853657b26cab07a))
+* the label-file line names sideways banks in hex, as the paging panel does ([#1681](https://github.com/mattgodbolt/jsbeeb/issues/1681)) ([06a105a](https://github.com/mattgodbolt/jsbeeb/commit/06a105abbcd817ff6235186b108b1f6142d76fce))
+
 ## [2.13.0](https://github.com/mattgodbolt/jsbeeb/compare/v2.12.1...v2.13.0) (2026-10-29)
 
 
