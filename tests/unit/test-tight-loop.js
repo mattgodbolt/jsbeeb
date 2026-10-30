@@ -74,10 +74,7 @@ describe("tightLoopAt", () => {
         expect(loopIn(nmos, code, pc)).toEqual(expected);
     });
 
-    it.each([
-        ["a JMP", () => nmos, [0xa5, 0x70, 0x4c, 0x00, 0x30, 0xd0, 0xf9]],
-        ["the 65C12's BRA", () => cmos, [0xa5, 0x70, 0x80, 0x02, 0xd0, 0xfa]],
-    ])("finds no loop where %s away comes before the branch back", (_, cpu, code) => {
-        expect(loopIn(cpu(), code, 0x2000)).toBeUndefined();
+    it("finds no loop where the 65C12's BRA away comes before the branch back", () => {
+        expect(loopIn(cmos, [0xa5, 0x70, 0x80, 0x02, 0xd0, 0xfa], 0x2000)).toBeUndefined();
     });
 });

@@ -41,7 +41,6 @@ export function tightLoopAt(disassembler, pc) {
         const { target } = instruction;
         if (target !== undefined && target <= pc && address - target <= MaxLoopBytes)
             return loopFrom(disassembler, target, address, pc);
-        if (instruction.unconditional) return undefined;
         address = instruction.next;
     }
     return undefined;
