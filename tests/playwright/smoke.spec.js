@@ -1014,7 +1014,7 @@ test.describe("on a phone", () => {
         await expect(page.locator('#touch-keyboard .tk-layer[data-name="more"]')).toBeVisible();
     });
 
-    test("the on-screen keyboard's legends load Open Gorton, which carries the function keys' f and the cursor keys' arrows", async ({
+    test("the on-screen keyboard's legends load Open Gorton, which carries the function keys' f, the slashed zero and the cursor keys' arrows", async ({
         beeb,
         page,
     }) => {
@@ -1029,9 +1029,9 @@ test.describe("on a phone", () => {
         const advances = await page.evaluate(() => {
             const context = document.createElement("canvas").getContext("2d");
             context.font = '1000px "Open Gorton"';
-            return [..."f←↑→↓"].map((legend) => Math.round(context.measureText(legend).width));
+            return [..."f0←↑→↓"].map((legend) => Math.round(context.measureText(legend).width));
         });
-        expect(advances).toEqual([376, 1100, 550, 1100, 550]);
+        expect(advances).toEqual([376, 627, 1100, 550, 1100, 550]);
         await expect(page.locator("#touch-keyboard .tk-key.fkey .tk-digit")).toHaveText(
             [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(String),
         );

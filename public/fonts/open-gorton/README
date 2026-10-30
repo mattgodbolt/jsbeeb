@@ -3,5 +3,5 @@ Open Gorton, by Dakota Felder, from https://github.com/dakotafelder/open-gorton
 
 OpenGorton-Regular.woff2 is built from that repository's OpenGorton-Regular.otf by
 tools/make-touch-keyboard-font.py, which cuts it down to printable ASCII less the
-lowercase letters (which it maps to its capitals), makes its zero a slashed O, and
+lowercase letters (which it maps to its capitals), slashes its zero, and
 adds the BBC Micro function keys' f and cursor keys' arrows.

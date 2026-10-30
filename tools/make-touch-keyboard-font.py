@@ -22,8 +22,8 @@ from fontTools.ttLib import TTFont
 Output = Path(__file__).resolve().parent.parent / "public" / "fonts" / "open-gorton" / "OpenGorton-Regular.woff2"
 KeptCodepoints = [c for c in range(0x20, 0x7F) if not ord("a") <= c <= ord("z")]
 Kappa = 0.5523
-# The keycaps' zero is Gorton's own oval zero, slashed from corner to corner of its bounds, the slash's ends a quarter
-# of the way again past the ring.
+# The zero is Gorton's own, slashed from corner to corner of its bounds, the slash's ends a quarter of the way again
+# past the ring.
 SlashReach = 1.25
 
 # The function keys' f: a plain f leaning 10 degrees, standing on the baseline, 850 units tall with a stroke of 86
