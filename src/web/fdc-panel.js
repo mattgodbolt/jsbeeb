@@ -9,6 +9,7 @@ import {
 } from "../intel-fdc.js";
 import { Command as WdCommand, Control, State as WdState, Status, TimerState as WdTimerState } from "../wd-fdc.js";
 import { decodedPanel, DecodedRegisters, fixed, lit, register, spelt } from "./decoded-registers.js";
+import { MenuGroup } from "./floating-panel.js";
 import { Centred, StartEdge } from "./panel-layout.js";
 
 const MinPanelSize = { w: 240, h: 160 };
@@ -341,6 +342,7 @@ export class FdcPanel {
         const { floating, body } = decodedPanel({
             id: "fdc",
             title: "Disc controller",
+            menuGroup: MenuGroup.hardware,
             feature: "disc_controller",
             place: () => ({ x: Centred, y: StartEdge }),
             minSize: MinPanelSize,

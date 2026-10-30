@@ -104,6 +104,7 @@ export class SessionPanel {
             panel: pane,
             id: "session",
             title: null,
+            menuGroup: null,
             group: null,
             place: () => ({ x: StartEdge, y: EndEdge }),
             minSize: MinPaneSize,

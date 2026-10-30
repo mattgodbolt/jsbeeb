@@ -1,6 +1,7 @@
 import { hexword } from "../hex.js";
 import { HDISPENABLE, VDISPENABLE, Video } from "../video.js";
 import { decodedPanel, DecodedRegisters, lit, register, spelt } from "./decoded-registers.js";
+import { MenuGroup } from "./floating-panel.js";
 import { Centred, StartEdge } from "./panel-layout.js";
 
 const MinPanelSize = { w: 240, h: 120 };
@@ -300,6 +301,7 @@ export class CrtcPanel {
         const { floating, body } = decodedPanel({
             id: "crtc",
             title: "6845 CRTC",
+            menuGroup: MenuGroup.hardware,
             feature: "crtc",
             place: () => ({ x: Centred, y: StartEdge }),
             minSize: MinPanelSize,

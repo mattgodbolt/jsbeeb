@@ -1,5 +1,6 @@
 import { hexbyte } from "../hex.js";
 import { decodedPanel, DecodedRegisters, fixed, lit } from "./decoded-registers.js";
+import { MenuGroup } from "./floating-panel.js";
 import { Centred, StartEdge } from "./panel-layout.js";
 import { controlSection, portsSection, TimersSection, viaState } from "./via-registers.js";
 
@@ -64,6 +65,7 @@ export class UserViaPanel {
         const { floating, body } = decodedPanel({
             id: "uservia",
             title: "User VIA",
+            menuGroup: MenuGroup.hardware,
             feature: "user_via",
             place: () => ({ x: Centred, y: StartEdge }),
             minSize: MinPanelSize,

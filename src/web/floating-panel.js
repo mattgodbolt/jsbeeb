@@ -7,7 +7,6 @@ import {
     emptyLayout,
     Gap,
     opened,
-    PanelIds,
     parseLayout,
     placeOf,
     placeOpened,
@@ -19,6 +18,9 @@ const StorageKey = "panelLayout";
 const BaseZIndex = 10;
 /** The group of the panels Alt-D and Alt-S show and hide: the debugger's own, and the decoded devices. */
 export const DebugGroup = "debug";
+/** The headings a menu of panels lists them under, in this order. */
+export const MenuGroup = { cpu: "CPU", hardware: "Hardware", software: "Software" };
+const MenuGroupOrder = Object.values(MenuGroup);
 const ResizeEdges = ["top", "right", "bottom", "left", "top-left", "top-right", "bottom-left", "bottom-right"];
 const GeometryStyles = ["left", "top", "width", "height", "maxHeight"];
 
@@ -294,11 +296,15 @@ export class PanelArrangement extends EventTarget {
         return this._stack.findLast((floating) => floatings.includes(floating)) ?? null;
     }
 
-    /** The panels that offer themselves in a menu, in the order of PanelIds. */
+    /** The panels that offer themselves in a menu, by MenuGroup and then by title. */
     listed() {
         return this._stack
             .filter((floating) => floating.listed)
-            .sort((a, b) => PanelIds.indexOf(a.id) - PanelIds.indexOf(b.id));
+            .sort(
+                (a, b) =>
+                    MenuGroupOrder.indexOf(a.menuGroup) - MenuGroupOrder.indexOf(b.menuGroup) ||
+                    a.title.localeCompare(b.title),
+            );
     }
 
     raise(floating) {
@@ -509,6 +515,7 @@ export class FloatingPanel extends EventTarget {
      * @param {HTMLElement} options.panel
      * @param {string} options.id one of panel-layout.js's PanelIds, under which its place is saved
      * @param {string | null} options.title what a menu of panels calls it, or null to stay out of such menus
+     * @param {string | null} options.menuGroup the MenuGroup it is listed under, null when its title is
      * @param {string | null} options.group the panels it is shown and hidden with, such as the debugger's
      * ("debug"), or null
      * @param {function(): {x: object, y: object, w?: number}} options.place where it goes until the user
@@ -517,12 +524,13 @@ export class FloatingPanel extends EventTarget {
      * @param {boolean} options.reopens whether it opens again on reload if it was open
      * @param {PanelArrangement} options.arrangement
      */
-    constructor({ panel, id, title, group, place, minSize, reopens, arrangement }) {
+    constructor({ panel, id, title, menuGroup, group, place, minSize, reopens, arrangement }) {
         super();
         this.panel = panel;
         this.header = panel.querySelector(".panel-header");
         this.id = id;
         this.title = title;
+        this.menuGroup = menuGroup;
         this.group = group;
         this.place = place;
         this.minSize = minSize;

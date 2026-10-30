@@ -2,6 +2,7 @@ import { hexword } from "../hex.js";
 import { BBC } from "../keymap.js";
 import { HwScrollSubtract } from "../video.js";
 import { decodedPanel, DecodedRegisters, fixed, lit, register, spelt, widest } from "./decoded-registers.js";
+import { MenuGroup } from "./floating-panel.js";
 import { Centred, StartEdge } from "./panel-layout.js";
 import { controlSection, portsSection, TimersSection, viaState } from "./via-registers.js";
 
@@ -262,6 +263,7 @@ export class SysViaPanel {
         const { floating, body } = decodedPanel({
             id: "sysvia",
             title: "System VIA",
+            menuGroup: MenuGroup.hardware,
             feature: "system_via",
             place: () => ({ x: Centred, y: StartEdge }),
             minSize: MinPanelSize,

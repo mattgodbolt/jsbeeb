@@ -124,6 +124,7 @@ export function namedBits(names) {
  * @param {object} options
  * @param {string} options.id
  * @param {string} options.title
+ * @param {string} options.menuGroup
  * @param {string} options.feature what analytics calls it
  * @param {function(): {x: object, y: object}} options.place
  * @param {{w: number, h: number}} options.minSize
@@ -131,7 +132,7 @@ export function namedBits(names) {
  * @param {function(): void} options.draw
  * @returns {{floating: FloatingPanel, body: HTMLElement}}
  */
-export function decodedPanel({ id, title, feature, place, minSize, arrangement, draw }) {
+export function decodedPanel({ id, title, menuGroup, feature, place, minSize, arrangement, draw }) {
     const { panel, body } = panelShell({ id, title, feature });
     panel.classList.add("decoded-panel");
     body.classList.add("decoded-columns");
@@ -139,6 +140,7 @@ export function decodedPanel({ id, title, feature, place, minSize, arrangement, 
         panel,
         id,
         title,
+        menuGroup,
         group: DebugGroup,
         place,
         minSize,

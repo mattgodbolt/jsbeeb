@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { helpRows, keyLine, PanelKeys } from "../../src/web/panel-keys.js";
-import { PanelArrangement } from "../../src/web/floating-panel.js";
+import { MenuGroup, PanelArrangement } from "../../src/web/floating-panel.js";
 import { MemoryKeys, ToolbarKeys } from "../../src/web/debug.js";
 import { DisassemblyKeys } from "../../src/web/disassembly-view.js";
 import { PauseKeys } from "../../src/web/keyboard-setup.js";
@@ -14,7 +14,7 @@ describe("PanelKeys", () => {
     let arrangement;
     let keys;
 
-    const panel = (id) => bareFloatingPanel(arrangement, id, id);
+    const panel = (id) => bareFloatingPanel(arrangement, id, id, MenuGroup.cpu);
     const owner = (floating, table) => {
         const actions = Object.fromEntries(table.filter((row) => row.run).map((row) => [row.run, vi.fn()]));
         keys.register({ table, actions, isLive: () => floating?.isOpen ?? true, panel: floating });

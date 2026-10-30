@@ -61,13 +61,17 @@ describe("the Electron hooks", () => {
     });
 
     it("tells the app's Debug menu the panels to list and which are open, and toggles the one it names", () => {
-        const watches = { id: "watches", title: "Watches", isOpen: false, toggle: vi.fn() };
+        const watches = { id: "watches", title: "Watches", menuGroup: "CPU", isOpen: false, toggle: vi.fn() };
         listed = [watches];
         initialise(deps);
-        expect(api.setPanels).toHaveBeenLastCalledWith([{ id: "watches", title: "Watches", open: false }]);
+        expect(api.setPanels).toHaveBeenLastCalledWith([
+            { id: "watches", title: "Watches", menuGroup: "CPU", open: false },
+        ]);
         watches.isOpen = true;
         panels.dispatchEvent(new Event("change"));
-        expect(api.setPanels).toHaveBeenLastCalledWith([{ id: "watches", title: "Watches", open: true }]);
+        expect(api.setPanels).toHaveBeenLastCalledWith([
+            { id: "watches", title: "Watches", menuGroup: "CPU", open: true },
+        ]);
         api.onTogglePanel.mock.calls[0][0]({ id: "watches" });
         expect(watches.toggle).toHaveBeenCalled();
     });
