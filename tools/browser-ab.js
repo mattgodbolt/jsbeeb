@@ -5,7 +5,6 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
 import { chromium, firefox, webkit } from "@playwright/test";
@@ -16,27 +15,31 @@ import {
     assertWritableFile,
     checkoutRef,
     checkWorkloads,
+    compareWorkload,
+    DiagnosticSides,
     existingCheckout,
     fileLabel,
     gitEnv,
     installedNodeModules,
     isCheckout,
     ManifestName,
+    onInterrupt,
     pairOptions,
-    pairOptionSpecs,
     pairOptionsHelp,
+    pairOptionSpecs,
     readManifest,
     removeWorktrees,
+    reportPairSettings,
+    reportSides,
+    runMain,
     Sides,
 } from "./ab-sides.js";
-import { describeComparison, PercentPerUnit, sampleUntilResolved } from "./ab-stats.js";
 import { checkGl, chromeArgs } from "./chrome-gl.js";
 
 const BrowserTypes = { chromium, firefox, webkit };
 const Passes = ["full", "video", "cpu"];
 const Statistics = ["median", "total"];
 const Fresh = ["context", "browser"];
-const DiagnosticSides = { a: ["a"], b: ["b"], both: ["a", "b"] };
 const LoopbackHosts = ["127.0.0.1", "localhost", "[::1]"];
 // For a page that never finishes, as one does when Chrome cannot reach the GPU that --gl hardware asks for.
 const SampleTimeoutMs = 5 * 60 * 1000;
@@ -308,7 +311,7 @@ export function checkSamePage(seen, side, { renderer, display, crossOriginIsolat
 }
 
 async function compare(sides, workloads, browsers, settings) {
-    const { minPairs, maxPairs, horizon, pass, statistic } = settings;
+    const { pass, statistic } = settings;
     const results = [];
     const seen = {};
     let engine = null;
@@ -336,12 +339,7 @@ async function compare(sides, workloads, browsers, settings) {
             });
             return mhz;
         };
-        const onPair = ({ pairs, ratio, low, high }) =>
-            console.error(
-                `  ${workload.name} ${pairs} pairs: ${ratio.toFixed(3)} [${low.toFixed(3)}, ${high.toFixed(3)}]`,
-            );
-        const result = await sampleUntilResolved({ sample, onPair, minPairs, maxPairs, horizon });
-        console.log(describeComparison(workload.name, result, engine));
+        const result = await compareWorkload(workload.name, sample, settings, engine);
         results.push({ workload: workload.name, ...result, raw });
     }
     return { results, engine, page: seen.first ? JSON.parse(seen.first) : null };
@@ -396,9 +394,7 @@ async function main() {
         await browsers.closeAll().catch(() => {});
         process.exit(1);
     };
-    process.once("SIGINT", interrupted);
-    process.once("SIGTERM", interrupted);
-    process.once("SIGHUP", interrupted);
+    onInterrupt(interrupted);
     if (settings.json) assertWritableFile(settings.json);
     if (settings.profileSides.length > 0) mkdirSync(settings.outDir, { recursive: true });
     try {
@@ -418,20 +414,10 @@ async function main() {
         const { results, engine, page } = await compare(sides, workloads, browsers, settings);
         const writeReport = (files) => {
             if (!settings.json) return;
-            const { project, gl, fresh, pass, statistic, minPairs, maxPairs, horizon } = settings;
+            const { project, gl, fresh, pass, statistic } = settings;
             const report = {
-                a: { spec: sides[0].spec, sha: sides[0].sha },
-                b: { spec: sides[1].spec, sha: sides[1].sha },
-                settings: {
-                    project,
-                    gl,
-                    fresh,
-                    pass,
-                    statistic,
-                    minPairs,
-                    maxPairs,
-                    horizonPercent: horizon * PercentPerUnit,
-                },
+                ...reportSides(sides),
+                settings: { project, gl, fresh, pass, statistic, ...reportPairSettings(settings) },
                 browser: engine,
                 page,
                 results,
@@ -450,13 +436,4 @@ async function main() {
     }
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-    main().then(
-        (code) => process.exit(code),
-        (error) => {
-            console.error(error.message);
-            if (error.cause) console.error(error.cause.message);
-            process.exit(1);
-        },
-    );
-}
+if (import.meta.main) runMain(main);

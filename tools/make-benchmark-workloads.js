@@ -202,7 +202,6 @@ async function manifestFor(workloads) {
     return prettier.format(JSON.stringify({ workloads: entries }), { ...options, filepath: ManifestPath });
 }
 
-const sameBytes = (a, b) => a.length === b.length && a.every((byte, index) => byte === b[index]);
 const isObject = (value) => typeof value === "object" && value !== null;
 
 function differingPaths(expected, actual, at) {
@@ -233,7 +232,7 @@ async function main() {
             console.log(`${relative}: ${bytes.length} bytes`);
         } else {
             const checkedIn = readFileSync(file);
-            if (sameBytes(checkedIn, bytes)) continue;
+            if (checkedIn.equals(bytes)) continue;
             console.log(
                 `${relative} differs from what this script builds, ${describeDifference(file, checkedIn, bytes)}`,
             );

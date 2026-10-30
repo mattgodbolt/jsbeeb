@@ -7,18 +7,16 @@ import { createHash } from "node:crypto";
 import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { parseArgs } from "node:util";
-import { fileURLToPath } from "node:url";
 
 import { benchmarkMachine, listBenchmarkWorkloads } from "../src/benchmark-machine.js";
 import { assertFastPath } from "../src/benchmark-workloads.js";
-import { TickMs } from "../src/emulation-tick.js";
+import { tickCycles } from "../src/emulation-tick.js";
 import { RepoRoot } from "../src/test-machine.js";
 
 const HashesPath = path.join(RepoRoot, "tests", "same-answer-hashes.json");
 const RelativeHashesPath = path.relative(RepoRoot, HashesPath);
 export const Frames = 100;
 const FramesPerSecond = 50;
-const MsPerSecond = 1000;
 const HashHexDigits = 16;
 
 function feed(hash, value) {
@@ -112,10 +110,10 @@ export async function workloadHashes(name, drainKind) {
     trace.soundEvents.length = 0;
     assertFastPath(cpu);
     const { cyclesPerSecond } = cpu.model;
-    const tickCycles = (cyclesPerSecond * TickMs) / MsPerSecond;
+    const cyclesPerTick = tickCycles(cyclesPerSecond);
     const totalCycles = (cyclesPerSecond * Frames) / FramesPerSecond;
-    for (let run = 0; run < totalCycles; run += tickCycles) {
-        cpu.execute(tickCycles);
+    for (let run = 0; run < totalCycles; run += cyclesPerTick) {
+        cpu.execute(cyclesPerTick);
         trace.registers.push(registersOf(cpu));
         trace.cycles.push(cyclesOf(cpu));
     }
@@ -199,6 +197,6 @@ async function main() {
     return values.record ? record(names) : check(names);
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (import.meta.main) {
     process.exitCode = await main();
 }

@@ -1,12 +1,11 @@
 import { test } from "vitest";
 
 import { benchmarkMachine, listBenchmarkWorkloads } from "../../src/benchmark-machine.js";
-import { TickMs } from "../../src/emulation-tick.js";
+import { tickCycles } from "../../src/emulation-tick.js";
 import { isSameModel } from "../../src/snapshot.js";
 
 // An iteration runs a million cycles, so the hz column Vitest prints reads as virtual MHz.
 const CyclesPerIteration = 1000 * 1000;
-const MsPerSecond = 1000;
 
 /**
  * Benchmarks every workload of `model`, always in the manifest's order. Type feedback is shared by every
@@ -20,9 +19,9 @@ export async function benchWorkloadsOf(model, { fakeVideo }) {
     for (const { name } of workloads) {
         test(`${name}, ${what}`, async ({ bench }) => {
             const { cpu } = await benchmarkMachine(name, { fakeVideo });
-            const tickCycles = (cpu.model.cyclesPerSecond * TickMs) / MsPerSecond;
+            const cycles = tickCycles(cpu.model.cyclesPerSecond);
             await bench(name, () => {
-                for (let run = 0; run < CyclesPerIteration; run += tickCycles) cpu.execute(tickCycles);
+                for (let run = 0; run < CyclesPerIteration; run += cycles) cpu.execute(cycles);
             }).run();
         });
     }

@@ -6,21 +6,28 @@
  * See tools/README-sth-mirror.md for the manifest format and upload steps.
  */
 
-import { mkdir, rename, stat, writeFile } from "node:fs/promises";
+import { mkdir, rename, writeFile } from "node:fs/promises";
 import { dirname, join, posix } from "node:path";
 import { argv, exit, stderr, stdout } from "node:process";
 
+import {
+    DefaultConcurrency,
+    fail,
+    fetchWithRetry,
+    fileSize,
+    forEachConcurrently,
+    HttpError,
+    RetryDelayMs,
+    sleep,
+    writeJson,
+} from "./mirror-common.js";
+
 const SthRoot = "https://www.stairwaytohell.com";
-const UserAgent = "jsbeeb-mirror (+https://github.com/mattgodbolt/jsbeeb)";
 const SchemaVersion = 1;
 const ProgressEvery = 100;
 // STH is a slow box run by volunteers, and this fetches several thousand files
-// from it, so keep the request rate low by default: four at a time, and no more
-// than ten a second across the run.
-const DefaultConcurrency = 4;
+// from it, so keep the request rate low: no more than ten a second across the run.
 const MinRequestIntervalMs = 100;
-const RetryDelayMs = 1000;
-const MaxRetries = 3;
 
 // Each category is one section of the archive. `id` doubles as the directory
 // name under archive/sth/, so the mirror's layout matches STH's own. `files`
@@ -143,15 +150,6 @@ export function parseZipLinks(html, indexUrl, filesUrl, corrections = {}) {
     return [...paths].sort();
 }
 
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-export class HttpError extends Error {
-    constructor(status, url) {
-        super(`HTTP ${status} for ${url}`);
-        this.status = status;
-    }
-}
-
 // Space requests out across the whole run, not per worker, so that mirroring
 // several thousand files doesn't hammer someone's volunteer-run server.
 let nextRequestAt = 0;
@@ -163,60 +161,21 @@ async function waitForTurn() {
     if (wait > 0) await sleep(wait);
 }
 
-// A dropped connection or a 5xx from an overloaded server is worth retrying. A
-// 404 is not: it means an index page promised a file the server won't serve,
-// which is a fault to report upstream rather than to retry or work around.
-export const isTransient = (error) => !(error instanceof HttpError) || error.status === 429 || error.status >= 500;
-
-export async function fetchWithRetry(url, retryDelayMs = RetryDelayMs) {
-    for (let attempt = 0; ; attempt++) {
-        await waitForTurn();
-        try {
-            const response = await fetch(url, { headers: { "user-agent": UserAgent } });
-            if (!response.ok) throw new HttpError(response.status, url);
-            return response;
-        } catch (error) {
-            if (attempt === MaxRetries || !isTransient(error)) throw error;
-            await sleep(retryDelayMs * (attempt + 1));
-        }
-    }
-}
-
-// Run `worker` over `items`, at most `concurrency` at a time. The workers share
-// one iterator, so each picks up the next item as it finishes.
-async function forEachConcurrently(items, concurrency, worker) {
-    const remaining = items.values();
-    let done = 0;
-    const run = async () => {
-        for (const item of remaining) {
-            await worker(item);
-            if (++done % ProgressEvery === 0) stderr.write(`  ${done}/${items.length}\n`);
-        }
-    };
-    await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, run));
-}
+const fetchFromSth = (url) => fetchWithRetry(url, RetryDelayMs, waitForTurn);
 
 // Download to a temporary name and rename into place, so an interrupted run
 // never leaves a truncated file that a later run would mistake for complete.
 async function download(url, dest) {
     await mkdir(dirname(dest), { recursive: true });
-    const response = await fetchWithRetry(url);
+    const response = await fetchFromSth(url);
     const partial = `${dest}.part`;
     await writeFile(partial, Buffer.from(await response.arrayBuffer()));
     await rename(partial, dest);
 }
 
-async function fileSize(path) {
-    try {
-        return (await stat(path)).size;
-    } catch {
-        return null;
-    }
-}
-
 async function index(category) {
     stderr.write(`\n[${category.id}] indexing ${category.index}\n`);
-    const html = await (await fetchWithRetry(category.index)).text();
+    const html = await (await fetchFromSth(category.index)).text();
     const paths = parseZipLinks(html, category.index, category.files, category.corrections);
     stderr.write(`[${category.id}] ${paths.length} files\n`);
     return paths;
@@ -228,7 +187,7 @@ async function index(category) {
 async function downloadCategory(category, paths, outRoot, concurrency) {
     let downloaded = 0;
     const sizes = new Map();
-    await forEachConcurrently(paths, concurrency, async (path) => {
+    await forEachConcurrently(paths, concurrency, ProgressEvery, async (path) => {
         const dest = join(outRoot, category.id, path);
         let size = await fileSize(dest);
         if (size === null) {
@@ -246,19 +205,11 @@ async function downloadCategory(category, paths, outRoot, concurrency) {
     return paths.map((path) => ({ path, size: sizes.get(path) }));
 }
 
-async function writeJson(dest, value) {
-    await mkdir(dirname(dest), { recursive: true });
-    await writeFile(dest, JSON.stringify(value, null, 2) + "\n");
-}
-
 async function downloadMetaFiles(outRoot, concurrency) {
     stderr.write(`\n[meta] fetching ${MetaFiles.length} auxiliary files\n`);
-    await forEachConcurrently(MetaFiles, concurrency, (meta) => download(meta.url, join(outRoot, meta.dest)));
-}
-
-function fail(message) {
-    stderr.write(`${message}\n`);
-    exit(2);
+    await forEachConcurrently(MetaFiles, concurrency, ProgressEvery, (meta) =>
+        download(meta.url, join(outRoot, meta.dest)),
+    );
 }
 
 function parseArgs(args) {
@@ -333,7 +284,7 @@ async function main() {
 }
 
 // Only run the mirror when invoked as a script, so the parser can be tested.
-if (argv[1]?.endsWith("mirror-sth.js")) {
+if (import.meta.main) {
     main().catch((error) => {
         stderr.write(`\nERROR: ${error.stack ?? error.message ?? error}\n`);
         if (error instanceof HttpError && error.status === 404)

@@ -37,7 +37,10 @@ const BbcMemoryBytes = OsOffset + RomBankBytes;
 // Further from every real offset than any address, and a small integer in every V8 build.
 const SlowPathOffset = -0x40000000;
 const NmiVector = 0xfffa;
+const ResetVector = 0xfffc;
 const IrqVector = 0xfffe;
+// The parasite's ROM fills the top half of its 4KB page at &F000.
+const TubeRomBytes = 2048;
 
 /**
  * Packs sideways RAM banks into a snapshot's `swram` and `swramBankMask`: the banks back to back in ascending
@@ -148,10 +151,10 @@ class Base6502 {
         this.a = this.x = this.y = this.s = 0;
         this.p = new Flags();
         this.pc = 0;
-        this.opcodes = model.opcodesFactory(this, { cycleAccurate });
-        this.disassembler = this.opcodes.disassembler;
+        const { disassembler, runInstruction } = model.opcodesFactory(this, { cycleAccurate });
+        this.disassembler = disassembler;
         this.forceTracing = false;
-        this.runner = this.opcodes.runInstruction;
+        this.runner = runInstruction;
         this.interrupt = 0;
         this._nmiSources = 0;
         this._nmiEdge = false;
@@ -259,6 +262,38 @@ class Base6502 {
 
     /** Called as the NMI vector is taken, for devices that withdraw their request at that point. */
     nmiAcknowledged() {}
+
+    /** The registers and NMI line, which every processor's snapshot leads with in this key order. */
+    snapshotRegisters() {
+        return {
+            a: this.a,
+            x: this.x,
+            y: this.y,
+            s: this.s,
+            pc: this.pc,
+            p: this.p.asByte(),
+            nmiLevel: this.nmi,
+            nmiEdge: this._nmiEdge,
+        };
+    }
+
+    /** Leaves the NMI line to the caller, which rebuilds it in an order of its own. */
+    restoreRegisters(state) {
+        this.a = state.a;
+        this.x = state.x;
+        this.y = state.y;
+        this.s = state.s;
+        this.pc = state.pc;
+        this.p.setFromByte(state.p);
+    }
+
+    resetRegisters() {
+        this.pc = this.readmem(ResetVector) | (this.readmem(ResetVector + 1) << 8);
+        this.p.i = true;
+        this.s = (this.s - 3) & 0xff; // Simulate 3 dummy pushes during reset
+        this._nmiSources = 0;
+        this._nmiEdge = false;
+    }
 
     polltime() {
         throw new Error("Must be overridden");
@@ -467,20 +502,16 @@ class Tube6502 extends Base6502 {
         this.cpuMultiplier = cpuMultiplier;
         this.romPaged = true;
         this.memory = new Uint8Array(65536);
-        this.rom = new Uint8Array(4096);
+        this.rom = new Uint8Array(2 * TubeRomBytes);
 
         this.tube = new Tube(cpu, this);
     }
 
     reset(hard) {
         this.romPaged = true;
-        this.pc = this.readmem(0xfffc) | (this.readmem(0xfffd) << 8);
-        this.p.i = true;
-        this.s = (this.s - 3) & 0xff; // Simulate 3 dummy pushes during reset
-        // A latched NMI would otherwise survive the reset and be taken on the first instruction
-        // after it, defeating the empty R3 FIFO the ULA seeds for exactly that reason.
-        this._nmiSources = 0;
-        this._nmiEdge = false;
+        // Clearing a latched NMI matters here: one taken on the first instruction after the reset would defeat
+        // the empty R3 FIFO the ULA seeds for exactly that reason.
+        this.resetRegisters();
         this.takeInt = false;
         this.tube.reset(hard);
     }
@@ -546,14 +577,7 @@ class Tube6502 extends Base6502 {
 
     snapshotState({ includeRoms = false } = {}) {
         return {
-            a: this.a,
-            x: this.x,
-            y: this.y,
-            s: this.s,
-            pc: this.pc,
-            p: this.p.asByte(),
-            nmiLevel: this.nmi,
-            nmiEdge: this._nmiEdge,
+            ...this.snapshotRegisters(),
             takeInt: this.takeInt,
             // The parasite has no scheduler of its own, so this is not relative to any epoch.
             cycles: this.cycles,
@@ -565,12 +589,7 @@ class Tube6502 extends Base6502 {
     }
 
     restoreState(state) {
-        this.a = state.a;
-        this.x = state.x;
-        this.y = state.y;
-        this.s = state.s;
-        this.pc = state.pc;
-        this.p.setFromByte(state.p);
+        this.restoreRegisters(state);
         this._nmiSources = state.nmiLevel ? NmiSource.tube : 0;
         this._nmiEdge = state.nmiEdge;
         this.takeInt = state.takeInt;
@@ -585,14 +604,10 @@ class Tube6502 extends Base6502 {
     }
 
     async loadOs() {
-        console.log("Loading tube rom from roms/" + this.model.os);
-        const tubeRom = this.rom;
-        const data = await loadData("roms/" + this.model.os);
-        const len = data.length;
-        if (len !== 2048) throw new Error("Broken ROM file (length=" + len + ")");
-        for (let i = 0; i < len; ++i) {
-            tubeRom[i + 2048] = data[i];
-        }
+        console.log(`Loading tube rom from roms/${this.model.os}`);
+        const data = await loadData(`roms/${this.model.os}`);
+        if (data.length !== TubeRomBytes) throw new Error(`Broken ROM file (length=${data.length})`);
+        this.rom.set(data, TubeRomBytes);
     }
 }
 
@@ -641,8 +656,8 @@ class DebugHook {
 
     remove(handler) {
         const i = this.handlers.indexOf(handler);
-        if (i < 0) throw "Unable to find debug hook handler";
-        this.handlers = this.handlers.slice(0, i).concat(this.handlers.slice(i + 1));
+        if (i < 0) throw new Error("No such debug hook handler");
+        this.handlers = this.handlers.filter((_, index) => index !== i);
         if (this.handlers.length === 0) {
             this.cpu[this.functionName] = null;
             this.cpu.refreshLook();
@@ -889,7 +904,7 @@ export class Cpu6502 extends Base6502 {
         else this.writememSlow(addr, b);
     }
 
-    // Handy debug function to read a string zero or \n terminated.
+    // Handy debug function to read a string terminated by a zero or a CR.
     readString(addr) {
         let s = "";
         for (;;) {
@@ -1428,7 +1443,7 @@ export class Cpu6502 extends Base6502 {
      * extra ROMs into the empty sockets and highest banks left.
      */
     async loadOs(os, ...modelRoms) {
-        os = "roms/" + os;
+        os = `roms/${os}`;
         console.log(`Loading OS from ${os}`);
         const ramRomOs = this.ramRomOs;
         const data = await loadData(os);
@@ -1438,11 +1453,11 @@ export class Cpu6502 extends Base6502 {
         const numExtraBanks = (len - RomBankBytes) / RomBankBytes;
         let romIndex = NumRomBanks - numExtraBanks;
         const filledBy = new Map();
-        for (let i_1 = 0; i_1 < numExtraBanks; ++i_1) {
-            const srcBase = RomBankBytes * (i_1 + 1);
-            const destBase = this.romOffset + (romIndex + i_1) * RomBankBytes;
+        for (let extraBank = 0; extraBank < numExtraBanks; ++extraBank) {
+            const srcBase = RomBankBytes * (extraBank + 1);
+            const destBase = this.romOffset + (romIndex + extraBank) * RomBankBytes;
             ramRomOs.set(data.subarray(srcBase, srcBase + RomBankBytes), destBase);
-            filledBy.set(romIndex + i_1, `a ROM from ${os}`);
+            filledBy.set(romIndex + extraBank, `a ROM from ${os}`);
         }
         const placed = [];
         const place = (bank, rom) => placed.push({ bank, rom });
@@ -1497,23 +1512,13 @@ export class Cpu6502 extends Base6502 {
 
     snapshotState({ includeRoms = false } = {}) {
         return {
-            // CPU registers
-            a: this.a,
-            x: this.x,
-            y: this.y,
-            s: this.s,
-            pc: this.pc,
-            p: this.p.asByte(),
-            nmiLevel: this.nmi,
-            nmiEdge: this._nmiEdge,
+            ...this.snapshotRegisters(),
             halted: this.halted,
             takeInt: this.takeInt,
             stoppedAtBreakpoint: this.debugInstruction.stopped,
-            // Memory control
             romsel: this.romsel,
             acccon: this.acccon,
             videoDisplayPage: this.videoDisplayPage,
-            // Cycle tracking
             currentCycles: this.currentCycles,
             targetCycles: this.targetCycles,
             cycleSeconds: this.cycleSeconds,
@@ -1523,7 +1528,6 @@ export class Cpu6502 extends Base6502 {
             ram: this.ramRomOs.slice(0, this.romOffset),
             roms: includeRoms ? this.ramRomOs.slice(this.romOffset, this.osOffset) : undefined,
             ...(includeRoms ? {} : this.packedSidewaysRam()),
-            // Sub-component state
             scheduler: this.scheduler.snapshotState(),
             sysvia: this.sysvia.snapshotState(),
             uservia: this.uservia.snapshotState(),
@@ -1566,12 +1570,7 @@ export class Cpu6502 extends Base6502 {
         this.scheduler.restoreState(state.scheduler);
 
         // 2. CPU registers
-        this.a = state.a;
-        this.x = state.x;
-        this.y = state.y;
-        this.s = state.s;
-        this.pc = state.pc;
-        this.p.setFromByte(state.p);
+        this.restoreRegisters(state);
         // interrupt is rebuilt by sub-component restores (VIA updateIFR, ACIA updateIrq)
         this.interrupt = 0;
         this._nmiSources = 0;
@@ -1700,11 +1699,7 @@ export class Cpu6502 extends Base6502 {
             this.currentCycles = 0;
             this.cycleSeconds = 0;
         }
-        this.pc = this.readmem(0xfffc) | (this.readmem(0xfffd) << 8);
-        this.p.i = true;
-        this.s = (this.s - 3) & 0xff; // Simulate 3 dummy pushes during reset
-        this._nmiEdge = false;
-        this._nmiSources = 0;
+        this.resetRegisters();
         this.halted = false;
         this.debugInstruction.forgetStop();
         this.music5000PageSel = 0;
@@ -1716,10 +1711,6 @@ export class Cpu6502 extends Base6502 {
             this.econet.reset();
             this.filestore.reset();
         }
-    }
-
-    updateKeyLayout() {
-        this.sysvia.setKeyLayout(this.keyLayout);
     }
 
     polltimeAddr(cycles, addr, isWrite) {
@@ -1745,7 +1736,6 @@ export class Cpu6502 extends Base6502 {
         return is1MHzAccess;
     }
 
-    // Builds common code between polltimeSlow and polltimeFast
     buildPolltime() {
         const nop = (_cycles) => {};
         const tubeStuff = this.hasTube ? (cycles) => this.tube.execute(cycles) : nop;
@@ -2151,13 +2141,11 @@ export class AtomCpu6502 extends Cpu6502 {
     // OS layout: osOffset holds 4KB kernel at 0xF000.
     // Extra ROMs (BASIC, FP, DOS) are 4KB blocks at romOffset+0..romOffset+0x5000
     // mapped at 0xC000, 0xD000, 0xE000 etc.
-    async loadOs(os) {
+    async loadOs(os, ...modelRoms) {
         if (this.config.bankRoms.length) throw new Error("The Atom has no sideways ROM banks to load a ROM into");
-        const extraRoms = Array.prototype.slice
-            .call(arguments, 1)
-            .concat(this.config.fittedRoms, this.config.extraRoms);
+        const extraRoms = [...modelRoms, ...this.config.fittedRoms, ...this.config.extraRoms];
         const bankRoms = this.model.banks || [];
-        os = "roms/" + os;
+        os = `roms/${os}`;
         console.log(`Loading Atom OS from ${os}`);
         const data = await loadData(os);
         const len = data.length;
@@ -2204,11 +2192,6 @@ export class AtomCpu6502 extends Cpu6502 {
             throw new Error(`Broken ROM file ${name} (length=${len})`);
         }
         this.ramRomOs.set(data, offset);
-    }
-
-    // Atom key layout goes through PPIA, not SysVia
-    updateKeyLayout() {
-        this.atomppia.setKeyLayout(this.keyLayout);
     }
 
     snapshotState(options) {
