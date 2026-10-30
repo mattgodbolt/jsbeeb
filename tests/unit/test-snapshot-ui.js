@@ -8,6 +8,7 @@ import { MediaSlots } from "../../src/web/media-slots.js";
 import { Drives } from "../../src/web/drives.js";
 import { DriveTracks } from "../../src/url-params.js";
 import { discFor } from "../../src/fdc.js";
+import { gzipCodec } from "../../src/archive.js";
 import {
     domFromIndexHtml,
     fakeFdc,
@@ -149,11 +150,15 @@ describe("SnapshotUI", () => {
                 "https://bbc.example/?disc1=elite.ssd&model=Master",
             ],
             ["a co-processor it lacks", "", { coProcessor: true }, "https://bbc.example/?model=B-DFS1.2&coProcessor"],
+            ["another model, saved gzipped", "", { model: "Master" }, "https://bbc.example/?model=Master", true],
         ])(
             "stashes a state for %s and reloads as that machine, without the page's own boot",
-            async (_, search, snapshot, reloadedAs) => {
+            async (_, search, snapshot, reloadedAs, gzipped) => {
                 deps.urlState = stubNavigation(fakeUrlState(search));
-                await make().loadStateFromFile(null, snapshotBuffer(snapshot));
+                const buffer = gzipped
+                    ? (await gzipCodec.compress(snapshotJson(snapshot))).buffer
+                    : snapshotBuffer(snapshot);
+                await make().loadStateFromFile(null, buffer);
                 expect(deps.urlState.navigatedTo).toBe(reloadedAs);
                 expect(window.location.hash).toBe("#navigated");
                 expect(JSON.parse(sessionStorage.getItem("jsbeeb-pending-state"))).toMatchObject(snapshot);
@@ -221,12 +226,12 @@ describe("SnapshotUI", () => {
             await fail(make());
             expect(loop.isRunning()).toBe(false);
             await vi.runAllTimersAsync();
-            expect(modals.anyVisible()).toBe(true);
+            expect(document.querySelector(".modal.show")).not.toBeNull();
             expect(document.querySelector("#error-dialog .context").textContent).toBe(doing);
             expect(loop.isRunning()).toBe(false);
             modals.hide("error-dialog");
             await vi.runAllTimersAsync();
-            expect(modals.anyVisible()).toBe(false);
+            expect(document.querySelector(".modal.show")).toBeNull();
             expect(loop.isRunning()).toBe(true);
         });
     });

@@ -1,7 +1,7 @@
 import { SidewaysEnd, SidewaysStart } from "../paging.js";
 import { machineSheilaBlocks } from "../sheila.js";
 import { addressRange } from "./debug-dom.js";
-import { placePopup, popupBehaviour, setText, textButton } from "./dom-utils.js";
+import { PopupMenu, setText, textButton } from "./dom-utils.js";
 import { DebugGroup, FloatingPanel, MenuGroup, panelShell } from "./floating-panel.js";
 import { EndEdge } from "./panel-layout.js";
 import { readStored, writeStored } from "./stored-json.js";
@@ -166,20 +166,7 @@ export class BreakpointsPanel {
             this._showNewKind(AddressKinds[(AddressKinds.indexOf(this._newKind) + 1) % AddressKinds.length]),
         );
         this._stopOn = textButton("bp-stop-on", "Stop on…", "Add a stop that has no address, or a common one");
-        this._stopOn.setAttribute("aria-haspopup", "menu");
-        this._stopOn.setAttribute("aria-expanded", "false");
         form.append(this._stopOn);
-        this._stopMenu = document.createElement("div");
-        this._stopMenu.className = "bp-stop-menu";
-        this._stopMenu.setAttribute("role", "menu");
-        this._stopMenu.hidden = true;
-        document.body.append(this._stopMenu);
-        this._stopOn.addEventListener("click", () => this._showStopMenu(this._stopMenu.hidden));
-        popupBehaviour(
-            this._stopMenu,
-            () => (this._stopMenu.hidden ? null : [this._stopOn, this._stopMenu]),
-            () => this._showStopMenu(false),
-        );
         this._input.addEventListener("input", () => this._invalid(this._input, null));
         form.addEventListener("submit", (e) => {
             e.preventDefault();
@@ -202,12 +189,17 @@ export class BreakpointsPanel {
             () => this.update(),
         );
         this.floating.addEventListener("open", () => refresh.drawNow());
-        this.floating.addEventListener("close", () => this._showStopMenu(false));
+        this._stopMenu = new PopupMenu({
+            opener: this._stopOn,
+            className: "bp-stop-menu",
+            floating: this.floating,
+            build: () => this._stopChoices(),
+        });
     }
 
     /** Shows `cpu`'s breakpoints, first putting back the ones saved on an earlier visit. */
     setCpu(cpu) {
-        this._showStopMenu(false);
+        this._stopMenu.show(false);
         this._cpu = cpu;
         this._breakpoints = cpu.breakpoints;
         this._restore();
@@ -273,32 +265,26 @@ export class BreakpointsPanel {
         this._input.blur();
     }
 
-    _showStopMenu(show) {
-        if (show === !this._stopMenu.hidden) return;
-        this._stopMenu.hidden = !show;
-        this._stopOn.setAttribute("aria-expanded", String(show));
-        if (!show) return;
+    _stopChoices() {
         const choice = ({ name, title }, add) => {
             const button = textButton("bp-stop-choice", name, title);
             button.setAttribute("role", "menuitem");
             button.addEventListener("click", () => {
-                this._showStopMenu(false);
+                this._stopMenu.show(false);
                 add();
                 this._input.blur();
             });
             return button;
         };
+        const presets = presetStops(this._cpu);
         const rule = document.createElement("hr");
         rule.className = "bp-stop-rule";
-        this._stopMenu.replaceChildren(
+        rule.hidden = presets.length === 0;
+        return [
             ...EventKinds.map((kind) => choice(kind, () => this._addEvent(kind.kind))),
             rule,
-            ...presetStops(this._cpu).map((preset) => choice(preset, () => this._breakpoints.add(preset.spec))),
-        );
-        rule.hidden = rule.nextSibling === null;
-        const { left, top, bottom } = this._stopOn.getBoundingClientRect();
-        const height = this._stopMenu.offsetHeight;
-        placePopup(this._stopMenu, left, bottom + height <= window.innerHeight ? bottom : top - height);
+            ...presets.map((preset) => choice(preset, () => this._breakpoints.add(preset.spec))),
+        ];
     }
 
     _addEvent(kind) {

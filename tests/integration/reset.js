@@ -1,13 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { TestMachine } from "../../src/test-machine.js";
-import { mode7Text } from "./helpers.js";
+import { bootedTestMachine, mode7Text } from "./helpers.js";
 
 describe("reset", () => {
     const booted = async () => {
-        const machine = new TestMachine();
-        await machine.initialise();
-        await machine.runUntilInput();
+        const machine = await bootedTestMachine();
         await machine.type('10 PRINT "KEPT"');
         await machine.runUntilInput();
         return machine;

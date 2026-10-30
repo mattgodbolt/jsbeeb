@@ -201,6 +201,13 @@ export async function teardownDom() {
     window.sessionStorage.clear();
 }
 
+/** Whether a mouse press on `target` is kept from moving the keyboard focus. */
+export function pressKeepsFocus(target) {
+    const press = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
+    target.dispatchEvent(press);
+    return press.defaultPrevented;
+}
+
 /** A FloatingPanel on a bare element of its own, offered in menus as `title` under `menuGroup` (or not, for null). */
 export function bareFloatingPanel(arrangement, id, title, menuGroup) {
     document.body.insertAdjacentHTML(

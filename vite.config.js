@@ -13,7 +13,7 @@ import { workersFor } from "./tools/test-workers.js";
 // run as it starts it.
 const JobSummaryTitle = process.env.VITEST_JOB_SUMMARY_TITLE;
 
-const FastWaitFor = "tests/fast-wait-for.js";
+const TestSetup = "tests/setup.js";
 
 // What the benchmark page reports a build as: the commit, with "-dirty" for uncommitted changes.
 function gitCommit() {
@@ -49,19 +49,19 @@ export default defineConfig({
         // threads.
         maxWorkers: workersFor(2),
         projects: [
-            { extends: true, test: { name: "unit", include: ["tests/unit/**/test-*.js"], setupFiles: [FastWaitFor] } },
+            { extends: true, test: { name: "unit", include: ["tests/unit/**/test-*.js"], setupFiles: [TestSetup] } },
             {
                 extends: true,
                 test: {
                     name: "integration",
                     include: ["tests/integration/**/*.js"],
-                    setupFiles: [FastWaitFor],
+                    setupFiles: [TestSetup],
                     exclude: [...configDefaults.exclude, "tests/integration/helpers.js", "tests/integration/png.js"],
                     // A hang detector; the dearest test costs under ten seconds uncontended.
                     testTimeout: 120000,
                 },
             },
-            { extends: true, test: { name: "shader", include: ["tests/shader/test-*.js"] } },
+            { extends: true, test: { name: "shader", include: ["tests/shader/test-*.js"], setupFiles: [TestSetup] } },
         ],
         slowTestThreshold: 1000,
         coverage: {
