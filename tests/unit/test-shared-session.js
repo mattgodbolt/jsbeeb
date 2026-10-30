@@ -20,7 +20,7 @@ import { AdcCentreValue } from "../../src/adc.js";
 import { StatsIntervalMs } from "../../src/web/session-log.js";
 import { ParamTypes, parseQueryString } from "../../src/url-params.js";
 import { Parameters, urlParamType } from "../../src/web/parameters.js";
-import { sentEvents } from "./helpers.js";
+import { sentEvents, teardownDom } from "./helpers.js";
 import { inProcessTransport } from "../helpers/session-link.js";
 import {
     CyclesPerSecond,
@@ -232,13 +232,10 @@ beforeEach(() => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date", "performance"] });
 });
 
-afterEach(() => {
+afterEach(async () => {
     for (const host of hosts) host.close();
     for (const guest of guests) guest.leave();
-    vi.useRealTimers();
-    vi.unstubAllGlobals();
-    vi.unstubAllEnvs();
-    vi.restoreAllMocks();
+    await teardownDom();
 });
 
 describe("SessionHost", () => {
@@ -1868,8 +1865,6 @@ describe("startSessionFromUrl", () => {
 });
 
 describe("hostSession", () => {
-    afterEach(() => window.history.replaceState(null, "", "/"));
-
     const taken = () => new RendezvousError("Rendezvous create room failed with status 409", 409);
 
     it("hosts a room with a name of its own, on the machine as it is, leaving the URL alone", async () => {
@@ -1932,8 +1927,6 @@ describe("hostSession", () => {
 });
 
 describe("joinLink", () => {
-    afterEach(() => window.history.replaceState(null, "", "/"));
-
     it("keeps nothing of this page's own query or fragment, and adds the name if there is one", () => {
         window.history.replaceState(null, "", "/?model=Master&disc=elite.ssd#frag");
         expect(joinLink("brave-owls-sing")).toBe(`${window.location.origin}/?client=brave-owls-sing`);
