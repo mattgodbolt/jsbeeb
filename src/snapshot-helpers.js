@@ -1,17 +1,7 @@
-// Shared helpers for snapshot importers (bem-snapshot.js, uef-snapshot.js).
-// Contains volume table, default peripheral state, video state builder,
-// and the common snapshot envelope that wraps per-format parsed state.
+// Shared helpers for snapshot importers (bem-snapshot.js, uef-snapshot.js): the jsbeeb state each
+// chip's import ends in, and the common snapshot envelope that wraps per-format parsed state.
 
-// Volume lookup table matching soundchip.js
-export const volumeTable = new Float32Array(16);
-(() => {
-    let f = 1.0;
-    for (let i = 0; i < 15; ++i) {
-        volumeTable[i] = f / 4;
-        f *= Math.pow(10, -0.1);
-    }
-    volumeTable[15] = 0;
-})();
+import { EVERYTHINGENABLED, Video } from "./video.js";
 
 const DefaultAcia = {
     sr: 0x02,
@@ -31,8 +21,78 @@ const DefaultAcia = {
 
 const DefaultAdc = { status: 0x40, low: 0x00, high: 0x00, taskOffset: null };
 
+const CrtcImportedRegisters = 18;
+const CrtcAddress = 0;
+const CrtcData = 1;
+const UlaControl = 0;
+const UlaPalette = 1;
+
 /**
- * Build jsbeeb video state from parsed CRTC, ULA, and palette data.
+ * A jsbeeb VIA state from an imported VIA's registers and lines.
+ * @param {{ora: number, orb: number, ira: number, irb: number, ddra: number, ddrb: number, sr: number, acr: number,
+ *     pcr: number, ifr: number, ier: number, t1l: number, t2l: number, t1c: number, t2c: number,
+ *     t1hit: number|boolean, t2hit: number|boolean, ca1: number|boolean, ca2: number|boolean, cb2?: boolean}} via
+ *     timers in jsbeeb's units, twice the 1MHz count
+ * @param {number|undefined} ic32 the system VIA's addressable latch; undefined for the user VIA
+ */
+export function importedViaState(via, ic32) {
+    const state = {
+        ora: via.ora,
+        orb: via.orb,
+        ira: via.ira,
+        irb: via.irb,
+        ddra: via.ddra,
+        ddrb: via.ddrb,
+        sr: via.sr,
+        acr: via.acr,
+        pcr: via.pcr,
+        ifr: via.ifr,
+        ier: via.ier,
+        t1l: via.t1l,
+        t2l: via.t2l,
+        t1c: via.t1c,
+        t2c: via.t2c,
+        // A free-running timer 1 that has already hit would never interrupt again, the 100Hz tick among them.
+        t1hit: via.acr & 0x40 ? false : !!via.t1hit,
+        t2hit: !!via.t2hit,
+        portapins: 0xff,
+        portbpins: 0xff,
+        ca1: !!via.ca1,
+        ca2: !!via.ca2,
+        cb1: false,
+        cb2: !!via.cb2,
+        justhit: 0,
+        t1_pb7: (via.orb >> 7) & 1,
+        lastPolltime: 0,
+        taskOffset: 1,
+    };
+    if (ic32 === undefined) return state;
+    return { ...state, IC32: ic32, capsLockLight: !(ic32 & 0x40), shiftLockLight: !(ic32 & 0x80) };
+}
+
+/**
+ * A jsbeeb sound chip state from an imported chip's channels, in SN76489 order with noise last.
+ * @param {{registers: Uint16Array, counter: Float32Array, outputBit: boolean[], volume: Float32Array}} channels
+ * @param {number} lfsr the noise shift register
+ */
+export function importedSoundState({ registers, counter, outputBit, volume }, lfsr) {
+    return {
+        registers,
+        counter,
+        outputBit,
+        volume,
+        lfsr,
+        latchedRegister: 0,
+        residual: 0,
+        sineOn: false,
+        sineStep: 0,
+        sineTime: 0,
+    };
+}
+
+/**
+ * Build jsbeeb video state from parsed CRTC, ULA and palette data, by writing them to a Video as the
+ * guest would have.
  * @param {number} ulaControl - VideoULA control register
  * @param {Uint8Array} ulaPalette - 16-entry raw ULA palette register values (lower nibble of &FE21 writes)
  * @param {Uint8Array} crtcRegs - CRTC registers (at least 18 bytes)
@@ -40,116 +100,25 @@ const DefaultAdc = { status: 0x40, low: 0x00, high: 0x00, taskOffset: null };
  * @param {object|null} [crtcCounters] - CRTC counter state {hc, vc, sc, ma, maback}, or null for defaults
  */
 export function buildVideoState(ulaControl, ulaPalette, crtcRegs, nulaCollook, crtcCounters) {
-    const regs = new Uint8Array(32);
-    regs.set(crtcRegs.slice(0, 18));
-    const actualPal = new Uint8Array(16);
-    for (let i = 0; i < 16; i++) actualPal[i] = ulaPalette[i] & 0x0f;
-
-    // Use NULA collook if provided, otherwise use default BBC palette
-    const collook =
-        nulaCollook ||
-        new Int32Array([
-            0xff000000, 0xff0000ff, 0xff00ff00, 0xff00ffff, 0xffff0000, 0xffff00ff, 0xffffff00, 0xffffffff, 0xff000000,
-            0xff0000ff, 0xff00ff00, 0xff00ffff, 0xffff0000, 0xffff00ff, 0xffffff00, 0xffffffff,
-        ]);
-
-    // Compute ulaPal from actualPal + collook, matching jsbeeb's Ula._recomputeUlaPal
-    const flashEnabled = !!(ulaControl & 1);
-    const defaultFlash = new Uint8Array([1, 1, 1, 1, 1, 1, 1, 1]);
-    const flash = defaultFlash;
-    const ulaPal = new Int32Array(16);
-    for (let i = 0; i < 16; i++) {
-        const palVal = actualPal[i];
-        let colour = collook[(palVal & 0xf) ^ 7];
-        if (palVal & 8 && flashEnabled && flash[(palVal & 7) ^ 7]) {
-            colour = collook[palVal & 0xf];
-        }
-        ulaPal[i] = colour;
+    const video = new Video(false, 0, () => {}, { hasVideoNula: true, drainKind: "js" });
+    for (let reg = 0; reg < CrtcImportedRegisters; reg++) {
+        video.crtc.write(CrtcAddress, reg);
+        video.crtc.write(CrtcData, crtcRegs[reg]);
     }
+    video.crtc.write(CrtcAddress, 0);
+    if (nulaCollook) video.ula.collook.set(nulaCollook);
+    video.ula.write(UlaControl, ulaControl);
+    for (let i = 0; i < 16; i++) video.ula.write(UlaPalette, (i << 4) | (ulaPalette[i] & 0x0f));
 
-    return {
-        regs,
-        bitmapX: 0,
-        bitmapY: 0,
-        oddClock: false,
-        frameCount: 0,
-        doEvenFrameLogic: true,
-        isEvenRender: true,
-        lastRenderWasEven: false,
-        firstScanline: true,
-        inHSync: false,
-        inVSync: false,
-        hadVSyncThisRow: false,
-        checkVertAdjust: false,
-        endOfMainLatched: false,
-        endOfVertAdjustLatched: false,
-        endOfFrameLatched: false,
-        inVertAdjust: false,
-        inDummyRaster: false,
-        hpulseWidth: regs[3] & 0x0f,
-        vpulseWidth: (regs[3] & 0xf0) >>> 4,
-        hpulseCounter: 0,
-        vpulseCounter: 0,
-        dispEnabled: 0x3f,
-        horizCounter: crtcCounters ? crtcCounters.hc : 0,
-        vertCounter: crtcCounters ? crtcCounters.vc : 0,
-        scanlineCounter: crtcCounters ? crtcCounters.sc : 0,
-        vertAdjustCounter: 0,
-        addr: crtcCounters ? crtcCounters.ma : (regs[13] | (regs[12] << 8)) & 0x3fff,
-        lineStartAddr: crtcCounters ? crtcCounters.maback : (regs[13] | (regs[12] << 8)) & 0x3fff,
-        nextLineStartAddr: crtcCounters ? crtcCounters.maback : (regs[13] | (regs[12] << 8)) & 0x3fff,
-        ulactrl: ulaControl,
-        pixelsPerChar: ulaControl & 0x10 ? 8 : 16,
-        halfClock: !(ulaControl & 0x10),
-        ulaMode: (ulaControl >>> 2) & 3,
-        teletextMode: !!(ulaControl & 2),
-        displayEnableSkew: Math.min((regs[8] & 0x30) >>> 4, 2),
-        ulaPal,
-        actualPal,
-        cursorOn: false,
-        cursorOff: false,
-        cursorOnThisFrame: false,
-        cursorDrawIndex: 0,
-        cursorPos: (regs[15] | (regs[14] << 8)) & 0x3fff,
-        interlacedSyncAndVideo: (regs[8] & 3) === 3,
-        screenSubtract: 0,
-        ula: {
-            collook: collook.slice(),
-            flash: new Uint8Array([1, 1, 1, 1, 1, 1, 1, 1]),
-            paletteWriteFlag: false,
-            paletteFirstByte: 0,
-            paletteMode: 0,
-            horizontalOffset: 0,
-            leftBlank: 0,
-            disabled: false,
-            attributeMode: 0,
-            attributeText: 0,
-        },
-        crtc: { curReg: 0 },
-        teletext: {
-            prevCol: 0,
-            col: 7,
-            bg: 0,
-            sep: false,
-            dbl: false,
-            oldDbl: false,
-            secondHalfOfDouble: false,
-            wasDbl: false,
-            gfx: false,
-            flash: false,
-            flashTime: 0,
-            heldChar: 0,
-            holdChar: false,
-            dataQueue: [0, 0, 0, 0],
-            scanlineCounter: 0,
-            levelDEW: false,
-            levelDISPTMG: false,
-            levelRA0: false,
-            nextGlyphs: "normal",
-            curGlyphs: "normal",
-            heldGlyphs: "normal",
-        },
-    };
+    const startAddr = (video.regs[13] | (video.regs[12] << 8)) & 0x3fff;
+    video.horizCounter = crtcCounters ? crtcCounters.hc : 0;
+    video.vertCounter = crtcCounters ? crtcCounters.vc : 0;
+    video.scanlineCounter = crtcCounters ? crtcCounters.sc : 0;
+    video.addr = crtcCounters ? crtcCounters.ma : startAddr;
+    video.lineStartAddr = crtcCounters ? crtcCounters.maback : startAddr;
+    video.nextLineStartAddr = video.lineStartAddr;
+    video.dispEnabled = EVERYTHINGENABLED;
+    return video.snapshotState();
 }
 
 /**
