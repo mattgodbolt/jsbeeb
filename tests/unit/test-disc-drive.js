@@ -154,7 +154,7 @@ describe("40 track discs", () => {
     it("stops on the outermost track double stepping can reach, and says so", () => {
         const drive = driveSteppedIn(fortyTrackDisc(), IbmDiscFormat.tracksPerDisc - 2);
         const stops = [];
-        drive.addEventListener("headStop", ({ track }) => stops.push(track));
+        drive.addEventListener("headStop", () => stops.push(drive.track));
 
         drive.seekOneTrack(1);
 

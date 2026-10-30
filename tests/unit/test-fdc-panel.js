@@ -161,19 +161,22 @@ describe("FdcPanel", () => {
                 fdc.write(WdCommandAddr, WdSeekVerify12ms);
             },
             lines: [
-                "control, drive 1, side 0, MFM  ctl 22",
+                "control, drive 1, side 0, MFM  wrote 22",
                 "sector register set to 3",
-                "seek, drive 1, side 0: to track 2 from 0, verify, 12 ms steps (head on track 0)  cmd 15 tr 0 sr 3 dr 2 ctl 22",
+                "seek, drive 1, side 0: to track 2 from 0, verify, 12 ms steps (head on track 0)  cmd 15 tr 0 sr 3 dr 2",
             ],
         },
     ])(
         "logs the $Fdc.name's commands spelt out, with the bytes behind them, only while asked",
         ({ Fdc, run, lines }) => {
             const { fdc } = panelFor(Fdc);
+            run(fdc);
+            expect(logLines().filter((line) => !line.startsWith("warning"))).toEqual([]);
+            fdc.powerOnReset();
             part("fdc-log-commands").click();
             run(fdc);
-            expect(logLines()).toEqual(lines);
-            expect(part("fdc-log").querySelector(".fdc-log-raw").textContent).toMatch(/^(cmd|ctl) /);
+            expect(logLines().filter((line) => !line.startsWith("warning"))).toEqual(lines);
+            expect(part("fdc-log").querySelector(".fdc-log-raw").textContent).toMatch(/^(cmd|wrote) /);
         },
     );
 
@@ -212,7 +215,7 @@ describe("FdcPanel", () => {
                 fdc.write(WdControlAddr, WdResetOff | WdDrive1);
                 fdc.write(WdCommandAddr, WdReadSector);
             },
-            line: /^state: idle → spin up wait {2}tr 0 sr 1 dr 0 ctl 22$/,
+            line: /^state: idle → spin up wait {2}tr 0 sr 1 dr 0$/,
         },
     ])("logs the $Fdc.name's state changes by name while asked", ({ Fdc, start, line }) => {
         const { fdc } = panelFor(Fdc);
@@ -226,6 +229,7 @@ describe("FdcPanel", () => {
     it("logs the drives' motors and heads while asked, the head against its stop among them", () => {
         const { fdc } = panelFor(WdFdc);
         fdc.drives[1].setDisc(blankDisc());
+        fdc.drives[1].tracksPerStep = 2;
         part("fdc-log-drives").click();
         fdc.write(WdControlAddr, WdResetOff | WdDrive1);
         fdc.write(WdDataAddr, 2);
@@ -305,7 +309,7 @@ describe("FdcPanel", () => {
         part("fdc-log-copy").click();
         expect(writeText).toHaveBeenCalledWith(shown().join("\n"));
         filter.focus();
-        filter.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+        filter.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
         expect(filter.value).toBe("");
         expect(document.activeElement).not.toBe(filter);
         expect(shown().length).toBeGreaterThan(2);

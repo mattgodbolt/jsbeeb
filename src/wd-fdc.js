@@ -394,6 +394,7 @@ export class WdFdc {
      * @param {Number} val byte to write
      */
     write(addr, val) {
+        const written = val;
         addr = this._remapAddr(addr);
         val = this._remapVal(addr, val);
         switch (addr) {
@@ -401,7 +402,7 @@ export class WdFdc {
             case 1:
             case 2:
             case 3:
-                if (this.logCommands) this._log({ kind: "control", value: val });
+                if (this.logCommands) this._log({ kind: "control", value: val, written });
                 this._writeControl(val);
                 break;
             case 4:
@@ -437,7 +438,7 @@ export class WdFdc {
                 byte: val,
                 ...this._loggedRegisters,
                 stepRateMs: this._stepRateMsFor(val),
-                headTrack: this._currentDrive?.track ?? null,
+                headTrack: this._currentDrive?.logicalTrack ?? null,
             });
         const command = val & 0xf0;
 

@@ -1158,7 +1158,6 @@ export class IntelFdc {
         this._regs[Registers.internalParam_3] = 1;
         this._regs[Registers.internalParam_4] = 1;
 
-        // Calculate parameters expected. Taken from the logic in the 8271 ROM.
         const numParams = paramCountOf(command);
         this._regs[Registers.internalParamCount] = numParams;
 
@@ -1502,8 +1501,7 @@ export class IntelFdc {
 
         this._paramCallback = ParamAccept.none;
 
-        // Select the drive before logging so that head position is reported.
-        // The MMIO clocks register really is used as a temporary storage for this.
+        // The MMIO clocks register really is used as a temporary storage for the select bits.
         const selectBits = commandReg & DriveOut.selectFlags;
         this._mmioClocks = selectBits;
         if (selectBits !== (this._driveOut & DriveOut.selectFlags)) {
@@ -1525,7 +1523,7 @@ export class IntelFdc {
                 command,
                 select: selectBits,
                 params: CommandParams.slice(0, paramCountOf(origCommand)).map((reg) => this._regs[reg]),
-                headTrack: this._driveSelectedBy(selectBits)?.track ?? null,
+                headTrack: this._driveSelectedBy(selectBits)?.logicalTrack ?? null,
             });
         if (command === Command.scanData || command === Command.scanDataAndDeleted) {
             this._warn("scan commands do not work in a BBC Micro");

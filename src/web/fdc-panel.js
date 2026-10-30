@@ -366,7 +366,7 @@ const WdErrorBits = {
     ],
 };
 
-const wdRegisters = ({ track, sector, data, control }) => `tr ${track} sr ${sector} dr ${data} ctl ${hexbyte(control)}`;
+const wdRegisters = ({ track, sector, data }) => `tr ${track} sr ${sector} dr ${data}`;
 
 const wdWhere = (control) =>
     `${drivesNamed([control & Control.drive0, control & Control.drive1])}, side ${control & Control.side ? 1 : 0}`;
@@ -413,7 +413,7 @@ function wdLogLine(entry) {
             const reset = value & Control.reset ? "" : ", held in reset";
             return {
                 text: `control${wdWhere(value)}, ${value & Control.density ? "FM" : "MFM"}${reset}`,
-                raw: `ctl ${hexbyte(value)}`,
+                raw: `wrote ${hexbyte(entry.written)}`,
             };
         }
         case "state":
@@ -462,8 +462,8 @@ function driveEvents(drive, driveIndex, log) {
                     `stepping ${Math.abs(steps)} ${Math.abs(steps) === 1 ? "track" : "tracks"} ${steps > 0 ? "in" : "out"}, ${stepMs} ms a step`,
                 ),
         ],
-        ["seekEnd", () => say(`head on track ${drive.track}`)],
-        ["headStop", ({ track }) => say(`head against its stop at track ${track}`)],
+        ["seekEnd", () => say(`head on track ${drive.logicalTrack}`)],
+        ["headStop", () => say(`head against its stop at track ${drive.logicalTrack}`)],
     ].map(([type, listener]) => ({ drive, type, listener }));
 }
 
@@ -584,9 +584,12 @@ export class FdcPanel {
                 filter.value = "";
                 filter.dispatchEvent(new Event("input"));
             }
-            if (event.key === "Escape" || event.key === "Enter") filter.blur();
+            if (event.key === "Enter") filter.blur();
         });
-        part("fdc-log-copy").addEventListener("click", () => this._copyLog());
+        const copy = part("fdc-log-copy");
+        // The clipboard is only there on a secure origin.
+        copy.hidden = !navigator.clipboard;
+        copy.addEventListener("click", () => this._copyLog());
         part("fdc-log-clear").addEventListener("click", () => this._log.replaceChildren());
         this._restoreLogging();
         this._showLogging();
