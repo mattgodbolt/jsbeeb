@@ -44,6 +44,8 @@ export function requireBank(bank, model) {
 
 export const bankView = (bank) => bank.toString(16);
 
+export const bankName = (bank) => bankView(bank).toUpperCase();
+
 /** @returns {number | undefined} the sideways bank `view` shows, if it shows one */
 export function viewedBank(view) {
     return /^[0-9a-f]$/.test(view) ? parseInt(view, 16) : undefined;
@@ -107,6 +109,15 @@ export function viewDiffers(cpu, view, address) {
     const offset = viewedOffset(cpu, view, address);
     if (offset === undefined) return false;
     return cpu.memLook[cpu.memStatOffset + (address >>> 8)] + address !== offset;
+}
+
+/**
+ * The view showing the RAM the video reads at screen `address`, &3000 to &7FFF: shadow whenever ACCCON's D bit has
+ * the video reading it, since the CPU's paging of it changes with X, E and the program counter.
+ */
+export function screenView(cpu, address) {
+    if (cpu.videoDisplayPage) return ShadowView;
+    return viewDiffers(cpu, MainView, address) ? MainView : PagedView;
 }
 
 function text(peek, from, to) {

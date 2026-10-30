@@ -1,6 +1,6 @@
-import { hexbyte } from "../hex.js";
 import {
     AndyView,
+    bankName,
     describeBank,
     MainView,
     PagedView,
@@ -104,9 +104,9 @@ export class PagingOverride {
         if (bank === undefined) return FixedViews[view];
         const contents = describeBank(this._cpu, bank);
         return {
-            label: `bank ${view.toUpperCase()}`,
+            label: `bank ${bankName(bank)}`,
             contents,
-            title: `Sideways bank ${bank} (&${hexbyte(bank)}) at &8000 to &BFFF: ${contents}`,
+            title: `Sideways bank ${bankName(bank)} at &8000 to &BFFF: ${contents}`,
         };
     }
 

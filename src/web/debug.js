@@ -14,7 +14,16 @@ import { NumRomBanks } from "../6502.js";
 import { bindGotoForm, externalLink, FittedRows, labelHtml, powerOfTwoColumnsThatFit } from "./debug-dom.js";
 import { DisassemblyView } from "./disassembly-view.js";
 import { PagingOverride } from "./paging-override.js";
-import { bankView, PagedView, parseViewedAddress, peekViewed, SidewaysStart, viewedBank } from "../paging.js";
+import {
+    bankName,
+    bankView,
+    PagedView,
+    parseViewedAddress,
+    peekViewed,
+    screenView,
+    SidewaysStart,
+    viewedBank,
+} from "../paging.js";
 import { Dropdown } from "bootstrap";
 import { TightLoopNote } from "./tight-loop-note.js";
 
@@ -569,8 +578,8 @@ export class Debugger {
         bank.type = "button";
         bank.className = "label-bank dropdown-toggle";
         bank.dataset.bsToggle = "dropdown";
-        bank.textContent = file.bank === null ? "any bank" : `bank ${file.bank}`;
-        bank.title = `Which sideways bank ${file.title} names $8000-$bfff in`;
+        bank.textContent = file.bank === null ? "any bank" : `bank ${bankName(file.bank)}`;
+        bank.title = `Which sideways bank ${file.title} names &8000 to &BFFF in`;
         // Bootstrap focuses the toggle as its menu opens.
         bank.addEventListener("hidden.bs.dropdown", () => bank.blur());
         const banks = document.createElement("div");
@@ -581,7 +590,7 @@ export class Debugger {
                 item.type = "button";
                 item.className = "dropdown-item";
                 item.classList.toggle("active", choice === file.bank);
-                item.textContent = choice === null ? "any bank" : `${choice}`;
+                item.textContent = choice === null ? "any bank" : bankName(choice);
                 item.addEventListener("click", () => this._labelFiles.tie(file, choice));
                 return item;
             }),
@@ -1027,13 +1036,14 @@ export class Debugger {
 
     /**
      * While the machine is stopped in the debugger, opens the memory panel at the byte drawn at a point of the
-     * screen, 0 to 1 across and down it, and takes the click; otherwise, or while the on-screen keyboard shows,
-     * the click is the machine's.
+     * screen, 0 to 1 across and down it, in the RAM it is drawn from, and takes the click; otherwise, or while the
+     * on-screen keyboard shows, the click is the machine's.
      */
     showScreenByteAt(x, y) {
         if (!this._inDebugger || this._touchKeyboardShown()) return false;
         const address = this.cpu.video.addressShownAt(x, y);
         if (address !== null) {
+            this._paging.memory.view = screenView(this.cpu, address);
             this._memoryView.update(address);
             this.panels.memory.open();
         }

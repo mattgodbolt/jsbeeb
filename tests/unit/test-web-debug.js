@@ -823,7 +823,9 @@ describe("Debugger", () => {
 
             expect(dbgr.showScreenByteAt(0.25, 0.75)).toBe(true);
             expect(visible("memory-panel")).toBe(false);
+            goTo("goto-mem-addr-form", "$8000`4");
             expect(dbgr.showScreenByteAt(0.25, 0.25)).toBe(true);
+            expect(document.querySelector("#memory-panel .paging-picker").textContent).toBe("paged");
             expect(picture).toHaveBeenLastCalledWith(0.25, 0.25);
             expect(visible("memory-panel")).toBe(true);
             expect(memTarget().dataset.addr).toBe(`${0x3456}`);
@@ -2289,12 +2291,12 @@ describe("Debugger", () => {
                 [...labelsLine().querySelectorAll(".dropdown-item")].find((item) => item.textContent === text);
             const shownToggle = labelsLine().querySelector(".label-bank");
             Dropdown.getOrCreateInstance(shownToggle);
-            bankChoice("4").click();
+            bankChoice("C").click();
             expect(Dropdown.getInstance(shownToggle)).toBeNull();
-            expect(labelsLine().querySelector(".label-bank").textContent).toBe("bank 4");
-            expect(bankChoice("4").classList.contains("active")).toBe(true);
+            expect(labelsLine().querySelector(".label-bank").textContent).toBe("bank C");
+            expect(bankChoice("C").classList.contains("active")).toBe(true);
             expect(code(0x2002).textContent).toBe("JSR $8003");
-            cpu.romSelect(4);
+            cpu.romSelect(12);
             dbgr.debug(cpu.pc);
             expect(code(0x2002).textContent).toBe("JSR service");
             labelsLine().querySelector(".label-forget").click();
