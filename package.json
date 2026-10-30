@@ -114,7 +114,7 @@
     "test:benchmark-workloads": "node tools/make-benchmark-workloads.js --check",
     "test:same-answer": "node tools/same-answer.js",
     "coverage:unit": "vitest run tests/unit --coverage",
-    "dom-unit-tests": "vitest run --silent=true --project unit $(grep -rlE 'domFromIndexHtml|stitchHtml' tests/unit)",
+    "dom-unit-tests": "vitest run --silent=true --project unit $(grep -rlE 'domFromIndexHtml|stitchHtml|indexHtmlThroughPlugin' tests/unit)",
     "coverage:all-tests": "vitest run --coverage",
     "benchmark": "vitest bench --config vitest.bench.config.js --silent=true --reporter=verbose",
     "benchmark:workloads": "node tools/make-benchmark-workloads.js",
