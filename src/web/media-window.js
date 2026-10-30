@@ -32,20 +32,22 @@ const FoldableDrive = 1;
 const targetFrom = (slot) => (slot === "tape" ? "tape" : Number(slot));
 
 /**
- * What a disc going into `driveIndex` does. Only drive 0 boots: as the Autoboot tick says, the other way
- * with Shift, or as `boot` says whatever the tick. `urlAutoboot` is what the URL's autoboot becomes,
- * undefined to leave it alone; it says the load booted only where the URL names the disc (`inUrl`).
+ * What a disc going into `driveIndex` does. Only drive 0 boots, and only on a machine that boots from a disc
+ * (`bootable`): as the Autoboot tick says, the other way with Shift, or as `boot` says whatever the tick.
+ * `urlAutoboot` is what the URL's autoboot becomes, undefined to leave it alone; it says the load booted only
+ * where the URL names the disc (`inUrl`).
  */
-export function bootDecision({ driveIndex, ticked, shift = false, boot, inUrl = false }) {
-    if (driveIndex !== 0) return { boots: false, urlAutoboot: undefined };
+export function bootDecision({ driveIndex, bootable, ticked, shift = false, boot, inUrl = false }) {
+    if (driveIndex !== 0 || !bootable) return { boots: false, urlAutoboot: undefined };
     const boots = boot ?? shift !== ticked;
     return { boots, urlAutoboot: boots && inUrl };
 }
 
 /** The keys that load from the search box, and what they do, aimed at `target`. */
-function hintKeys(target, ticked) {
+function hintKeys(target, bootable, ticked) {
     if (target === "tape") return [["Enter", "loads into the deck"]];
-    const boots = (shift) => bootDecision({ driveIndex: target, ticked, shift }).boots;
+    if (!bootable) return [["Enter", `loads into drive ${target}`]];
+    const boots = (shift) => bootDecision({ driveIndex: target, bootable, ticked, shift }).boots;
     if (!boots(false) && !boots(true)) return [["Enter", `loads into drive ${target}, which does not boot`]];
     return [
         ["Enter", boots(false) ? `boots from drive ${target}` : `loads into drive ${target}`],
@@ -180,11 +182,17 @@ export class MediaWindow {
             this.list.newDisc.hidden = true;
             this.list.connect.hidden = true;
         }
+        this.list.autoboot.closest("label").hidden = !this.bootable;
         this.showDeck(!this.model.hasDiscDrives);
         this.showDrive(false);
         this.showList(true);
         this.setTarget(this.defaultTarget);
         this.renderAll();
+    }
+
+    /** The Atom has no SHIFT+BREAK: a reset leaves it at its prompt, with Atom DOS not even linked in. */
+    get bootable() {
+        return !this.model.isAtom;
     }
 
     get defaultTarget() {
@@ -600,8 +608,9 @@ export class MediaWindow {
     renderHint() {
         const first = this.list.rows.querySelector(".media-row-main")?.descriptor;
         const target = first ? this.rowTarget(first) : this.target;
+        const keys = hintKeys(target, this.bootable, this.list.autoboot.checked);
         this.list.hint.replaceChildren(
-            ...[...hintKeys(target, this.list.autoboot.checked), ["Esc", "closes"]].map(([key, what]) => {
+            ...[...keys, ["Esc", "closes"]].map(([key, what]) => {
                 const span = document.createElement("span");
                 const kbd = document.createElement("kbd");
                 kbd.textContent = key;
@@ -820,7 +829,7 @@ export class MediaWindow {
 
     /** What a load into `driveIndex` does, by the Autoboot tick as it is now. */
     decideBoot(driveIndex, asked = {}) {
-        return bootDecision({ driveIndex, ticked: this.list.autoboot.checked, ...asked });
+        return bootDecision({ driveIndex, bootable: this.bootable, ticked: this.list.autoboot.checked, ...asked });
     }
 
     /** Which slot a descriptor's media is loaded in, as text, or null. */

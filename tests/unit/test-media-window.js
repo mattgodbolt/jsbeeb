@@ -805,24 +805,41 @@ describe("MediaWindow", () => {
             expect(rowMain().title).toMatch(title);
         });
 
+        it("only loads a disc on an Atom, which has no disc boot, and says so", async () => {
+            deps.model.isAtom = true;
+            deps.media.loadDiscImage.mockResolvedValue(ssd());
+            await openWith([elite]);
+            expect(hint()).toEqual(["Enter loads into drive 0", "Esc closes"]);
+            expect(rowMain().title).toMatch(/^Load Elite.*into drive 0$/);
+            expect(autobootTick().closest("label").hidden).toBe(true);
+            pressEnter();
+            await vi.waitFor(() => expect(fdc.drives[0].disc).toBeTruthy());
+            expect(deps.processor.reset).not.toHaveBeenCalled();
+            expect(deps.autoboot).not.toHaveBeenCalled();
+        });
+
         describe("what a load into a drive does", () => {
             it.each`
-                driveIndex | ticked   | shift    | boot         | inUrl    | boots    | urlAutoboot
-                ${0}       | ${true}  | ${false} | ${undefined} | ${true}  | ${true}  | ${true}
-                ${0}       | ${true}  | ${true}  | ${undefined} | ${true}  | ${false} | ${false}
-                ${0}       | ${false} | ${false} | ${undefined} | ${true}  | ${false} | ${false}
-                ${0}       | ${false} | ${true}  | ${undefined} | ${true}  | ${true}  | ${true}
-                ${0}       | ${true}  | ${false} | ${undefined} | ${false} | ${true}  | ${false}
-                ${0}       | ${true}  | ${false} | ${false}     | ${true}  | ${false} | ${false}
-                ${0}       | ${false} | ${false} | ${true}      | ${true}  | ${true}  | ${true}
-                ${0}       | ${true}  | ${true}  | ${true}      | ${true}  | ${true}  | ${true}
-                ${1}       | ${true}  | ${false} | ${undefined} | ${true}  | ${false} | ${undefined}
-                ${1}       | ${false} | ${true}  | ${undefined} | ${true}  | ${false} | ${undefined}
-                ${1}       | ${true}  | ${false} | ${true}      | ${true}  | ${false} | ${undefined}
+                driveIndex | bootable | ticked   | shift    | boot         | inUrl    | boots    | urlAutoboot
+                ${0}       | ${true}  | ${true}  | ${false} | ${undefined} | ${true}  | ${true}  | ${true}
+                ${0}       | ${true}  | ${true}  | ${true}  | ${undefined} | ${true}  | ${false} | ${false}
+                ${0}       | ${true}  | ${false} | ${false} | ${undefined} | ${true}  | ${false} | ${false}
+                ${0}       | ${true}  | ${false} | ${true}  | ${undefined} | ${true}  | ${true}  | ${true}
+                ${0}       | ${true}  | ${true}  | ${false} | ${undefined} | ${false} | ${true}  | ${false}
+                ${0}       | ${true}  | ${true}  | ${false} | ${false}     | ${true}  | ${false} | ${false}
+                ${0}       | ${true}  | ${false} | ${false} | ${true}      | ${true}  | ${true}  | ${true}
+                ${0}       | ${true}  | ${true}  | ${true}  | ${true}      | ${true}  | ${true}  | ${true}
+                ${1}       | ${true}  | ${true}  | ${false} | ${undefined} | ${true}  | ${false} | ${undefined}
+                ${1}       | ${true}  | ${false} | ${true}  | ${undefined} | ${true}  | ${false} | ${undefined}
+                ${1}       | ${true}  | ${true}  | ${false} | ${true}      | ${true}  | ${false} | ${undefined}
+                ${0}       | ${false} | ${false} | ${true}  | ${true}      | ${true}  | ${false} | ${undefined}
             `(
-                "drive $driveIndex, ticked $ticked, Shift $shift, boot $boot, in URL $inUrl: boots $boots, URL autoboot $urlAutoboot",
-                ({ driveIndex, ticked, shift, boot, inUrl, boots, urlAutoboot }) => {
-                    expect(bootDecision({ driveIndex, ticked, shift, boot, inUrl })).toEqual({ boots, urlAutoboot });
+                "drive $driveIndex, bootable $bootable, ticked $ticked, Shift $shift, boot $boot, in URL $inUrl: boots $boots, URL autoboot $urlAutoboot",
+                ({ driveIndex, bootable, ticked, shift, boot, inUrl, boots, urlAutoboot }) => {
+                    expect(bootDecision({ driveIndex, bootable, ticked, shift, boot, inUrl })).toEqual({
+                        boots,
+                        urlAutoboot,
+                    });
                 },
             );
 
