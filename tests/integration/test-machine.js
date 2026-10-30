@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { MaxCyclesPerIter, TestMachine } from "../../src/test-machine.js";
-import { mode7Text } from "./helpers.js";
+import { bootedTestMachine, mode7Text } from "./helpers.js";
 
 describe("TestMachine", () => {
     const fx19Loop = 'FOR I%=1 TO 5:OSCLI "FX19":NEXT:PRINT "SYN";"CED"';
@@ -62,13 +62,6 @@ describe("TestMachine debug stops", () => {
     const MaxOverrunCycles = 10;
     const IrqVector = 0x204;
 
-    async function bootedMachine() {
-        const machine = new TestMachine();
-        await machine.initialise();
-        await machine.runUntilInput();
-        return machine;
-    }
-
     function writeBytes(machine, address, bytes) {
         bytes.forEach((byte, i) => machine.writebyte(address + i, byte));
     }
@@ -89,14 +82,14 @@ describe("TestMachine debug stops", () => {
     }
 
     it("started at its own address, runUntilAddress waits for the next visit", async () => {
-        const machine = await bootedMachine();
+        const machine = await bootedTestMachine();
         (await stopAt(machine, ReturnAtOnce, ProgramAddress)).remove();
 
         await expect(machine.runUntilAddress(ProgramAddress, 1)).rejects.toThrow("did not hit");
     });
 
     it("runUntilAddress removes its hook when the run throws", async () => {
-        const machine = await bootedMachine();
+        const machine = await bootedTestMachine();
         const irqHandler = machine.readbyte(IrqVector) | (machine.readbyte(IrqVector + 1) << 8);
         const failing = machine.processor.debugInstruction.add(() => {
             throw new Error("hook failed");
@@ -108,7 +101,7 @@ describe("TestMachine debug stops", () => {
     });
 
     it("rejects, and leaves no unspent cycles, when a hook throws after the first slice", async () => {
-        const machine = await bootedMachine();
+        const machine = await bootedTestMachine();
         const start = machine.elapsedCycles;
         const hook = machine.processor.debugInstruction.add(() => {
             if (machine.elapsedCycles - start > MaxCyclesPerIter * 1.5) throw new Error("hook failed late");
@@ -122,7 +115,7 @@ describe("TestMachine debug stops", () => {
 
     describe("a hook called at a stop, removed and added back", () => {
         it("stops again once the fast path has run", async () => {
-            const machine = await bootedMachine();
+            const machine = await bootedTestMachine();
             const hook = await stopAt(machine, LoopWithoutInterrupts, LoopAddress);
             hook.remove();
             await cyclesToRun(machine, ShortRunCycles);
@@ -133,7 +126,7 @@ describe("TestMachine debug stops", () => {
         });
 
         it("does not stop again when the fast path ran nothing", async () => {
-            const machine = await bootedMachine();
+            const machine = await bootedTestMachine();
             const hook = await stopAt(machine, LoopWithoutInterrupts, LoopAddress);
             hook.remove();
             machine.processor.execute(0);
@@ -146,7 +139,7 @@ describe("TestMachine debug stops", () => {
 
     describe("a state saved where a hook stopped it", () => {
         it("says so, where one saved running does not", async () => {
-            const machine = await bootedMachine();
+            const machine = await bootedTestMachine();
             expect(machine.snapshot().stoppedAtBreakpoint).toBe(false);
 
             await stopAt(machine, LoopWithoutInterrupts, LoopAddress);
@@ -155,7 +148,7 @@ describe("TestMachine debug stops", () => {
         });
 
         it("runs on past the restored pc, which a hook added since still sees", async () => {
-            const machine = await bootedMachine();
+            const machine = await bootedTestMachine();
             const hook = await stopAt(machine, LoopWithoutInterrupts, LoopAddress);
             const state = machine.snapshot();
             hook.remove();
@@ -173,7 +166,7 @@ describe("TestMachine debug stops", () => {
         });
 
         it("stops at the restored pc when the state predates the field", async () => {
-            const machine = await bootedMachine();
+            const machine = await bootedTestMachine();
             await stopAt(machine, LoopWithoutInterrupts, LoopAddress);
             const state = machine.snapshot();
             delete state.stoppedAtBreakpoint;
@@ -185,7 +178,7 @@ describe("TestMachine debug stops", () => {
     });
 
     it("keeps the hooks called at a stop across an execute that runs nothing", async () => {
-        const machine = await bootedMachine();
+        const machine = await bootedTestMachine();
         await stopAt(machine, LoopWithoutInterrupts, LoopAddress);
 
         machine.processor.execute(0);

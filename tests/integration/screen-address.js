@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { TestMachine } from "../../src/test-machine.js";
 import { FakeVideo, Video } from "../../src/video.js";
 import { FbHeight, FbWidth, FrameCapturingVideo } from "../helpers/frame-capturing-video.js";
+import { bootedTestMachine } from "./helpers.js";
 
 // Three fields: both of an interlaced picture, whatever field the run starts in.
 const PictureCycles = 120000;
@@ -39,9 +39,7 @@ function addressAtPixel(video, x, y) {
 /** A machine in `mode`, scrolled so its picture starts part way through its memory and wraps. */
 async function scrolledMachine(model, mode) {
     const video = new FrameCapturingVideo({ isMaster: model.startsWith("Master"), isAtom: false });
-    const machine = new TestMachine(model, { video });
-    await machine.initialise();
-    await machine.runUntilInput();
+    const machine = await bootedTestMachine(model, { video });
     await machine.type(`MODE ${mode}:VDU 23,1,0;0;0;0;:FOR I=1 TO 37:PRINT:NEXT`);
     await machine.runUntilInput();
     const blank = mode === Teletext ? TeletextBlank : 0;

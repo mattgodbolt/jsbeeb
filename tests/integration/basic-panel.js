@@ -7,7 +7,7 @@ import { BasicPanel } from "../../src/web/basic-panel.js";
 import { PanelArrangement } from "../../src/web/floating-panel.js";
 import { PanelKeys } from "../../src/web/panel-keys.js";
 import { teardownDom } from "../unit/helpers.js";
-import { FileBackedXhr } from "./helpers.js";
+import { bootedTestMachine, FileBackedXhr } from "./helpers.js";
 
 const RunCycles = 2 * 1000 * 1000;
 const VduDriverStart = 0xc000;
@@ -34,9 +34,7 @@ describe.each([
 
     beforeEach(async () => {
         vi.stubGlobal("XMLHttpRequest", FileBackedXhr);
-        machine = new TestMachine(model);
-        await machine.initialise();
-        await machine.runUntilInput();
+        machine = await bootedTestMachine(model);
         await machine.loadBasic(Program);
         await machine.type("RUN");
         await machine.runFor(RunCycles);
@@ -189,9 +187,7 @@ describe("the BASIC panel on a Master in a shadow mode", () => {
 
     it("reads memory as BASIC does, even stopped in the VDU driver, which sees the shadow screen", async () => {
         vi.stubGlobal("XMLHttpRequest", FileBackedXhr);
-        const machine = new TestMachine("Master");
-        await machine.initialise();
-        await machine.runUntilInput();
+        const machine = await bootedTestMachine("Master");
         await machine.loadBasic(`10 MODE 135:LOMEM=&5000
 20 apple=3.5
 30 PRINT apple:GOTO 30
