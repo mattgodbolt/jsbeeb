@@ -9,6 +9,7 @@ import { MediaSlots } from "../../src/web/media-slots.js";
 import { Drives } from "../../src/web/drives.js";
 import { DriveTracks } from "../../src/url-params.js";
 import { discFor } from "../../src/fdc.js";
+import { DiscLayout } from "../../src/disc.js";
 import { toHfe } from "../../src/disc-hfe.js";
 import {
     domFromIndexHtml,
@@ -103,7 +104,7 @@ describe("MediaWindow", () => {
             processor,
             model,
             loop,
-            visualiser: { openOn: vi.fn(), redraw: vi.fn() },
+            visualiser: { openOn: vi.fn(), openReport: vi.fn(), redraw: vi.fn() },
             arrangement: new PanelArrangement(() => window.localStorage),
             autoboot: vi.fn(),
             driveSource: {
@@ -281,6 +282,24 @@ describe("MediaWindow", () => {
             expect(text(byId("media-summary"))).toBe("0: empty · 1: ELITE.ssd · tape: empty");
         });
 
+        it("notes what loading the disc found out, picking out the oddities", () => {
+            make();
+            const loaded = discFor("odd.ssd", titledImage("ODD", 1));
+            loaded.loadNotes = [
+                { text: "40 track, as its catalogue says so", isOdd: false },
+                { text: "a bit rate far from 250 kbit/s on track 3", isOdd: true },
+            ];
+            putDiscIn(0, loaded);
+            const notes = bay(0).querySelector(".bay-notes");
+            expect(text(notes)).toBe("40 track, as its catalogue says so · a bit rate far from 250 kbit/s on track 3");
+            expect([...notes.querySelectorAll(".warn")].map(text)).toEqual([
+                "a bit rate far from 250 kbit/s on track 3",
+            ]);
+            expect(notes.title).toBe("40 track, as its catalogue says so\na bit rate far from 250 kbit/s on track 3");
+            putDiscIn(0, discFor("plain.ssd", titledImage("PLAIN", 1), undefined, DiscLayout.contiguous));
+            expect(notes.hidden).toBe(true);
+        });
+
         it("follows the catalogue as it is written, and stops following a disc once it is out", () => {
             make();
             const first = discFor("a.ssd", titledImage("ELITE", 5));
@@ -333,7 +352,7 @@ describe("MediaWindow", () => {
             expect(text(bay(0).querySelector(".bay-sub"))).toBe("");
         });
 
-        it("saves through the drives and opens the surface on its own drive", () => {
+        it("saves through the drives and opens the surface, or its report, on its own drive", () => {
             make();
             putDiscIn(1, ssd());
             const ssdSave = vi.spyOn(deps.drives, "downloadSsdOrDsd").mockResolvedValue();
@@ -341,9 +360,11 @@ describe("MediaWindow", () => {
             bay(1).querySelector(".bay-save-ssd").click();
             bay(1).querySelector(".bay-save-hfe").click();
             bay(1).querySelector(".bay-surface").click();
+            bay(1).querySelector(".bay-report").click();
             expect(ssdSave).toHaveBeenCalledWith(1);
             expect(hfeSave).toHaveBeenCalledWith(1);
             expect(deps.visualiser.openOn).toHaveBeenCalledWith(1);
+            expect(deps.visualiser.openReport).toHaveBeenCalledWith(1);
         });
 
         it("nudges the search box when a slot asks for something to load", () => {

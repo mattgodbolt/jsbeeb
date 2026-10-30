@@ -27,7 +27,8 @@ the 1770 ask for a track and the drive decides how far to move.
 
 An image is either a list of sectors (SSD, DSD, ADF, ADM, ADL) or a picture of the surface (HFE),
 and the two are asked different questions. All of it happens once, in `discFor`, which every load
-path goes through, and the answer and its reason are logged.
+path goes through, and the answer and its reason are kept in the disc's `loadNotes`, which the media window's
+drive bay shows.
 
 **A DFS sector image (SSD, DSD) is asked its catalogue.** The DFS catalogue records how many sectors the
 disc has: 400 for 40 tracks, 800 for 80. An image whose catalogue is structurally sane, claims from

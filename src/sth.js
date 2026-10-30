@@ -40,7 +40,6 @@ export class StairwayToHell {
 
     async fetch(file) {
         const url = this._baseUrl + encodePath(file);
-        console.log("Loading ZIP from " + url);
         const data = await fetchBytes(url);
         try {
             return await failingFor(LoadFailures.badImage, () => unzipDiscImage(data));

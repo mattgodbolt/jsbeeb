@@ -9,6 +9,12 @@ import { DiscLayout } from "../disc.js";
 
 const FluxBlankSectorExtension = ".dsd";
 
+const saveFailed = (name) => (error) =>
+    toast(
+        `Google Drive would not take changes to ${name} (${errorText(error)}). Use the drive's Save button to keep a copy.`,
+        { title: "Google Drive", quietKey: "quietDriveSaveFailed" },
+    );
+
 const isUnauthorised = (error) => error?.status === 401 || error?.result?.error?.code === 401;
 
 /** @returns {Uint8Array} an empty sector image, its catalogue titled from `name` where the format has one */
@@ -85,7 +91,7 @@ export class GoogleDriveSource {
                 new Error("Google Drive is not connected; use Connect Google Drive in the media window first"),
                 LoadFailures.unauthorised,
             );
-        const loaded = await this.withToken(() => this.googleDrive.load(cat.id, layout));
+        const loaded = await this.withToken(() => this.googleDrive.load(cat.id, layout, saveFailed(cat.name)));
         if (!loaded.savesChanges) {
             toast(`${cat.name} is read only on Google Drive, so changes to it are not written back.`, {
                 title: "Google Drive",
@@ -110,7 +116,9 @@ export class GoogleDriveSource {
     /** Puts an image on the Drive under `name`, as a disc that saves its changes there. */
     async createFrom(name, data, layout) {
         const fullName = replaceOrAddExtension(name, disc.guessDiscTypeFromName(name).extension);
-        const result = await this.withToken(() => this.googleDrive.create(fullName, data, layout));
+        const result = await this.withToken(() =>
+            this.googleDrive.create(fullName, data, layout, saveFailed(fullName)),
+        );
         return { ref: `gd:${result.fileId}/${fullName}`, disc: result.disc };
     }
 }

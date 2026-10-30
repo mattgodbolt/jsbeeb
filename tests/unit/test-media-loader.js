@@ -106,7 +106,6 @@ describe("MediaLoader", () => {
 
     describe("a disc kept in this browser", () => {
         it("says once, naming Save, when the browser will not store a write", async () => {
-            vi.spyOn(console, "log").mockImplementation(() => {});
             vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
                 throw new Error("QuotaExceededError");
             });

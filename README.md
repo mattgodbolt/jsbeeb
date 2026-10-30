@@ -176,7 +176,10 @@ same for that row.
   aimed drive and a tape into the deck. The footer also makes a blank disc in this browser or on Google Drive, and
   connects Google Drive. Save states load from the **State** menu; see [Save State and Rewind](#save-state-and-rewind).
 - **Each drive** has an eject latch, a 40/80 track switch (which pins the drive, so `drive0Tracks=` follows it in the
-  URL), a **Save** menu to download the disc or copy it to Google Drive, and **Surface** to open the disc visualiser.
+  URL), a **Save** menu to download the disc or copy it to Google Drive, **Surface** to open the disc visualiser, and
+  **Report** to open it listing what is odd about the disc (bad CRCs, sectors claiming other tracks, unusual tracks),
+  each finding a link to that place on the surface. Under the drive, a line says what loading the image found out:
+  whether it reads as 40 or 80 track and why, and for an HFE its version and anything odd in it.
 - **The URL** names what is loaded and says whether the last load into drive 0 booted, so a link copied afterwards
   does the same. A file from this computer is left out, so a link never boots one. See
   [URL Parameters](#url-parameters).

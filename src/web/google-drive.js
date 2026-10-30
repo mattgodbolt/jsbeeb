@@ -33,9 +33,7 @@ export class GoogleDriveLoader {
     }
 
     async _initialise() {
-        console.log("Creating GAPI");
         await this._loadScript("https://apis.google.com/js/api.js");
-        console.log("Got GAPI, creating token client");
         this.gapi = window.gapi;
         await this._loadScript("https://accounts.google.com/gsi/client");
         this.tokenClient = window.google.accounts.oauth2.initTokenClient({
@@ -44,15 +42,11 @@ export class GoogleDriveLoader {
             error_callback: "", // defined later
             callback: "", // defined later
         });
-        console.log("Token client created, loading client");
 
         await this.gapi.load("client", async () => {
-            console.log("Client loaded; initialising GAPI");
             await this.gapi.client.init({ discoveryDocs: [DISCOVERY_DOC] });
-            console.log("GAPI initialised");
             this.driveClient = this.gapi.client.drive;
         });
-        console.log("Google Drive: available");
         return true;
     }
 
@@ -71,15 +65,12 @@ export class GoogleDriveLoader {
         if (this.authorized) return true;
         if (imm) return false;
         return new Promise((resolve, reject) => {
-            console.log("Authorizing...");
             this.tokenClient.callback = (resp) => {
                 if (resp.error !== undefined) return reject(new Error(resp.error_description ?? resp.error));
-                console.log("Authorized OK");
                 this.authorized = true;
                 resolve(true);
             };
             this.tokenClient.error_callback = (resp) => {
-                console.log(`Token client failure: ${resp.type}; failed to authorize`);
                 reject(new Error(`Token client failure: ${resp.type}; failed to authorize`));
             };
             this.tokenClient.requestAccessToken({ select_account: false });
@@ -106,15 +97,12 @@ export class GoogleDriveLoader {
             corpora: "user",
         });
         if (list.result.files.length === 1) {
-            console.log("Found existing parent folder");
             return list.result.files[0].id;
         }
-        console.log(`Creating parent folder ${PARENT_FOLDER_NAME}`);
         const file = await this.driveClient.files.create({
             resource: { name: PARENT_FOLDER_NAME, mimeType: FOLDER_MIME_TYPE },
             fields: "id",
         });
-        console.log("Folder Id:", file.result.id);
         return file.result.id;
     }
 
@@ -141,33 +129,45 @@ export class GoogleDriveLoader {
         });
     }
 
-    async create(name, data, layout) {
-        console.log(`Google Drive: creating disc image: '${name}'`);
+    /**
+     * @param {function(Error): void} onSaveError - called the first time a change cannot be saved
+     */
+    async create(name, data, layout, onSaveError) {
         const response = await this.saveFile(name, data);
         const meta = response.result;
-        return { fileId: meta.id, disc: this.makeDisc(data, meta, layout) };
+        return { fileId: meta.id, disc: this.makeDisc(data, meta, layout, onSaveError) };
     }
 
-    makeDisc(data, meta, layout) {
+    makeDisc(data, meta, layout, onSaveError) {
         let flusher = null;
         const name = meta.name;
         const id = meta.id;
         if (meta.capabilities.canEdit) {
-            console.log("Making editable disc");
+            let reportedSaveError = false;
             flusher = debounce(async (changedData) => {
-                console.log("Data changed...");
-                await this.saveFile(name, changedData, id);
-                console.log("Saved ok");
+                try {
+                    await this.saveFile(name, changedData, id);
+                } catch (error) {
+                    if (reportedSaveError) return;
+                    reportedSaveError = true;
+                    // The Drive client rejects with its response, not an Error.
+                    onSaveError(
+                        error instanceof Error
+                            ? error
+                            : new Error(error?.result?.error?.message ?? "the request to Google Drive failed"),
+                    );
+                }
             }, 200);
-        } else {
-            console.log("Making read-only disc");
         }
         return discFor(name, data, flusher, layout);
     }
 
-    async load(fileId, layout) {
+    /**
+     * @param {function(Error): void} onSaveError - called the first time a change cannot be saved
+     */
+    async load(fileId, layout, onSaveError) {
         const meta = (await this.driveClient.files.get({ fileId, fields: FILE_FIELDS })).result;
         const data = (await this.driveClient.files.get({ fileId, alt: "media" })).body;
-        return this.makeDisc(data, meta, layout);
+        return this.makeDisc(data, meta, layout, onSaveError);
     }
 }

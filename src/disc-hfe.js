@@ -2,6 +2,8 @@
 // Translated from beebjit by Chris Evans and expanded by Matt Godbolt.
 
 import { IbmDiscFormat } from "./disc-format.js";
+import { numberRuns } from "./disc.js";
+import { hexbyte } from "./hex.js";
 
 // HFE format constants
 const HfeHeaderV1 = "HXCPICFE";
@@ -13,6 +15,9 @@ const HfeV3OpcodeSetBitrate = 0xf2;
 const HfeV3OpcodeSkipBits = 0xf3;
 const HfeV3OpcodeRand = 0xf4;
 const HfeTrackCountOffset = 9;
+// SETBITRATE's argument is 72 for 250 kbit/s, the BBC's rate; these are as far from it as is believable.
+const MinBitRate = 64;
+const MaxBitRate = 80;
 const HfeBlockSideSize = 256;
 const HfeBlockSize = HfeBlockSideSize * 2;
 const HfeShugartDdFloppyMode = 7;
@@ -92,7 +97,7 @@ export function loadHfe(disc, data, onChange) {
     if (data[8] !== 0) throw new Error("HFE file revision not 0");
     if (data[11] !== 2 && data[11] !== 0) {
         if (data[11] === 0xff) {
-            console.log(`Unknown HFE encoding ${data[11]}, trying anyway`);
+            disc.loadNotes.push({ text: `unknown encoding &${hexbyte(data[11])}, read as FM or MFM`, isOdd: true });
         } else {
             throw new Error(`HFE encoding not ISOIBM_(M)FM_ENCODING: ${data[11]}`);
         }
@@ -106,10 +111,14 @@ export function loadHfe(disc, data, onChange) {
     if (disc.config.expandTo80 && numTracks * 2 <= IbmDiscFormat.tracksPerDisc) {
         expandShift = 1;
         disc.is40Track = true;
-        console.log("Expanding 40 tracks to 80");
     }
-
-    console.log(`HFE v${hfeVersion} loading ${numSides} sides, ${numTracks} tracks`);
+    const spread = expandShift ? " spread over 80" : "";
+    disc.loadNotes.push({
+        text: `HFE v${hfeVersion}, ${numSides} ${numSides === 1 ? "side" : "sides"}, ${numTracks} tracks${spread}`,
+        isOdd: false,
+    });
+    const wildBitRateTracks = new Set();
+    const lateIndexTracks = new Set();
 
     const lutOffset = HfeBlockSize * (data[18] + (data[19] << 8));
     if (lutOffset + HfeBlockSize > data.length) throw new Error("HFE LUT doesn't fit");
@@ -154,9 +163,7 @@ export function loadHfe(disc, data, onChange) {
 
                 if (isSetBitRate) {
                     isSetBitRate = false;
-                    if (byte < 64 || byte > 80) {
-                        console.log(`HFE v3 SETBITRATE wild (72=250kbit) track: ${trackNum} ${byte}`);
-                    }
+                    if (byte < MinBitRate || byte > MaxBitRate) wildBitRateTracks.add(trackNum);
                     continue;
                 } else if (isSkipBits) {
                     isSkipBits = false;
@@ -174,8 +181,7 @@ export function loadHfe(disc, data, onChange) {
                         case HfeV3OpcodeNop:
                             continue; // NB continue
                         case HfeV3OpcodeSetIndex:
-                            if (bytesWritten !== 0)
-                                console.log(`HFEv3 SETINDEX not at byte 0, track ${trackNum}: ${bytesWritten}`);
+                            if (bytesWritten !== 0) lateIndexTracks.add(trackNum);
                             continue; // NB continue
                         case HfeV3OpcodeSetBitrate:
                             isSetBitRate = true;
@@ -206,6 +212,8 @@ export function loadHfe(disc, data, onChange) {
             trackObj.length = bytesWritten;
         }
     }
+    noteTracks(disc, wildBitRateTracks, "a bit rate far from 250 kbit/s");
+    noteTracks(disc, lateIndexTracks, "the index part way round");
 
     if (onChange) {
         disc.addTrackWriteListener((_side, _trackNum, _trackObj) => {
@@ -217,6 +225,12 @@ export function loadHfe(disc, data, onChange) {
     }
 
     return disc;
+}
+
+function noteTracks(disc, trackNums, what) {
+    if (!trackNums.size) return;
+    const tracks = trackNums.size === 1 ? "track" : "tracks";
+    disc.loadNotes.push({ text: `${what} on ${tracks} ${numberRuns([...trackNums])}`, isOdd: true });
 }
 
 /**

@@ -41,7 +41,6 @@ export class BitshiftersArchive {
      */
     async fetch(path) {
         const url = this._baseUrl + path.split("/").map(encodeURIComponent).join("/");
-        console.log("Loading disc from " + url);
         return fetchBytes(url);
     }
 }

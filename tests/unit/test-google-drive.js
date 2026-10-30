@@ -1,13 +1,11 @@
 // @vitest-environment jsdom
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { GoogleDriveLoader } from "../../src/web/google-drive.js";
 import { DiscLayout } from "../../src/disc.js";
 import { ssdImage, teardownDom } from "./helpers.js";
 
 describe("GoogleDriveLoader", () => {
-    beforeEach(() => vi.spyOn(console, "log").mockImplementation(() => {}));
-
     afterEach(teardownDom);
 
     describe("creating a disc", () => {
@@ -33,6 +31,36 @@ describe("GoogleDriveLoader", () => {
             const contiguous = await loader.create("fresh.ssd", ssdImage(fortyTrackSectors), DiscLayout.contiguous);
             expect(contiguous.disc.is40Track).toBe(false);
         });
+
+        it.each([
+            [
+                "Drive's own message",
+                { result: { error: { message: "Insufficient permissions" } } },
+                "Insufficient permissions",
+            ],
+            ["a plain message when Drive gives none", { status: 0 }, "the request to Google Drive failed"],
+            ["an Error as it is", new Error("Network down"), "Network down"],
+        ])(
+            "reports a change Drive will not take once, however many tracks are written, with %s",
+            async (_, rejection, message) => {
+                vi.useFakeTimers();
+                const loader = makeSignedIn();
+                const refused = [];
+                const { disc } = await loader.create(
+                    "fresh.ssd",
+                    ssdImage(fortyTrackSectors),
+                    DiscLayout.contiguous,
+                    (error) => refused.push(error.message),
+                );
+                loader.gapi.client.request.mockRejectedValue(rejection);
+                for (const trackNum of [0, 1]) {
+                    disc.writePulses(false, trackNum, 0, 0);
+                    disc.flushWrites();
+                    await vi.runAllTimersAsync();
+                }
+                expect(refused).toEqual([message]);
+            },
+        );
     });
 
     it("lists every page of disc images, asking each time for the fields the rows read", async () => {

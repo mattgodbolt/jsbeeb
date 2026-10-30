@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
+import * as fs from "node:fs";
 
 import { discFor, guessDiscTypeFromName } from "../../src/fdc.js";
 import { Disc, DiscConfig, DiscLayout, loadSsd } from "../../src/disc.js";
@@ -20,10 +21,6 @@ function ssdDisc(numTracks, is40Track) {
 }
 
 describe("loading a disc image", () => {
-    // Every load says what it made of the image.
-    beforeEach(() => vi.spyOn(globalThis.console, "log").mockImplementation(() => {}));
-    afterEach(() => vi.restoreAllMocks());
-
     it("keeps only the CRC of the image it loaded", () => {
         const image = ssdImage();
         const disc = discFor("test.ssd", image);
@@ -31,13 +28,30 @@ describe("loading a disc image", () => {
         expect(disc.originalImageData).toBeNull();
     });
 
-    it("lays a 40 track image out for a 40 track drive", () => {
-        expect(discFor("test.ssd", ssdImage(400)).is40Track).toBe(true);
+    it("lays a 40 track image out for a 40 track drive, and notes why", () => {
+        const forty = discFor("test.ssd", ssdImage(400));
+        expect(forty.is40Track).toBe(true);
+        expect(forty.loadNotes).toEqual([{ text: expect.stringMatching(/^40 track, as /), isOdd: false }]);
         expect(discFor("test.ssd", ssdImage(800)).is40Track).toBe(false);
     });
 
-    it("does as it is told when a snapshot says how the disc was laid out", () => {
-        expect(discFor("test.ssd", ssdImage(400), null, DiscLayout.contiguous).is40Track).toBe(false);
+    it(
+        "notes what a flux image's surface says of its layout ahead of the image's own notes",
+        { timeout: 30000 },
+        () => {
+            const elite = discFor("elite.hfe", fs.readFileSync("public/discs/elite.hfe"));
+            expect(elite.is40Track).toBe(true);
+            expect(elite.loadNotes.map(({ text }) => text)).toEqual([
+                expect.stringMatching(/^40 track, as \d+ tracks sit at twice the number their sectors claim$/),
+                "HFE v3, 2 sides, 81 tracks",
+            ]);
+        },
+    );
+
+    it("does as it is told when a snapshot says how the disc was laid out, with nothing to note", () => {
+        const told = discFor("test.ssd", ssdImage(400), null, DiscLayout.contiguous);
+        expect(told.is40Track).toBe(false);
+        expect(told.loadNotes).toEqual([]);
         expect(discFor("test.ssd", ssdImage(800), null, DiscLayout.expanded40).is40Track).toBe(true);
     });
 
@@ -55,9 +69,6 @@ describe("loading a disc image", () => {
 });
 
 describe("knowing whether a disc keeps its changes", () => {
-    beforeEach(() => vi.spyOn(globalThis.console, "log").mockImplementation(() => {}));
-    afterEach(() => vi.restoreAllMocks());
-
     const adfsImage = new Uint8Array(80 * 16 * SectorSize);
 
     it.each([

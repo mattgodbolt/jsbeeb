@@ -6,9 +6,12 @@ import { PanelArrangement } from "../../src/web/floating-panel.js";
 import { DiscGeometry } from "../../src/disc-surface.js";
 import { IbmDiscFormat } from "../../src/disc-format.js";
 import { discFor } from "../../src/fdc.js";
+import { corruptSectorData } from "../helpers/disc-builders.js";
 import { domFromIndexHtml, fakeAnimationFrames, ssdImage, teardownDom } from "./helpers.js";
 
 const CanvasSize = 100;
+const OddTrack = 40;
+const OddSector = 5;
 
 const overlayContext = () => ({
     clearRect: vi.fn(),
@@ -138,7 +141,6 @@ describe("DiscVisualiser", () => {
 
     describe("with a disc in the drive", () => {
         beforeEach(() => {
-            vi.spyOn(console, "log").mockImplementation(() => {});
             fdc.drives[0].disc = discFor("elite.ssd", ssdImage());
             fdc.drives[0].spinning = true;
         });
@@ -179,6 +181,59 @@ describe("DiscVisualiser", () => {
             overlay.dispatchEvent(new MouseEvent("dblclick"));
             frames.run();
             expect(status()).not.toContain("x");
+        });
+
+        it("lists what is odd about the side, and zooms in on a finding when it is clicked", () => {
+            const visualiser = make();
+            visualiser.openReport(0);
+            frames.run();
+            const findings = () => [...document.querySelectorAll("#disc-report li")].map((item) => item.textContent);
+            expect(document.getElementById("disc-report").hidden).toBe(false);
+            expect(findings()).toEqual(["Nothing odd on this side."]);
+            const odd = discFor("odd.ssd", ssdImage());
+            corruptSectorData(odd.getTrack(false, OddTrack), OddSector);
+            fdc.drives[0].disc = odd;
+            visualiser.redraw();
+            frames.run();
+            expect(findings()).toEqual([`track ${OddTrack}: sector ${OddSector} with a bad data CRC`]);
+            pumpUntilScanned();
+            document.querySelector("#disc-report button").click();
+            const overlay = document.getElementById("disc-overlay");
+            overlay.dispatchEvent(new MouseEvent("mousemove", { clientX: CanvasSize / 2, clientY: CanvasSize / 2 }));
+            frames.run();
+            expect(status()).toContain("6.0x");
+            expect(document.getElementById("disc-hover-where").textContent).toMatch(
+                new RegExp(`^Track ${OddTrack} · `),
+            );
+            document.getElementById("disc-report-toggle").click();
+            expect(document.getElementById("disc-report").hidden).toBe(true);
+        });
+
+        it("lists the side shown, and lists it again once writes to it have stopped", () => {
+            const now = vi.spyOn(performance, "now").mockReturnValue(1000);
+            const odd = discFor("odd.dsd", ssdImage(800, { length: 2 * 80 * 10 * 256 }));
+            corruptSectorData(odd.getTrack(true, OddTrack), OddSector);
+            fdc.drives[0].disc = odd;
+            const visualiser = make();
+            visualiser.openReport(0);
+            frames.run();
+            const findings = () => [...document.querySelectorAll("#disc-report li")].map((item) => item.textContent);
+            expect(findings()).toEqual(["Nothing odd on this side."]);
+            document.querySelector("[data-side='1']").click();
+            frames.run();
+            expect(findings()).toEqual([`track ${OddTrack}: sector ${OddSector} with a bad data CRC`]);
+
+            const track = odd.getTrack(true, OddTrack);
+            const dataWord = Math.floor(track.findSectors()[OddSector + 1].dataPosBitOffset / 32) + 2;
+            odd.writePulses(true, OddTrack, dataWord, IbmDiscFormat.fmTo2usPulses(0xff, 0x55));
+            odd.flushWrites();
+            frames.run();
+            expect(findings()).toHaveLength(1);
+            now.mockReturnValue(1000 + 1000);
+            frames.run();
+            expect(findings()).toEqual([
+                `track ${OddTrack}: sectors ${OddSector}-${OddSector + 1} with a bad data CRC`,
+            ]);
         });
 
         it("opens zoomed in on the head, wherever it is", () => {

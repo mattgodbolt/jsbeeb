@@ -77,7 +77,6 @@ export class BbcDiscArchive {
      */
     async fetch(path) {
         const url = this._baseUrl + encodeURIComponent(path);
-        console.log("Loading HFE from " + url);
         return fetchBytes(url);
     }
 }

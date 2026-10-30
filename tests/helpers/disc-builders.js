@@ -83,3 +83,10 @@ export function mfmDiscWithSector(options) {
     appendMfmSector(disc.buildTrack(false, 0).appendRepeatMfmByte(0x4e, 60), options).fillMfmByte(0x4e);
     return disc;
 }
+
+/** Changes a byte in a sector's data on a track, so its data CRC no longer matches. */
+export function corruptSectorData(track, sectorNumber) {
+    // Past the address mark, so the sector is still found.
+    const dataWord = Math.floor(track.findSectors()[sectorNumber].dataPosBitOffset / 32) + 2;
+    track.pulses2Us[dataWord] = IbmDiscFormat.fmTo2usPulses(0xff, 0x55);
+}

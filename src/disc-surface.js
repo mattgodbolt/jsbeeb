@@ -98,10 +98,9 @@ const CrcBytes = 2;
  * Pick the sectors out of a track and say what each word of it holds.
  *
  * @param {Track} track
- * @param {function(string): void} [warn] where to send the decoder's complaints
  * @returns {{codes: Uint8Array, sectorNumbers: Int16Array, errors: {firstWord: number, lastWord: number, kind: string, sectorNumber: number}[]}}
  */
-export function trackRegions(track, warn) {
+export function trackRegions(track) {
     const codes = new Uint8Array(track.length);
     const sectorNumbers = new Int16Array(track.length).fill(-1);
     const errors = [];
@@ -117,7 +116,7 @@ export function trackRegions(track, warn) {
         }
     };
 
-    for (const sector of track.findSectors(warn)) {
+    for (const sector of track.findSectors()) {
         const { pulsesPerByte } = sector;
         const noteError = (kind, startBit, endBit) =>
             errors.push({
