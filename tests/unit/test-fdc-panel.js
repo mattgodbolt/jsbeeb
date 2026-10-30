@@ -5,6 +5,7 @@ import { DiscDrive } from "../../src/disc-drive.js";
 import { fake6502 } from "../../src/fake6502.js";
 import { IntelFdc } from "../../src/intel-fdc.js";
 import { Scheduler } from "../../src/scheduler.js";
+import { findModel } from "../../src/models.js";
 import { WdFdc, WdFdcVariant } from "../../src/wd-fdc.js";
 import { FdcPanel } from "../../src/web/fdc-panel.js";
 import { PanelArrangement } from "../../src/web/floating-panel.js";
@@ -19,6 +20,7 @@ const IntelSeek = (0x0a << 2) | IntelSelect0 | 1;
 const IntelReadDriveStatus = (0x0b << 2) | IntelSelect0;
 const IntelUnwiredAddr = 3;
 const IntelWriteSpecialRegister = 0x3a;
+const IntelReadSpecialRegister = (0x0f << 2) | IntelSelect0 | 1;
 const IntelDriveOutRegister = 0x23;
 const IntelLoadHeadOnDrive0 = IntelSelect0 | 0x08;
 const IntelSpecify = 0x35;
@@ -43,6 +45,8 @@ const WdNoSpinUp = 0x08;
 const WdRestore = 0x00;
 const WdSeek = 0x10;
 const WdStepOut = 0x60;
+const MasterControlAddr = 4;
+const MasterFmDrive0 = 0x25;
 const PastAbortCycles = 1000;
 const PastCommandCycles = 4_000_000;
 
@@ -61,8 +65,8 @@ describe("FdcPanel", () => {
         await teardownDom();
     });
 
-    function panelFor(Fdc) {
-        const cpu = fake6502();
+    function panelFor(Fdc, model) {
+        const cpu = fake6502(model);
         const drives = [0, 1].map((id) => new DiscDrive(id, scheduler, cpu.peripheralCyclesPerSecond));
         const fdc =
             Fdc === WdFdc
@@ -143,12 +147,16 @@ describe("FdcPanel", () => {
             Fdc: IntelFdc,
             run: (fdc) => {
                 fdc.write(IntelCommandAddr, IntelReadDriveStatus);
+                fdc.write(IntelCommandAddr, IntelReadSpecialRegister);
+                fdc.write(IntelParamAddr, IntelDriveOutRegister);
                 fdc.write(IntelCommandAddr, IntelReadData);
                 for (const param of [5, 2, OneSectorOf256]) fdc.write(IntelParamAddr, param);
             },
             lines: [
                 "read drive status, drive 0 (head on track 0)  cmd 6c",
-                expect.stringMatching(/^result &[0-9a-f]{2} {2}status \w\w result \w\w$/),
+                "result &81  status 10 result 81",
+                "read special register, drive 0: register &23 (head on track 0)  cmd 7d params 23",
+                "result &40  status 10 result 40",
                 "read data, drive 0: track 5, sector 2, 1 × 256 bytes (head on track 0)  cmd 53 params 05 02 21",
             ],
         },
@@ -267,13 +275,11 @@ describe("FdcPanel", () => {
         expect(console.warn).toHaveBeenCalledWith("8271: write to unwired register: 0003=01");
     });
 
-    it("names the 1772 in its warnings", () => {
-        const cpu = fake6502();
-        const fdc = new WdFdc(cpu, scheduler, undefined, WdFdcVariant.wd1772);
-        fdc.write(WdControlAddr, WdResetOff | WdDrive1);
-        fdc.write(WdCommandAddr, WdReadSector);
-        fdc.write(WdCommandAddr, WdReadSector);
-        expect(console.warn).toHaveBeenCalledWith("WD1772: command &80 ignored while busy with &80");
+    it("logs the control byte a Master wrote, decoded as its latch is wired", () => {
+        const { fdc } = panelFor(WdFdc, findModel("Master"));
+        part("fdc-log-commands").click();
+        fdc.write(MasterControlAddr, MasterFmDrive0);
+        expect(logLines()).toEqual(["control, drive 0, side 0, FM  wrote 25"]);
     });
 
     it("remembers which logs are on for the next visit", async () => {
@@ -304,6 +310,7 @@ describe("FdcPanel", () => {
         fdc.write(IntelCommandAddr, IntelSeek);
         fdc.write(IntelParamAddr, 4);
         expect(shown()).toHaveLength(2);
+        expect(part("fdc-log-copy").hidden).toBe(true);
         const writeText = vi.fn(() => Promise.resolve());
         vi.stubGlobal("navigator", { clipboard: { writeText } });
         part("fdc-log-copy").click();

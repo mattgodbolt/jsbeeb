@@ -400,7 +400,7 @@ function wdLogLine(entry) {
             };
         }
         case "result": {
-            const errors = (WdErrorBits[Math.min(entry.commandType, 2)] ?? [])
+            const errors = WdErrorBits[Math.min(entry.commandType, 2)]
                 .filter(([mask]) => entry.status & mask)
                 .map(([, text]) => text);
             return {
