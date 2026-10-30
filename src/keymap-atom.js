@@ -1,10 +1,10 @@
 import {
     characterBinder,
     detectKeyboardLayout,
-    hostKeyCodes,
     keyCodes,
+    keyMapBuilder,
     PrintableCharacters,
-    userKeymap,
+    stringToKeys,
 } from "./keymap.js";
 
 // ATOM
@@ -167,100 +167,12 @@ export function atomKeyForCharacter(char) {
 }
 
 export function stringToATOMKeys(str) {
-    const array = [];
-    let shiftState = false;
-    let capsLockState = true;
-    for (const char of str) {
-        const needs = atomKeyForCharacter(char);
-        if (!needs) continue;
-
-        if (needs.shift !== shiftState) {
-            array.push(ATOM.SHIFT);
-            shiftState = needs.shift;
-        }
-        if (needs.upperCase !== undefined && needs.upperCase !== capsLockState) {
-            array.push(ATOM.LOCK);
-            capsLockState = needs.upperCase;
-        }
-        array.push(needs.key);
-    }
-
-    if (shiftState) array.push(ATOM.SHIFT);
-    if (!capsLockState) array.push(ATOM.LOCK);
-    return array;
+    return stringToKeys(str, atomKeyForCharacter, ATOM.SHIFT, ATOM.LOCK);
 }
 
 export function getKeyMapAtom(keyLayout) {
     const isUKlayout = detectKeyboardLayout() === "UK";
-    const keys2 = [];
-
-    // shift pressed
-    keys2[true] = {};
-
-    // shift not pressed
-    keys2[false] = {};
-
-    // shiftDown MUST be true or false (not undefined)
-    function doMap(s, colRow, shiftDown) {
-        if (keys2[shiftDown][s] && keys2[shiftDown][s] !== colRow) {
-            console.log(
-                "Warning: duplicate binding for atom key",
-                (shiftDown ? "<SHIFT>" : "") + s,
-                colRow,
-                keys2[shiftDown][s],
-            );
-        }
-        keys2[shiftDown][s] = colRow;
-    }
-
-    // Overriding a default is the point here, so unlike `map` this doesn't warn about the clash.
-    function remap(s, colRow) {
-        keys2[true][s] = colRow;
-        keys2[false][s] = colRow;
-    }
-
-    // shiftDown undefined -> map both
-    function map(s, colRow, shiftDown) {
-        if (!s || !colRow) {
-            console.log("error binding key", s, colRow);
-        }
-
-        if (shiftDown === undefined) {
-            doMap(s, colRow, true);
-            doMap(s, colRow, false);
-        } else {
-            doMap(s, colRow, shiftDown);
-        }
-    }
-
-    map(keyCodes.Q, ATOM.Q);
-    map(keyCodes.W, ATOM.W);
-    map(keyCodes.E, ATOM.E);
-    map(keyCodes.R, ATOM.R);
-    map(keyCodes.T, ATOM.T);
-    map(keyCodes.Y, ATOM.Y);
-    map(keyCodes.U, ATOM.U);
-    map(keyCodes.I, ATOM.I);
-    map(keyCodes.O, ATOM.O);
-    map(keyCodes.P, ATOM.P);
-
-    map(keyCodes.A, ATOM.A);
-    map(keyCodes.S, ATOM.S);
-    map(keyCodes.D, ATOM.D);
-    map(keyCodes.F, ATOM.F);
-    map(keyCodes.G, ATOM.G);
-    map(keyCodes.H, ATOM.H);
-    map(keyCodes.J, ATOM.J);
-    map(keyCodes.K, ATOM.K);
-    map(keyCodes.L, ATOM.L);
-
-    map(keyCodes.Z, ATOM.Z);
-    map(keyCodes.X, ATOM.X);
-    map(keyCodes.C, ATOM.C);
-    map(keyCodes.V, ATOM.V);
-    map(keyCodes.B, ATOM.B);
-    map(keyCodes.N, ATOM.N);
-    map(keyCodes.M, ATOM.M);
+    const { map, finish } = keyMapBuilder(ATOM);
 
     // these keys are in the same place on PC/Mac and ATOM keyboards
     // including shifted characters
@@ -395,12 +307,7 @@ export function getKeyMapAtom(keyLayout) {
         // Z - M normal
     }
 
-    // `KEY.` URL parameters, applied last so they win. See the equivalent in `getKeyMap`.
-    for (const mapping of userKeymap) {
-        for (const code of hostKeyCodes(mapping.native)) remap(code, ATOM[mapping.key]);
-    }
-
-    return keys2;
+    return finish();
 }
 
 /**

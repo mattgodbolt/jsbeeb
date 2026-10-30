@@ -1,6 +1,4 @@
-import { BBC, getKeyMap, ShiftOverride } from "./keymap.js";
-
-export const KeyMatrixSize = 16;
+import { BBC, getKeyMap, WithKeyMatrix } from "./keymap.js";
 
 const ORB = 0x0,
     ORA = 0x1,
@@ -669,23 +667,18 @@ class Via {
     }
 }
 
-export class SysVia extends Via {
+export class SysVia extends WithKeyMatrix(Via) {
     constructor(cpu, scheduler, { video, soundChip, cmos, isMaster, initialLayout, getGamepads } = {}) {
         super(cpu, scheduler, 0x01);
 
         this.IC32 = 0;
         this.capsLockLight = false;
         this.shiftLockLight = false;
-        this.keys = [];
-        for (let i = 0; i < KeyMatrixSize; ++i) {
-            this.keys[i] = new Uint8Array(KeyMatrixSize);
-        }
+        this._initKeyMatrix(BBC.SHIFT, KeyboardColumns);
         // Mouse joystick button state
         this.mouseButton1 = false;
         this.mouseButton2 = false;
         this.keyChanges = 0;
-        this.keyboardEnabled = true;
-        this.shift = new ShiftOverride(BBC.SHIFT);
         this.setKeyLayout(initialLayout);
         this.video = video;
         this.soundChip = soundChip;
@@ -766,88 +759,10 @@ export class SysVia extends Via {
         this.setca1(level);
     }
 
-    clearKeys() {
-        for (let i = 0; i < this.keys.length; ++i) {
-            for (let j = 0; j < this.keys[i].length; ++j) {
-                this.keys[i][j] = false;
-            }
-        }
-        this.shift.clear();
-        this._keysChanged();
-    }
-
-    disableKeyboard() {
-        this.keyboardEnabled = false;
-        this.clearKeys();
-    }
-
-    enableKeyboard() {
-        this.keyboardEnabled = true;
-        this.clearKeys();
-    }
-
-    set(key, val, shiftDown) {
-        const mapping = this.keyMapping(key, shiftDown);
-        if (mapping) this.setMapped(mapping, val);
-    }
-
-    /**
-     * Where a key code lands on the BBC's key matrix under the current layout, as
-     * `[col, row, bbcShiftOverride?]`, or undefined.
-     */
-    keyMapping(key, shiftDown) {
-        return this.keycodeToRowCol[!!shiftDown][key];
-    }
-
-    setMapped(mapping, val) {
-        if (!this.keyboardEnabled) return;
-        this.shift.setMapped(this.keys, mapping, val);
-        this._keysChanged();
-    }
-
-    keyDown(key, shiftDown) {
-        this.set(key, 1, shiftDown);
-    }
-
-    keyUp(key) {
-        // set up for both keymaps
-        // (with and without shift)
-        this.set(key, 0, true);
-        this.set(key, 0, false);
-    }
-
-    keyDownRaw(colrow) {
-        this.keys[colrow[0]][colrow[1]] = 1;
-        this._keysChanged();
-    }
-
-    keyUpRaw(colrow) {
-        this.keys[colrow[0]][colrow[1]] = 0;
-        this._keysChanged();
-    }
-
-    keyToggleRaw(colrow) {
-        this.keys[colrow[0]][colrow[1]] = 1 - this.keys[colrow[0]][colrow[1]];
-        this._keysChanged();
-    }
-
     /** Counted for `machineMoment`. */
     _keysChanged() {
         ++this.keyChanges;
-        this.updateKeys();
-    }
-
-    hasAnyKeyDown() {
-        // 10 for BBC, 13 for Master 128
-        const numCols = 13;
-        for (let i = 0; i < numCols; ++i) {
-            for (let j = 0; j < 8; ++j) {
-                if (this.keys[i][j]) {
-                    return true;
-                }
-            }
-        }
-        return false;
+        super._keysChanged();
     }
 
     updateKeys() {
