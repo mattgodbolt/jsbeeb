@@ -1,5 +1,19 @@
 # Changelog
 
+## [2.15.0](https://github.com/mattgodbolt/jsbeeb/compare/v2.14.0...v2.15.0) (2026-10-30)
+
+
+### Features
+
+* group the Debug menu's panels under CPU, Hardware and Software, each sorted by title ([#1685](https://github.com/mattgodbolt/jsbeeb/issues/1685)) ([47180d0](https://github.com/mattgodbolt/jsbeeb/commit/47180d0084290f2c862ca7d0818c042b66ac0836))
+* special stops: BRK, undocumented opcodes, IRQ and NMI entry, vsync and raster lines ([#1690](https://github.com/mattgodbolt/jsbeeb/issues/1690)) ([7d4c384](https://github.com/mattgodbolt/jsbeeb/commit/7d4c38477af8ff47c9472822e6d8f4f9a888045e))
+* the disc controller panel's log spells out commands and results, logs the drives, and replaces the URL flags ([#1688](https://github.com/mattgodbolt/jsbeeb/issues/1688)) ([0fc95f0](https://github.com/mattgodbolt/jsbeeb/commit/0fc95f0c0a54b71315a7066e9090a6be8c1b7a6e))
+
+
+### Bug Fixes
+
+* close the on-screen keyboard's gap between f and the number on Android ([#1691](https://github.com/mattgodbolt/jsbeeb/issues/1691)) ([2f12f86](https://github.com/mattgodbolt/jsbeeb/commit/2f12f86768e5ed68876b224c2cdd0d0d7a9c69e0))
+
 ## [2.14.0](https://github.com/mattgodbolt/jsbeeb/compare/v2.13.0...v2.14.0) (2026-10-30)
 
 

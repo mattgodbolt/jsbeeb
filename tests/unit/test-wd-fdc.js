@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { afterEach, describe, it, expect, vi } from "vitest";
 
 import { Scheduler } from "../../src/scheduler.js";
 import { WdFdc, WdFdcVariant } from "../../src/wd-fdc.js";
@@ -105,7 +105,7 @@ function makeFdc({
         new DiscDrive(1, scheduler, cpu.peripheralCyclesPerSecond),
     ];
     if (disc) drives[0].setDisc(disc);
-    const fdc = new WdFdc(cpu, scheduler, drives, {}, variant);
+    const fdc = new WdFdc(cpu, scheduler, drives, variant);
     fdc.write(controlRegister, control);
     return { cpu, scheduler, fdc, drives };
 }
@@ -160,6 +160,8 @@ function rotateTrackBits(track, bits) {
 }
 
 describe("WD1770 FDC tests", () => {
+    afterEach(() => vi.restoreAllMocks());
+
     describe("force interrupt", () => {
         it("does not interrupt for &D0", () => {
             const { cpu, fdc } = makeFdc();
@@ -719,6 +721,14 @@ describe("WD1770 FDC tests", () => {
     });
 
     describe("variants", () => {
+        it("a 1772 names itself in its warnings", () => {
+            const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+            const { fdc } = makeFdc({ variant: WdFdcVariant.wd1772 });
+            fdc.write(CommandRegister, ReadSectorCommand);
+            fdc.write(CommandRegister, ReadSectorCommand);
+            expect(warn).toHaveBeenCalledWith("WD1772: command &88 ignored while busy with &80");
+        });
+
         describe("step rate", () => {
             it.each([
                 [WdFdcVariant.wd1770, 0, 6],

@@ -43,11 +43,6 @@ describe("buildEmulationConfig", () => {
         expect(build().tube).toBeNull();
         expect(build({ settings: settings({ coProcessor: true }) }).tube).toBeTruthy();
     });
-
-    it("turns the FDC logging flags on by their presence alone", () => {
-        expect(build().debugFlags).toEqual({ logFdcCommands: false, logFdcStateChanges: false });
-        expect(build({ parsedQuery: { logFdcCommands: "" } }).debugFlags.logFdcCommands).toBe(true);
-    });
 });
 
 describe("Machine", () => {

@@ -4,20 +4,68 @@ import { requireBank } from "./paging.js";
 
 const Actions = ["stop", "log"];
 const AddressSpace = 0x10000;
+const LastAddress = AddressSpace - 1;
+export const BrkOpcode = 0x00;
 const AccessesOfKind = new Map([
     ["execute", ["execute"]],
     ["read", ["read"]],
     ["write", ["write"]],
     ["access", ["read", "write"]],
 ]);
-const Accesses = ["execute", "read", "write"];
+const HookOfAccess = new Map([
+    ["execute", "debugInstruction"],
+    ["read", "debugRead"],
+    ["write", "debugWrite"],
+    ["interrupt", "debugInterrupt"],
+]);
+const Accesses = [...HookOfAccess.keys()];
+
+/**
+ * Makes tests of whether `holds(cpu, entry)` has turned true since the last instruction tested, which the first never
+ * has.
+ */
+function turns(holds) {
+    return () => {
+        let held = null;
+        return (cpu, entry) => {
+            const had = held;
+            held = holds(cpu, entry);
+            return held && had === false;
+        };
+    };
+}
+
+const takenIs = (cpu, entry, address, value, taken) => taken === entry.kind;
+
+/**
+ * The kinds with no address: each acts on the instructions, or the interrupts, its test picks out. `firesOn` makes
+ * a fresh test, as a test that a change has happened keeps what it saw last.
+ */
+const EventKinds = new Map([
+    ["brk", { access: "execute", firesOn: () => (cpu, entry, address, opcode) => opcode === BrkOpcode }],
+    [
+        "undocumented",
+        {
+            access: "execute",
+            firesOn: () => (cpu, entry, address, opcode) => !cpu.disassembler.isDocumentedOpcode(opcode),
+        },
+    ],
+    ["irq", { access: "interrupt", firesOn: () => takenIs }],
+    ["nmi", { access: "interrupt", firesOn: () => takenIs }],
+    ["vsync", { access: "execute", firesOn: turns((cpu) => cpu.video.beamPosition().inVSync) }],
+    ["line", { access: "execute", firesOn: turns((cpu, entry) => cpu.video.beamPosition().line === entry.line) }],
+]);
 
 /**
  * @typedef {object} BreakpointSpec
- * @property {"execute" | "read" | "write" | "access"} kind - access is a read or a write
- * @property {number} start
+ * @property {"execute" | "read" | "write" | "access" | "brk" | "undocumented" | "irq" | "nmi" | "vsync" | "line"} kind -
+ * access is a read or a write. The rest have no address: brk and undocumented act before the CPU runs a BRK or an
+ * undocumented opcode, irq and nmi as the CPU takes one, before the handler's first instruction, and vsync and line
+ * before the first instruction after vsync starts or the beam reaches TV line `line`
+ * @property {number} [start] - for an address kind
  * @property {number} [end] - the last address it covers; `start` if not given
  * @property {number} [bank] - only while this sideways bank is paged in where it is hit
+ * @property {number} [line] - for a line breakpoint, the TV line, as the beam position counts them
  * @property {string} [condition]
  * @property {(address: number, value: number, pc: number) => boolean} [accepts] - a test of its own, after the
  * condition, for an owner whose rule a condition cannot say, such as a watch's
@@ -32,11 +80,13 @@ const Accesses = ["execute", "read", "write"];
 /**
  * @typedef {object} BreakpointHit
  * @property {number} id
- * @property {"execute" | "read" | "write"} access
- * @property {number} address
+ * @property {BreakpointSpec["kind"]} kind
+ * @property {"execute" | "read" | "write" | "interrupt"} access
+ * @property {number} address - for an interrupt, its handler's
  * @property {number} [value] - the byte read or written
  * @property {number} [old] - the byte a write replaced
- * @property {number} pc - the instruction that made the access
+ * @property {number} [line] - a line breakpoint's
+ * @property {number} pc - the instruction that made the access; for an interrupt, the one it returns to
  * @property {"stop" | "log"} action
  * @property {number} hits
  */
@@ -105,6 +155,11 @@ export class Breakpoints {
         this._changed();
     }
 
+    /** Starts each stop waiting for a change afresh, as the machine has jumped to a state it did not run into. */
+    forgetSeen() {
+        for (const entry of this._entries.values()) entry.fires = EventKinds.get(entry.kind)?.firesOn() ?? null;
+    }
+
     resetHits() {
         for (const entry of this._entries.values()) entry.hits = 0;
         this._notify(this._changeListeners);
@@ -139,17 +194,26 @@ export class Breakpoints {
         return entry;
     }
 
-    _spec({ kind, start, end, bank, condition, accepts, hitCount, enabled, action, label, owner, onHit }) {
-        return { kind, start, end, bank, condition, accepts, hitCount, enabled, action, label, owner, onHit };
+    _spec({ kind, start, end, bank, line, condition, accepts, hitCount, enabled, action, label, owner, onHit }) {
+        return { kind, start, end, bank, line, condition, accepts, hitCount, enabled, action, label, owner, onHit };
     }
 
-    _checked({ kind, start, end, bank, condition, accepts, hitCount, enabled, action, label, owner, onHit }) {
-        if (!AccessesOfKind.has(kind)) throw new Error(`Unknown breakpoint type: ${kind}`);
-        end ??= start;
-        requireAddress("start", start);
-        requireAddress("end", end);
-        if (end < start) throw new Error(`Breakpoint end $${hexword(end)} is before its start $${hexword(start)}`);
-        requireBank(bank, this._cpu.model);
+    _checked({ kind, start, end, bank, line, condition, accepts, hitCount, enabled, action, label, owner, onHit }) {
+        const event = EventKinds.get(kind);
+        if (!event && !AccessesOfKind.has(kind)) throw new Error(`Unknown breakpoint type: ${kind}`);
+        if (event) {
+            if (start !== undefined || end !== undefined || bank !== undefined)
+                throw new Error(`A breakpoint of kind ${kind} has no address`);
+        } else {
+            end ??= start;
+            requireAddress("start", start);
+            requireAddress("end", end);
+            if (end < start) throw new Error(`Breakpoint end $${hexword(end)} is before its start $${hexword(start)}`);
+            requireBank(bank, this._cpu.model);
+        }
+        if (kind === "line" && (!Number.isInteger(line) || line < 0))
+            throw new Error(`Line ${line} is not a whole number from 0`);
+        if (kind !== "line" && line !== undefined) throw new Error(`A breakpoint of kind ${kind} has no line`);
         if (condition !== undefined && typeof condition !== "string")
             throw new Error(`Breakpoint condition ${condition} is not text`);
         condition = condition?.trim() || undefined;
@@ -167,6 +231,11 @@ export class Breakpoints {
             start,
             end,
             bank,
+            line,
+            accesses: event ? [event.access] : AccessesOfKind.get(kind),
+            from: start ?? 0,
+            to: end ?? LastAddress,
+            fires: event?.firesOn() ?? null,
             condition,
             test: condition === undefined ? null : compileCondition(condition),
             hitCount,
@@ -190,10 +259,7 @@ export class Breakpoints {
 
     /** Attaches the hook for `access` while an enabled breakpoint needs it, and only then. */
     _watch(access) {
-        const entries = [...this._entries.values()].filter(
-            (entry) => entry.enabled && AccessesOfKind.get(entry.kind).includes(access),
-        );
-        const hook = this._cpu[{ execute: "debugInstruction", read: "debugRead", write: "debugWrite" }[access]];
+        const entries = [...this._entries.values()].filter((entry) => entry.enabled && entry.accesses.includes(access));
         const watching = this._watching[access];
         if (!entries.length) {
             watching?.handler.remove();
@@ -201,12 +267,18 @@ export class Breakpoints {
             return;
         }
         const covered = new Uint8Array(AddressSpace);
-        for (const { start, end } of entries) covered.fill(1, start, end + 1);
-        const handler = watching?.handler ?? hook.add((address, value) => this._check(access, address, value & 0xff));
+        for (const { from, to } of entries) covered.fill(1, from, to + 1);
+        const handler = watching?.handler ?? this._cpu[HookOfAccess.get(access)].add(this._handler(access));
         this._watching[access] = { handler, entries, covered };
     }
 
-    _check(access, address, value) {
+    _handler(access) {
+        if (access === "interrupt") return (taken, returnsTo) => this._check(access, this._cpu.pc, 0, returnsTo, taken);
+        return (address, value) => this._check(access, address, value & 0xff, undefined, undefined);
+    }
+
+    /** `returnsTo` and `taken`, "irq" or "nmi", are an interrupt's. */
+    _check(access, address, value, returnsTo, taken) {
         // A handler earlier in the same dispatch can remove the last breakpoint, detaching this one before its call.
         const watching = this._watching[access];
         if (!watching?.covered[address]) return false;
@@ -215,24 +287,27 @@ export class Breakpoints {
         // An instruction a stop halted before runs on resuming; no execute breakpoint stops it a second time.
         if (access === "execute" && cpu.resumingFromStop) return false;
         const old = access === "write" ? cpu.peekmem(address) : value;
-        const pc = access === "execute" ? address : cpu.getPrevPc(0);
+        const pc = { execute: address, interrupt: returnsTo }[access] ?? cpu.getPrevPc(0);
         let stop = false;
         for (const entry of entries) {
-            if (address < entry.start || address > entry.end) continue;
+            if (address < entry.from || address > entry.to) continue;
+            if (entry.fires && !entry.fires(cpu, entry, address, value, taken)) continue;
             if (entry.bank !== undefined && !cpu.isBankPagedAt(entry.bank, address)) continue;
             if (entry.test && !entry.test(cpu, pc, value, old)) continue;
             if (entry.accepts && !entry.accepts(address, value, pc)) continue;
             if (++entry.hits < entry.hitCount) continue;
             const hit = {
                 id: entry.id,
+                kind: entry.kind,
                 access,
                 address,
                 pc,
                 action: entry.action,
                 hits: entry.hits,
             };
-            if (access !== "execute") hit.value = value;
+            if (access === "read" || access === "write") hit.value = value;
             if (access === "write") hit.old = old;
+            if (entry.line !== undefined) hit.line = entry.line;
             if (entry.action === "stop") stop = true;
             entry.onHit?.(hit);
             this._notify(this._hitListeners, hit);
@@ -241,12 +316,21 @@ export class Breakpoints {
     }
 }
 
+const EventPhrases = new Map([
+    ["brk", () => "BRK"],
+    ["undocumented", () => "undocumented opcode"],
+    ["vsync", () => "vsync"],
+    ["line", (line) => `line ${line}`],
+]);
+
 /** A line describing `hit`, as the console shows a logged one. */
-export function describeHit({ id, access, address, value, old, pc, hits }) {
+export function describeHit({ id, kind, access, address, value, old, pc, line, hits }) {
     const what = {
-        execute: "execute",
-        read: `read $${hexbyte(value)} from`,
-        write: `write $${hexbyte(value)} (was $${hexbyte(old)}) to`,
-    }[access];
-    return `Breakpoint ${id}: ${what} $${hexword(address)} at pc $${hexword(pc)}, hit ${hits}`;
+        execute: () => EventPhrases.get(kind)?.(line) ?? `execute $${hexword(address)}`,
+        read: () => `read $${hexbyte(value)} from $${hexword(address)}`,
+        write: () => `write $${hexbyte(value)} (was $${hexbyte(old)}) to $${hexword(address)}`,
+        interrupt: () => `${kind.toUpperCase()} to $${hexword(address)}`,
+    }[access]();
+    const at = access === "interrupt" ? "from" : "at";
+    return `Breakpoint ${id}: ${what} ${at} pc $${hexword(pc)}, hit ${hits}`;
 }

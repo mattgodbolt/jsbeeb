@@ -7,18 +7,27 @@ import {
     StatusFlag,
     TimerState as IntelTimerState,
 } from "../intel-fdc.js";
-import { Command as WdCommand, Control, State as WdState, Status, TimerState as WdTimerState } from "../wd-fdc.js";
+import {
+    Command as WdCommand,
+    CommandBits as WdCommandBits,
+    Control,
+    State as WdState,
+    Status,
+    TimerState as WdTimerState,
+} from "../wd-fdc.js";
 import { decodedPanel, DecodedRegisters, fixed, lit, register, spelt } from "./decoded-registers.js";
 import { MenuGroup } from "./floating-panel.js";
 import { Centred, StartEdge } from "./panel-layout.js";
 
 const MinPanelSize = { w: 240, h: 160 };
-const MaxLogLines = 500;
+const MaxLogLines = 10000;
+const LogStorageKey = "fdcLog";
 const ResultCodeMask = 0x1e;
 const SectorCountMask = 0x1f;
 const SectorSizeShift = 5;
 const SmallestSectorBytes = 128;
 const IntelParamCount = 5;
+const WdCommandMask = 0xf0;
 const Acronyms = new Set(["id", "crc", "dma", "fm", "mfm"]);
 
 /** An enum's name for a value, as words: `syncingForIdWait` as "syncing for ID wait". */
@@ -186,6 +195,48 @@ const IntelSections = {
     ],
 };
 
+/** The drives a select pattern names, as words to follow a command's name. */
+function drivesNamed(selected) {
+    const drives = selected.flatMap((on, drive) => (on ? [drive] : []));
+    if (!drives.length) return "";
+    return drives.length === 1 ? `, drive ${drives[0]}` : `, drives ${drives.join(" and ")}`;
+}
+
+const headOn = (headTrack) => (headTrack === null ? "" : ` (head on track ${headTrack})`);
+const hexBytes = (values) => values.map(hexbyte).join(" ");
+
+const IntelValueResults = new Set([IntelCommand.readDriveStatus, IntelCommand.readSpecialRegister]);
+
+function intelLogLine(entry) {
+    switch (entry.kind) {
+        case "command": {
+            const { byte, command, select, params, headTrack } = entry;
+            const meanings = (IntelParams.get(command) ?? [])
+                .slice(0, params.length)
+                .flatMap((param, index) => (param ? [param.describe(params[index])] : []));
+            const where = drivesNamed([select & DriveOut.select_0, select & DriveOut.select_1]);
+            return {
+                text: `${spellName(IntelCommand, command)}${where}${meanings.length ? `: ${meanings.join(", ")}` : ""}${headOn(headTrack)}`,
+                raw: `cmd ${hexbyte(byte)}${params.length ? ` params ${hexBytes(params)}` : ""}`,
+            };
+        }
+        case "result": {
+            const { command, status, result } = entry;
+            const deleted = result & Result.flagDeletedData ? ", deleted data" : "";
+            return {
+                text: IntelValueResults.has(command)
+                    ? `result &${hexbyte(result)}`
+                    : `done: ${spellName(ResultCodes, result & ResultCodeMask)}${deleted}`,
+                raw: `status ${hexbyte(status)} result ${hexbyte(result)}`,
+            };
+        }
+        case "state":
+            return { text: `state: ${spellName(IntelState, entry.from)} → ${spellName(IntelState, entry.to)}` };
+        default:
+            return { text: entry.text };
+    }
+}
+
 // ---- The 1770 ----
 
 const WdCommandNames = spellingsOf(WdCommand);
@@ -302,6 +353,81 @@ const WdSections = {
     ],
 };
 
+const WdErrorBits = {
+    1: [
+        [Status.recordNotFound, "seek error"],
+        [Status.crcError, "CRC error"],
+    ],
+    2: [
+        [Status.writeProtected, "write protected"],
+        [Status.recordNotFound, "not found"],
+        [Status.crcError, "CRC error"],
+        [Status.typeIIorIIILostByte, "lost data"],
+    ],
+};
+
+const wdRegisters = ({ track, sector, data }) => `tr ${track} sr ${sector} dr ${data}`;
+
+const wdWhere = (control) =>
+    `${drivesNamed([control & Control.drive0, control & Control.drive1])}, side ${control & Control.side ? 1 : 0}`;
+
+function wdCommandDetails({ byte, track, sector, data, stepRateMs }) {
+    const command = byte & WdCommandMask;
+    const commandType = wdCommandType(command);
+    if (command === WdCommand.forceInterrupt) return [];
+    if (commandType === 1) {
+        const details = command === WdCommand.seek ? [`to track ${data} from ${track}`] : [];
+        if (byte & WdCommandBits.typeIVerify) details.push("verify");
+        return [...details, `${stepRateMs} ms steps`];
+    }
+    if (commandType === 2) {
+        const isWrite = command === WdCommand.writeSector || command === WdCommand.writeSectorMulti;
+        const deleted = isWrite && byte & WdCommandBits.typeIIDeleted ? ["deleted data mark"] : [];
+        return [`track ${track} sector ${sector}`, ...deleted];
+    }
+    return [];
+}
+
+function wdLogLine(entry) {
+    switch (entry.kind) {
+        case "command": {
+            const details = wdCommandDetails(entry);
+            return {
+                text:
+                    `${spellName(WdCommand, entry.byte & WdCommandMask)}${wdWhere(entry.control)}` +
+                    `${details.length ? `: ${details.join(", ")}` : ""}${headOn(entry.headTrack)}`,
+                raw: `cmd ${hexbyte(entry.byte)} ${wdRegisters(entry)}`,
+            };
+        }
+        case "result": {
+            const errors = WdErrorBits[Math.min(entry.commandType, 2)]
+                .filter(([mask]) => entry.status & mask)
+                .map(([, text]) => text);
+            const deleted =
+                entry.commandType > 1 && entry.status & Status.typeIIorIIIDeletedMark ? ", deleted data" : "";
+            return {
+                text: `done: ${errors.length ? errors.join(", ") : "ok"}${deleted}`,
+                raw: `status ${hexbyte(entry.status)}`,
+            };
+        }
+        case "control": {
+            const { value } = entry;
+            const reset = value & Control.reset ? "" : ", held in reset";
+            return {
+                text: `control${wdWhere(value)}, ${value & Control.density ? "FM" : "MFM"}${reset}`,
+                raw: `wrote ${hexbyte(entry.written)}`,
+            };
+        }
+        case "state":
+            return {
+                text: `state: ${spellName(WdState, entry.from)} → ${spellName(WdState, entry.to)}`,
+                raw: wdRegisters(entry),
+            };
+        default:
+            return { text: entry.text };
+    }
+}
+
 // ---- Either ----
 
 const HeadSection = {
@@ -325,10 +451,28 @@ const HeadSection = {
     ],
 };
 
+/** A drive's own events as log lines, for the drive toggle. */
+function driveEvents(drive, driveIndex, log) {
+    const say = (text) => log({ kind: "drive", text: `drive ${driveIndex}: ${text}` });
+    return [
+        ["startSpinning", () => say("motor on")],
+        ["stopSpinning", () => say("motor off")],
+        [
+            "seekStart",
+            ({ steps, stepMs }) =>
+                say(
+                    `stepping ${Math.abs(steps)} ${Math.abs(steps) === 1 ? "track" : "tracks"} ${steps > 0 ? "in" : "out"}, ${stepMs} ms a step`,
+                ),
+        ],
+        ["seekEnd", () => say(`head on track ${drive.logicalTrack}`)],
+        ["headStop", () => say(`head against its stop at track ${drive.logicalTrack}`)],
+    ].map(([type, listener]) => ({ drive, type, listener }));
+}
+
 /**
  * A floating panel showing the disc controller, the 8271 or the 1770, decoded: its command and parameters, where it
- * is in the command, its status and result, the drive lines and the head. It can show the controller's log, and the
- * disc under the head.
+ * is in the command, its status and result, the drive lines and the head. It logs the controller's commands, its state
+ * changes and the drives' events while each is switched on, and the controller's warnings always.
  */
 export class FdcPanel {
     /**
@@ -336,9 +480,11 @@ export class FdcPanel {
      * @param {import("../6502.js").Cpu6502} options.cpu
      * @param {import("./floating-panel.js").PanelArrangement} options.arrangement
      * @param {{zoomToHead: (driveIndex: number) => void}} options.visualiser
+     * @param {(() => Storage) | null} options.storage - where the log's switches are kept between visits, or null
      */
-    constructor({ cpu, arrangement, visualiser }) {
+    constructor({ cpu, arrangement, visualiser, storage }) {
         this._fdc = cpu.fdc;
+        this._storage = storage;
         const { floating, body } = decodedPanel({
             id: "fdc",
             title: "Disc controller",
@@ -364,6 +510,12 @@ export class FdcPanel {
                         title="Log each command the controller is given, with its parameters and result">commands</button>
                     <button type="button" class="decoded-bit fdc-log-states" tabindex="-1"
                         title="Log each change of the controller's state; there are a great many">state changes</button>
+                    <button type="button" class="decoded-bit fdc-log-drives" tabindex="-1"
+                        title="Log the drives' motors starting and stopping, and their heads stepping">drives</button>
+                    <input type="text" class="form-control form-control-sm panel-field fdc-log-filter"
+                        aria-label="Show only the lines containing this" placeholder="filter" />
+                    <button type="button" class="txt-btn fdc-log-copy" tabindex="-1"
+                        title="Copy the lines shown to the clipboard">copy</button>
                     <button type="button" class="txt-btn fdc-log-clear" tabindex="-1">clear</button>
                 </div>
                 <div class="fdc-log"></div>
@@ -371,6 +523,7 @@ export class FdcPanel {
         const part = (className) => body.querySelector(`.${className}`);
         const { chip } = this._fdc.inspect();
         const sections = chip === "8271" ? IntelSections : WdSections;
+        this._logLine = chip === "8271" ? intelLogLine : wdLogLine;
         const [commandSection, ...otherSections] = sections.command;
         this._registers = [
             new DecodedRegisters(part("fdc-registers"), [
@@ -390,33 +543,128 @@ export class FdcPanel {
             this._followingLog =
                 log.scrollTop >= this._followedTo || log.scrollTop + log.clientHeight >= log.scrollHeight - 1;
         });
-        this._fdc.onLog = (line) => this._appendLog(line);
+        this._fdc.onLog = (entry) => this._appendLog(entry);
+
+        this._driveListeners = this._fdc.drives.flatMap((drive, index) =>
+            driveEvents(drive, index, (entry) => this._appendLog(entry)),
+        );
+        this._loggingDrives = false;
         this._logToggles = [
-            { button: part("fdc-log-commands"), flag: "logCommands" },
-            { button: part("fdc-log-states"), flag: "logStateChanges" },
+            {
+                name: "commands",
+                button: part("fdc-log-commands"),
+                isOn: () => this._fdc.logCommands,
+                set: (on) => (this._fdc.logCommands = on),
+            },
+            {
+                name: "states",
+                button: part("fdc-log-states"),
+                isOn: () => this._fdc.logStateChanges,
+                set: (on) => (this._fdc.logStateChanges = on),
+            },
+            {
+                name: "drives",
+                button: part("fdc-log-drives"),
+                isOn: () => this._loggingDrives,
+                set: (on) => this._logDrives(on),
+            },
         ];
-        for (const { button, flag } of this._logToggles)
-            button.addEventListener("click", () => {
-                this._fdc[flag] = !this._fdc[flag];
+        for (const toggle of this._logToggles)
+            toggle.button.addEventListener("click", () => {
+                toggle.set(!toggle.isOn());
                 this._showLogging();
+                this._saveLogging();
             });
+
+        this._filter = "";
+        const filter = part("fdc-log-filter");
+        filter.addEventListener("input", () => {
+            this._filter = filter.value.toLowerCase();
+            for (const line of this._log.children) line.hidden = !this._shows(line);
+        });
+        filter.addEventListener("keydown", (event) => {
+            if (event.key === "Escape") {
+                filter.value = "";
+                filter.dispatchEvent(new Event("input"));
+            }
+            if (event.key === "Enter") filter.blur();
+        });
+        const copy = part("fdc-log-copy");
+        // The clipboard is only there on a secure origin.
+        copy.hidden = !navigator.clipboard;
+        copy.addEventListener("click", () => this._copyLog());
         part("fdc-log-clear").addEventListener("click", () => this._log.replaceChildren());
+        this._restoreLogging();
         this._showLogging();
         this.update();
     }
 
-    _showLogging() {
-        for (const { button, flag } of this._logToggles) {
-            button.classList.toggle("lit", this._fdc[flag]);
-            button.setAttribute("aria-pressed", String(this._fdc[flag]));
+    _logDrives(on) {
+        if (on === this._loggingDrives) return;
+        this._loggingDrives = on;
+        for (const { drive, type, listener } of this._driveListeners) {
+            if (on) drive.addEventListener(type, listener);
+            else drive.removeEventListener(type, listener);
         }
     }
 
-    _appendLog(text) {
+    _showLogging() {
+        for (const { button, isOn } of this._logToggles) {
+            button.classList.toggle("lit", isOn());
+            button.setAttribute("aria-pressed", String(isOn()));
+        }
+    }
+
+    _restoreLogging() {
+        if (!this._storage) return;
+        let saved;
+        try {
+            saved = JSON.parse(this._storage().getItem(LogStorageKey) ?? "null");
+        } catch (error) {
+            console.warn(`Could not read the disc controller's log switches: ${error}`);
+            return;
+        }
+        for (const { name, set } of this._logToggles) set(saved?.[name] === true);
+    }
+
+    _saveLogging() {
+        if (!this._storage) return;
+        const saved = Object.fromEntries(this._logToggles.map(({ name, isOn }) => [name, isOn()]));
+        try {
+            this._storage().setItem(LogStorageKey, JSON.stringify(saved));
+        } catch (error) {
+            console.warn(`Could not save the disc controller's log switches: ${error}`);
+        }
+    }
+
+    _shows(line) {
+        return !this._filter || line.textContent.toLowerCase().includes(this._filter);
+    }
+
+    /** @param {import("../fdc.js").FdcLogEntry | {kind: "drive", text: string}} entry */
+    _appendLog(entry) {
+        const { text, raw } = this._logLine(entry);
+        const isWarning = entry.kind === "warning";
         const line = document.createElement("div");
-        line.textContent = text;
+        line.textContent = isWarning ? `warning: ${text}` : text;
+        if (raw) {
+            const rawPart = document.createElement("span");
+            rawPart.className = "fdc-log-raw";
+            rawPart.textContent = raw;
+            line.append("  ", rawPart);
+        }
+        // console.log(line.textContent);
+        line.classList.toggle("fdc-log-warning", isWarning);
+        line.hidden = !this._shows(line);
         this._log.append(line);
         if (this._log.childElementCount > MaxLogLines) this._log.firstElementChild.remove();
+    }
+
+    _copyLog() {
+        const shown = [...this._log.children].filter((line) => !line.hidden).map((line) => line.textContent);
+        navigator.clipboard
+            .writeText(shown.join("\n"))
+            .catch((error) => console.warn(`Could not copy the disc controller's log: ${error}`));
     }
 
     update() {

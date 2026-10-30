@@ -32,7 +32,7 @@ const FB_WIDTH = 1024;
 const FB_HEIGHT = 625;
 
 export const MaxLoggedHits = 10000;
-const BreakpointUpdateFields = ["bank", "end", "condition", "hitCount", "action", "enabled"];
+const BreakpointUpdateFields = ["bank", "end", "line", "condition", "hitCount", "action", "enabled"];
 
 // Bit X of ACCCON: shadow RAM in place of main at &3000 to &7FFF.
 const AccconShadowBit = 4;
@@ -466,24 +466,27 @@ export class MachineSession {
     /**
      * Add a persistent breakpoint, one of the processor's `breakpoints`, which stays until removed and, unless it
      * logs, stops the run it fires in. Returns the breakpoint id.
-     * @param {"execute"|"read"|"write"|"access"} type - access is a read or a write
-     * @param {number} address
+     * @param {"execute"|"read"|"write"|"access"|"brk"|"undocumented"|"irq"|"nmi"|"vsync"|"line"} type - access is a
+     *     read or a write; the rest have no address, as src/breakpoints.js describes
+     * @param {number | undefined} address
      * @param {Object} [opts]
      * @param {number} [opts.bank] only break while this sideways bank is paged in where it is hit (on a Master,
      *     not while ANDY is paged over &8000 to &8FFF)
      * @param {number} [opts.end] the last address it covers, for a range from `address`
+     * @param {number} [opts.line] the TV line a line breakpoint stops at
      * @param {string} [opts.condition] as src/conditions.js describes, e.g. "A = &0D AND ?&70 <> 0"
      * @param {number} [opts.hitCount] act on this hit and every one after
      * @param {"stop"|"log"} [opts.action] log records each hit for drainBreakpointLog() and runs on
      * @param {boolean} [opts.enabled]
      * @returns {number} breakpoint id
      */
-    addBreakpoint(type, address, { bank, end, condition, hitCount, action, enabled } = {}) {
+    addBreakpoint(type, address, { bank, end, line, condition, hitCount, action, enabled } = {}) {
         const id = this._breakpoints.add({
             kind: type,
             start: address,
             end,
             bank,
+            line,
             condition,
             hitCount,
             action,
@@ -502,8 +505,8 @@ export class MachineSession {
     /**
      * Change the fields `changes` gives of breakpoint `id`, as addBreakpoint's options name them.
      * @param {number} id
-     * @param {{bank?: number, end?: number, condition?: string, hitCount?: number, action?: "stop"|"log",
-     *     enabled?: boolean}} changes
+     * @param {{bank?: number, end?: number, line?: number, condition?: string, hitCount?: number,
+     *     action?: "stop"|"log", enabled?: boolean}} changes
      */
     updateBreakpoint(id, changes) {
         this._requireOwnBreakpoint(id);
@@ -514,8 +517,9 @@ export class MachineSession {
     /** This session's breakpoints, with how often each has been hit. */
     listBreakpoints() {
         return [...this._breakpointHits.keys()].map((id) => {
-            const { kind, start, end, bank, condition, hitCount, action, enabled, hits } = this._breakpoints.get(id);
-            return { id, type: kind, address: start, end, bank, condition, hitCount, action, enabled, hits };
+            const { kind, start, end, bank, line, condition, hitCount, action, enabled, hits } =
+                this._breakpoints.get(id);
+            return { id, type: kind, address: start, end, bank, line, condition, hitCount, action, enabled, hits };
         });
     }
 
@@ -577,7 +581,8 @@ export class MachineSession {
 
     /**
      * Return the first breakpoint that stopped the machine since the last reset, or null: its id, type and the
-     * address hit, its bank if it has one, and the byte read or written.
+     * address hit (an interrupt's handler, or the instruction for a breakpoint with no address), its bank if it has
+     * one, and the byte read or written.
      */
     hitBreakpoint() {
         for (const [id, hit] of this._breakpointHits) {
