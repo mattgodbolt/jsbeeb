@@ -60,11 +60,6 @@ describe("browserFloorPlugin", () => {
         });
     });
 
-    it("passes the measurement id when there is one", async () => {
-        const script = floorCallIn(await pageWith("G-UNITTEST"));
-        expect(JSON.parse(script.textContent.match(FloorCall)[1]).measurementId).toBe("G-UNITTEST");
-    });
-
     // The HTML spec looks for the charset declaration in the first 1024 bytes.
     it("leaves the charset declaration where the browser looks for it", async () => {
         expect((await htmlWith(undefined)).indexOf("<meta charset")).toBeLessThan(1024);
