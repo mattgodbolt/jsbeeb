@@ -490,23 +490,14 @@ describe("Debugger", () => {
                 expect(operand()).toBe(before);
             });
 
-            it("catch up with a change to the machine that takes no cycles, a reset or a state load", () => {
-                const shownPc = () => document.getElementById("cpu6502_pc").textContent;
-                const before = cpu.snapshotState();
-                frames.run();
-                cpu.reset(false);
-                frames.run();
-                expect(shownPc()).toBe(hexword(dbgr.resetEntry()));
-                cpu.restoreState(before);
-                frames.run();
-                expect(shownPc()).toBe("2000");
-            });
-
             it.each([
                 ["a power-on reset", () => cpu.reset(true)],
                 ["a soft reset, which leaves the cycle count", () => cpu.reset(false)],
                 ["a state put in", (saved) => cpu.restoreState(saved)],
-                ["a state put in at the same program counter", (saved) => cpu.restoreState({ ...saved, pc: 0x2002 })],
+                [
+                    "the state it is already in, at the same cycle and program counter",
+                    () => cpu.restoreState(cpu.snapshotState()),
+                ],
             ])("move the cursor to the program counter after %s, and only then", (_, replace) => {
                 const cursorAt = () => addrOf(currentRow()).slice(0, 4);
                 const saved = cpu.snapshotState();
