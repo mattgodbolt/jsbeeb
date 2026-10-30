@@ -1177,6 +1177,11 @@ export class Debugger {
         }, false);
     }
 
+    /** Runs the machine, from the debugger, until `stopsHere()` holds before an instruction; see runTo. */
+    runUntil(stopsHere) {
+        this._fromDebugger(() => this.runTo(stopsHere, false));
+    }
+
     runToCursor() {
         const target = this._disassembly.cursor;
         this.runTo(() => this.cpu.pc === target, target === this.resetEntry());
