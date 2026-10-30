@@ -26,7 +26,6 @@ const SpecDefaults = {
     userPort: NullUserPort,
     printerPort: null,
     getGamepads: () => [],
-    debugFlags: { logFdcCommands: false, logFdcStateChanges: false },
 };
 
 /**
@@ -44,7 +43,6 @@ export function machineSpec(overrides = {}) {
         fittedRoms: Object.freeze([...(given.fittedRoms ?? SpecDefaults.fittedRoms)]),
         bankRoms: Object.freeze([...(given.bankRoms ?? SpecDefaults.bankRoms)]),
         extraRoms: Object.freeze([...(given.extraRoms ?? SpecDefaults.extraRoms)]),
-        debugFlags: Object.freeze({ ...SpecDefaults.debugFlags, ...given.debugFlags }),
     });
 }
 

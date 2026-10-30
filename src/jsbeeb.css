@@ -1315,6 +1315,32 @@ button.decoded-bit:not(.lit) {
   grid-column: 1 / -1;
 }
 
+.fdc-log-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 0;
+}
+
+.fdc-log-heading .fdc-log-filter {
+  flex: 1 1 8em;
+  min-width: 6em;
+  max-width: 20em;
+  min-height: 0;
+  margin: 0 6px 2px;
+  padding: 0 4px;
+  font: inherit;
+  line-height: 18px;
+}
+
+.fdc-log-raw {
+  color: #777777;
+}
+
+.fdc-log-warning {
+  color: #f0c060;
+}
+
 .fdc-log {
   /* Anchoring would scroll the log back by every line dropped from its top, as if the reader had. */
   overflow-anchor: none;

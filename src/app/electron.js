@@ -32,7 +32,9 @@ function init(args) {
 
     // The app's Debug menu lists the same panels as the page's, which the app has no navbar to show.
     const sendPanels = () =>
-        api.setPanels(panels.listed().map(({ id, title, isOpen }) => ({ id, title, open: isOpen })));
+        api.setPanels(
+            panels.listed().map(({ id, title, menuGroup, isOpen }) => ({ id, title, menuGroup, open: isOpen })),
+        );
     sendPanels();
     panels.addEventListener("change", sendPanels);
     api.onTogglePanel(({ id }) =>

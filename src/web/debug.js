@@ -6,7 +6,7 @@ import { noteFeature } from "./analytics.js";
 import { toast } from "./toast.js";
 import { WatchPanel } from "./watch-panel.js";
 import { RunMode } from "./emulation-loop.js";
-import { DebugGroup, FloatingPanel } from "./floating-panel.js";
+import { DebugGroup, FloatingPanel, MenuGroup } from "./floating-panel.js";
 import { EndEdge, Gap, StartEdge } from "./panel-layout.js";
 import { keyLine } from "./panel-keys.js";
 import { cycleCount } from "../lockstep.js";
@@ -705,6 +705,7 @@ export class Debugger {
             panel,
             id: own.id,
             title: own.title,
+            menuGroup: MenuGroup.cpu,
             group: DebugGroup,
             place: () => ({ ...own.place, w: this._columnWidth(own.side) }),
             minSize: own.minSize,

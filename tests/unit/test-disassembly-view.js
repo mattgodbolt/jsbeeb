@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DisassemblyView } from "../../src/web/disassembly-view.js";
 import { PagingOverride } from "../../src/web/paging-override.js";
 import { SidewaysStart } from "../../src/paging.js";
-import { FloatingPanel, PanelArrangement } from "../../src/web/floating-panel.js";
+import { FloatingPanel, MenuGroup, PanelArrangement } from "../../src/web/floating-panel.js";
 import { PanelKeys } from "../../src/web/panel-keys.js";
 import { StartEdge } from "../../src/web/panel-layout.js";
 import { NoNames } from "../../src/symbol-names.js";
@@ -45,6 +45,7 @@ describe("DisassemblyView", () => {
             panel,
             id: "disassembly",
             title: "Disassembly",
+            menuGroup: MenuGroup.cpu,
             group: null,
             place: () => ({ x: StartEdge, y: StartEdge }),
             minSize: { w: 100, h: 50 },

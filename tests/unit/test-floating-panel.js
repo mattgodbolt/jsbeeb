@@ -1,9 +1,15 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { FloatingPanel, navbarHeightOf, PanelArrangement, panelShell } from "../../src/web/floating-panel.js";
+import {
+    FloatingPanel,
+    MenuGroup,
+    navbarHeightOf,
+    PanelArrangement,
+    panelShell,
+} from "../../src/web/floating-panel.js";
 import { EndEdge, Gap, overlaps, StartEdge } from "../../src/web/panel-layout.js";
-import { fakeAnimationFrames, sentEvents, teardownDom } from "./helpers.js";
+import { bareFloatingPanel, fakeAnimationFrames, sentEvents, teardownDom } from "./helpers.js";
 
 const NavbarHeight = 50;
 const HeaderHeight = 30;
@@ -54,6 +60,7 @@ describe("FloatingPanel", () => {
             panel,
             id,
             title: reopens ? id : null,
+            menuGroup: reopens ? MenuGroup.cpu : null,
             group: null,
             place: () => place,
             minSize: { w: 120, h: 60 },
@@ -408,11 +415,18 @@ describe("FloatingPanel", () => {
             expect(changed).toEqual([floating, floating]);
         });
 
-        it("lists the panels with a title, in the registry's order", () => {
-            media();
-            disc();
-            watches();
-            expect(arrangement.listed().map((floating) => floating.id)).toEqual(["watches", "disc"]);
+        it("lists the panels with a title by menu group, and by title within each", () => {
+            bareFloatingPanel(arrangement, "basic", "BASIC", MenuGroup.software);
+            bareFloatingPanel(arrangement, "watches", "Watches", MenuGroup.cpu);
+            bareFloatingPanel(arrangement, "media", null, null);
+            bareFloatingPanel(arrangement, "sysvia", "System VIA", MenuGroup.hardware);
+            bareFloatingPanel(arrangement, "breakpoints", "Breakpoints", MenuGroup.cpu);
+            expect(arrangement.listed().map((floating) => floating.id)).toEqual([
+                "breakpoints",
+                "watches",
+                "sysvia",
+                "basic",
+            ]);
         });
     });
 
@@ -512,6 +526,7 @@ describe("FloatingPanel", () => {
                 panel,
                 id,
                 title: `The ${id}`,
+                menuGroup: MenuGroup.hardware,
                 group,
                 place: () => ({ x: StartEdge, y: StartEdge }),
                 minSize: { w: 120, h: 60 },

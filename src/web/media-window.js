@@ -116,6 +116,7 @@ export class MediaWindow {
             panel: this.panel,
             id: "media",
             title: null,
+            menuGroup: null,
             group: null,
             place: () => ({ x: Centred, y: EndEdge }),
             minSize: MinPanelSize,

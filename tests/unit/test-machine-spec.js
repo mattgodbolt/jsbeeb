@@ -30,7 +30,6 @@ describe("machineSpec", () => {
         expect(spec.tube).toBeNull();
         expect(spec.extraRoms).toEqual([]);
         expect(spec.userPort.read()).toBe(0xff);
-        expect(spec.debugFlags).toEqual({ logFdcCommands: false, logFdcStateChanges: false });
     });
 
     it("takes what it is given and ignores an undefined override", () => {
@@ -49,6 +48,5 @@ describe("machineSpec", () => {
         const spec = machineSpec();
         expect(Object.isFrozen(spec)).toBe(true);
         expect(Object.isFrozen(spec.extraRoms)).toBe(true);
-        expect(Object.isFrozen(spec.debugFlags)).toBe(true);
     });
 });

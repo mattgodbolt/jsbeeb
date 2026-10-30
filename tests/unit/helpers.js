@@ -201,8 +201,8 @@ export async function teardownDom() {
     window.sessionStorage.clear();
 }
 
-/** A FloatingPanel on a bare element of its own, offered in menus as `title` (or not, for null). */
-export function bareFloatingPanel(arrangement, id, title) {
+/** A FloatingPanel on a bare element of its own, offered in menus as `title` under `menuGroup` (or not, for null). */
+export function bareFloatingPanel(arrangement, id, title, menuGroup) {
     document.body.insertAdjacentHTML(
         "beforeend",
         `<div id="${id}" hidden><div class="panel-header"><button class="panel-close"></button></div></div>`,
@@ -212,6 +212,7 @@ export function bareFloatingPanel(arrangement, id, title) {
         panel: element,
         id,
         title,
+        menuGroup,
         group: null,
         place: () => ({ x: StartEdge, y: StartEdge }),
         minSize: { w: 100, h: 50 },

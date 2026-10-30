@@ -136,7 +136,7 @@ function sendAction(actionId) {
     };
 }
 
-/** The Debug menu: into and out of the debugger, and every panel the page lists, ticked while open. */
+/** The Debug menu: into and out of the debugger, and every panel the page lists under its group, ticked while open. */
 function debugMenu(panels) {
     return {
         label: "Debug",
@@ -153,13 +153,17 @@ function debugMenu(panels) {
                 ...(!isMac && { accelerator: "Alt+D", registerAccelerator: false }),
                 click: sendAction("toggle-debug-panels"),
             },
-            { type: "separator" },
-            ...panels.map(({ id, title, open }) => ({
-                label: title,
-                type: "checkbox",
-                checked: open,
-                click: (_, browserWindow) => browserWindow.webContents.send("toggle-panel", { id }),
-            })),
+            ...panels.flatMap(({ id, title, menuGroup, open }, index) => [
+                ...(menuGroup === panels[index - 1]?.menuGroup
+                    ? []
+                    : [{ type: "separator" }, { label: menuGroup, enabled: false }]),
+                {
+                    label: title,
+                    type: "checkbox",
+                    checked: open,
+                    click: (_, browserWindow) => browserWindow.webContents.send("toggle-panel", { id }),
+                },
+            ]),
         ],
     };
 }

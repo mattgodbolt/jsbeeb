@@ -1,6 +1,6 @@
 import { hexword } from "../hex.js";
 import { formatWatch, parseCondition, WatchFormats, writeStops } from "../watches.js";
-import { FloatingPanel } from "./floating-panel.js";
+import { FloatingPanel, MenuGroup } from "./floating-panel.js";
 import { StartEdge } from "./panel-layout.js";
 import { placePopup, popupBehaviour, textButton } from "./dom-utils.js";
 
@@ -57,6 +57,7 @@ export class WatchPanel {
             panel: this.panel,
             id: "watches",
             title: "Watches",
+            menuGroup: MenuGroup.cpu,
             group: null,
             place: () => ({ x: StartEdge, y: StartEdge }),
             minSize: MinPanelSize,

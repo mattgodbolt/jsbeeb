@@ -116,9 +116,11 @@ export class Beeb {
     /**
      * Held, then let go, long enough for the OS's scans of the matrix to see both. Timed from when this page's own
      * matrix changes: in a shared session a key reaches every machine at the cycle the one running the session
-     * applied it, so that is the clock the hold is measured on.
+     * applied it, so that is the clock the hold is measured on. The hold has no ceiling, since the machine runs on
+     * until the release arrives, so auto-repeat is turned off first or a slow browser types the key twice.
      */
     async pressKey(key) {
+        await this.page.evaluate((address) => window.processor.writemem(address, 0), AutoRepeatDelayAddress);
         await this.page.keyboard.down(key);
         await this._keyScans(true);
         await this.page.keyboard.up(key);
@@ -142,10 +144,6 @@ export class Beeb {
     async togglePanel(id) {
         await this.page.click("#navbarDebug");
         await this.page.click(`#debug-menu [data-panel="${id}"]`);
-    }
-
-    disableAutoRepeat() {
-        return this.page.evaluate((address) => window.processor.writemem(address, 0), AutoRepeatDelayAddress);
     }
 
     drive0() {

@@ -28,8 +28,6 @@ test("a paused machine hosts from the More menu, and a guest joins by the pasted
     test.setTimeout(SessionTestTimeoutMs);
     await beeb.open("?hasVideoNula");
     await beeb.expectScreenText("BASIC");
-    // Before the guest joins, so its copy of the machine has it too.
-    await beeb.disableAutoRepeat();
     await typeLine(beeb, "A%=4321");
     const hostUrl = beeb.page.url();
     await beeb.page.click("#debug-pause");
