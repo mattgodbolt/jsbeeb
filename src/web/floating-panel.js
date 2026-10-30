@@ -255,12 +255,12 @@ export class PanelArrangement extends EventTarget {
         }
     }
 
-    /** Opens again the panels that were open when the page was last left, of those that reopen. */
+    /** Opens again the panels that were open when the page was last left, of those offered in menus of panels. */
     reopen() {
         const layout = this._read();
         for (const id of layout.order) {
             const floating = this._stack.find((other) => other.id === id);
-            if (floating?.reopens && layout.panels[id]?.open) floating.open();
+            if (floating?.listed && layout.panels[id]?.open) floating.open();
         }
     }
 
@@ -468,15 +468,15 @@ export class PanelArrangement extends EventTarget {
 }
 
 /**
- * The frame of a panel whose content is built in code, added to the page hidden: a header with its
- * title and a close button, as FloatingPanel finds them, and an empty body.
- * @param {object} options
+ * A FloatingPanel whose content is built in code, added to the page hidden: a header with its
+ * title and a close button, and an empty body.
+ * @param {object} options the FloatingPanel's, less `panel`
  * @param {string} options.id the panel's, of panel-layout.js's PanelIds; the element's is `<id>-panel`
  * @param {string} options.title
  * @param {string} options.feature what analytics calls it
- * @returns {{panel: HTMLElement, body: HTMLElement}}
+ * @returns {{floating: FloatingPanel, body: HTMLElement}}
  */
-export function panelShell({ id, title, feature }) {
+export function panelShell({ id, title, feature, menuGroup, group, place, minSize, arrangement }) {
     const panel = document.createElement("div");
     panel.id = `${id}-panel`;
     panel.dataset.feature = feature;
@@ -497,7 +497,8 @@ export function panelShell({ id, title, feature }) {
     body.className = "panel-body";
     panel.append(header, body);
     document.body.append(panel);
-    return { panel, body };
+    const floating = new FloatingPanel({ panel, id, title, menuGroup, group, place, minSize, arrangement });
+    return { floating, body };
 }
 
 /**
@@ -514,17 +515,17 @@ export class FloatingPanel extends EventTarget {
      * @param {object} options
      * @param {HTMLElement} options.panel
      * @param {string} options.id one of panel-layout.js's PanelIds, under which its place is saved
-     * @param {string | null} options.title what a menu of panels calls it, or null to stay out of such menus
+     * @param {string | null} options.title what a menu of panels calls it, or null to stay out of such menus;
+     * one in such menus opens again on reload if it was open
      * @param {string | null} options.menuGroup the MenuGroup it is listed under, null when its title is
      * @param {string | null} options.group the panels it is shown and hidden with, such as the debugger's
      * ("debug"), or null
      * @param {function(): {x: object, y: object, w?: number}} options.place where it goes until the user
      * arranges it, asked afresh each time it is laid out
      * @param {{w: number, h: number}} options.minSize
-     * @param {boolean} options.reopens whether it opens again on reload if it was open
      * @param {PanelArrangement} options.arrangement
      */
-    constructor({ panel, id, title, menuGroup, group, place, minSize, reopens, arrangement }) {
+    constructor({ panel, id, title, menuGroup, group, place, minSize, arrangement }) {
         super();
         this.panel = panel;
         this.header = panel.querySelector(".panel-header");
@@ -534,7 +535,6 @@ export class FloatingPanel extends EventTarget {
         this.group = group;
         this.place = place;
         this.minSize = minSize;
-        this.reopens = reopens;
         this.isOpen = false;
         this._arrangement = arrangement;
         panel.classList.add("floating-panel");
@@ -558,6 +558,17 @@ export class FloatingPanel extends EventTarget {
     /** Whether it offers itself in menus of panels. */
     get listed() {
         return this.title !== null;
+    }
+
+    /**
+     * Has `draw` called as it opens, then once a frame while it is open, as `PanelArrangement.refreshing` does.
+     * @param {function(): void} draw
+     * @returns {PanelRefresh}
+     */
+    whileOpen(draw) {
+        const refresh = this._arrangement.refreshing(() => this.isOpen, draw);
+        this.addEventListener("open", () => refresh.drawNow());
+        return refresh;
     }
 
     /** Whether it can be moved: only while its header is styled as a drag handle, with the move cursor. */

@@ -1,5 +1,4 @@
 import { decodedPanel, DecodedRegisters, lit, namedBits, register, spelt } from "./decoded-registers.js";
-import { MenuGroup } from "./floating-panel.js";
 import { Centred, StartEdge } from "./panel-layout.js";
 import { Video } from "../video.js";
 
@@ -286,10 +285,9 @@ export class VideoUlaPanel {
         this._video = cpu.video;
         this._hasNula = this._video.ula.hasVideoNula;
         this._showEntries = false;
-        const { floating, body } = decodedPanel({
+        const { floating, body, part } = decodedPanel({
             id: "videoula",
             title: "Video ULA",
-            menuGroup: MenuGroup.hardware,
             feature: "video_ula",
             place: () => ({ x: Centred, y: StartEdge }),
             minSize: MinPanelSize,
@@ -307,7 +305,6 @@ export class VideoUlaPanel {
                 <div class="videoula-palette videoula-ula-palette"></div>
             </div>
             ${this._hasNula ? NulaColumn : ""}`;
-        const part = (className) => body.querySelector(`.${className}`);
         this._control = new DecodedRegisters(part("videoula-control"), [ControlSection]);
         this._ulaPalette = new Swatches(part("videoula-ula-palette"));
         this._ulaHeading = part("videoula-ula-heading");

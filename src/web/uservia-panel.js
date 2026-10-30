@@ -1,6 +1,5 @@
 import { hexbyte } from "../hex.js";
 import { decodedPanel, DecodedRegisters, fixed, lit } from "./decoded-registers.js";
-import { MenuGroup } from "./floating-panel.js";
 import { Centred, StartEdge } from "./panel-layout.js";
 import { controlSection, portsSection, TimersSection, viaState } from "./via-registers.js";
 
@@ -62,10 +61,9 @@ export class UserViaPanel {
      */
     constructor({ cpu, arrangement }) {
         this._via = cpu.uservia;
-        const { floating, body } = decodedPanel({
+        const { floating, body, part } = decodedPanel({
             id: "uservia",
             title: "User VIA",
-            menuGroup: MenuGroup.hardware,
             feature: "user_via",
             place: () => ({ x: Centred, y: StartEdge }),
             minSize: MinPanelSize,
@@ -75,8 +73,8 @@ export class UserViaPanel {
         this.floating = floating;
         body.innerHTML = `<div class="uservia-ports"></div><div class="uservia-control"></div>`;
         this._registers = [
-            new DecodedRegisters(body.querySelector(".uservia-ports"), [Sections.ports, TimersSection]),
-            new DecodedRegisters(body.querySelector(".uservia-control"), [Sections.control]),
+            new DecodedRegisters(part("uservia-ports"), [Sections.ports, TimersSection]),
+            new DecodedRegisters(part("uservia-control"), [Sections.control]),
         ];
         this.update();
     }

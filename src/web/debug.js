@@ -711,7 +711,6 @@ export class Debugger {
             group: DebugGroup,
             place: () => ({ ...own.place, w: this._columnWidth(own.side) }),
             minSize: own.minSize,
-            reopens: true,
             arrangement: this._arrangement,
         });
         floating.addEventListener("open", () => {

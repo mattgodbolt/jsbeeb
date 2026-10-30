@@ -77,7 +77,7 @@ describe("DiscVisualiser", () => {
     describe("the panel", () => {
         it("opens and closes from its button", () => {
             const visualiser = make();
-            visualiser.toggle();
+            visualiser.floating.toggle();
             expect(panel().hidden).toBe(false);
             expect(status()).toBe("Drive 0: no disc");
             document.getElementById("disc-close").click();
@@ -86,14 +86,14 @@ describe("DiscVisualiser", () => {
 
         it("stops animating once closed", () => {
             const visualiser = make();
-            visualiser.toggle();
+            visualiser.floating.toggle();
             frames.run();
             document.getElementById("disc-close").click();
             expect(frames.pending).toBe(0);
         });
 
         it("redraws its surface at the size the canvas is resized to, while open", () => {
-            make().open();
+            make().floating.open();
             const surface = document.getElementById("disc-surface");
             expect(resizeObserved.element).toBe(surface);
             Object.defineProperty(surface, "clientWidth", { value: 2 * CanvasSize, configurable: true });
@@ -126,7 +126,7 @@ describe("DiscVisualiser", () => {
 
         it("marks the drive, side and view in use once open", () => {
             const visualiser = make();
-            visualiser.toggle();
+            visualiser.floating.toggle();
             const active = [...panel().querySelectorAll(".active")];
             expect(active.map((button) => button.dataset)).toEqual([
                 expect.objectContaining({ drive: "0" }),
@@ -147,7 +147,7 @@ describe("DiscVisualiser", () => {
 
         it("scans the surface, then names the disc and reports the head", () => {
             const visualiser = make();
-            visualiser.toggle();
+            visualiser.floating.toggle();
             pumpUntilScanned();
             expect(status()).toBe("spinning · head track 0 · 0.0 ms");
             expect(document.getElementById("disc-name").textContent).toBe("elite.ssd");
@@ -156,7 +156,7 @@ describe("DiscVisualiser", () => {
 
         it("reads the surface under the pointer", () => {
             const visualiser = make();
-            visualiser.toggle();
+            visualiser.floating.toggle();
             pumpUntilScanned();
             const geometry = new DiscGeometry(CanvasSize, IbmDiscFormat.tracksPerDisc);
             const { x, y } = geometry.pointAt(0, 0.25);
@@ -172,7 +172,7 @@ describe("DiscVisualiser", () => {
 
         it("zooms with the wheel and says so, and a double click resets", () => {
             const visualiser = make();
-            visualiser.toggle();
+            visualiser.floating.toggle();
             pumpUntilScanned();
             const overlay = document.getElementById("disc-overlay");
             overlay.dispatchEvent(new WheelEvent("wheel", { deltaY: -100, clientX: 50, clientY: 50 }));

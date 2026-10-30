@@ -49,7 +49,6 @@ describe("DisassemblyView", () => {
             group: null,
             place: () => ({ x: StartEdge, y: StartEdge }),
             minSize: { w: 100, h: 50 },
-            reopens: false,
             arrangement,
         });
         showMemory = vi.fn();

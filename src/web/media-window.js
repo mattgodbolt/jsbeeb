@@ -120,7 +120,6 @@ export class MediaWindow {
             group: null,
             place: () => ({ x: Centred, y: EndEdge }),
             minSize: MinPanelSize,
-            reopens: false,
             arrangement,
         });
         this.summary = document.getElementById("media-summary");

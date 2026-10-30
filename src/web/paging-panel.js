@@ -1,6 +1,5 @@
 import { bankName, describeBank, sidewaysBanks } from "../paging.js";
 import { decodedPanel, DecodedRegisters, fixed, lit, namedBits, register } from "./decoded-registers.js";
-import { MenuGroup } from "./floating-panel.js";
 import { Centred, StartEdge } from "./panel-layout.js";
 
 const MinPanelSize = { w: 240, h: 120 };
@@ -70,10 +69,9 @@ export class PagingPanel {
     constructor({ cpu, arrangement, showBank }) {
         this._cpu = cpu;
         const { isMaster } = cpu.model;
-        const { floating, body } = decodedPanel({
+        const { floating, body, part } = decodedPanel({
             id: "paging",
             title: "Paging and ROMs",
-            menuGroup: MenuGroup.hardware,
             feature: "paging",
             place: () => ({ x: Centred, y: StartEdge }),
             minSize: MinPanelSize,
@@ -87,8 +85,8 @@ export class PagingPanel {
                 <div class="decoded-heading paging-sockets-heading">Sockets</div>
                 <div class="paging-socket-grid"></div>
             </div>`;
-        this._registers = new DecodedRegisters(body.querySelector(".paging-registers"), sections(isMaster));
-        this._sockets = this._socketGrid(body.querySelector(".paging-socket-grid"), showBank);
+        this._registers = new DecodedRegisters(part("paging-registers"), sections(isMaster));
+        this._sockets = this._socketGrid(part("paging-socket-grid"), showBank);
         this.update();
     }
 

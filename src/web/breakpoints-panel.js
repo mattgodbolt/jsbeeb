@@ -2,7 +2,7 @@ import { hexword } from "../hex.js";
 import { SidewaysEnd, SidewaysStart } from "../paging.js";
 import { machineSheilaBlocks } from "../sheila.js";
 import { placePopup, popupBehaviour, textButton } from "./dom-utils.js";
-import { DebugGroup, FloatingPanel, MenuGroup, panelShell } from "./floating-panel.js";
+import { DebugGroup, MenuGroup, panelShell } from "./floating-panel.js";
 import { EndEdge } from "./panel-layout.js";
 
 const MinPanelSize = { w: 360, h: 100 };
@@ -149,8 +149,18 @@ export class BreakpointsPanel {
         this._rendering = false;
         this._newKind = AddressKinds[0];
 
-        const { panel, body } = panelShell({ id: "breakpoints", title: "Breakpoints", feature: "breakpoints" });
-        this.panel = panel;
+        const { floating, body } = panelShell({
+            id: "breakpoints",
+            title: "Breakpoints",
+            feature: "breakpoints",
+            menuGroup: MenuGroup.cpu,
+            group: DebugGroup,
+            place: () => ({ x: EndEdge, y: EndEdge }),
+            minSize: MinPanelSize,
+            arrangement,
+        });
+        this.floating = floating;
+        this.panel = floating.panel;
         body.innerHTML = `
             <table class="bp-list"><tbody></tbody></table>
             <div class="bp-empty">None set. Click beside an instruction in the disassembly, or add one here.</div>
@@ -189,22 +199,7 @@ export class BreakpointsPanel {
             this._addTyped();
         });
 
-        this.floating = new FloatingPanel({
-            panel,
-            id: "breakpoints",
-            title: "Breakpoints",
-            menuGroup: MenuGroup.cpu,
-            group: DebugGroup,
-            place: () => ({ x: EndEdge, y: EndEdge }),
-            minSize: MinPanelSize,
-            reopens: true,
-            arrangement,
-        });
-        const refresh = arrangement.refreshing(
-            () => this.floating.isOpen,
-            () => this.update(),
-        );
-        this.floating.addEventListener("open", () => refresh.drawNow());
+        floating.whileOpen(() => this.update());
         this.floating.addEventListener("close", () => this._showStopMenu(false));
     }
 

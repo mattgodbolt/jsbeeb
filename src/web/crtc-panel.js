@@ -1,7 +1,6 @@
 import { hexword } from "../hex.js";
 import { HDISPENABLE, VDISPENABLE, Video } from "../video.js";
 import { decodedPanel, DecodedRegisters, lit, register, spelt } from "./decoded-registers.js";
-import { MenuGroup } from "./floating-panel.js";
 import { Centred, StartEdge } from "./panel-layout.js";
 
 const MinPanelSize = { w: 240, h: 120 };
@@ -298,10 +297,9 @@ export class CrtcPanel {
      */
     constructor({ cpu, arrangement }) {
         this._video = cpu.video;
-        const { floating, body } = decodedPanel({
+        const { floating, body, part } = decodedPanel({
             id: "crtc",
             title: "6845 CRTC",
-            menuGroup: MenuGroup.hardware,
             feature: "crtc",
             place: () => ({ x: Centred, y: StartEdge }),
             minSize: MinPanelSize,
@@ -311,8 +309,8 @@ export class CrtcPanel {
         this.floating = floating;
         body.innerHTML = `<div class="crtc-timing"></div><div class="crtc-screen"></div>`;
         this._registers = [
-            new DecodedRegisters(body.querySelector(".crtc-timing"), [Sections.horizontal, Sections.vertical]),
-            new DecodedRegisters(body.querySelector(".crtc-screen"), [Sections.counters, Sections.screen]),
+            new DecodedRegisters(part("crtc-timing"), [Sections.horizontal, Sections.vertical]),
+            new DecodedRegisters(part("crtc-screen"), [Sections.counters, Sections.screen]),
         ];
         this.update();
     }

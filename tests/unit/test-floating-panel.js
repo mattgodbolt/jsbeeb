@@ -41,7 +41,7 @@ describe("FloatingPanel", () => {
     };
     const saved = () => JSON.parse(storage.getItem("panelLayout"));
 
-    function make(id, place, reopens) {
+    function make(id, place, listed) {
         document.body.insertAdjacentHTML(
             "beforeend",
             `<div id="${id}" data-feature="${id}" hidden>
@@ -59,12 +59,11 @@ describe("FloatingPanel", () => {
         const floating = new FloatingPanel({
             panel,
             id,
-            title: reopens ? id : null,
-            menuGroup: reopens ? MenuGroup.cpu : null,
+            title: listed ? id : null,
+            menuGroup: listed ? MenuGroup.cpu : null,
             group: null,
             place: () => place,
             minSize: { w: 120, h: 60 },
-            reopens,
             arrangement,
         });
         for (const target of [header, ...panel.querySelectorAll(".panel-resize")]) target.setPointerCapture = () => {};
@@ -316,7 +315,7 @@ describe("FloatingPanel", () => {
             expect(saved().panels.watches).toMatchObject({ w: null, h: 150 });
         });
 
-        it("reopens only the panels that reopen, where they were left", () => {
+        it("reopens only the panels offered in menus, where they were left", () => {
             const first = watches();
             const second = media();
             first.open();
@@ -520,21 +519,17 @@ describe("FloatingPanel", () => {
     });
 
     describe("made from a shell", () => {
-        const shelled = (id, group) => {
-            const { panel, body } = panelShell({ id, title: `The ${id}`, feature: id });
-            const floating = new FloatingPanel({
-                panel,
+        const shelled = (id, group) =>
+            panelShell({
                 id,
                 title: `The ${id}`,
+                feature: id,
                 menuGroup: MenuGroup.hardware,
                 group,
                 place: () => ({ x: StartEdge, y: StartEdge }),
                 minSize: { w: 120, h: 60 },
-                reopens: true,
                 arrangement,
             });
-            return { floating, body };
-        };
 
         it("has a header with its title and a button that closes it, and an empty body, hidden until opened", () => {
             const { floating, body } = shelled("sysvia", "debug");
@@ -583,12 +578,11 @@ describe("FloatingPanel", () => {
             arrangement.followMachine(() => cycles);
         });
 
-        it("draws an open panel once a frame, but only when the machine has moved on or it is asked to", () => {
+        it("draws an open panel as it opens, then once a frame, only when the machine has moved on or it is asked to", () => {
             const floating = watches();
             const draw = vi.fn();
-            const refresh = arrangement.refreshing(() => floating.isOpen, draw);
+            const refresh = floating.whileOpen(draw);
             floating.open();
-            refresh.drawNow();
             frames.run();
             expect(draw).toHaveBeenCalledTimes(1);
             cycles += 100;

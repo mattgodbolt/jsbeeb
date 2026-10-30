@@ -61,14 +61,9 @@ export class WatchPanel {
             group: null,
             place: () => ({ x: StartEdge, y: StartEdge }),
             minSize: MinPanelSize,
-            reopens: true,
             arrangement,
         });
-        const refresh = arrangement.refreshing(
-            () => this.floating.isOpen,
-            () => this.update(),
-        );
-        this.floating.addEventListener("open", () => refresh.drawNow());
+        this.floating.whileOpen(() => this.update());
         this.floating.addEventListener("close", () => this._showPopup(null));
         popupBehaviour(
             this._menu,

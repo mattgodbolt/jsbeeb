@@ -2,7 +2,6 @@ import { hexword } from "../hex.js";
 import { BBC } from "../keymap.js";
 import { HwScrollSubtract } from "../video.js";
 import { decodedPanel, DecodedRegisters, fixed, lit, register, spelt, widest } from "./decoded-registers.js";
-import { MenuGroup } from "./floating-panel.js";
 import { Centred, StartEdge } from "./panel-layout.js";
 import { controlSection, portsSection, TimersSection, viaState } from "./via-registers.js";
 
@@ -260,10 +259,9 @@ export class SysViaPanel {
      */
     constructor({ cpu, arrangement }) {
         this._via = cpu.sysvia;
-        const { floating, body } = decodedPanel({
+        const { floating, body, part } = decodedPanel({
             id: "sysvia",
             title: "System VIA",
-            menuGroup: MenuGroup.hardware,
             feature: "system_via",
             place: () => ({ x: Centred, y: StartEdge }),
             minSize: MinPanelSize,
@@ -279,7 +277,6 @@ export class SysViaPanel {
                 <div class="key-matrix-status"></div>
                 <div class="sysvia-latch"></div>
             </div>`;
-        const part = (className) => body.querySelector(`.${className}`);
         // The keyboard matrix heads the second column, which is why the sections are split as they are.
         this._registers = [
             new DecodedRegisters(part("sysvia-ports"), [Sections.ports, Sections.control]),

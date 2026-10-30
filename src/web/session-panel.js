@@ -108,7 +108,6 @@ export class SessionPanel {
             group: null,
             place: () => ({ x: StartEdge, y: EndEdge }),
             minSize: MinPaneSize,
-            reopens: false,
             arrangement,
         });
         const readout = root.querySelector(".slot-readout");

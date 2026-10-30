@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { UrlState } from "../../src/web/url-state.js";
-import { FloatingPanel } from "../../src/web/floating-panel.js";
+import { panelShell } from "../../src/web/floating-panel.js";
 import { StartEdge } from "../../src/web/panel-layout.js";
 import { stitchHtml } from "../../tools/html-includes.js";
 import { RomBankBytes } from "../../src/6502.js";
@@ -201,24 +201,18 @@ export async function teardownDom() {
     window.sessionStorage.clear();
 }
 
-/** A FloatingPanel on a bare element of its own, offered in menus as `title` under `menuGroup` (or not, for null). */
+/** A FloatingPanel with an empty body, offered in menus as `title` under `menuGroup` (or not, for null). */
 export function bareFloatingPanel(arrangement, id, title, menuGroup) {
-    document.body.insertAdjacentHTML(
-        "beforeend",
-        `<div id="${id}" hidden><div class="panel-header"><button class="panel-close"></button></div></div>`,
-    );
-    const element = document.getElementById(id);
-    return new FloatingPanel({
-        panel: element,
+    return panelShell({
         id,
         title,
+        feature: id,
         menuGroup,
         group: null,
         place: () => ({ x: StartEdge, y: StartEdge }),
         minSize: { w: 100, h: 50 },
-        reopens: false,
         arrangement,
-    });
+    }).floating;
 }
 
 /**
