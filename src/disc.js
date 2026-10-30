@@ -1314,7 +1314,6 @@ const StandardMfmSectors = [16, 18];
  */
 export function discReport(disc, isSideUpper) {
     const findings = [];
-    // A dual format disc's sides can differ in pitch, so the side is asked rather than the disc.
     const step = sniffSurfaceLayout(disc, isSideUpper).is40Track ? 2 : 1;
     // Tracks with no sectors and nothing else to say come in runs, each told in one line.
     let run = null;
