@@ -16,7 +16,7 @@ import { PanelKeys } from "../../src/web/panel-keys.js";
 import { PanelArrangement } from "../../src/web/floating-panel.js";
 import { SysViaPanel } from "../../src/web/sysvia-panel.js";
 import { FdcPanel } from "../../src/web/fdc-panel.js";
-import { cycleCount } from "../../src/lockstep.js";
+import { cycleCount, machineMoment } from "../../src/lockstep.js";
 import {
     bankOffset,
     captureDownloads,
@@ -90,7 +90,7 @@ describe("Debugger", () => {
     /** A debugger on a fresh page, with a loop that puts the machine in it when stopped. */
     const makeDebugger = (symbolSets) => {
         arrangement = new PanelArrangement(() => window.localStorage);
-        arrangement.followMachine(() => cycleCount(cpu));
+        arrangement.followMachine(() => machineMoment(cpu));
         keys = new PanelKeys(arrangement);
         labelFiles = new LabelFiles({ load: vi.fn() });
         const made = new Debugger({
@@ -488,6 +488,13 @@ describe("Debugger", () => {
                 frames.run();
                 expect(peek).not.toHaveBeenCalled();
                 expect(operand()).toBe(before);
+            });
+
+            it("catch up with a change to the machine that takes no cycles, such as a soft reset", () => {
+                frames.run();
+                cpu.reset(false);
+                frames.run();
+                expect(document.getElementById("cpu6502_pc").textContent).toBe(hexword(dbgr.resetEntry()));
             });
 
             it("read nothing once closed", () => {

@@ -54,7 +54,7 @@ import { PagingPanel } from "./web/paging-panel.js";
 import { BasicPanel } from "./web/basic-panel.js";
 import { SoundChipPanel } from "./web/soundchip-panel.js";
 import { FdcPanel } from "./web/fdc-panel.js";
-import { cycleCount } from "./lockstep.js";
+import { machineMoment } from "./lockstep.js";
 import { MachineSwitch } from "./web/machine-switch.js";
 import { PageActions } from "./web/page-actions.js";
 import { processDriveTrackParams } from "./url-params.js";
@@ -244,7 +244,7 @@ const machine = new Machine({
     gamepad,
 });
 const processor = machine.processor;
-panelArrangement.followMachine(() => cycleCount(processor));
+panelArrangement.followMachine(() => machineMoment(processor));
 
 const loop = new EmulationLoop({
     processor,

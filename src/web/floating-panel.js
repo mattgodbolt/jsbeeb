@@ -130,18 +130,18 @@ class PanelRefresh {
 
     /** Records that what is shown is up to date with the machine as it is now, for an owner that drew it itself. */
     drawn() {
-        this._drawnAt = this._arrangement.cycleCount();
+        this._drawnAt = this._arrangement.machineMoment();
         this._wanted = false;
     }
 
-    /** Has it drawn at the next frame, for a change the machine's cycle count does not show, such as the pointer's. */
+    /** Has it drawn at the next frame, for a change the machine's moment does not show, such as the pointer's. */
     drawSoon() {
         this._wanted = true;
         if (this.isShown()) this._arrangement.keepRefreshing();
     }
 
-    isDue(cycles) {
-        return this._wanted || cycles !== this._drawnAt;
+    isDue(moment) {
+        return this._wanted || moment !== this._drawnAt;
     }
 }
 
@@ -165,7 +165,7 @@ export class PanelArrangement extends EventTarget {
         this._stack = [];
         /** @type {PanelRefresh[]} */
         this._refreshes = [];
-        this._cycles = () => null;
+        this._moment = () => null;
         this._frameHandle = null;
         /** @type {Set<FloatingPanel>} */
         this._gesturing = new Set();
@@ -200,17 +200,17 @@ export class PanelArrangement extends EventTarget {
     }
 
     /**
-     * Where the machine's cycle count comes from, by which the panels that keep up with the machine
-     * tell that it has moved on.
-     * @param {function(): number} cycles
+     * Where the machine's moment comes from, a value that changes whenever the machine does (see
+     * `machineMoment` in lockstep.js), by which the panels that keep up with the machine tell that it has moved on.
+     * @param {function(): (number|string)} moment
      */
-    followMachine(cycles) {
-        this._cycles = cycles;
+    followMachine(moment) {
+        this._moment = moment;
     }
 
-    /** The machine's cycle count, or null before there is a machine to follow. */
-    cycleCount() {
-        return this._cycles();
+    /** The machine's moment, or null before there is a machine to follow. */
+    machineMoment() {
+        return this._moment();
     }
 
     /**
@@ -241,8 +241,8 @@ export class PanelArrangement extends EventTarget {
         this._frameHandle = null;
         const shown = this._refreshes.filter((refresh) => refresh.isShown());
         if (shown.length === 0) return;
-        const cycles = this.cycleCount();
-        for (const refresh of shown) if (refresh.isDue(cycles)) refresh.drawNow();
+        const moment = this.machineMoment();
+        for (const refresh of shown) if (refresh.isDue(moment)) refresh.drawNow();
         this.keepRefreshing();
     }
 
