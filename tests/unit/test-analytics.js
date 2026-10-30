@@ -219,8 +219,6 @@ describe("analytics", () => {
                 gtag.mock.calls.filter(([command, event]) => command === "event" && event === name).map(([, , p]) => p);
 
             describe("noteFeature", () => {
-                afterEach(() => (document.body.innerHTML = ""));
-
                 it("names the feature by the data-feature its element is or is inside", async () => {
                     const { noteFeature } = await loadWithMeasurementId(measurementId);
                     document.body.innerHTML = '<div data-feature="rewind"><button>x</button></div><p>none</p>';

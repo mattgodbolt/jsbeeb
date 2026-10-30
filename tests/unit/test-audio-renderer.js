@@ -4,6 +4,9 @@ import { SoundChip } from "../../src/soundchip.js";
 import { loadWorkletProcessor } from "../helpers/stub-audio-context.js";
 import { goertzelAmplitude } from "./helpers.js";
 
+const OutputQuantum = 128;
+const OutputRate = 48000;
+
 let SoundChipProcessor;
 
 beforeAll(async () => {
@@ -14,8 +17,6 @@ afterAll(() => {
     vi.unstubAllGlobals();
 });
 
-const OutputQuantum = 128;
-const OutputRate = 48000;
 const CyclesPerMs = 2000;
 const CyclesPerSample = 4; // 2MHz CPU, 500kHz chip
 
