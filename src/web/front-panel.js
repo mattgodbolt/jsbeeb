@@ -46,9 +46,12 @@ export class FrontPanel {
     }
 
     updateLedVisibility() {
-        for (const el of document.querySelectorAll(".bbc-only")) el.style.display = this.model.isAtom ? "none" : "";
-        for (const el of document.querySelectorAll(".drives-only"))
+        for (const el of document.querySelectorAll(".bbc-only")) {
+            el.style.display = this.model.isAtom ? "none" : "";
+        }
+        for (const el of document.querySelectorAll(".drives-only")) {
             el.style.display = this.model.hasDiscDrives ? "" : "none";
+        }
     }
 
     syncLights() {
