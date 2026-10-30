@@ -884,8 +884,7 @@ export class Debugger {
 
     /**
      * Where the disassembly shows: the program counter while the machine runs or outside the debugger. Stopped in
-     * it, the cursor, which goes to the program counter when the machine has moved without a stop, as on a reset,
-     * a rewind or a state loaded.
+     * it, the cursor, which first goes to the program counter if the machine has moved since a stop last put it there.
      */
     _disassemblyAt() {
         if (this._loop?.isRunning() || !this._inDebugger) return this.cpu.pc;

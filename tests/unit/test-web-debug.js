@@ -492,14 +492,17 @@ describe("Debugger", () => {
 
             it.each([
                 ["a power-on reset", () => cpu.reset(true)],
+                ["a soft reset, which leaves the cycle count", () => cpu.reset(false)],
                 ["a state put in", (saved) => cpu.restoreState(saved)],
+                ["a state put in at the same program counter", (saved) => cpu.restoreState({ ...saved, pc: 0x2002 })],
             ])("move the cursor to the program counter after %s, and only then", (_, replace) => {
                 const cursorAt = () => addrOf(currentRow()).slice(0, 4);
                 const saved = cpu.snapshotState();
                 keyPress("n");
                 goTo("goto-dis-addr-form", "3000");
                 replace(saved);
-                frames.run();
+                // Not the once-a-frame refresh, which waits for cycles a soft reset does not take.
+                arrangement.drawAllNow();
                 expect(cursorAt()).toBe(hexword(cpu.pc));
                 goTo("goto-dis-addr-form", "3000");
                 arrangement.drawAllNow();
