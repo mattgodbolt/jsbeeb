@@ -14,6 +14,7 @@ import {
 } from "../basic-state.js";
 import { hexword } from "../hex.js";
 import { bindGotoForm } from "./debug-dom.js";
+import { setText } from "./dom-utils.js";
 import { DebugGroup, FloatingPanel, MenuGroup, panelShell } from "./floating-panel.js";
 import { keyLine } from "./panel-keys.js";
 import { Centred, StartEdge } from "./panel-layout.js";
@@ -218,7 +219,7 @@ export class BasicPanel {
             .join("  ");
         this._showLine(lineHolding(peek, pointers.page, pointers.reading), pointers.reading, basic.keywords);
         readResidentIntegers(peek).forEach(({ value }, i) => {
-            if (this._residents[i].textContent !== value) this._residents[i].textContent = value;
+            setText(this._residents[i], value);
         });
         this._showVariables(readVariables(peek));
     }

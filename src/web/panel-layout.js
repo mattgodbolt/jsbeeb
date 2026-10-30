@@ -365,16 +365,10 @@ function parseEntry(entry) {
 }
 
 /**
- * The layout saved as `text`. Anything not understood, from a whole layout of another version to
+ * The layout as `saved`, parsed from storage. Anything not understood, from a whole layout of another version to
  * one panel's place, is dropped, which leaves that panel where it goes by default.
  */
-export function parseLayout(text) {
-    let saved;
-    try {
-        saved = JSON.parse(text);
-    } catch {
-        return emptyLayout();
-    }
+export function parseLayout(saved) {
     if (saved?.version !== LayoutVersion) return emptyLayout();
     const panels = {};
     for (const id of PanelIds) if (saved.panels?.[id]) panels[id] = parseEntry(saved.panels[id]);
