@@ -189,7 +189,7 @@ export const gzipCodec = Object.freeze({
         return new Uint8Array(await new Response(stream).arrayBuffer());
     },
     async decompress(bytes) {
-        return new TextDecoder().decode(await ungzip(bytes));
+        return new Response(new Response(bytes).body.pipeThrough(new DecompressionStream("gzip"))).text();
     },
 });
 

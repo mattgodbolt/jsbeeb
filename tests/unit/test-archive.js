@@ -172,11 +172,6 @@ function repeatMember(times) {
     return result;
 }
 
-async function gzipMember(text) {
-    const stream = new Blob([new TextEncoder().encode(text)]).stream().pipeThrough(new CompressionStream("gzip"));
-    return new Uint8Array(await new Response(stream).arrayBuffer());
-}
-
 function concat(parts) {
     const result = new Uint8Array(parts.reduce((total, part) => total + part.length, 0));
     let offset = 0;
@@ -206,7 +201,7 @@ describe("gzip tests", function () {
     });
 
     it("should concatenate members of differing contents", async () => {
-        const members = await Promise.all(["first ", "second ", "third"].map(gzipMember));
+        const members = await Promise.all(["first ", "second ", "third"].map(gzipCodec.compress));
         const result = await ungzip(concat(members));
         expect(new TextDecoder().decode(result)).toBe("first second third");
     });
