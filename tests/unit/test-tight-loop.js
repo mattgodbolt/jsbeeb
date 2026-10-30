@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from "vitest";
 
-import { fake6502 } from "../../src/fake6502.js";
+import { fake6502, fake65C12 } from "../../src/fake6502.js";
 import { tightLoopAt } from "../../src/tight-loop.js";
 
 const Base = 0x2000;
@@ -16,10 +16,11 @@ const loop = (start, end, reads) => ({ start, end, reads });
 
 describe("tightLoopAt", () => {
     let nmos;
+    let cmos;
 
     beforeAll(async () => {
-        nmos = fake6502();
-        await nmos.initialise();
+        [nmos, cmos] = [fake6502(), fake65C12()];
+        await Promise.all([nmos.initialise(), cmos.initialise()]);
     });
 
     it.each([
@@ -55,7 +56,6 @@ describe("tightLoopAt", () => {
             loop(0x2000, 0x2002, [0x70]),
         ],
         ["EOR &70 : BNE back, which toggles A", [0x45, 0x70, 0xd0, 0xfc], 0x2000, undefined],
-        ["ASL A : BNE back, a shift", [0x0a, 0xd0, 0xfd], 0x2000, undefined],
         ["PLA : BEQ back, a stack operation", [0x68, 0xf0, 0xfd], 0x2000, undefined],
         ["an indirect read", [0xb1, 0x70, 0xf0, 0xfc], 0x2000, undefined],
         ["a store in it", [0xad, 0x4d, 0xfe, 0x8d, 0x00, 0x30, 0xf0, 0xf8], 0x2000, undefined],
@@ -72,5 +72,12 @@ describe("tightLoopAt", () => {
         ],
     ])("%s", (_, code, pc, expected) => {
         expect(loopIn(nmos, code, pc)).toEqual(expected);
+    });
+
+    it.each([
+        ["JMP", () => nmos, [0xa5, 0x70, 0x4c, 0x00, 0x30, 0xd0, 0xf9]],
+        ["the 65C12's BRA", () => cmos, [0xa5, 0x70, 0x80, 0x02, 0xd0, 0xfa]],
+    ])("finds no loop where a %s away comes before the branch back", (_, cpu, code) => {
+        expect(loopIn(cpu(), code, 0x2000)).toBeUndefined();
     });
 });

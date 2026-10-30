@@ -14,7 +14,7 @@ const DirectModes = new Set(["implied", "imm", "zp", "abs", "branch", "zp,branch
  * The instruction at `address`, as far as a tight loop cares: where it goes next, where it may branch, and what it
  * reads. Undefined for one no tight loop runs: a write, a call, a return, an indexed or indirect operand, or one
  * that would change something more if run again at once.
- * @param {import("./6502.opcodes.js").Disassemble6502} disassembler
+ * @param {ReturnType<typeof import("./6502.opcodes.js").Cpu6502>["disassembler"]} disassembler
  */
 function waitingInstruction(disassembler, address) {
     const { mnemonic, mode, accesses, flow, next, address: operand, target } = disassembler.instructionAt(address);
@@ -30,7 +30,7 @@ function waitingInstruction(disassembler, address) {
  * The tight loop the instruction at `pc` is part of, if it is in one: a short run of instructions closed by a branch
  * back, each of which writes nothing, calls nothing and settles, changing nothing more when run again at once, so
  * that the loop waits for what it reads to be changed by a device or an interrupt. Found from the code alone.
- * @param {import("./6502.opcodes.js").Disassemble6502} disassembler the CPU's
+ * @param {ReturnType<typeof import("./6502.opcodes.js").Cpu6502>["disassembler"]} disassembler the CPU's
  * @param {number} pc
  * @returns {TightLoop | undefined}
  */
