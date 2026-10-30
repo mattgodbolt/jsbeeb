@@ -490,6 +490,23 @@ describe("Debugger", () => {
                 expect(operand()).toBe(before);
             });
 
+            it.each([
+                ["a power-on reset", () => cpu.reset(true)],
+                ["a state put in", (saved) => cpu.restoreState(saved)],
+            ])("move the cursor to the program counter after %s, and only then", (_, replace) => {
+                const cursorAt = () => addrOf(currentRow()).slice(0, 4);
+                const saved = cpu.snapshotState();
+                keyPress("n");
+                goTo("goto-dis-addr-form", "3000");
+                replace(saved);
+                frames.run();
+                expect(cursorAt()).toBe(hexword(cpu.pc));
+                goTo("goto-dis-addr-form", "3000");
+                arrangement.drawAllNow();
+                frames.run();
+                expect(cursorAt()).toBe("3000");
+            });
+
             it("read nothing once closed", () => {
                 stoppedLoop.go();
                 dbgr.hidePanels();

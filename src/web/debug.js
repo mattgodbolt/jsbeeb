@@ -386,6 +386,8 @@ export class Debugger {
         // replaced, until it is reset.
         this._stopwatchFrom = 0;
         this._inDebugger = false;
+        // Where the machine was as the cursor last went to the program counter.
+        this._cursorPlacedAt = { cycles: null, pc: null };
         this._hidingPanels = false;
         this._matchedAt = 0;
         this._screenBounds = () => null;
@@ -880,9 +882,23 @@ export class Debugger {
         if (!this._loop?.isRunning()) this._arrangement.keepAttached();
     }
 
-    /** Where the disassembly shows: the program counter while the machine runs or outside the debugger. */
+    /**
+     * Where the disassembly shows: the program counter while the machine runs or outside the debugger. Stopped in
+     * it, the cursor, which goes to the program counter when the machine has moved without a stop, as on a reset,
+     * a rewind or a state loaded.
+     */
     _disassemblyAt() {
-        return this._loop?.isRunning() || !this._inDebugger ? this.cpu.pc : this._disassembly.cursor;
+        if (this._loop?.isRunning() || !this._inDebugger) return this.cpu.pc;
+        const { cycles, pc } = this._cursorPlacedAt;
+        if (cycles !== this._arrangement.cycleCount() || pc !== this.cpu.pc) {
+            this._disassembly.update(this.cpu.pc);
+            this._placedCursor();
+        }
+        return this._disassembly.cursor;
+    }
+
+    _placedCursor() {
+        this._cursorPlacedAt = { cycles: this._arrangement.cycleCount(), pc: this.cpu.pc };
     }
 
     /**
@@ -995,6 +1011,7 @@ export class Debugger {
         this.cancelRun();
         this._matchSymbols();
         for (const own of OwnPanels) own.show(this, where);
+        this._placedCursor();
         this._loopNote.show();
         this.watches.showWhichFired();
         this._refresh.drawn();
