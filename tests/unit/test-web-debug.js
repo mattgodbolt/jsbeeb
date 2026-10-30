@@ -17,6 +17,7 @@ import { PanelArrangement } from "../../src/web/floating-panel.js";
 import { SysViaPanel } from "../../src/web/sysvia-panel.js";
 import { FdcPanel } from "../../src/web/fdc-panel.js";
 import { cycleCount, machineMoment } from "../../src/lockstep.js";
+import { BBC } from "../../src/keymap.js";
 import {
     bankOffset,
     captureDownloads,
@@ -510,6 +511,26 @@ describe("Debugger", () => {
                 arrangement.drawAllNow();
                 frames.run();
                 expect(cursorAt()).toBe("3000");
+            });
+
+            it.each([
+                ["by its key code", (via) => via.keyUp("KeyA")],
+                ["by its place in the matrix", (via) => via.keyUpRaw(BBC.A)],
+                ["with every other key", (via) => via.clearKeys()],
+            ])("show a key held into a stop as released %s, without moving the cursor", (_, release) => {
+                const held = () => document.querySelectorAll("#sysvia-panel .key-matrix td.held").length;
+                new SysViaPanel({ cpu, arrangement }).floating.open();
+                stoppedLoop.go();
+                cpu.sysvia.keyDownRaw(BBC.A);
+                stoppedLoop.tick(2);
+                frames.run();
+                expect(held()).toBe(1);
+                stoppedLoop.stop(true);
+                goTo("goto-dis-addr-form", "3000");
+                release(cpu.sysvia);
+                frames.run();
+                expect(held()).toBe(0);
+                expect(addrOf(currentRow()).slice(0, 4)).toBe("3000");
             });
 
             it("read nothing once closed", () => {

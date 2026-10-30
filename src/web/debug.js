@@ -9,7 +9,7 @@ import { RunMode } from "./emulation-loop.js";
 import { DebugGroup, FloatingPanel, MenuGroup } from "./floating-panel.js";
 import { EndEdge, Gap, StartEdge } from "./panel-layout.js";
 import { keyLine } from "./panel-keys.js";
-import { cycleCount } from "../lockstep.js";
+import { cpuMoment, cycleCount } from "../lockstep.js";
 import { NumRomBanks } from "../6502.js";
 import { describeHit } from "../breakpoints.js";
 import { sheilaAddress, machineSheilaBlocks } from "../sheila.js";
@@ -884,11 +884,11 @@ export class Debugger {
 
     /**
      * Where the disassembly shows: the program counter while the machine runs or outside the debugger. Stopped in
-     * it, the cursor, which first goes to the program counter if the machine has moved since it last went there.
+     * it, the cursor, which first goes to the program counter if the processor has moved since it last went there.
      */
     _disassemblyAt() {
         if (this._loop?.isRunning() || !this._inDebugger) return this.cpu.pc;
-        if (this._cursorPlacedAt !== this._arrangement.machineMoment()) {
+        if (this._cursorPlacedAt !== cpuMoment(this.cpu)) {
             this._disassembly.update(this.cpu.pc);
             this._noteCursorAtPc();
         }
@@ -896,7 +896,7 @@ export class Debugger {
     }
 
     _noteCursorAtPc() {
-        this._cursorPlacedAt = this._arrangement.machineMoment();
+        this._cursorPlacedAt = cpuMoment(this.cpu);
     }
 
     /**
