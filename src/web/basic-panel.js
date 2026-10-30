@@ -14,7 +14,7 @@ import {
 } from "../basic-state.js";
 import { hexword } from "../hex.js";
 import { bindGotoForm } from "./debug-dom.js";
-import { DebugGroup, FloatingPanel, panelShell } from "./floating-panel.js";
+import { DebugGroup, FloatingPanel, MenuGroup, panelShell } from "./floating-panel.js";
 import { keyLine } from "./panel-keys.js";
 import { Centred, StartEdge } from "./panel-layout.js";
 
@@ -101,6 +101,7 @@ export class BasicPanel {
             panel,
             id: "basic",
             title: "BASIC",
+            menuGroup: MenuGroup.software,
             group: DebugGroup,
             place: () => ({ x: Centred, y: StartEdge }),
             minSize: MinPanelSize,

@@ -1,5 +1,5 @@
 import { IbmDiscFormat } from "../disc-format.js";
-import { FloatingPanel } from "./floating-panel.js";
+import { FloatingPanel, MenuGroup } from "./floating-panel.js";
 import { EndEdge, StartEdge } from "./panel-layout.js";
 import {
     DensityPalette,
@@ -127,6 +127,7 @@ export class DiscVisualiser {
             panel: this.panel,
             id: "disc",
             title: "Disc surface",
+            menuGroup: MenuGroup.hardware,
             group: null,
             place: () => ({ x: EndEdge, y: StartEdge }),
             minSize: MinPanelSize,

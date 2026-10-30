@@ -1,7 +1,7 @@
 import { hexword } from "../hex.js";
 import { SidewaysEnd, SidewaysStart } from "../paging.js";
 import { textButton } from "./dom-utils.js";
-import { DebugGroup, FloatingPanel, panelShell } from "./floating-panel.js";
+import { DebugGroup, FloatingPanel, MenuGroup, panelShell } from "./floating-panel.js";
 import { EndEdge } from "./panel-layout.js";
 
 const MinPanelSize = { w: 360, h: 100 };
@@ -85,6 +85,7 @@ export class BreakpointsPanel {
             panel,
             id: "breakpoints",
             title: "Breakpoints",
+            menuGroup: MenuGroup.cpu,
             group: DebugGroup,
             place: () => ({ x: EndEdge, y: EndEdge }),
             minSize: MinPanelSize,

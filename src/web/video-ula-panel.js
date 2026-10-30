@@ -1,4 +1,5 @@
 import { decodedPanel, DecodedRegisters, lit, namedBits, register, spelt } from "./decoded-registers.js";
+import { MenuGroup } from "./floating-panel.js";
 import { Centred, StartEdge } from "./panel-layout.js";
 import { Video } from "../video.js";
 
@@ -288,6 +289,7 @@ export class VideoUlaPanel {
         const { floating, body } = decodedPanel({
             id: "videoula",
             title: "Video ULA",
+            menuGroup: MenuGroup.hardware,
             feature: "video_ula",
             place: () => ({ x: Centred, y: StartEdge }),
             minSize: MinPanelSize,

@@ -1,5 +1,6 @@
 import { bankName, describeBank, sidewaysBanks } from "../paging.js";
 import { decodedPanel, DecodedRegisters, fixed, lit, namedBits, register } from "./decoded-registers.js";
+import { MenuGroup } from "./floating-panel.js";
 import { Centred, StartEdge } from "./panel-layout.js";
 
 const MinPanelSize = { w: 240, h: 120 };
@@ -72,6 +73,7 @@ export class PagingPanel {
         const { floating, body } = decodedPanel({
             id: "paging",
             title: "Paging and ROMs",
+            menuGroup: MenuGroup.hardware,
             feature: "paging",
             place: () => ({ x: Centred, y: StartEdge }),
             minSize: MinPanelSize,

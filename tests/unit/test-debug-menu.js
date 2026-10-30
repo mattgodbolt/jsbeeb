@@ -2,20 +2,19 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DebugMenu } from "../../src/web/debug-menu.js";
-import { PanelArrangement } from "../../src/web/floating-panel.js";
+import { MenuGroup, PanelArrangement } from "../../src/web/floating-panel.js";
 import { bareFloatingPanel, domFromIndexHtml, teardownDom } from "./helpers.js";
 
 describe("DebugMenu", () => {
     let arrangement;
     let dbgr;
 
-    const panel = (id, title) => bareFloatingPanel(arrangement, id, title);
+    const panel = (id, title, menuGroup) => bareFloatingPanel(arrangement, id, title, menuGroup);
     const show = () => document.getElementById("navbarDebug").dispatchEvent(new Event("show.bs.dropdown"));
     const items = () =>
-        [...document.querySelectorAll("#debug-menu .panel-item")].map((item) => [
-            item.textContent,
-            item.getAttribute("aria-checked"),
-        ]);
+        [...document.querySelectorAll("#debug-menu .panel-item, #debug-menu .dropdown-header")].map((item) =>
+            item.matches(".dropdown-header") ? item.textContent : [item.textContent, item.getAttribute("aria-checked")],
+        );
     const label = (id) => document.querySelector(`#${id} .menu-label`).textContent;
 
     beforeEach(() => {
@@ -27,25 +26,24 @@ describe("DebugMenu", () => {
 
     afterEach(teardownDom);
 
-    it("lists every panel that has a title, in the registry's order, ticking the open ones", () => {
-        panel("memory", "Memory");
-        const watches = panel("watches", "Watches");
-        panel("media", null);
+    it("lists every panel that has a title under its group's heading, ticking the open ones", () => {
+        panel("sysvia", "System VIA", MenuGroup.hardware);
+        const watches = panel("watches", "Watches", MenuGroup.cpu);
+        panel("memory", "Memory", MenuGroup.cpu);
+        panel("media", null, null);
         watches.open();
         show();
-        expect(items()).toEqual([
-            ["Watches", "true"],
-            ["Memory", "false"],
-        ]);
+        expect(items()).toEqual(["CPU", ["Memory", "false"], ["Watches", "true"], "Hardware", ["System VIA", "false"]]);
+        expect(document.querySelectorAll("#debug-menu .dropdown-divider")).toHaveLength(2);
     });
 
     it("opens and closes a panel from its item, and is drawn afresh each time it opens", () => {
-        const memory = panel("memory", "Memory");
+        const memory = panel("memory", "Memory", MenuGroup.cpu);
         show();
         document.querySelector('[data-panel="memory"]').click();
         expect(memory.isOpen).toBe(true);
         show();
-        expect(items()).toEqual([["Memory", "true"]]);
+        expect(items()).toEqual(["CPU", ["Memory", "true"]]);
     });
 
     it("says whether its first items enter or leave the debugger and show or hide its panels", () => {

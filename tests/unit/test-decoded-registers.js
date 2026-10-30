@@ -5,7 +5,7 @@ import { findModel } from "../../src/models.js";
 import { Scheduler } from "../../src/scheduler.js";
 import { SysVia, UserVia } from "../../src/via.js";
 import { decodedPanel } from "../../src/web/decoded-registers.js";
-import { DebugGroup, PanelArrangement } from "../../src/web/floating-panel.js";
+import { DebugGroup, MenuGroup, PanelArrangement } from "../../src/web/floating-panel.js";
 import { StartEdge } from "../../src/web/panel-layout.js";
 import { SysViaPanel } from "../../src/web/sysvia-panel.js";
 import { UserViaPanel } from "../../src/web/uservia-panel.js";
@@ -33,6 +33,7 @@ describe("decoded panels", () => {
         const { floating } = decodedPanel({
             id: "device",
             title: "Device",
+            menuGroup: MenuGroup.hardware,
             feature: "device",
             place: () => ({ x: StartEdge, y: StartEdge }),
             minSize: { w: 100, h: 100 },
