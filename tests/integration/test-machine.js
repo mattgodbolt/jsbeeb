@@ -17,9 +17,7 @@ describe("TestMachine", () => {
     });
 
     it("boots a Master with ANFS, which waits for vsync, to a prompt", async () => {
-        const machine = new TestMachine("MasterANFS", { econet: true });
-        await machine.initialise();
-        await machine.runUntilInput(10);
+        const machine = await bootedTestMachine("MasterANFS", { econet: true }, 10);
         expect(mode7Text(machine)).toContain("BASIC");
     });
 

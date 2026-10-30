@@ -7,7 +7,8 @@ import { BasicPanel } from "../../src/web/basic-panel.js";
 import { PanelArrangement } from "../../src/web/floating-panel.js";
 import { PanelKeys } from "../../src/web/panel-keys.js";
 import { teardownDom } from "../unit/helpers.js";
-import { bootedTestMachine, FileBackedXhr } from "./helpers.js";
+import { FileBackedXhr } from "../helpers/file-backed-xhr.js";
+import { bootedTestMachine } from "./helpers.js";
 
 const RunCycles = 2 * 1000 * 1000;
 const VduDriverStart = 0xc000;

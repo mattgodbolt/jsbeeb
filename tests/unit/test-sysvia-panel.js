@@ -8,7 +8,7 @@ import { Scheduler } from "../../src/scheduler.js";
 import { SysVia } from "../../src/via.js";
 import { SysViaPanel, sysViaState } from "../../src/web/sysvia-panel.js";
 import { PanelArrangement } from "../../src/web/floating-panel.js";
-import { FileBackedXhr } from "../integration/helpers.js";
+import { FileBackedXhr } from "../helpers/file-backed-xhr.js";
 import { decodedMeanings, decodedRow, teardownDom, ViaRegister } from "./helpers.js";
 
 const { ORB, ORA, DDRB, DDRA, T1CL, T1CH, ACR, PCR, IER } = ViaRegister;
@@ -207,30 +207,36 @@ describe("sysViaState", () => {
     const BootCycles = 1000 * 1000;
     const ReadEveryCycles = 997;
     const HoldCycles = 200 * 1000;
+    const Mode7Screen = 0x7c00;
+    const Mode7ScreenBytes = 0x400;
 
     afterEach(teardownDom);
+
+    const screenText = (cpu) =>
+        String.fromCharCode(...Array.from({ length: Mode7ScreenBytes }, (_, i) => cpu.peekmem(Mode7Screen + i)));
 
     async function runWithKeyHeld(readPanel) {
         vi.stubGlobal("XMLHttpRequest", FileBackedXhr);
         const cpu = fake6502(findModel("B-DFS1.2"));
         await cpu.initialise();
-        cpu.execute(BootCycles);
         const run = (cycles) => {
             for (let ran = 0; ran < cycles; ran += ReadEveryCycles) {
                 cpu.execute(ReadEveryCycles);
                 if (readPanel) sysViaState(cpu.sysvia);
             }
         };
+        run(BootCycles);
         cpu.sysvia.keyDownRaw(BBC.A);
         run(HoldCycles);
         cpu.sysvia.keyUpRaw(BBC.A);
         run(HoldCycles);
+        expect(screenText(cpu)).toContain(">A");
         // Reading catches the VIA's counters up to now, as the machine's next access to it would.
         cpu.sysvia.peekTimers();
         return cpu.snapshotState({ includeRoms: false });
     }
 
-    it("reads the machine as it runs without changing what it does", async () => {
+    it("reads the machine as it boots and takes a key without changing what it does", async () => {
         const [read, unread] = [await runWithKeyHeld(true), await runWithKeyHeld(false)];
         expect(read).toEqual(unread);
     });
