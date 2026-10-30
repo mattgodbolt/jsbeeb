@@ -131,7 +131,7 @@ function atomModel({ name, synonyms, os, banks }) {
 }
 
 // A convenience layout for the expanded B models, not any real board's: all sixteen banks decoded, and RAM in 0-7
-// written through ROMSEL (0-3 for the Dunjunz variants and Exile, 4-7 for Crazee Rider). Real boards: #1539.
+// written through ROMSEL (0-3 for the Dunjunz variants, 4-7 for Crazee Rider; Exile is not picky). Real boards: #1539.
 const beebSwram = Array.from({ length: NumRomBanks }, (_, bank) => bank < 8);
 const noSwram = Array(NumRomBanks).fill(false);
 const masterSwram = Array.from({ length: NumRomBanks }, (_, bank) => bank >= 4 && bank < 8);
