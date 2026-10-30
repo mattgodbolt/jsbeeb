@@ -190,6 +190,26 @@ describe("DisassemblyView", () => {
         expect(cpu.breakpoints.list().map((bp) => bp.id)).toEqual([id]);
     });
 
+    it("pins a breakpoint set in a bank the panel is set to show to that bank, and shows it only there", () => {
+        const Sideways = 0x8000;
+        const rowAt = () => rows().find((row) => Number(row.dataset.addr) === Sideways);
+        const dot = () => rowAt().querySelector(".bp_gutter").classList.contains("active");
+        cpu.romSelect(5);
+        paging.view = "4";
+        view.update(Sideways);
+        click(rowAt().querySelector(".bp_gutter"));
+        expect(cpu.breakpoints.list()).toEqual([expect.objectContaining({ start: Sideways, bank: 4 })]);
+        expect(dot()).toBe(true);
+        paging.view = "";
+        view.update(Sideways);
+        expect(dot()).toBe(false);
+        cpu.romSelect(4);
+        view.redraw();
+        expect(dot()).toBe(true);
+        click(rowAt().querySelector(".bp_gutter"));
+        expect(cpu.breakpoints.list()).toEqual([]);
+    });
+
     describe("SHEILA registers", () => {
         const program = (bytes) => bytes.forEach((byte, i) => cpu.writemem(0x2002 + i, byte));
 

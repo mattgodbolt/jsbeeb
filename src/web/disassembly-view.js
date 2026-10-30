@@ -1,5 +1,6 @@
 import { byteChar, hexbyte, hexword } from "../hex.js";
 import { nameUrl } from "../symbol-sets.js";
+import { SidewaysEnd, SidewaysStart, viewedBank } from "../paging.js";
 import { machineSheilaBlocks, sheilaName } from "../sheila.js";
 import { bindGotoForm, externalLink, FittedRows, labelHtml } from "./debug-dom.js";
 import { keyLine } from "./panel-keys.js";
@@ -257,28 +258,47 @@ export class DisassemblyView {
         this.update(ref);
     }
 
+    /** The execute breakpoints on the code the row at `address` shows: unpinned, or pinned to the bank it shows. */
     _executeBreakpoints(address) {
+        const bank = this._bankShownAt(address);
         return this._cpu.breakpoints
             .list()
-            .filter(({ kind, start, end }) => kind === "execute" && start <= address && address <= end);
+            .filter(
+                (bp) =>
+                    bp.kind === "execute" &&
+                    bp.start <= address &&
+                    address <= bp.end &&
+                    (bp.bank === undefined || bp.bank === bank),
+            );
+    }
+
+    /** The sideways bank whose code the row at `address` shows, if it shows one. */
+    _bankShownAt(address) {
+        if (address < SidewaysStart || address >= SidewaysEnd) return undefined;
+        const viewed = viewedBank(this._paging.view);
+        if (viewed !== undefined) return viewed;
+        const cpu = this._cpu;
+        return !this._paging.differs(address) && cpu.isBankPagedAt(cpu.pagedBank, address) ? cpu.pagedBank : undefined;
     }
 
     /**
-     * Removes the plain breakpoints on just `address`, or with none there, sets one. One with a condition, a bank, a
-     * hit count or logging is left for the Breakpoints panel or the console to change.
+     * Removes the plain breakpoints on just `address`, or with none there, sets one: pinned to the bank shown, when the
+     * panel is set to show one, so that it stops in the code shown. One with a condition, a hit count or logging is
+     * left for the Breakpoints panel or the console to change.
      */
     _toggleBreakpoint(address) {
         const { breakpoints } = this._cpu;
+        const shown = this._bankShownAt(address);
+        const pin = viewedBank(this._paging.view) === undefined ? undefined : shown;
         const onAddress = this._executeBreakpoints(address).filter(
             (bp) =>
                 bp.start === bp.end &&
                 bp.owner === "user" &&
-                bp.bank === undefined &&
                 bp.condition === undefined &&
                 bp.hitCount === 1 &&
                 bp.action === "stop",
         );
-        if (!onAddress.length) breakpoints.add({ kind: "execute", start: address });
+        if (!onAddress.length) breakpoints.add({ kind: "execute", start: address, bank: pin });
         for (const { id } of onAddress) breakpoints.remove(id);
     }
 
