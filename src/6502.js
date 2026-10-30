@@ -277,6 +277,7 @@ class Base6502 {
         };
     }
 
+    /** Leaves the NMI line to the caller, which rebuilds it in an order of its own. */
     restoreRegisters(state) {
         this.a = state.a;
         this.x = state.x;
@@ -656,7 +657,7 @@ class DebugHook {
     remove(handler) {
         const i = this.handlers.indexOf(handler);
         if (i < 0) throw new Error("No such debug hook handler");
-        this.handlers = this.handlers.filter((h) => h !== handler);
+        this.handlers = this.handlers.filter((_, index) => index !== i);
         if (this.handlers.length === 0) {
             this.cpu[this.functionName] = null;
             this.cpu.refreshLook();
@@ -1442,7 +1443,7 @@ export class Cpu6502 extends Base6502 {
      * extra ROMs into the empty sockets and highest banks left.
      */
     async loadOs(os, ...modelRoms) {
-        os = "roms/" + os;
+        os = `roms/${os}`;
         console.log(`Loading OS from ${os}`);
         const ramRomOs = this.ramRomOs;
         const data = await loadData(os);
@@ -2144,7 +2145,7 @@ export class AtomCpu6502 extends Cpu6502 {
         if (this.config.bankRoms.length) throw new Error("The Atom has no sideways ROM banks to load a ROM into");
         const extraRoms = [...modelRoms, ...this.config.fittedRoms, ...this.config.extraRoms];
         const bankRoms = this.model.banks || [];
-        os = "roms/" + os;
+        os = `roms/${os}`;
         console.log(`Loading Atom OS from ${os}`);
         const data = await loadData(os);
         const len = data.length;
