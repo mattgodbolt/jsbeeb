@@ -89,7 +89,10 @@ describe("dom-utils", () => {
             });
         });
 
-        afterEach(teardownDom);
+        afterEach(() => {
+            popup.show(false);
+            return teardownDom();
+        });
 
         it("opens and closes on its opener, built afresh each time it opens", () => {
             opener.click();
@@ -110,7 +113,6 @@ describe("dom-utils", () => {
             vi.stubGlobal("innerHeight", OpenerBottom + MenuHeight - 1);
             opener.click();
             expect(menu().style.top).toBe(`${OpenerTop - MenuHeight}px`);
-            opener.click();
         });
 
         it("keeps its buttons from focus, closing on a press elsewhere, its panel closing, or Escape alone", () => {

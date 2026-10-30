@@ -1846,6 +1846,7 @@ describe("Debugger", () => {
             dbgr.debug(cpu.pc);
             addWatch("$70");
             const buttons = [...document.querySelectorAll("#watch-panel .watch-list button")];
+            expect(buttons.length).toBeGreaterThan(0);
             expect(buttons.map((button) => button.tabIndex)).toEqual(buttons.map(() => -1));
         });
     });
