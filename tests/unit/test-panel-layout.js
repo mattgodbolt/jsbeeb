@@ -393,16 +393,13 @@ describe("panel layout", () => {
                 { x: 400, y: 300, w: 300, h: 200 },
                 { w: 300, h: null },
             );
-            expect(parseLayout(JSON.stringify(layout))).toEqual(layout);
+            expect(parseLayout(JSON.parse(JSON.stringify(layout)))).toEqual(layout);
             expect(layout.version).toBe(LayoutVersion);
         });
 
-        it("is the defaults when missing, corrupt or of another version", () => {
+        it("is the defaults when missing or of another version", () => {
             expect(parseLayout(null)).toEqual(emptyLayout());
-            expect(parseLayout("{not json")).toEqual(emptyLayout());
-            expect(parseLayout(JSON.stringify({ version: LayoutVersion + 1, order: ["watches"], panels: {} }))).toEqual(
-                emptyLayout(),
-            );
+            expect(parseLayout({ version: LayoutVersion + 1, order: ["watches"], panels: {} })).toEqual(emptyLayout());
         });
 
         it("drops unknown panels and any place it does not understand", () => {
@@ -423,7 +420,7 @@ describe("panel layout", () => {
                     session: { open: false, x: EndEdge, y: Centred, w: 300, h: null },
                 },
             };
-            expect(parseLayout(JSON.stringify(saved))).toEqual({
+            expect(parseLayout(saved)).toEqual({
                 version: LayoutVersion,
                 order: ["watches", "disc"],
                 panels: {

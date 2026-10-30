@@ -9,7 +9,7 @@ import {
     panelShell,
 } from "../../src/web/floating-panel.js";
 import { EndEdge, Gap, overlaps, StartEdge } from "../../src/web/panel-layout.js";
-import { bareFloatingPanel, fakeAnimationFrames, sentEvents, teardownDom } from "./helpers.js";
+import { bareFloatingPanel, fakeAnimationFrames, pressKeepsFocus, sentEvents, teardownDom } from "./helpers.js";
 
 const NavbarHeight = 50;
 const HeaderHeight = 30;
@@ -361,6 +361,15 @@ describe("FloatingPanel", () => {
             expect(rectOf(floating)).toMatchObject({ x: 200, y: NavbarHeight + 200 });
             expect(warn).toHaveBeenCalled();
         });
+
+        it("starts from the defaults, saying so, when what storage holds is not a layout it can read", () => {
+            const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+            storage.setItem("panelLayout", "{not json");
+            const floating = watches();
+            floating.open();
+            expect(rectOf(floating)).toMatchObject({ x: 0, y: NavbarHeight });
+            expect(warn).toHaveBeenCalledWith(expect.stringContaining("Could not read the panel layout"));
+        });
     });
 
     describe("the keyboard", () => {
@@ -372,9 +381,7 @@ describe("FloatingPanel", () => {
                 floating.panel.querySelector(".panel-close"),
                 floating.panel.querySelector(".link"),
             ]) {
-                const press = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
-                target.dispatchEvent(press);
-                expect(press.defaultPrevented).toBe(true);
+                expect(pressKeepsFocus(target)).toBe(true);
             }
         });
 

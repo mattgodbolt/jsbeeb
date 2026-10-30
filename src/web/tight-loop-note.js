@@ -1,6 +1,8 @@
 import { hexword } from "../hex.js";
 import { machineSheilaBlocks, sheilaName, sheilaRegister } from "../sheila.js";
 import { tightLoopAt } from "../tight-loop.js";
+import { addressRange } from "./debug-dom.js";
+import { textButton } from "./dom-utils.js";
 import { DebugGroup } from "./floating-panel.js";
 
 /** The decoded panel, by id, of each SHEILA device that has one, by its block's `device`. */
@@ -11,10 +13,6 @@ const DevicePanels = {
     SysVIA: "sysvia",
     UserVIA: "uservia",
 };
-
-function loopAddresses({ start, end }) {
-    return start === end ? `$${hexword(start)}` : `$${hexword(start)}-$${hexword(end)}`;
-}
 
 /** `nodes` listed as in prose: "a", "a and b", "a, b and c". */
 function inProse(nodes) {
@@ -54,7 +52,7 @@ export class TightLoopNote {
             : [" that reads nothing"];
         this._line.hidden = false;
         this._line.replaceChildren(
-            `In a loop at ${loopAddresses(loop)}`,
+            `In a loop at ${addressRange(loop)}`,
             ...polling,
             ...[...panels].flatMap((panel) => [" ", this._opener(panel)]),
         );
@@ -78,11 +76,7 @@ export class TightLoopNote {
     }
 
     _opener(floating) {
-        const button = document.createElement("button");
-        button.type = "button";
-        button.className = "txt-btn";
-        button.tabIndex = -1;
-        button.textContent = `open ${floating.title}`;
+        const button = textButton("", `open ${floating.title}`, "");
         button.addEventListener("click", () => floating.open());
         return button;
     }

@@ -3,3 +3,7 @@
 // else runs execute() (the benchmarks, the same-answer check) uses slices of this size too, to call it as the
 // page does: its exit deopts, so the slice size changes what runs.
 export const TickMs = 10;
+const MsPerSecond = 1000;
+
+/** The CPU cycles one tick runs on a machine of `cyclesPerSecond`. */
+export const tickCycles = (cyclesPerSecond) => (cyclesPerSecond * TickMs) / MsPerSecond;

@@ -1,4 +1,5 @@
 import { hexbyte, hexword } from "../hex.js";
+import { setText } from "./dom-utils.js";
 import { DebugGroup, MenuGroup, panelShell } from "./floating-panel.js";
 
 /**
@@ -72,7 +73,7 @@ export class DecodedRegisters {
             const { register } = row;
             const value = register.value(state);
             const hex = register.bits === 16 ? hexword(value) : hexbyte(value);
-            if (row.hex.textContent !== hex) row.hex.textContent = hex;
+            setText(row.hex, hex);
             const meanings = register.decode(value, state);
             const shown = meanings
                 .map(({ text, title, lit, width }) => `${text}\u0000${title}\u0000${lit}\u0000${width}`)

@@ -1,13 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { TestMachine } from "../../src/test-machine.js";
 import { FbHeight, FbWidth, FrameCapturingVideo } from "../helpers/frame-capturing-video.js";
 import { decodeLineGrid, findBands } from "../helpers/line-grid.js";
+import { bootedTestMachine } from "./helpers.js";
 
 async function render(model, program, { isAtom = false } = {}) {
     const video = new FrameCapturingVideo({ isMaster: false, isAtom });
-    const machine = new TestMachine(model, { video });
-    await machine.initialise();
-    await machine.runUntilInput();
+    const machine = await bootedTestMachine(model, { video });
     for (const line of program) await machine.type(line);
     await machine.runUntilInput();
     video.frame = null;

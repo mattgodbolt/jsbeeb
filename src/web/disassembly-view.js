@@ -180,7 +180,7 @@ export class DisassemblyView {
     _showRow(row, address, shown) {
         const cpu = this._cpu;
         const names = this._names();
-        const [text, end, jumpTarget] = this._paging.disassembler.disassemble(address);
+        const [text, end] = this._paging.disassembler.disassemble(address);
         const bytes = Array.from({ length: end - address }, (_, i) => this._paging.peek(address + i));
         const addrNode = row.querySelector(".dis_addr");
         addrNode.innerHTML = labelHtml(address);
@@ -234,11 +234,6 @@ export class DisassemblyView {
         );
         gutter.classList.toggle("disabled", executes.length > 0 && !executes.some((bp) => bp.enabled));
         row.dataset.addr = address;
-        if (jumpTarget !== undefined) {
-            row.dataset.ref = jumpTarget;
-        } else {
-            delete row.dataset.ref;
-        }
         return end & 0xffff;
     }
 

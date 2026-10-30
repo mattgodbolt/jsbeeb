@@ -2,6 +2,7 @@ import { Provenance, describe as describeHfe } from "../bbcdiscs.js";
 import { Schemas, splitImage } from "../media-resolver.js";
 import { findModel } from "../models.js";
 import { Parameters } from "./parameters.js";
+import { readStored, writeStored } from "./stored-json.js";
 
 /**
  * One shape for everything the media window can list, whichever source it
@@ -283,13 +284,9 @@ export class RecentMedia {
     }
 
     read() {
-        try {
-            const entries = JSON.parse(this.storage().getItem(RecentKey) ?? "[]");
-            return Array.isArray(entries) ? entries.filter(outlivesSession).slice(0, MaxRecent) : [];
-        } catch (error) {
-            console.warn("Could not read the recently loaded media:", error);
-            return [];
-        }
+        const entries = readStored(this.storage, RecentKey, "the recently loaded media");
+        if (!Array.isArray(entries)) return [];
+        return entries.filter((entry) => typeof entry?.ref === "string" && outlivesSession(entry)).slice(0, MaxRecent);
     }
 
     note(ref, kind) {
@@ -298,11 +295,7 @@ export class RecentMedia {
         const kept = newestFirst.filter(outlivesSession).slice(0, MaxRecent);
         const opened = newestFirst.filter((other) => !outlivesSession(other)).slice(0, MaxRecent);
         this.entries = newestFirst.filter((other) => kept.includes(other) || opened.includes(other));
-        try {
-            this.storage().setItem(RecentKey, JSON.stringify(kept));
-        } catch (error) {
-            console.warn("Could not keep the recently loaded media:", error);
-        }
+        writeStored(this.storage, RecentKey, kept, "the recently loaded media");
     }
 
     /** Where a descriptor stands in the list, newest at 0, or -1 when it was not loaded recently. */

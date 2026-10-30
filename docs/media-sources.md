@@ -149,7 +149,7 @@ manifest's fields, with `repo` and `ref` in place of the site:
 The entry is listed as `github:<repo>/<path>`, or `github:<repo>@<ref>/<path>` when it has a ref.
 A link that boots it finds its `machine` only when the link spells the reference that way: the
 same disc named with `@main`, say, loads but is not switched to the machine it needs.
-`tests/unit/test-github-source.js` checks every entry's fields, and that no two entries name the
+`tests/unit/test-archive-sources.js` checks every entry's fields, and that no two entries name the
 same disc.
 
 ## Adding a source
@@ -162,14 +162,14 @@ same disc.
    `SourceRank`.
 3. In `src/media-resolver.js`: the schema in `Schemas`, and a `case` in `resolve` if an existing
    route does not fit. A schema with no source is marked `personal` there instead.
-4. A source class in `src/web/` that constructs the archive and registers both halves:
-   `media.addSource(schema, fetcher)` and `media.addLister(source, lister)`. A source whose
+4. In `src/web/archive-sources.js`, `addArchiveSources` constructs the archive and registers both
+   halves: `media.addSource(schema, fetcher)` and `media.addLister(source, lister)`. A source whose
    entries can carry `requires` also registers `media.addDescriber(source, (path) => descriptor)`,
    so a link that boots one of its discs can find the requirement without listing the catalogue.
-5. Wiring: construct the source in `src/main.js` beside the others, and register the fetcher in
-   `src/machine-session.js` so the headless session and the MCP server can load its references.
-   A source whose route needs no fetcher, as GitHub's does not, has nothing to register there.
+5. Register the fetcher in `src/machine-session.js` too, so the headless session and the MCP server
+   can load its references. A source whose route needs no fetcher, as GitHub's does not, has
+   nothing to register there.
 6. The README's list of `disc=` forms, and a mention in the media window paragraph.
-7. Tests: the archive (`fetch` stubbed with `vi.spyOn`, restored after each test), the source's
-   registration, the descriptor in the catalogue tests, the schema in the resolver tests, and any
-   new row behaviour in the media window tests.
+7. Tests: the archive (`fetch` stubbed with `vi.spyOn`, restored after each test), the
+   registration in `test-archive-sources.js`, the descriptor in the catalogue tests, the schema in
+   the resolver tests, and any new row behaviour in the media window tests.

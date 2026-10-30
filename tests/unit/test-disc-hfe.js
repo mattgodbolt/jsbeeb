@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
 
-import { Disc, DiscConfig, discReport, loadAdf, loadSsd, sniffSurfaceLayout, toSsdOrDsd } from "../../src/disc.js";
+import { Disc, DiscConfig, discReport, loadAdf, sniffSurfaceLayout, toSsdOrDsd } from "../../src/disc.js";
 import { loadHfe, sniffHfeLayout, toHfe, convertTrackToHfeV3 } from "../../src/disc-hfe.js";
-import { SectorBytes, fmDiscWithSector, mfmDiscWithSector } from "../helpers/disc-builders.js";
+import { SectorBytes, fmDiscWithSector, mfmDiscWithSector, ssdDisc } from "../helpers/disc-builders.js";
 import * as fs from "node:fs";
 
 const TrackBytes = 10 * SectorBytes;
@@ -48,10 +48,9 @@ function expectSameSectors(original, copy) {
 }
 
 function countingImage(length, isDsd) {
-    return loadSsd(
-        new Disc(true, new DiscConfig(), "test.ssd"),
+    return ssdDisc(
         new Uint8Array(length).map((_, i) => i & 0xff),
-        isDsd,
+        { isDsd },
     );
 }
 
@@ -213,9 +212,7 @@ describe("telling a 40 track HFE from an 80 track one", () => {
     });
 
     it("wants more than a track or two before it believes", () => {
-        const config = new DiscConfig();
-        config.expandTo80 = true;
-        const disc = loadSsd(new Disc(true, config, "test.ssd"), new Uint8Array(40 * TrackBytes), false, null);
+        const disc = ssdDisc(new Uint8Array(40 * TrackBytes), { expandTo80: true });
         // A capture holding only the first couple of tracks cannot say which pitch it was at.
         for (let trackNum = 4; trackNum < disc.tracksUsed; ++trackNum) disc.eraseTrack(false, trackNum);
 

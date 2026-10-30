@@ -4,11 +4,8 @@
  *
  * @param {string[]} [argv=process.argv] Full argv array.
  * @param {boolean} [defaultApp=process.defaultApp]
- *   True when running under `electron .` (dev). Electron only sets
- *   process.defaultApp in that case, so we use it instead of comparing
- *   basename(argv[0]) === "jsbeeb" (the previous check), which failed on
- *   Windows where the binary is jsbeeb.exe, silently dropping the first
- *   user argument. See issue #684.
+ *   True when running under `electron .` (dev); Electron sets it only then,
+ *   whatever the binary is called.
  * @returns {string[]}
  */
 export function getArguments(argv = process.argv, defaultApp = process.defaultApp) {

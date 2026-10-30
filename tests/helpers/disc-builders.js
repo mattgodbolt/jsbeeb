@@ -1,4 +1,4 @@
-import { Disc, DiscConfig } from "../../src/disc.js";
+import { Disc, DiscConfig, loadSsd } from "../../src/disc.js";
 import { IbmDiscFormat } from "../../src/disc-format.js";
 
 export const SectorLengthCode = 1;
@@ -8,6 +8,16 @@ export const MfmSectorGap = 22;
 export function blankDisc() {
     return new Disc(true, new DiscConfig(), "test.ssd");
 }
+
+/** `data` loaded as an SSD, or as a DSD with `isDsd`, its 40 tracks spread across 80 with `expandTo80`. */
+export function ssdDisc(data, { expandTo80 = false, isDsd = false, onChange = null } = {}) {
+    const config = new DiscConfig();
+    config.expandTo80 = expandTo80;
+    return loadSsd(new Disc(true, config, "test.ssd"), data, isDsd, onChange);
+}
+
+/** Cycles in `n` milliseconds at the BBC's 2MHz. */
+export const ms = (n) => n * 2000;
 
 export function sectorData() {
     return new Uint8Array(SectorBytes).map((_, i) => i & 0xff);
@@ -26,19 +36,7 @@ export function appendFmSector(
     return builder
         .appendRepeatFmByte(0xff, IbmDiscFormat.stdGap1FFs)
         .appendRepeatFmByte(0x00, IbmDiscFormat.stdSync00s)
-        .resetCrc()
-        .appendFmDataAndClocks(idMark, IbmDiscFormat.markClockPattern)
-        .appendFmByte(track)
-        .appendFmByte(0)
-        .appendFmByte(sector)
-        .appendFmByte(SectorLengthCode)
-        .appendCrc()
-        .appendRepeatFmByte(0xff, IbmDiscFormat.stdGap2FFs)
-        .appendRepeatFmByte(0x00, IbmDiscFormat.stdSync00s)
-        .resetCrc()
-        .appendFmDataAndClocks(dataMark, IbmDiscFormat.markClockPattern)
-        .appendFmChunk(data)
-        .appendCrc();
+        .appendFmSector({ idMark, dataMark, track, head: 0, sector, lengthCode: SectorLengthCode, data });
 }
 
 export function appendMfmSector(
@@ -53,22 +51,7 @@ export function appendMfmSector(
 ) {
     return builder
         .appendRepeatMfmByte(0x4e, MfmSectorGap)
-        .appendRepeatMfmByte(0x00, 12)
-        .resetCrc()
-        .appendMfm3xA1Sync()
-        .appendMfmByte(idMark)
-        .appendMfmByte(0)
-        .appendMfmByte(0)
-        .appendMfmByte(sector)
-        .appendMfmByte(lengthCode)
-        .appendCrc()
-        .appendRepeatMfmByte(0x4e, MfmSectorGap)
-        .appendRepeatMfmByte(0x00, 12)
-        .resetCrc()
-        .appendMfm3xA1Sync()
-        .appendMfmByte(dataMark)
-        .appendMfmChunk(data)
-        .appendCrc();
+        .appendMfmSector({ idMark, dataMark, track: 0, head: 0, sector, lengthCode, data });
 }
 
 /** A disc whose track 0 holds the one sector `options` describe and nothing else. */

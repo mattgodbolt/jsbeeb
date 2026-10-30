@@ -1,9 +1,8 @@
 import { describe, it } from "vitest";
 import path from "node:path";
 import sharp from "sharp";
-import { TestMachine } from "../../src/test-machine.js";
 import { Video } from "../../src/video.js";
-import { RepoRoot } from "./helpers.js";
+import { bootedTestMachine, RepoRoot } from "./helpers.js";
 import { expectPngToMatch } from "./png.js";
 
 class CapturingVideo extends Video {
@@ -35,13 +34,6 @@ class CapturingVideo extends Video {
     }
 }
 
-async function bootedMachine(video) {
-    const testMachine = new TestMachine(null, { video });
-    await testMachine.initialise();
-    await testMachine.runUntilInput();
-    return testMachine;
-}
-
 const RefDir = path.join(RepoRoot, "tests/integration/teletext");
 
 const FieldCycles = 40000;
@@ -71,7 +63,7 @@ async function compare(video, testMachine, expectedName, field) {
 describe("Test Ceefax test page", () => {
     it("should match the Ceefax test page with flash hidden and shown, before and after reveal", async () => {
         const video = new CapturingVideo();
-        const testMachine = await bootedMachine(video);
+        const testMachine = await bootedTestMachine(undefined, { video });
         await testMachine.loadDisc("discs/eng_test.ssd");
         await testMachine.type("*EXEC !BOOT");
         // The drive has to spin up before the page can load, and the load takes a second or so.
@@ -87,7 +79,7 @@ describe("Test Ceefax test page", () => {
 describe("Test other teletext test pages", () => {
     it("should work with hoglet's test case", async () => {
         const video = new CapturingVideo();
-        const testMachine = await bootedMachine(video);
+        const testMachine = await bootedTestMachine(undefined, { video });
         // https://github.com/mattgodbolt/jsbeeb/issues/316
         await testMachine.type("VDU &91,&61,&9E,&92,&93,&94,&81,&91,&91,10,13");
         await testMachine.runUntilInput();
@@ -95,7 +87,7 @@ describe("Test other teletext test pages", () => {
     });
     it("should apply Steady as Set At, not Set After (bug 611)", async () => {
         const video = new CapturingVideo();
-        const testMachine = await bootedMachine(video);
+        const testMachine = await bootedTestMachine(undefined, { video });
         // https://github.com/mattgodbolt/jsbeeb/issues/611
         // Red graphics, Flash, two blocks, Hold, Steady, two blocks: with the flash hidden, the held
         // block in the Steady cell shows, as Steady is Set At.
@@ -105,7 +97,7 @@ describe("Test other teletext test pages", () => {
     });
     it("should work with the alternative engineer test page bug 469", async () => {
         const video = new CapturingVideo();
-        const testMachine = await bootedMachine(video);
+        const testMachine = await bootedTestMachine(undefined, { video });
         // https://github.com/mattgodbolt/jsbeeb/issues/469
         // Taken from the 7th line of the engineer test page from b2.
         await testMachine.type(

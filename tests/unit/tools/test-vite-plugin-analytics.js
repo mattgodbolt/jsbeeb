@@ -1,34 +1,19 @@
-import { readFileSync } from "node:fs";
-import { createServer } from "vite";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { analyticsPlugin } from "../../tools/vite-plugin-analytics.js";
-
-const IndexHtml = readFileSync(new URL("../../index.html", import.meta.url), "utf8");
+import { analyticsPlugin } from "../../../tools/vite-plugin-analytics.js";
+import { indexHtmlThroughPlugin } from "../../helpers/vite-page.js";
 
 const cspOf = (html) => html.match(/http-equiv="Content-Security-Policy"\s+content="([^"]*)"/)[1];
 
 describe("analyticsPlugin", () => {
-    let server;
-
-    const pageWith = async (measurementId) => {
-        server = await createServer({
-            configFile: false,
-            logLevel: "silent",
-            plugins: [analyticsPlugin(measurementId)],
-            server: { middlewareMode: true, hmr: false, ws: false },
-        });
-        return server.transformIndexHtml("/index.html", IndexHtml);
-    };
+    const pageWith = (measurementId) => indexHtmlThroughPlugin(analyticsPlugin(measurementId));
 
     beforeEach(() => {
         vi.stubEnv("GA_MEASUREMENT_ID", undefined);
     });
 
-    afterEach(async () => {
+    afterEach(() => {
         vi.unstubAllEnvs();
-        await server?.close();
-        server = undefined;
     });
 
     it.each([undefined, ""])("puts nothing of Google's on the page when the id is %j", async (measurementId) => {

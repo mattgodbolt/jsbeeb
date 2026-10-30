@@ -1,5 +1,6 @@
 import { IbmDiscFormat } from "../disc-format.js";
 import { discReport } from "../disc.js";
+import { setText } from "./dom-utils.js";
 import { FloatingPanel, MenuGroup } from "./floating-panel.js";
 import { EndEdge, StartEdge } from "./panel-layout.js";
 import {
@@ -66,11 +67,6 @@ const Views = {
         legend: () => RegionStyles.map(({ hex, name }) => swatch(hex, name)).join("") + swatch(ErrorHex, "CRC error"),
     },
 };
-
-/** These lines are rewritten every frame, so skip the ones that have not changed. */
-function setText(element, text) {
-    if (element.textContent !== text) element.textContent = text;
-}
 
 /** One atomic legend entry, so a swatch never gets orphaned from its label by a line break. */
 function swatch(colour, label) {

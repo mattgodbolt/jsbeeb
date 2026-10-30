@@ -243,7 +243,7 @@ describe("xBR shader", () => {
             const expected = rendered.diagonal;
             const actual = rendered[variant];
             expect([actual.width, actual.height]).toEqual([expected.width, expected.height]);
-            expect([...actual.data]).toEqual([...expected.data]);
+            expect(actual.data).toEqual(expected.data);
         });
     });
 });

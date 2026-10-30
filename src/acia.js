@@ -261,7 +261,6 @@ export class Acia extends EventTarget {
     }
 
     snapshotState() {
-        const scheduler = this.txCompleteTask.scheduler;
         return {
             sr: this.sr,
             cr: this.cr,
@@ -274,11 +273,9 @@ export class Acia extends EventTarget {
             hadDcdHigh: this.hadDcdHigh,
             serialReceiveRate: this.serialReceiveRate,
             serialTransmitRate: this.serialTransmitRate,
-            txCompleteTaskOffset: this.txCompleteTask.scheduled()
-                ? this.txCompleteTask.expireEpoch - scheduler.epoch
-                : null,
-            runTapeTaskOffset: this.runTapeTask.scheduled() ? this.runTapeTask.expireEpoch - scheduler.epoch : null,
-            runRs423TaskOffset: this.runRs423Task.scheduled() ? this.runRs423Task.expireEpoch - scheduler.epoch : null,
+            txCompleteTaskOffset: this.txCompleteTask.offset(),
+            runTapeTaskOffset: this.runTapeTask.offset(),
+            runRs423TaskOffset: this.runRs423Task.offset(),
         };
     }
 
@@ -299,12 +296,9 @@ export class Acia extends EventTarget {
         this.setSerialTransmit(state.serialTransmitRate ?? 19200);
         this.updateIrq();
 
-        this.txCompleteTask.cancel();
-        this.runTapeTask.cancel();
-        this.runRs423Task.cancel();
-        if (state.txCompleteTaskOffset !== null) this.txCompleteTask.schedule(state.txCompleteTaskOffset);
-        if (state.runTapeTaskOffset !== null) this.runTapeTask.schedule(state.runTapeTaskOffset);
-        if (state.runRs423TaskOffset !== null) this.runRs423Task.schedule(state.runRs423TaskOffset);
+        this.txCompleteTask.restoreOffset(state.txCompleteTaskOffset);
+        this.runTapeTask.restoreOffset(state.runTapeTaskOffset);
+        this.runRs423Task.restoreOffset(state.runRs423TaskOffset);
     }
 
     /** A tape put in, or taken out, while the tape is meant to be running starts or stops at once. */
