@@ -1,4 +1,4 @@
-/** What the archive mirror tools share: polite fetching with retries, a worker pool, and safe file writes. */
+/** What the archive mirror tools share: polite fetching with retries, a worker pool, and their small file helpers. */
 
 import { mkdir, stat, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
