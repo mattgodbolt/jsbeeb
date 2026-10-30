@@ -44,7 +44,8 @@ function captureThumbnail(fb32) {
 }
 
 /**
- * Execute cycles until a complete top-to-bottom frame is in fb32.
+ * Execute cycles until a complete top-to-bottom frame is in fb32, with the debug hooks detached so that no
+ * breakpoint or watch cuts the preview short.
  *
  * Snapshots may be mid-frame, so we run through two vsyncs:
  * 1. First vsync completes the partial frame and clears fb32 normally.
@@ -52,26 +53,28 @@ function captureThumbnail(fb32) {
  *    so fb32 retains the completed frame for capture.
  */
 function executeUntilFrame(processor, video) {
-    const startFrame = video.frameCount;
+    processor.withoutDebugHooks(() => {
+        const startFrame = video.frameCount;
 
-    // Phase 1: run to first vsync (completes partial frame, clears fb32)
-    for (let i = 0; i < MaxChunks; i++) {
-        if (processor.execute(CyclesPerChunk) === false) break;
-        if (video.frameCount !== startFrame) break;
-    }
-
-    // Phase 2: run to second vsync with clear suppressed (full frame in fb32)
-    const secondFrame = video.frameCount;
-    const origClear = video.clearPaintBuffer;
-    video.clearPaintBuffer = function () {};
-    try {
+        // Phase 1: run to first vsync (completes partial frame, clears fb32)
         for (let i = 0; i < MaxChunks; i++) {
-            if (processor.execute(CyclesPerChunk) === false) return;
-            if (video.frameCount !== secondFrame) return;
+            if (processor.execute(CyclesPerChunk) === false) break;
+            if (video.frameCount !== startFrame) break;
         }
-    } finally {
-        video.clearPaintBuffer = origClear;
-    }
+
+        // Phase 2: run to second vsync with clear suppressed (full frame in fb32)
+        const secondFrame = video.frameCount;
+        const origClear = video.clearPaintBuffer;
+        video.clearPaintBuffer = function () {};
+        try {
+            for (let i = 0; i < MaxChunks; i++) {
+                if (processor.execute(CyclesPerChunk) === false) return;
+                if (video.frameCount !== secondFrame) return;
+            }
+        } finally {
+            video.clearPaintBuffer = origClear;
+        }
+    });
 }
 
 /**

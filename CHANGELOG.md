@@ -1,5 +1,45 @@
 # Changelog
 
+## [2.13.0](https://github.com/mattgodbolt/jsbeeb/compare/v2.12.1...v2.13.0) (2026-10-29)
+
+
+### Features
+
+* a click on the stopped screen opens the memory panel at the byte drawn there ([#1656](https://github.com/mattgodbolt/jsbeeb/issues/1656)) ([05e1724](https://github.com/mattgodbolt/jsbeeb/commit/05e17240ced7198ee231d2ff38fb96e47ebabfec))
+* a decoded 6845 CRTC panel, replacing the debugger's raw Peripherals panel ([#1651](https://github.com/mattgodbolt/jsbeeb/issues/1651)) ([1d3ac50](https://github.com/mattgodbolt/jsbeeb/commit/1d3ac505a276626757a7a5cf858dac2e9c28242e))
+* a decoded system VIA panel with the keyboard matrix ([#1594](https://github.com/mattgodbolt/jsbeeb/issues/1594)) ([c06dfef](https://github.com/mattgodbolt/jsbeeb/commit/c06dfef9807454d06e22492652f61e25dcb00bdb))
+* a decoded user VIA panel, with debug panels that register themselves, share one refresh and one shell ([#1616](https://github.com/mattgodbolt/jsbeeb/issues/1616)) ([b6c4f0f](https://github.com/mattgodbolt/jsbeeb/commit/b6c4f0f7170e23e108198981767f1d560569af7c))
+* a disc controller panel in the debugger, with the controller's log ([#1667](https://github.com/mattgodbolt/jsbeeb/issues/1667)) ([60eb284](https://github.com/mattgodbolt/jsbeeb/commit/60eb284c61e2fa59277d4f6093d9ab90c9949c36))
+* a sound chip panel showing the SN76489 decoded, with channel mutes ([#1655](https://github.com/mattgodbolt/jsbeeb/issues/1655)) ([aa0a7d7](https://github.com/mattgodbolt/jsbeeb/commit/aa0a7d7b4f873aeec494b6be87a2cec7996a9aa8))
+* a video ULA panel, with NuLA's palette when one is fitted ([#1650](https://github.com/mattgodbolt/jsbeeb/issues/1650)) ([b5eef26](https://github.com/mattgodbolt/jsbeeb/commit/b5eef26eaa8d8fa34da640184f6c44d34db054db))
+* a watch can stop the machine when a write changes it, or makes it match a condition ([#1663](https://github.com/mattgodbolt/jsbeeb/issues/1663)) ([4885c84](https://github.com/mattgodbolt/jsbeeb/commit/4885c8483d213f4179ee1eb58cb891d3092d20d1))
+* a wider disassembly panel gives its label column half the extra width ([#1634](https://github.com/mattgodbolt/jsbeeb/issues/1634)) ([01e86fe](https://github.com/mattgodbolt/jsbeeb/commit/01e86fe50890552b0fd198e9088dde0eb5e01d35))
+* an on-screen BBC keyboard for phones ([#1602](https://github.com/mattgodbolt/jsbeeb/issues/1602)) ([2dbfacd](https://github.com/mattgodbolt/jsbeeb/commit/2dbfacd9043db2a2b5df0f76cfa82dd3f71449af))
+* debugger run to cursor and step over a loop, with step over and out running the machine ([#1596](https://github.com/mattgodbolt/jsbeeb/issues/1596)) ([455f34a](https://github.com/mattgodbolt/jsbeeb/commit/455f34a6040be00acc1a1c35b563ffe3879e22dc))
+* Help splits into tabs, its key tables made from the keys themselves ([#1654](https://github.com/mattgodbolt/jsbeeb/issues/1654)) ([aaf48f0](https://github.com/mattgodbolt/jsbeeb/commit/aaf48f0dad6a67f9b73a3a40270a720b84592500))
+* let the no-audio-worklet warning be closed ([#1608](https://github.com/mattgodbolt/jsbeeb/issues/1608)) ([19d6cdd](https://github.com/mattgodbolt/jsbeeb/commit/19d6cdd0a9dfa8deb182e3683e589707ecf80080))
+* load BeebAsm, VICE and b-em label files into the debugger ([#1657](https://github.com/mattgodbolt/jsbeeb/issues/1657)) ([17df455](https://github.com/mattgodbolt/jsbeeb/commit/17df455c14f5148b3d76f1f7330138bf598ad012))
+* make the on-screen keyboard look like a real Model B's: Gorton legends, drawn f keys and arrows, and the real key colours ([#1615](https://github.com/mattgodbolt/jsbeeb/issues/1615)) ([83b92ac](https://github.com/mattgodbolt/jsbeeb/commit/83b92ac2e974a661ab22cf730d1c8b3511a099ef))
+* note the SHEILA register an operand addresses in the disassembly ([#1593](https://github.com/mattgodbolt/jsbeeb/issues/1593)) ([c6df61c](https://github.com/mattgodbolt/jsbeeb/commit/c6df61cc085235f1e1b82c94feaea01341c2576f))
+* remember where floating panels are put, and let them be resized ([#1599](https://github.com/mattgodbolt/jsbeeb/issues/1599)) ([2159ad9](https://github.com/mattgodbolt/jsbeeb/commit/2159ad90a93e1d03988d9e9d0a1ee177ca993983))
+* save a range of memory to a file and edit bytes in place from the memory panel ([#1665](https://github.com/mattgodbolt/jsbeeb/issues/1665)) ([c8c3b9c](https://github.com/mattgodbolt/jsbeeb/commit/c8c3b9c37981e63e9fe98a77373e14ec9b261571))
+* split the debugger into floating panels, with a toolbar, a Debug menu and keys owned by panels ([#1603](https://github.com/mattgodbolt/jsbeeb/issues/1603)) ([64806fc](https://github.com/mattgodbolt/jsbeeb/commit/64806fc819eb34dadd10ae4f9af1b3207664a8bd))
+* the disassembly and memory panels show as many rows as fit their height ([#1618](https://github.com/mattgodbolt/jsbeeb/issues/1618)) ([9abe182](https://github.com/mattgodbolt/jsbeeb/commit/9abe182a07de06558ad97e37bf5c08d3e36592f8))
+* the memory view shows 8, 16, 32 or more bytes a row as its panel widens ([#1639](https://github.com/mattgodbolt/jsbeeb/issues/1639)) ([b02658a](https://github.com/mattgodbolt/jsbeeb/commit/b02658ad9637f87a05abf8cfbc8e98c7e8314234))
+* the registers panel shows a stopwatch and where the beam is, and the debugger runs to a line or the next vsync ([#1659](https://github.com/mattgodbolt/jsbeeb/issues/1659)) ([bc6e6bb](https://github.com/mattgodbolt/jsbeeb/commit/bc6e6bb2dc0ef07e286cd1d2b4b700bb2d35d688))
+
+
+### Bug Fixes
+
+* a debugger redraw while stopped no longer undoes a panel drag in progress ([#1621](https://github.com/mattgodbolt/jsbeeb/issues/1621)) ([b938dc4](https://github.com/mattgodbolt/jsbeeb/commit/b938dc440bb10fcb05d5f0d50661e5f2aa96781e))
+* a gamepad on the Atom presses the Atom's keys, the Atom joystick keys by default ([#1642](https://github.com/mattgodbolt/jsbeeb/issues/1642)) ([3ef9727](https://github.com/mattgodbolt/jsbeeb/commit/3ef97271482c107d9e6df887a1b6a1fbb54fe6a5))
+* a modal's late hidden event acts only on its own opening, not on a dialog shown during its backdrop's fade ([#1677](https://github.com/mattgodbolt/jsbeeb/issues/1677)) ([a7ad225](https://github.com/mattgodbolt/jsbeeb/commit/a7ad2251e3a9072057e9aeeb67651751693079d6))
+* centre the disassembly's highlight in a resized panel, running or stepping ([#1638](https://github.com/mattgodbolt/jsbeeb/issues/1638)) ([7500a2d](https://github.com/mattgodbolt/jsbeeb/commit/7500a2dec2db09f4cad327227a50561e8a1c8311))
+* decode the Model B's SHEILA mirrors for ROMSEL, INTOFF, INTON and the ADLC ([#1598](https://github.com/mattgodbolt/jsbeeb/issues/1598)) ([0dea4be](https://github.com/mattgodbolt/jsbeeb/commit/0dea4be9a2ef35c14c6b53afa1d6a769f07ac0d5))
+* noise following tone 2 treats period 0 as 1024, as the tone does ([#1664](https://github.com/mattgodbolt/jsbeeb/issues/1664)) ([a773a5b](https://github.com/mattgodbolt/jsbeeb/commit/a773a5b435202d92dcec5b25f6868925c2a91f4a))
+* on the Atom the gamepad also works the AtoMMC's joystick port ([#1649](https://github.com/mattgodbolt/jsbeeb/issues/1649)) ([4f2c7e2](https://github.com/mattgodbolt/jsbeeb/commit/4f2c7e28d793e64892c0016534cf00c3be7c9bd8))
+* wrap the disassembly past $ffff to $0000 ([#1619](https://github.com/mattgodbolt/jsbeeb/issues/1619)) ([c0ad567](https://github.com/mattgodbolt/jsbeeb/commit/c0ad5672d94d19e1acd7e3c0d0e02eda25b23540))
+
 ## [2.12.1](https://github.com/mattgodbolt/jsbeeb/compare/v2.12.0...v2.12.1) (2026-10-28)
 
 

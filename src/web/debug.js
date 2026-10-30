@@ -1,4 +1,4 @@
-import { downloadBlob, toggle } from "./dom-utils.js";
+import { downloadBlob } from "./dom-utils.js";
 import { hexbyte, hexword, parseAddr } from "../hex.js";
 import { NoNames } from "../symbol-names.js";
 import { isHttps } from "../symbol-sets.js";
@@ -10,10 +10,17 @@ import { DebugGroup, FloatingPanel } from "./floating-panel.js";
 import { EndEdge, Gap, StartEdge } from "./panel-layout.js";
 import { keyLine } from "./panel-keys.js";
 import { cycleCount } from "../lockstep.js";
+import { NumRomBanks } from "../6502.js";
 import { bindGotoForm, externalLink, FittedRows, labelHtml, powerOfTwoColumnsThatFit } from "./debug-dom.js";
 import { DisassemblyView } from "./disassembly-view.js";
+import { Dropdown } from "bootstrap";
 
 const noop = () => {};
+
+const LabelDrop = {
+    dropWhat: "Drop a label file",
+    dropInto: "BeebAsm, VICE or b-em labels name addresses in the debugger",
+};
 
 const InitialMemoryRows = 16;
 const FewestBytesPerRow = 8;
@@ -345,11 +352,12 @@ export class Debugger {
     /**
      * @param {object} options
      * @param {import("../symbol-sets.js").SymbolSets | null} options.symbolSets - where names for addresses come from
+     * @param {import("../label-files.js").LabelFiles} options.labelFiles - the user's own names, ahead of the sets'
      * @param {import("./panel-keys.js").PanelKeys} options.keys - where the panels' keys are routed from
      * @param {import("./floating-panel.js").PanelArrangement} options.arrangement - what places its panels
      * @param {HTMLElement} options.monitor - the monitor around the screen, which shows when a click finds a byte
      */
-    constructor({ symbolSets, keys, arrangement, monitor }) {
+    constructor({ symbolSets, labelFiles, keys, arrangement, monitor }) {
         this._arrangement = arrangement;
         this._monitor = monitor;
         this.patchInstructions = new Map();
@@ -380,14 +388,17 @@ export class Debugger {
         // Fetches the index, and the sets matching memory now, so names typed while the machine runs can resolve.
         this.watches.floating.addEventListener("open", () => this._namesNow());
         this._symbolSets = symbolSets;
+        this._labelFiles = labelFiles;
         this._names = NoNames;
-        for (const credit of Object.values(this._credits)) toggle(credit.line, symbolSets !== null);
         symbolSets?.addEventListener("loaded", () => {
             // The index arriving is what lets the sets matching memory be fetched.
             if (this.watches.floating.isOpen) this._namesNow();
-            if (!this.cpu || (!this._inDebugger && !this._ownPanelsShown())) return;
-            this._matchSymbols();
-            this._refresh.drawNow();
+            this._renameShown();
+        });
+        this._labelsLine = document.querySelector("#disassembly-panel .debug-labels");
+        labelFiles.addEventListener("change", () => {
+            this._showLabelFiles();
+            this._renameShown();
         });
 
         this.panels = Object.fromEntries(OwnPanels.map((own) => [own.id, this._makePanel(own)]));
@@ -426,6 +437,7 @@ export class Debugger {
         });
         this._bindToolbar();
         this._bindKeys(keys);
+        this._bindLabelDrops();
 
         bindGotoForm(document.getElementById("goto-mem-addr-form"), resolve, (address) =>
             this._memoryView.update(address),
@@ -494,6 +506,76 @@ export class Debugger {
             downloadBlob(new Blob([bytes]), `memory-${hexword(start)}-${hexword(end)}.bin`);
             close();
         });
+    }
+
+    _renameShown() {
+        if (!this.cpu || (!this._inDebugger && !this._ownPanelsShown())) return;
+        this._matchSymbols();
+        this._refresh.drawNow();
+    }
+
+    /** Lists the label files under the disassembly, each with the bank it is for and a button to forget it. */
+    _showLabelFiles() {
+        // Bootstrap holds on to each menu's toggle until it is disposed of, open or not.
+        for (const toggle of this._labelsLine.querySelectorAll(".label-bank")) Dropdown.getInstance(toggle)?.dispose();
+        const { files } = this._labelFiles;
+        this._labelsLine.hidden = files.length === 0;
+        this._labelsLine.replaceChildren(
+            "labels from ",
+            ...files.flatMap((file, i) => [...(i ? [" · "] : []), this._labelFileNode(file)]),
+        );
+    }
+
+    _labelFileNode(file) {
+        const node = document.createElement("span");
+        node.className = "label-file dropdown";
+        const bank = document.createElement("button");
+        bank.type = "button";
+        bank.className = "label-bank dropdown-toggle";
+        bank.dataset.bsToggle = "dropdown";
+        bank.textContent = file.bank === null ? "any bank" : `bank ${file.bank}`;
+        bank.title = `Which sideways bank ${file.title} names $8000-$bfff in`;
+        // Bootstrap focuses the toggle as its menu opens.
+        bank.addEventListener("hidden.bs.dropdown", () => bank.blur());
+        const banks = document.createElement("div");
+        banks.className = "dropdown-menu dropdown-menu-dark label-banks";
+        banks.append(
+            ...[null, ...Array.from({ length: NumRomBanks }, (_, n) => n)].map((choice) => {
+                const item = document.createElement("button");
+                item.type = "button";
+                item.className = "dropdown-item";
+                item.classList.toggle("active", choice === file.bank);
+                item.textContent = choice === null ? "any bank" : `${choice}`;
+                item.addEventListener("click", () => this._labelFiles.tie(file, choice));
+                return item;
+            }),
+        );
+        const forget = document.createElement("button");
+        forget.type = "button";
+        forget.className = "label-forget";
+        forget.textContent = "\u00d7";
+        forget.title = forget.ariaLabel = `Forget ${file.title}'s labels`;
+        forget.addEventListener("click", () => this._labelFiles.remove(file));
+        node.append(file.title, " ", bank, banks, forget);
+        return node;
+    }
+
+    async _dropLabels(file) {
+        try {
+            const added = this._labelFiles.add({
+                key: `dropped:${file.name}`,
+                title: file.name,
+                source: "",
+                text: await file.text(),
+                bank: null,
+            });
+            const names = new Set(added.labels.map(({ name }) => name)).size;
+            toast(`${names} names from ${file.name} are in the debugger.`, {
+                title: "Label files",
+            });
+        } catch (error) {
+            toast(error.message, { title: "Label files" });
+        }
     }
 
     _offerWatch(e, address, name) {
@@ -595,6 +677,27 @@ export class Debugger {
         return this._arrangement.panelsIn(DebugGroup);
     }
 
+    /**
+     * Has every debug panel and the watch panel take a dropped label file. Other modules make debug panels,
+     * before or after this, so each is marked for the media window's drop zone as a file comes over the page.
+     */
+    _bindLabelDrops() {
+        const takers = () => [...this._debugPanels(), this.watches.floating].map(({ panel }) => panel);
+        document.addEventListener(
+            "dragenter",
+            () => {
+                for (const panel of takers()) Object.assign(panel.dataset, LabelDrop);
+            },
+            true,
+        );
+        document.addEventListener("drop", (e) => {
+            const file = e.dataTransfer?.files[0];
+            if (!file || !takers().some((panel) => panel.contains(e.target))) return;
+            e.preventDefault();
+            this._dropLabels(file);
+        });
+    }
+
     panelsShown() {
         return this._debugPanels().some((floating) => floating.isOpen);
     }
@@ -680,6 +783,7 @@ export class Debugger {
     setCpu(cpu) {
         this.cpu = cpu;
         this._disassembly.setCpu(cpu);
+        this.watches.setCpu(cpu);
         if (this._ownPanelsShown()) this._refresh.drawNow();
     }
     updateElem(elem, val) {
@@ -764,6 +868,7 @@ export class Debugger {
         this.cancelRun();
         this._matchSymbols();
         for (const own of OwnPanels) own.show(this, where);
+        this.watches.showWhichFired();
         this._refresh.drawn();
         if (!this._inDebugger) {
             noteFeature("debugger", "open");
@@ -793,14 +898,15 @@ export class Debugger {
                 title.className = "symbol-set";
                 title.textContent = set.title;
                 title.title = [set.licence, set.notice].filter(Boolean).join("\n\n");
-                return [...(i ? [" · "] : []), title, " (", ...homeNodes(set.home), sourceNode(set.source), ")"];
+                const origin = set.source ? [" (", ...homeNodes(set.home), sourceNode(set.source), ")"] : [];
+                return [...(i ? [" · "] : []), title, ...origin];
             }),
         );
         credit.line.title = credit.line.textContent;
     }
 
     _namesNow() {
-        return this._symbolSets?.names(this._peek) ?? NoNames;
+        return this._labelFiles.names(this._symbolSets?.names(this._peek) ?? NoNames, this.cpu?.pagedBank);
     }
 
     _resolveWatch(text) {
@@ -844,6 +950,7 @@ export class Debugger {
         // A run handed to the loop keeps the memory it started from, to show what it changed.
         if (!this._runningTo) this.updatePrevMem();
         this.watches.dismissMenu();
+        this.watches.clearFired();
         this._inDebugger = false;
         this._monitor.classList.remove("finds-bytes");
         // Focus left in a goto box would keep the keyboard from the machine.
