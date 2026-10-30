@@ -205,7 +205,7 @@ describe.each(["wasm", "js"])("Teletext painted by the %s drain", (drainKind) =>
 
         const alpha = renderCells([Mosaic]);
 
-        expect([...alpha[0]]).not.toEqual([...graphics[1]]);
+        expect(alpha[0]).not.toEqual(graphics[1]);
     });
 
     it("round-trips conceal through a snapshot", () => {
@@ -238,7 +238,7 @@ describe.each(["wasm", "js"])("Teletext painted by the %s drain", (drainKind) =>
             const top = renderCharacterRow([DoubleHeight, LetterA]);
             const bottom = renderCharacterRow([DoubleHeight, LetterA]);
 
-            const halfOf = (row) => row.map((cells) => [...cells[1]]);
+            const halfOf = (row) => row.map((cells) => cells[1]);
             expect(halfOf(bottom)).not.toEqual(halfOf(top));
             expect(bottom.every((cells) => shownColour(cells[1]) === paletteColour(Blank))).toBe(false);
         });
@@ -276,14 +276,14 @@ describe.each(["wasm", "js"])("Teletext painted by the %s drain", (drainKind) =>
             teletext.setRA0(true);
             const oddRow = renderCells([LetterA]);
 
-            expect([...oddRow[0]]).not.toEqual([...evenRow[0]]);
+            expect(oddRow[0]).not.toEqual(evenRow[0]);
         });
 
         it("wraps back to the top of the glyph after ten scanlines", () => {
             const first = renderCells([LetterA]);
             for (let scanline = 0; scanline < 10; ++scanline) endScanline();
 
-            expect([...renderCells([LetterA])[0]]).toEqual([...first[0]]);
+            expect(renderCells([LetterA])[0]).toEqual(first[0]);
         });
 
         it("restarts the glyph when a frame begins", () => {
@@ -292,8 +292,8 @@ describe.each(["wasm", "js"])("Teletext painted by the %s drain", (drainKind) =>
             const second = renderCells([LetterA]);
             endFrame();
 
-            expect([...second[0]]).not.toEqual([...first[0]]);
-            expect([...renderCells([LetterA])[0]]).toEqual([...first[0]]);
+            expect(second[0]).not.toEqual(first[0]);
+            expect(renderCells([LetterA])[0]).toEqual(first[0]);
         });
     });
 
@@ -338,12 +338,12 @@ describe.each(["wasm", "js"])("Teletext painted by the %s drain", (drainKind) =>
         const continuation = [SolidBlock, WhiteGraphics, SolidBlock, NewBackground, Space, SolidBlock];
         renderCells([BlueGraphics, Flash, SeparatedGraphics, SolidBlock, HoldGraphics, Conceal]);
         const state = teletext.snapshotState();
-        const expected = renderCells(continuation).map((cell) => [...cell]);
+        const expected = renderCells(continuation);
 
         teletext = new Teletext();
         teletext.restoreState(state);
 
-        expect(renderCells(continuation).map((cell) => [...cell])).toEqual(expected);
+        expect(renderCells(continuation)).toEqual(expected);
     });
 
     // The video logs the chip's input and runs it only when something reads it; nothing may tell the difference.
