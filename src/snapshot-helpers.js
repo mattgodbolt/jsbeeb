@@ -26,6 +26,7 @@ const CrtcAddress = 0;
 const CrtcData = 1;
 const UlaControl = 0;
 const UlaPalette = 1;
+const MaxDisplayEnableSkew = 2;
 
 /**
  * A jsbeeb VIA state from an imported VIA's registers and lines.
@@ -118,6 +119,8 @@ export function buildVideoState(ulaControl, ulaPalette, crtcRegs, nulaCollook, c
     video.lineStartAddr = crtcCounters ? crtcCounters.maback : startAddr;
     video.nextLineStartAddr = video.lineStartAddr;
     video.dispEnabled = EVERYTHINGENABLED;
+    // The CRTC leaves a skew of 3 (display off) unset; the import has always shown it as 2.
+    video.displayEnableSkew = Math.min((video.regs[8] & 0x30) >>> 4, MaxDisplayEnableSkew);
     return video.snapshotState();
 }
 
