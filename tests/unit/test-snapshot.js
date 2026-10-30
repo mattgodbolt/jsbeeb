@@ -4,7 +4,7 @@ import { Video } from "../../src/video.js";
 import { SoundChip } from "../../src/soundchip.js";
 import { machineSpec, nullIo } from "../../src/machine-spec.js";
 import { TEST_6502, TEST_65C12, TubeModel } from "../../src/models.js";
-import { Disc, DiscConfig, loadSsd } from "../../src/disc.js";
+import { ssdDisc } from "../helpers/disc-builders.js";
 import { typedArrayToBase64 } from "../../src/state-utils.js";
 import { RomBankBytes } from "../../src/6502.js";
 
@@ -22,7 +22,7 @@ const TrackBytes = 256 * 10;
 
 function discOf(tracks, doubleSided = false) {
     const image = new Uint8Array(TrackBytes * tracks * (doubleSided ? 2 : 1)).map((_, i) => i * 7);
-    return loadSsd(new Disc(true, new DiscConfig(), "test.ssd"), image, doubleSided);
+    return ssdDisc(image, { isDsd: doubleSided });
 }
 
 describe("Snapshot coordinator", () => {

@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 
+import { loadWorkletProcessor } from "../helpers/stub-audio-context.js";
+
 const BoardSampleRate = 46875;
 const BlockFrames = 128;
 const Quantum = 128;
@@ -8,19 +10,7 @@ const FullScale = 32768;
 let Music5000Processor;
 
 beforeAll(async () => {
-    vi.stubGlobal("sampleRate", BoardSampleRate);
-    vi.stubGlobal(
-        "AudioWorkletProcessor",
-        class {
-            constructor() {
-                this.port = { postMessage() {}, onmessage: null };
-            }
-        },
-    );
-    vi.stubGlobal("registerProcessor", (name, cls) => {
-        Music5000Processor = cls;
-    });
-    await import("../../src/music5000-worklet.js");
+    Music5000Processor = await loadWorkletProcessor(() => import("../../src/music5000-worklet.js"), BoardSampleRate);
 });
 
 afterAll(() => {

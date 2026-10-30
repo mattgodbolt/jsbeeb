@@ -6,7 +6,8 @@
 // 0x0460-0x047F range, identified by an initial 0x046C (BeebEm ID) chunk.
 // Reference: stardot/beebem-windows Src/UefState.cpp
 
-import { volumeTable, buildVideoState, buildSnapshot } from "./snapshot-helpers.js";
+import { buildSnapshot, buildVideoState, importedSoundState, importedViaState } from "./snapshot-helpers.js";
+import { volumeTable } from "./soundchip.js";
 import { BaseRamBytes, packSidewaysRam, RomBankBytes } from "./6502.js";
 
 // Chunk IDs used in BeebEm UEF save states
@@ -113,43 +114,32 @@ function convertViaChunk(data) {
     // Sys VIA (type 0) always needs IC32; default to 0xff if missing
     const ic32 = viaType === 0 ? (data.length > 21 ? data[21] : 0xff) : undefined;
 
-    const result = {
-        ora: data[3],
-        orb: data[1],
-        ira: data[4],
-        irb: data[2],
-        ddra: data[6],
-        ddrb: data[5],
-        sr: 0,
-        acr,
-        pcr,
-        ifr,
-        ier,
-        t1l,
-        t2l,
-        t1c,
-        t2c,
-        // In free-running mode (ACR bit 6), t1hit must be false or jsbeeb
-        // will never generate timer 1 interrupts (blocking the 100Hz tick).
-        t1hit: acr & 0x40 ? false : !!data[19],
-        t2hit: !!data[20],
-        portapins: 0xff,
-        portbpins: 0xff,
-        ca1: false,
-        ca2,
-        cb1: false,
-        cb2,
-        justhit: 0,
-        t1_pb7: (data[1] >> 7) & 1,
-        lastPolltime: 0,
-        taskOffset: 1,
-    };
-    if (ic32 !== undefined) {
-        result.IC32 = ic32;
-        result.capsLockLight = !(ic32 & 0x40);
-        result.shiftLockLight = !(ic32 & 0x80);
-    }
-    return { viaType, state: result };
+    const state = importedViaState(
+        {
+            ora: data[3],
+            orb: data[1],
+            ira: data[4],
+            irb: data[2],
+            ddra: data[6],
+            ddrb: data[5],
+            sr: 0,
+            acr,
+            pcr,
+            ifr,
+            ier,
+            t1l,
+            t2l,
+            t1c,
+            t2c,
+            t1hit: data[19],
+            t2hit: data[20],
+            ca1: false,
+            ca2,
+            cb2,
+        },
+        ic32,
+    );
+    return { viaType, state };
 }
 
 /**
@@ -201,61 +191,31 @@ function convertSoundChunk(data) {
         outputBit[3] = vol3 !== 15;
     }
 
-    return {
-        registers,
-        counter,
-        outputBit,
-        volume,
-        lfsr: 1 << 14,
-        latchedRegister: 0,
-        residual: 0,
-        sineOn: false,
-        sineStep: 0,
-        sineTime: 0,
-    };
+    return importedSoundState({ registers, counter, outputBit, volume }, 1 << 14);
 }
 
-/**
- * Default jsbeeb VIA state used when no VIA chunk is present.
- * @param {number|undefined} ic32 - IC32 value (sys VIA only)
- */
-function defaultViaState(ic32) {
-    const result = {
-        ora: 0xff,
-        orb: 0xff,
-        ira: 0xff,
-        irb: 0xff,
-        ddra: 0x00,
-        ddrb: 0x00,
-        sr: 0,
-        acr: 0x00,
-        pcr: 0x00,
-        ifr: 0x00,
-        ier: 0x80,
-        t1l: 0x1fffe,
-        t2l: 0x1fffe,
-        t1c: 0x1fffe,
-        t2c: 0x1fffe,
-        t1hit: true,
-        t2hit: true,
-        portapins: 0xff,
-        portbpins: 0xff,
-        ca1: false,
-        ca2: false,
-        cb1: false,
-        cb2: false,
-        justhit: 0,
-        t1_pb7: 1,
-        lastPolltime: 0,
-        taskOffset: 1,
-    };
-    if (ic32 !== undefined) {
-        result.IC32 = ic32;
-        result.capsLockLight = !(ic32 & 0x40);
-        result.shiftLockLight = !(ic32 & 0x80);
-    }
-    return result;
-}
+// What a save state with no chunk for a VIA holds for it.
+const MissingUefVia = Object.freeze({
+    ora: 0xff,
+    orb: 0xff,
+    ira: 0xff,
+    irb: 0xff,
+    ddra: 0x00,
+    ddrb: 0x00,
+    sr: 0,
+    acr: 0x00,
+    pcr: 0x00,
+    ifr: 0x00,
+    ier: 0x80,
+    t1l: 0x1fffe,
+    t2l: 0x1fffe,
+    t1c: 0x1fffe,
+    t2c: 0x1fffe,
+    t1hit: true,
+    t2hit: true,
+    ca1: false,
+    ca2: false,
+});
 
 /**
  * Parse a BeebEm UEF save state into a jsbeeb snapshot object.
@@ -317,11 +277,7 @@ export function parseUefSnapshot(buffer) {
     // ── RAM ─────────────────────────────────────────────────────────────
     // Main RAM (chunk 0x0462): 32 KB at offset 0.
     const ram = new Uint8Array(BaseRamBytes);
-    if (chunks.has(ChunkId.MainRam)) {
-        const mainRam = chunks.get(ChunkId.MainRam)[0];
-        // Defensive: chunk is defined as exactly 32 KB; clamp in case of a malformed file
-        ram.set(mainRam.slice(0, Math.min(32768, mainRam.length)));
-    }
+    ram.set(chunks.get(ChunkId.MainRam)[0].subarray(0, 0x8000));
 
     // ── Shadow RAM (chunk 0x0463, Master/B+) ─────────────────────────────
     // BeebEm saves 32 KB (full shadow bank). jsbeeb's LYNNE region is 20 KB
@@ -355,8 +311,8 @@ export function parseUefSnapshot(buffer) {
 
     // ── VIA (chunk 0x0467, one per VIA) ─────────────────────────────────
     // sysvia default: IC32 = 0xff (all outputs open), keyboard not scanning
-    let sysvia = defaultViaState(0xff);
-    let uservia = defaultViaState(undefined);
+    let sysvia = importedViaState(MissingUefVia, 0xff);
+    let uservia = importedViaState(MissingUefVia, undefined);
     if (chunks.has(ChunkId.Via)) {
         for (const d of chunks.get(ChunkId.Via)) {
             const { viaType, state } = convertViaChunk(d);

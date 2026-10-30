@@ -15,7 +15,7 @@ import { TestMachine } from "../../src/test-machine.js";
 import * as fdc from "../../src/fdc.js";
 import { loadData } from "../../src/loader.js";
 import { keyCodes } from "../../src/keymap.js";
-import { mode7Text } from "./helpers.js";
+import { bootedTestMachine, mode7Text } from "./helpers.js";
 import { keyCodeFor } from "../helpers/session-fakes.js";
 
 // Steps the host runs after the last input, for its effect to reach the screen.
@@ -40,13 +40,6 @@ function seededRandom(seed) {
         state = (Math.imul(state, LcgMultiplier) + LcgIncrement) >>> 0;
         return state % limit;
     };
-}
-
-async function booted(model) {
-    const machine = new TestMachine(model);
-    await machine.initialise();
-    await machine.runUntilInput();
-    return machine;
 }
 
 const hosting = (machine, send = () => {}, onJump = () => {}) =>
@@ -101,7 +94,7 @@ const keyInput = (machine, key, down) => ({
  */
 async function runSession({ model, inputs, joinAt = [0], corruptAt, resetAt, guestResetAt, prepare, seed = 1 }) {
     const random = seededRandom(seed);
-    const host = await booted(model);
+    const host = await bootedTestMachine(model);
     prepare?.(host);
     const guests = [];
     let step = 0;
@@ -186,8 +179,7 @@ function expectIdentical(host, guests) {
     for (const { machine } of guests) {
         expect(cycleCount(machine.processor)).toBe(cycleCount(processor));
         expect(stateHash(machine.processor)).toBe(stateHash(processor));
-        // Buffer.compare rather than toEqual, which takes seconds over this many bytes.
-        expect(Buffer.compare(machine.processor.ramRomOs, processor.ramRomOs)).toBe(0);
+        expect(machine.processor.ramRomOs).toEqual(processor.ramRomOs);
         expect(machine.processor.sysvia.cmos.store).toEqual(processor.sysvia.cmos.store);
         expect(mode7Text(machine)).toBe(mode7Text(host));
     }
@@ -252,7 +244,7 @@ describe("lockstep sessions", () => {
 
     describe("one host and one guest", () => {
         async function pair({ prepareHost = async () => {}, prepareGuest } = {}) {
-            const host = await booted("B-DFS1.2");
+            const host = await bootedTestMachine("B-DFS1.2");
             await prepareHost(host);
             const commits = [];
             const lockstep = hosting(host, (commit) => commits.push(commit));
@@ -388,7 +380,7 @@ describe("lockstep sessions", () => {
             vi.stubEnv("TZ", "America/New_York");
             vi.useFakeTimers({ toFake: ["Date"] });
             vi.setSystemTime(Date.UTC(2026, 1, 10, 17, 0, 30));
-            const host = await booted("Master");
+            const host = await bootedTestMachine("Master");
             const { cyclesPerSecond } = host.model;
             // Time on the clock before the session, which a jump must not take off it.
             host.processor.execute(3 * cyclesPerSecond);

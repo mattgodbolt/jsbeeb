@@ -105,16 +105,6 @@ function announceDesync(notify, desyncs, what, reason, other) {
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-export const gzipCodec = Object.freeze({
-    async compress(text) {
-        const stream = new Response(text).body.pipeThrough(new CompressionStream("gzip"));
-        return new Uint8Array(await new Response(stream).arrayBuffer());
-    },
-    async decompress(bytes) {
-        return new Response(new Response(bytes).body.pipeThrough(new DecompressionStream("gzip"))).text();
-    },
-});
-
 function randomId() {
     const bytes = crypto.getRandomValues(new Uint8Array(12));
     return btoa(String.fromCharCode(...bytes))

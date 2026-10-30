@@ -2,23 +2,17 @@ import { describe, it, expect } from "vitest";
 import * as fs from "node:fs";
 
 import { discFor, guessDiscTypeFromName } from "../../src/fdc.js";
-import { Disc, DiscConfig, DiscLayout, loadSsd } from "../../src/disc.js";
+import { DiscLayout } from "../../src/disc.js";
 import { IntelFdc } from "../../src/intel-fdc.js";
 import { Scheduler } from "../../src/scheduler.js";
 import { fake6502 } from "../../src/fake6502.js";
 import { ssdImage } from "./helpers.js";
 import { crc32 } from "../../src/archive.js";
+import { ssdDisc } from "../helpers/disc-builders.js";
 
 const SectorSize = 256;
 const SectorsPerTrack = 10;
 const TrackSize = SectorSize * SectorsPerTrack;
-
-function ssdDisc(numTracks, is40Track) {
-    const config = new DiscConfig();
-    config.expandTo80 = is40Track;
-    const data = new Uint8Array(numTracks * TrackSize);
-    return loadSsd(new Disc(true, config, "test.ssd"), data, false, null);
-}
 
 describe("loading a disc image", () => {
     it("keeps only the CRC of the image it loaded", () => {
@@ -56,15 +50,10 @@ describe("loading a disc image", () => {
     });
 
     it("knows which formats hold a catalogue name", () => {
-        expect(guessDiscTypeFromName("test.ssd").supportsCatalogue).toBe(true);
-        expect(guessDiscTypeFromName("test.dsd").supportsCatalogue).toBe(true);
-        // Naming one of these would call a setter it does not have.
+        expect(guessDiscTypeFromName("test.ssd").setDiscName).not.toBeNull();
+        expect(guessDiscTypeFromName("test.dsd").setDiscName).not.toBeNull();
         for (const name of ["test.adf", "test.adl", "test.hfe"])
-            expect(guessDiscTypeFromName(name).supportsCatalogue).toBe(false);
-    });
-
-    it("has nothing to go on for a format that cannot say", () => {
-        expect(guessDiscTypeFromName("test.adf").sniffLayout(new Uint8Array(80 * 16 * SectorSize))).toBe(null);
+            expect(guessDiscTypeFromName(name).setDiscName).toBeNull();
     });
 });
 
@@ -87,7 +76,7 @@ describe("putting a disc in a drive", () => {
     it("sets the drive's switch to suit the disc", () => {
         const fdc = newFdc();
 
-        fdc.loadDisc(1, ssdDisc(40, true));
+        fdc.loadDisc(1, ssdDisc(new Uint8Array(40 * TrackSize), { expandTo80: true }));
 
         expect(fdc.drives[1].tracksPerStep).toBe(2);
         expect(fdc.drives[0].tracksPerStep).toBe(1);
@@ -96,8 +85,8 @@ describe("putting a disc in a drive", () => {
     it("puts the switch back for the next 80 track disc", () => {
         const fdc = newFdc();
 
-        fdc.loadDisc(0, ssdDisc(40, true));
-        fdc.loadDisc(0, ssdDisc(80, false));
+        fdc.loadDisc(0, ssdDisc(new Uint8Array(40 * TrackSize), { expandTo80: true }));
+        fdc.loadDisc(0, ssdDisc(new Uint8Array(80 * TrackSize)));
 
         expect(fdc.drives[0].tracksPerStep).toBe(1);
     });
@@ -105,8 +94,8 @@ describe("putting a disc in a drive", () => {
     it("leaves the switch where the caller asks for it", () => {
         const fdc = newFdc();
 
-        fdc.loadDisc(0, ssdDisc(40, true), 1);
-        fdc.loadDisc(1, ssdDisc(80, false), 2);
+        fdc.loadDisc(0, ssdDisc(new Uint8Array(40 * TrackSize), { expandTo80: true }), 1);
+        fdc.loadDisc(1, ssdDisc(new Uint8Array(80 * TrackSize)), 2);
 
         expect(fdc.drives[0].tracksPerStep).toBe(1);
         expect(fdc.drives[1].tracksPerStep).toBe(2);

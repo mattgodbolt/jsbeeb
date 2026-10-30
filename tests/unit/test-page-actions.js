@@ -118,32 +118,6 @@ describe("PageActions", () => {
         });
     });
 
-    describe("drops", () => {
-        const dragOver = (types) => {
-            const over = new Event("dragover", { cancelable: true, bubbles: true });
-            over.dataTransfer = { dropEffect: "copy", types };
-            document.body.dispatchEvent(over);
-            return over;
-        };
-
-        it("refuses a drag that carries no file, so a dropped link cannot replace the page", () => {
-            make();
-            const over = dragOver(["text/uri-list"]);
-            expect(over.defaultPrevented).toBe(true);
-            expect(over.dataTransfer.dropEffect).toBe("none");
-            const drop = new Event("drop", { cancelable: true, bubbles: true });
-            document.body.dispatchEvent(drop);
-            expect(drop.defaultPrevented).toBe(true);
-        });
-
-        it("leaves a drag that carries files to the media window", () => {
-            make();
-            const over = dragOver(["Files"]);
-            expect(over.defaultPrevented).toBe(false);
-            expect(over.dataTransfer.dropEffect).toBe("copy");
-        });
-    });
-
     describe("dialogs the URL asks for", () => {
         it("opens the about and terms dialogs when named", () => {
             deps.parsedQuery = { about: true, "pp-tos": true };

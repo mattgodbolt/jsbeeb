@@ -9,6 +9,7 @@ import {
     StatsIntervalMs,
     watchPage,
 } from "../../src/web/session-log.js";
+import { teardownDom } from "./helpers.js";
 
 function clock() {
     let ms = 1000;
@@ -59,10 +60,7 @@ describe("IntervalStats", () => {
 });
 
 describe("watchPage", () => {
-    afterEach(() => {
-        vi.unstubAllGlobals();
-        vi.restoreAllMocks();
-    });
+    afterEach(teardownDom);
 
     const pageEvents = (log) => log.events.filter((each) => each.event === "page");
 

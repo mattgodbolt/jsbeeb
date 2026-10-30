@@ -1,5 +1,5 @@
 import { DiscLayout } from "../disc.js";
-import { discFor, guessDiscTypeFromName } from "../fdc.js";
+import { blankImage, discFor, guessDiscTypeFromName } from "../fdc.js";
 import { stringToUint8Array, uint8ArrayToString } from "../binary.js";
 
 /**
@@ -15,14 +15,7 @@ export function localDisc(name, layout = DiscLayout.auto, onSaveError = () => {}
     let data;
     const dataString = window.localStorage[discName];
     if (!dataString) {
-        const discType = guessDiscTypeFromName(name);
-        if (!discType.byteSize) {
-            throw new Error(`Cannot create blank disc of type ${discType.extension} - unknown size`);
-        }
-        data = new Uint8Array(discType.byteSize);
-        if (discType.supportsCatalogue) {
-            discType.setDiscName(data, name);
-        }
+        data = blankImage(guessDiscTypeFromName(name), name);
     } else {
         data = stringToUint8Array(dataString);
     }

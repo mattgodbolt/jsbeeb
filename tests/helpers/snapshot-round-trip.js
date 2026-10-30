@@ -25,7 +25,5 @@ export async function expectSnapshotRoundTrips(makeDevice, driveIntoState) {
 
     const restored = await makeDevice();
     restored.restoreState(saved);
-    const resaved = restored.snapshotState();
-    // Vitest compares a typed array element by element, half a second for a machine's RAM; it only runs to show a diff.
-    if (!isDeepStrictEqual(resaved, saved)) expect(resaved).toStrictEqual(saved);
+    expect(restored.snapshotState()).toStrictEqual(saved);
 }

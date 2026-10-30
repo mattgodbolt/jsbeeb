@@ -1,5 +1,5 @@
 import { DataStream, stringToUint8Array } from "./binary.js";
-import { ungzip } from "./archive.js";
+import { isGzip, ungzip } from "./archive.js";
 import { hexbyte, hexword } from "./hex.js";
 
 function secsToClocks(secs, cpuSpeed) {
@@ -327,7 +327,7 @@ class TapefileTape {
 
 export async function loadTapeFromData(name, data, model) {
     const raw = stringToUint8Array(data);
-    if (raw && raw.length > 4 && raw[0] === 0x1f && raw[1] === 0x8b) {
+    if (isGzip(raw)) {
         console.log("Ungzipping " + name);
         data = await ungzip(raw);
     }

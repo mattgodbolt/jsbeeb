@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { createSnapshot, restoreSnapshot, snapshotFromJSON, snapshotToJSON } from "../../src/snapshot.js";
 import { TestMachine } from "../../src/test-machine.js";
+import { gzipCodec } from "../../src/archive.js";
 import { Video } from "../../src/video.js";
 import {
     CpuCyclesPerField,
@@ -38,15 +39,7 @@ describe("save state round trip", () => {
         expect(mode7Text(original)).toContain("SNAPSHOT");
 
         const json = snapshotToJSON(createSnapshot(original.processor, original.model));
-        const compressed = await new Response(
-            new Blob([json]).stream().pipeThrough(new CompressionStream("gzip")),
-        ).blob();
-        const compressedBytes = new Uint8Array(await compressed.arrayBuffer());
-        expect([compressedBytes[0], compressedBytes[1]]).toEqual([0x1f, 0x8b]);
-        const decompressed = await new Response(
-            compressed.stream().pipeThrough(new DecompressionStream("gzip")),
-        ).text();
-        const snapshot = snapshotFromJSON(decompressed);
+        const snapshot = snapshotFromJSON(await gzipCodec.decompress(await gzipCodec.compress(json)));
 
         const restored = withVideo();
         await restored.initialise();

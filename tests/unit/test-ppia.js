@@ -124,8 +124,11 @@ describe("AtomPPIA", () => {
         it("should ignore key events when keyboard disabled", () => {
             const { ppia } = makePPIA();
             ppia.disableKeyboard();
-            ppia.set(65, 1, false); // 'A' key code
+            ppia.keyDown(keyCodes.A, false);
             expect(ppia.hasAnyKeyDown()).toBe(false);
+            ppia.enableKeyboard();
+            ppia.keyDown(keyCodes.A, false);
+            expect(ppia.hasAnyKeyDown()).toBe(true);
         });
     });
 

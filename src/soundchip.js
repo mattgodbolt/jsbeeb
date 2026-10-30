@@ -19,7 +19,7 @@ const EventProgressCycles = 4000;
 // The tone counters are 10 bits wide and wrap, so a period of 0 counts this many steps.
 export const ToneCounterSteps = 1024;
 
-const volumeTable = new Float32Array(16);
+export const volumeTable = new Float32Array(16);
 (() => {
     let f = 1.0;
     for (let i = 0; i < 15; ++i) {

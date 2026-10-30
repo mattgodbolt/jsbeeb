@@ -224,28 +224,41 @@ const UnshiftedCharacters = {
     "/": BBC.SLASH,
 };
 
-export function stringToBBCKeys(str) {
+/**
+ * The keys to press, in order, to type `str`, toggling `shiftKey` and `lockKey` as each character needs them and
+ * leaving both as they were found.
+ * @param {string} str
+ * @param {function(string): ?{key: number[], shift: boolean, upperCase?: boolean}} keyForCharacter where
+ *     `upperCase` is left out for a character the lock does not change
+ * @param {number[]} shiftKey
+ * @param {number[]} lockKey
+ */
+export function stringToKeys(str, keyForCharacter, shiftKey, lockKey) {
     const array = [];
     let shiftState = false;
     let capsLockState = true;
     for (const char of str) {
-        const needs = bbcKeyForCharacter(char);
+        const needs = keyForCharacter(char);
         if (!needs) continue;
 
         if (needs.shift !== shiftState) {
-            array.push(BBC.SHIFT);
+            array.push(shiftKey);
             shiftState = needs.shift;
         }
-        if (needs.upperCase !== capsLockState) {
-            array.push(BBC.CAPSLOCK);
+        if (needs.upperCase !== undefined && needs.upperCase !== capsLockState) {
+            array.push(lockKey);
             capsLockState = needs.upperCase;
         }
         array.push(needs.key);
     }
 
-    if (shiftState) array.push(BBC.SHIFT);
-    if (!capsLockState) array.push(BBC.CAPSLOCK);
+    if (shiftState) array.push(shiftKey);
+    if (!capsLockState) array.push(lockKey);
     return array;
+}
+
+export function stringToBBCKeys(str) {
+    return stringToKeys(str, bbcKeyForCharacter, BBC.SHIFT, BBC.CAPSLOCK);
 }
 
 /**
@@ -417,77 +430,58 @@ export function isUserRemapped(code) {
     return userKeymap.some((mapping) => hostKeyCodes(mapping.native).includes(code));
 }
 
-export function getKeyMap(keyLayout) {
-    const isUKlayout = detectKeyboardLayout() === "UK";
-    const keys2 = [];
+const Letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
-    // shift pressed
-    keys2[true] = {};
+/**
+ * What both machines' key maps are built with, the letters already bound. `finish()` applies the `KEY.` URL
+ * parameters last, so they win, without consuming them: a map is rebuilt on layout and model changes, and the user's
+ * mapping has to survive that.
+ * @param {Object<string, number[]>} machineKeys the machine's keys by name, BBC or ATOM
+ */
+export function keyMapBuilder(machineKeys) {
+    const keys = [];
+    keys[true] = {};
+    keys[false] = {};
 
-    // shift not pressed
-    keys2[false] = {};
-
-    // shiftDown MUST be true or false (not undefined)
-    function doMap(s, colRow, shiftDown) {
-        if (keys2[shiftDown][s] && keys2[shiftDown][s] !== colRow) {
+    function bind(code, colRow, shiftDown) {
+        if (keys[shiftDown][code] && keys[shiftDown][code] !== colRow) {
             console.log(
                 "Warning: duplicate binding for key",
-                (shiftDown ? "<SHIFT>" : "") + s,
+                (shiftDown ? "<SHIFT>" : "") + code,
                 colRow,
-                keys2[shiftDown][s],
+                keys[shiftDown][code],
             );
         }
-        keys2[shiftDown][s] = colRow;
+        keys[shiftDown][code] = colRow;
     }
 
-    // Overriding a default is the point here, so unlike `map` this doesn't warn about the clash.
-    function remap(s, colRow) {
-        keys2[true][s] = colRow;
-        keys2[false][s] = colRow;
-    }
-
-    // shiftDown undefined -> map both
-    function map(s, colRow, shiftDown) {
-        if (!s || !colRow) {
-            console.log("error binding key", s, colRow);
-        }
-
+    function map(code, colRow, shiftDown) {
+        if (!code || !colRow) console.log("error binding key", code, colRow);
         if (shiftDown === undefined) {
-            doMap(s, colRow, true);
-            doMap(s, colRow, false);
+            bind(code, colRow, true);
+            bind(code, colRow, false);
         } else {
-            doMap(s, colRow, shiftDown);
+            bind(code, colRow, shiftDown);
         }
     }
 
-    map(keyCodes.Q, BBC.Q);
-    map(keyCodes.W, BBC.W);
-    map(keyCodes.E, BBC.E);
-    map(keyCodes.R, BBC.R);
-    map(keyCodes.T, BBC.T);
-    map(keyCodes.Y, BBC.Y);
-    map(keyCodes.U, BBC.U);
-    map(keyCodes.I, BBC.I);
-    map(keyCodes.O, BBC.O);
-    map(keyCodes.P, BBC.P);
+    function finish() {
+        for (const mapping of userKeymap) {
+            for (const code of hostKeyCodes(mapping.native)) {
+                keys[true][code] = machineKeys[mapping.key];
+                keys[false][code] = machineKeys[mapping.key];
+            }
+        }
+        return keys;
+    }
 
-    map(keyCodes.A, BBC.A);
-    map(keyCodes.S, BBC.S);
-    map(keyCodes.D, BBC.D);
-    map(keyCodes.F, BBC.F);
-    map(keyCodes.G, BBC.G);
-    map(keyCodes.H, BBC.H);
-    map(keyCodes.J, BBC.J);
-    map(keyCodes.K, BBC.K);
-    map(keyCodes.L, BBC.L);
+    for (const letter of Letters) map(keyCodes[letter], machineKeys[letter]);
+    return { map, finish };
+}
 
-    map(keyCodes.Z, BBC.Z);
-    map(keyCodes.X, BBC.X);
-    map(keyCodes.C, BBC.C);
-    map(keyCodes.V, BBC.V);
-    map(keyCodes.B, BBC.B);
-    map(keyCodes.N, BBC.N);
-    map(keyCodes.M, BBC.M);
+export function getKeyMap(keyLayout) {
+    const isUKlayout = detectKeyboardLayout() === "UK";
+    const { map, finish } = keyMapBuilder(BBC);
 
     map(keyCodes.F10, BBC.F0); // F0 (mapped to F10)
     map(keyCodes.F1, BBC.F1);
@@ -670,13 +664,7 @@ export function getKeyMap(keyLayout) {
     // eg Master Dunjunz needs # Del 3 , * Enter
     // https://web.archive.org/web/20080305042238/http://bbc.nvg.org/doc/games/Dunjunz-docs.txt
 
-    // `KEY.` URL parameters, applied last so they win. Not consumed: this map is rebuilt on
-    // layout and model changes, and the user's mapping has to survive that.
-    for (const mapping of userKeymap) {
-        for (const code of hostKeyCodes(mapping.native)) remap(code, BBC[mapping.key]);
-    }
-
-    return keys2;
+    return finish();
 }
 
 /**
@@ -722,3 +710,97 @@ export class ShiftOverride {
         this.forcedShift = shiftOverrideActive ? shiftOverrideDesiredShift : null;
     }
 }
+
+export const KeyMatrixSize = 16;
+const KeyMatrixRows = 8;
+
+/**
+ * The keyboard half of the BBC's system VIA and the Atom's PPIA: a key matrix that host keys are mapped onto. The
+ * owner calls `_initKeyMatrix` from its constructor, provides `keycodeToRowCol` (a key map) and `updateKeys()`, and
+ * sees every change through `_keysChanged()`.
+ * @template {new (...args: any[]) => object} TBase
+ * @param {TBase} Base
+ */
+export const WithKeyMatrix = (Base) =>
+    class extends Base {
+        /**
+         * @param {number[]} shiftKey where SHIFT is on the matrix
+         * @param {number} columns how many of the matrix's columns hold keys
+         */
+        _initKeyMatrix(shiftKey, columns) {
+            this.keys = Array.from({ length: KeyMatrixSize }, () => new Uint8Array(KeyMatrixSize));
+            this.keyColumns = columns;
+            this.shift = new ShiftOverride(shiftKey);
+            this.keyboardEnabled = true;
+        }
+
+        clearKeys() {
+            for (const column of this.keys) column.fill(0);
+            this.shift.clear();
+            this._keysChanged();
+        }
+
+        disableKeyboard() {
+            this.keyboardEnabled = false;
+            this.clearKeys();
+        }
+
+        enableKeyboard() {
+            this.keyboardEnabled = true;
+            this.clearKeys();
+        }
+
+        set(key, val, shiftDown) {
+            const mapping = this.keyMapping(key, shiftDown);
+            if (mapping) this.setMapped(mapping, val);
+        }
+
+        /**
+         * Where a key code lands on the key matrix under the current layout, as `[col, row, shiftOverride?]`, or
+         * undefined.
+         */
+        keyMapping(key, shiftDown) {
+            return this.keycodeToRowCol[!!shiftDown][key];
+        }
+
+        setMapped(mapping, val) {
+            if (!this.keyboardEnabled) return;
+            this.shift.setMapped(this.keys, mapping, val);
+            this._keysChanged();
+        }
+
+        keyDown(key, shiftDown) {
+            this.set(key, 1, shiftDown);
+        }
+
+        /** Releases the key under both the shifted and unshifted maps, whichever pressed it. */
+        keyUp(key) {
+            this.set(key, 0, true);
+            this.set(key, 0, false);
+        }
+
+        keyDownRaw([col, row]) {
+            this.keys[col][row] = 1;
+            this._keysChanged();
+        }
+
+        keyUpRaw([col, row]) {
+            this.keys[col][row] = 0;
+            this._keysChanged();
+        }
+
+        keyToggleRaw([col, row]) {
+            this.keys[col][row] = 1 - this.keys[col][row];
+            this._keysChanged();
+        }
+
+        _keysChanged() {
+            this.updateKeys();
+        }
+
+        hasAnyKeyDown() {
+            return this.keys
+                .slice(0, this.keyColumns)
+                .some((column) => column.subarray(0, KeyMatrixRows).some(Boolean));
+        }
+    };

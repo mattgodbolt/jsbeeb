@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { LaggingMs, peerState, SessionPanel, SilentMs } from "../../src/web/session-panel.js";
 import { PanelArrangement } from "../../src/web/floating-panel.js";
-import { domFromIndexHtml } from "./helpers.js";
+import { domFromIndexHtml, teardownDom } from "./helpers.js";
 
 describe("peerState", () => {
     const keepingUp = { lagMs: 60, commits: 60 };
@@ -26,10 +26,7 @@ describe("peerState", () => {
 });
 
 describe("SessionPanel", () => {
-    afterEach(() => {
-        document.body.innerHTML = "";
-        vi.restoreAllMocks();
-    });
+    afterEach(teardownDom);
 
     const session = (overrides = {}) => ({
         name: "neat-dolls-occur",

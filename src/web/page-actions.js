@@ -6,8 +6,8 @@ const UnloadWarning =
 
 /**
  * The page around the emulator: the reset menu items and the filestore
- * download, what focus and unload do to the machine, the drop guard, the
- * dialogs a URL can ask for, and the version stamp.
+ * download, what focus and unload do to the machine, the dialogs a URL
+ * can ask for, and the version stamp.
  */
 export class PageActions {
     constructor({ loop, processor, keyboard, audioHandler, rewindUI, modals, parsedQuery, version }) {
@@ -28,19 +28,6 @@ export class PageActions {
             { signal },
         );
         window.addEventListener("focus", () => loop.setEmulationLead(audioHandler.setWindowFocused(true)), { signal });
-
-        // Files are the media window's to take; anything else dropped on the page would replace it.
-        const carriesFiles = (event) => [...(event.dataTransfer?.types ?? [])].includes("Files");
-        document.addEventListener(
-            "dragover",
-            (event) => {
-                if (carriesFiles(event)) return;
-                event.preventDefault();
-                event.dataTransfer.dropEffect = "none";
-            },
-            { signal },
-        );
-        document.addEventListener("drop", (event) => event.preventDefault(), { signal });
 
         window.addEventListener(
             "beforeunload",
