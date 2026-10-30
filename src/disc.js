@@ -8,8 +8,10 @@ import { hexbyte } from "./hex.js";
 export const PulsesPerWord = 32;
 
 // The 1770 datasheet's recommended MFM gaps, in bytes.
+const MfmGap1_4Es = 60;
 const MfmSync00s = 12;
 const MfmGap2_4Es = 22;
+const MfmGap3_4Es = 24;
 
 class TrackBuilder {
     /**
@@ -813,7 +815,7 @@ export function loadAdf(disc, data, isDsd) {
         for (let side = 0; side < numSides; ++side) {
             // Using recommended values from the 177x datasheet.
             const trackBuilder = disc.buildTrack(side === 1, track);
-            trackBuilder.appendRepeatMfmByte(0x4e, 60);
+            trackBuilder.appendRepeatMfmByte(0x4e, MfmGap1_4Es);
             for (let sector = 0; sector < AdfSectorsPerTrack; ++sector) {
                 trackBuilder.appendMfmSector({
                     idMark: IbmDiscFormat.idMarkDataPattern,
@@ -827,7 +829,7 @@ export function loadAdf(disc, data, isDsd) {
                 offset += AdfSectorSize;
 
                 // Sync pattern between sectors, aka GAP 3.
-                trackBuilder.appendRepeatMfmByte(0x4e, 24);
+                trackBuilder.appendRepeatMfmByte(0x4e, MfmGap3_4Es);
             }
             trackBuilder.fillMfmByte(0x4e);
         }

@@ -8,7 +8,6 @@ import {
     discReport,
     numberRuns,
     DiscLayout,
-    loadSsd,
     loadAdf,
     sniffDfsLayout,
     toSsdOrDsd,
@@ -93,8 +92,7 @@ describe("Disc builder tests", () => {
 describe("SSD loader tests", function () {
     it("should load and roundtrip Elite", { timeout: 60000 }, () => {
         const data = new Uint8Array(fs.readFileSync("public/discs/elite.ssd"));
-        const disc = blankDisc();
-        loadSsd(disc, data, false);
+        const disc = ssdDisc(data);
         expect(disc.tracksUsed).toBe(80);
 
         const ssdSaved = toSsdOrDsd(disc);
@@ -104,8 +102,7 @@ describe("SSD loader tests", function () {
 
     it("should load an SSD whose size is not a multiple of sector size", () => {
         const oddData = new Uint8Array(SectorSize * 2 + 100).map((_, i) => i & 0xff);
-        const disc = blankDisc();
-        loadSsd(disc, oddData, false);
+        const disc = ssdDisc(oddData);
 
         const sectors = disc.getTrack(false, 0).findSectors();
         expect(sectors.length).toBe(10);
@@ -131,8 +128,6 @@ function numberedImage(numTracks, numSides = 1) {
     return data;
 }
 
-const fortyTrackDisc = (data, isDsd = false, onChange = null) => ssdDisc(data, { expandTo80: true, isDsd, onChange });
-
 describe("SSD track skew", () => {
     const sectorOrder = (disc, isSide1, track) =>
         disc
@@ -151,7 +146,7 @@ describe("SSD track skew", () => {
     });
 
     it("keeps each sector's data with its ID", () => {
-        const disc = loadSsd(new Disc(true, new DiscConfig(), "test.dsd"), numberedImage(80, 2), true, null);
+        const disc = ssdDisc(numberedImage(80, 2), { isDsd: true });
 
         for (const isSide1 of [false, true]) {
             for (const track of [0, 1, 2, 79]) {
@@ -163,13 +158,13 @@ describe("SSD track skew", () => {
     });
 
     it("skews both sides of a DSD alike", () => {
-        const disc = loadSsd(new Disc(true, new DiscConfig(), "test.dsd"), numberedImage(80, 2), true, null);
+        const disc = ssdDisc(numberedImage(80, 2), { isDsd: true });
 
         for (const track of [0, 1, 2]) expect(sectorOrder(disc, true, track)).toEqual(sectorOrder(disc, false, track));
     });
 
     it("skews a 40 track image by its logical track", () => {
-        const disc = fortyTrackDisc(numberedImage(40));
+        const disc = ssdDisc(numberedImage(40), { expandTo80: true });
 
         expect(sectorOrder(disc, false, 2)).toEqual([7, 8, 9, 0, 1, 2, 3, 4, 5, 6]);
     });
@@ -177,7 +172,7 @@ describe("SSD track skew", () => {
 
 describe("40 track SSD images", () => {
     it("puts each logical track on every other physical track", () => {
-        const disc = fortyTrackDisc(numberedImage(40));
+        const disc = ssdDisc(numberedImage(40), { expandTo80: true });
 
         expect(disc.is40Track).toBe(true);
         expect(disc.tracksUsed).toBe(79);
@@ -196,7 +191,7 @@ describe("40 track SSD images", () => {
     });
 
     it("leaves the tracks in between unformatted", () => {
-        const disc = fortyTrackDisc(numberedImage(40));
+        const disc = ssdDisc(numberedImage(40), { expandTo80: true });
 
         for (const physical of [1, 3, 77]) expect(disc.getTrack(false, physical).findSectors()).toEqual([]);
     });
@@ -205,7 +200,7 @@ describe("40 track SSD images", () => {
     it("saves back to the image it was loaded from", { timeout: 60000 }, () => {
         for (const numSides of [1, 2]) {
             const image = numberedImage(40, numSides);
-            expect(toSsdOrDsd(fortyTrackDisc(image, numSides === 2))).toEqual(image);
+            expect(toSsdOrDsd(ssdDisc(image, { expandTo80: true, isDsd: numSides === 2 }))).toEqual(image);
         }
     });
 
@@ -213,21 +208,21 @@ describe("40 track SSD images", () => {
         const padded = new Uint8Array(80 * TrackSize);
         padded.set(numberedImage(40));
 
-        expect(fortyTrackDisc(padded).tracksUsed).toBe(79);
+        expect(ssdDisc(padded, { expandTo80: true }).tracksUsed).toBe(79);
     });
 
     it("reaches past the 40th track for an image with data there", () => {
-        expect(fortyTrackDisc(numberedImage(41)).tracksUsed).toBe(81);
+        expect(ssdDisc(numberedImage(41), { expandTo80: true }).tracksUsed).toBe(81);
     });
 
     it("stops at the surface's outer edge however much data it is given", () => {
-        expect(fortyTrackDisc(numberedImage(50)).tracksUsed).toBe(83);
+        expect(ssdDisc(numberedImage(50), { expandTo80: true }).tracksUsed).toBe(83);
     });
 
     it("keeps an image loader's writeback in logical order", () => {
         const image = numberedImage(40);
         let written = null;
-        const disc = fortyTrackDisc(image, false, (data) => (written = data));
+        const disc = ssdDisc(image, { expandTo80: true, onChange: (data) => (written = data) });
 
         // Rewriting physical track 4 rewrites logical track 2, wherever the image keeps it.
         disc.writePulses(false, 4, 0, disc.readPulses(false, 4, 0));
@@ -298,9 +293,7 @@ describe("ADF loader tests", function () {
 /** Most discs have nothing watching them: fdc.js discards onChange for ADF, ADM and ADL, and
  *  discFor is usually called without one. */
 function unobservedDisc() {
-    const disc = blankDisc();
-    loadSsd(disc, new Uint8Array(IbmDiscFormat.bytesPerTrack), false, null);
-    return disc;
+    return ssdDisc(new Uint8Array(IbmDiscFormat.bytesPerTrack));
 }
 
 /** Leaves a sector's header pointing at nothing, which the decoder complains about. */
@@ -537,8 +530,7 @@ describe("track write listeners", () => {
 
     it("keeps an image loader's own writeback working when something else watches too", () => {
         let imageUpdates = 0;
-        const disc = blankDisc();
-        loadSsd(disc, new Uint8Array(IbmDiscFormat.bytesPerTrack), false, () => imageUpdates++);
+        const disc = ssdDisc(new Uint8Array(IbmDiscFormat.bytesPerTrack), { onChange: () => imageUpdates++ });
         let watcherCalls = 0;
         disc.addTrackWriteListener(() => watcherCalls++);
 
@@ -578,8 +570,7 @@ describe("track write listeners", () => {
         const sectorSize = 256;
         const data = new Uint8Array(sectorsPerTrack * sectorSize).fill(0xa5);
         let image = null;
-        const disc = blankDisc();
-        loadSsd(disc, data, false, (updated) => (image = updated));
+        const disc = ssdDisc(data, { onChange: (updated) => (image = updated) });
         eraseDataField(disc.getTrack(false, 0), 4);
 
         disc.writePulses(false, 0, 0, 0);

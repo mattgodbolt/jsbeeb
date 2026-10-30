@@ -4,7 +4,7 @@ import { Scheduler } from "../../src/scheduler.js";
 import { IntelFdc } from "../../src/intel-fdc.js";
 import { fake6502 } from "../../src/fake6502.js";
 import { DiscDrive } from "../../src/disc-drive.js";
-import { Disc, DiscConfig, loadSsd } from "../../src/disc.js";
+import { Disc } from "../../src/disc.js";
 import { findModel } from "../../src/models.js";
 import { expectSnapshotRoundTrips } from "../helpers/snapshot-round-trip.js";
 import { SectorBytes, appendFmSector, ms, ssdDisc } from "../helpers/disc-builders.js";
@@ -534,7 +534,7 @@ describe("Intel 8271 tests", function () {
     describe("head unload", () => {
         it("reads only the selected drive while the other turns", () => {
             const otherData = new Uint8Array(Tracks * SectorsPerTrack * SectorBytes).fill(0xaa);
-            const secondDisc = loadSsd(new Disc(true, new DiscConfig(), "other.ssd"), otherData, false, null);
+            const secondDisc = ssdDisc(otherData);
             const { readFirstByte } = dfsFdc({ secondDisc });
             expect(readFirstByte(5)).toEqual({ result: 0, firstByte: 5 });
         });

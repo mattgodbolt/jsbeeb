@@ -3,18 +3,16 @@ import * as fs from "node:fs";
 
 import { discFor, guessDiscTypeFromName } from "../../src/fdc.js";
 import { DiscLayout } from "../../src/disc.js";
-import { ssdDisc } from "../helpers/disc-builders.js";
 import { IntelFdc } from "../../src/intel-fdc.js";
 import { Scheduler } from "../../src/scheduler.js";
 import { fake6502 } from "../../src/fake6502.js";
 import { ssdImage } from "./helpers.js";
 import { crc32 } from "../../src/archive.js";
+import { ssdDisc } from "../helpers/disc-builders.js";
 
 const SectorSize = 256;
 const SectorsPerTrack = 10;
 const TrackSize = SectorSize * SectorsPerTrack;
-
-const blankSsd = (numTracks, is40Track) => ssdDisc(new Uint8Array(numTracks * TrackSize), { expandTo80: is40Track });
 
 describe("loading a disc image", () => {
     it("keeps only the CRC of the image it loaded", () => {
@@ -83,7 +81,7 @@ describe("putting a disc in a drive", () => {
     it("sets the drive's switch to suit the disc", () => {
         const fdc = newFdc();
 
-        fdc.loadDisc(1, blankSsd(40, true));
+        fdc.loadDisc(1, ssdDisc(new Uint8Array(40 * TrackSize), { expandTo80: true }));
 
         expect(fdc.drives[1].tracksPerStep).toBe(2);
         expect(fdc.drives[0].tracksPerStep).toBe(1);
@@ -92,8 +90,8 @@ describe("putting a disc in a drive", () => {
     it("puts the switch back for the next 80 track disc", () => {
         const fdc = newFdc();
 
-        fdc.loadDisc(0, blankSsd(40, true));
-        fdc.loadDisc(0, blankSsd(80, false));
+        fdc.loadDisc(0, ssdDisc(new Uint8Array(40 * TrackSize), { expandTo80: true }));
+        fdc.loadDisc(0, ssdDisc(new Uint8Array(80 * TrackSize)));
 
         expect(fdc.drives[0].tracksPerStep).toBe(1);
     });
@@ -101,8 +99,8 @@ describe("putting a disc in a drive", () => {
     it("leaves the switch where the caller asks for it", () => {
         const fdc = newFdc();
 
-        fdc.loadDisc(0, blankSsd(40, true), 1);
-        fdc.loadDisc(1, blankSsd(80, false), 2);
+        fdc.loadDisc(0, ssdDisc(new Uint8Array(40 * TrackSize), { expandTo80: true }), 1);
+        fdc.loadDisc(1, ssdDisc(new Uint8Array(80 * TrackSize)), 2);
 
         expect(fdc.drives[0].tracksPerStep).toBe(1);
         expect(fdc.drives[1].tracksPerStep).toBe(2);

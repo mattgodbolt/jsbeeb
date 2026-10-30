@@ -1,7 +1,6 @@
 import { afterEach, describe, it, expect, vi } from "vitest";
 
 import { Disc, DiscConfig, loadAdf } from "../../src/disc.js";
-import { ssdDisc } from "../helpers/disc-builders.js";
 import { IbmDiscFormat } from "../../src/disc-format.js";
 import {
     DensityPalette,
@@ -16,6 +15,7 @@ import {
     trackPulseDensity,
     trackRegions,
 } from "../../src/disc-surface.js";
+import { ssdDisc } from "../helpers/disc-builders.js";
 
 const densityColour = (density) => DensityPalette[density];
 
