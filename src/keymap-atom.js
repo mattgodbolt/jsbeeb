@@ -190,9 +190,6 @@ export function getKeyMapAtom(keyLayout) {
     map(keyCodes.DOWN, ATOM.DOWN); // arrow down
     map(keyCodes.UP, ATOM.UP_DOWN); // arrow up
 
-    map(keyCodes.BACKSPACE, ATOM.DELETE); // delete
-    map(keyCodes.DELETE, ATOM.DELETE); // delete
-
     map(keyCodes.ESCAPE, ATOM.ESCAPE);
     map(keyCodes.TAB, ATOM.COPY);
 
@@ -206,6 +203,8 @@ export function getKeyMapAtom(keyLayout) {
         const mapCharacter = characterBinder(map, atomKeyForCharacter, ShiftMakesNoDifference);
         for (const char of PrintableCharacters) mapCharacter(char, char);
 
+        map(keyCodes.BACKSPACE, ATOM.DELETE);
+        map(keyCodes.DELETE, ATOM.DELETE);
         map(keyCodes.END, ATOM.COPY);
         map(keyCodes.HOME, ATOM.LOCK);
         map(keyCodes.CAPSLOCK, ATOM.LOCK);
@@ -264,7 +263,8 @@ export function getKeyMapAtom(keyLayout) {
         // Atom uses CTRL as shift, so map PC Ctrl to Atom's LOCK key
         map(keyCodes.CTRL_LEFT, ATOM.LOCK);
 
-        // ATOM.DELETE is covered by the common mapping above
+        // should be 4th row, not enough keys
+        map(keyCodes.MENU, ATOM.DELETE);
         map(keyCodes.CTRL_RIGHT, ATOM.COPY);
     } else {
         // Physical, and default
@@ -274,6 +274,8 @@ export function getKeyMapAtom(keyLayout) {
         // REPT is using RIGHT_SHIFT
         // note: LOCK is on LEFT_ALT
         map(keyCodes.HOME, ATOM.LOCK);
+        map(keyCodes.BACKSPACE, ATOM.DELETE);
+        map(keyCodes.DELETE, ATOM.DELETE);
         map(keyCodes.K1, ATOM.K1);
         map(keyCodes.K2, ATOM.K2);
         map(keyCodes.K3, ATOM.K3);
