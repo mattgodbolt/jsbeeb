@@ -323,7 +323,7 @@ describe("BreakpointsPanel", () => {
                     ["Code in I/O", preset("execute", 0xfc00, 0xfeff, "I/O")],
                     ["ROMSEL write", preset("write", 0xfe30, 0xfe3f, "ROMSEL")],
                     ["Disc command", preset("write", 0xfe80, 0xfe80, "disc command")],
-                    ["Sound write", preset("write", 0xfe40, 0xfe40, "sound", "value AND 15 = 0")],
+                    ["Sound write", preset("write", 0xfe40, 0xfe40, "sound", "(value AND 15) = 0")],
                 ],
             ],
             [
@@ -333,7 +333,7 @@ describe("BreakpointsPanel", () => {
                     ["ROMSEL write", preset("write", 0xfe30, 0xfe33, "ROMSEL")],
                     ["ACCCON write", preset("write", 0xfe34, 0xfe37, "ACCCON")],
                     ["Disc command", preset("write", 0xfe28, 0xfe28, "disc command")],
-                    ["Sound write", preset("write", 0xfe40, 0xfe40, "sound", "value AND 15 = 0")],
+                    ["Sound write", preset("write", 0xfe40, 0xfe40, "sound", "(value AND 15) = 0")],
                 ],
             ],
             ["Atom", []],
@@ -351,6 +351,22 @@ describe("BreakpointsPanel", () => {
                 expect(specs()).toEqual(presets.map(([, spec]) => spec));
             },
         );
+
+        it("stops at a write that strobes the sound chip, and not at the write that ends it", () => {
+            const Program = 0x2000;
+            const SoundStrobe = 0x2007;
+            // LDA #8, STA &FE40, LDA #0, STA &FE40, JMP &200A
+            const Strobes = [0xa9, 0x08, 0x8d, 0x40, 0xfe, 0xa9, 0x00, 0x8d, 0x40, 0xfe, 0x4c, 0x0a, 0x20];
+            cpu.reset(true);
+            Strobes.forEach((byte, i) => cpu.writemem(Program + i, byte));
+            cpu.pc = Program;
+            cpu.p.i = true;
+            const hits = [];
+            cpu.breakpoints.onHit((hit) => hits.push(hit));
+            pick("Sound write");
+            expect(cpu.execute(1000)).toBe(false);
+            expect(hits).toEqual([expect.objectContaining({ pc: SoundStrobe, value: 0 })]);
+        });
 
         it("adds a stop with no address, closing the menu and leaving the keyboard to the machine", () => {
             input().focus();

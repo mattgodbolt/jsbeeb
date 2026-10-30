@@ -60,7 +60,7 @@ const IoStart = 0xfc00;
 const IoEnd = 0xfeff;
 // The System VIA's port B drives IC32's latch; a write of 0 to its low four bits clears bit 0, the sound chip's
 // write enable.
-const SoundWriteCondition = "value AND 15 = 0";
+const SoundWriteCondition = "(value AND 15) = 0";
 
 /**
  * Common stops that are ordinary address breakpoints on the machine `cpu` emulates, each at the SHEILA register it
