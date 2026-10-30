@@ -148,8 +148,9 @@ describe("Disassemble6502", () => {
             expect(cpu().disassembler.isIdempotent(opcode)).toBe(idempotent);
         });
 
-        it("measures without touching the machine it measures", () => {
+        it("measures without touching the machine it measures", async () => {
             const cpu = fake6502();
+            await cpu.initialise();
             const machine = () =>
                 [cpu.a, cpu.x, cpu.y, cpu.s, cpu.pc, cpu.p.asByte()].concat(
                     Array.from({ length: 0x10000 }, (_, address) => cpu.peekmem(address)),
