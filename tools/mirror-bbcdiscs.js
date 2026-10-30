@@ -9,17 +9,7 @@
 
 import { createHash } from "node:crypto";
 import { brotliCompress, brotliDecompress, constants as zlibConstants } from "node:zlib";
-import {
-    access,
-    constants as fsConstants,
-    mkdir,
-    readdir,
-    readFile,
-    rename,
-    rm,
-    stat,
-    writeFile,
-} from "node:fs/promises";
+import { access, constants as fsConstants, mkdir, readdir, readFile, rm, stat } from "node:fs/promises";
 import { basename, dirname, extname, join } from "node:path";
 import { argv, env, exit, stderr, stdin, stdout } from "node:process";
 import { createInterface } from "node:readline/promises";
@@ -27,6 +17,16 @@ import { promisify } from "node:util";
 import Papa from "papaparse";
 
 import { parseFingerprints, runBeebjitWithRetry } from "./beebjit-fingerprint.js";
+import {
+    DefaultConcurrency,
+    fail,
+    fetchWithRetry,
+    fileSize,
+    forEachConcurrently,
+    RetryDelayMs,
+    writeAtomically,
+    writeJson,
+} from "./mirror-common.js";
 
 const SchemaVersion = 1;
 const ArchiveName = "BBC Micro HFE disc images";
@@ -35,12 +35,8 @@ const ArchiveName = "BBC Micro HFE disc images";
 // whichever source it came from and whatever categories are added later. Named
 // for the archive's first and only category, which is what the links say.
 const BlobDir = "hfe";
-const UserAgent = "jsbeeb-mirror (+https://github.com/mattgodbolt/jsbeeb)";
 const DriveDownload = "https://drive.usercontent.google.com/download";
-const DefaultConcurrency = 4;
 const ProgressEvery = 25;
-const RetryDelayMs = 1000;
-const MaxRetries = 3;
 const HfeMagics = ["HXCPICFE", "HXCHFEV3"];
 const PublishedManifest = "https://bbc.xania.org/archive/bbcdiscs/hfe/manifest.json";
 const PreflightSample = 10;
@@ -304,45 +300,8 @@ async function* hfeFilesUnder(root, prefix = "") {
     }
 }
 
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const compress = promisify(brotliCompress);
 const decompress = promisify(brotliDecompress);
-
-export class HttpError extends Error {
-    constructor(status, url) {
-        super(`HTTP ${status} for ${url}`);
-        this.status = status;
-    }
-}
-
-const isTransient = (error) => !(error instanceof HttpError) || error.status === 429 || error.status >= 500;
-
-async function fetchWithRetry(url) {
-    for (let attempt = 0; ; attempt++) {
-        try {
-            const response = await fetch(url, { headers: { "user-agent": UserAgent } });
-            if (!response.ok) throw new HttpError(response.status, url);
-            return response;
-        } catch (error) {
-            if (attempt === MaxRetries || !isTransient(error)) throw error;
-            await sleep(RetryDelayMs * (attempt + 1));
-        }
-    }
-}
-
-// Run `worker` over `items`, at most `concurrency` at a time. The workers share
-// one iterator, so each picks up the next item as it finishes.
-async function forEachConcurrently(items, concurrency, worker) {
-    const remaining = items.values();
-    let done = 0;
-    const run = async () => {
-        for (const item of remaining) {
-            await worker(item);
-            if (++done % ProgressEvery === 0) stderr.write(`  ${done}/${items.length}\n`);
-        }
-    };
-    await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, run));
-}
 
 // A disc read from a tree is whatever the tree holds, and Drive serves an HTML
 // interstitial rather than an error status when it won't hand over a file, so
@@ -353,38 +312,14 @@ function checkIsHfe(bytes, what) {
         throw new Error(`${what}: expected an HFE image, got ${bytes.length} bytes starting ${JSON.stringify(magic)}`);
 }
 
-async function fileSize(path) {
-    try {
-        return (await stat(path)).size;
-    } catch {
-        return null;
-    }
-}
-
-let nextTemp = 0;
-
-// So an interrupted run never leaves a truncated file that a later run would
-// mistake for complete. The name is unique per write because two discs with
-// the same bytes are published under the same name, by two workers at once.
-async function writeAtomically(dest, bytes) {
-    const partial = `${dest}.${nextTemp++}.part`;
-    await writeFile(partial, bytes);
-    await rename(partial, dest);
-}
-
 async function fetchDisc(entry, cacheDir) {
     const dest = join(cacheDir, driveCacheName(entry));
     if ((await fileSize(dest)) !== null) return { path: dest, downloaded: false };
     const url = `${DriveDownload}?id=${entry.driveId}&export=download`;
-    const bytes = new Uint8Array(await (await fetchWithRetry(url)).arrayBuffer());
+    const bytes = new Uint8Array(await (await fetchWithRetry(url, RetryDelayMs, null)).arrayBuffer());
     checkIsHfe(bytes, `${entry.blob}, which Drive may be refusing to hand over as ${entry.driveId}`);
     await writeAtomically(dest, bytes);
     return { path: dest, downloaded: true };
-}
-
-async function writeJson(dest, value) {
-    await mkdir(dirname(dest), { recursive: true });
-    await writeFile(dest, JSON.stringify(value, null, 2) + "\n");
 }
 
 /**
@@ -454,11 +389,6 @@ async function prune(dir, wanted) {
     // as immutable alongside the real thing.
     for (const name of [...names.filter((name) => name.endsWith(".part")), ...stale]) await rm(join(dir, name));
     return stale;
-}
-
-function fail(message) {
-    stderr.write(`${message}\n`);
-    exit(2);
 }
 
 /**
@@ -636,7 +566,7 @@ async function mirrorDiscs(selected, source, opts, blobDir, cacheDir) {
     let downloaded = 0;
     let held = 0;
 
-    await forEachConcurrently(selected, opts.concurrency, async (entry) => {
+    await forEachConcurrently(selected, opts.concurrency, ProgressEvery, async (entry) => {
         const what = `${entry.publisher ?? "?"} ${entry.title ?? entry.source}`;
         try {
             const {
