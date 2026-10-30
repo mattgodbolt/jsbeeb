@@ -1,0 +1,175 @@
+<div
+  class="modal fade"
+  id="econetfs"
+  data-feature="econet_fileserver"
+  tabindex="-1"
+  aria-labelledby="econetModalLabel"
+  aria-hidden="true"
+>
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="econetModalLabel">Econet file server</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <label>
+          Download server drive image (10mb scsi.dat):<br />
+
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" id="download-filestore-link">
+            Download image
+          </button>
+        </label>
+
+        <div class="disc">
+          <label
+            >Upload a local drive image and restart the file server:
+            <input class="form-control" type="file" id="fs_load" accept=".dat,application/binary" />
+          </label>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div
+  class="modal fade"
+  id="session-dialog"
+  data-feature="shared_session"
+  tabindex="-1"
+  aria-labelledby="sessionModalLabel"
+  aria-hidden="true"
+>
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="sessionModalLabel">Shared session</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p>
+          Play on one BBC Micro with friends, each in their own browser. Everyone types into the same machine; use a
+          voice call alongside.
+        </p>
+        <p class="session-refusal text-warning"></p>
+        <div class="mb-3">
+          <label class="form-label" for="session-name">Your name</label>
+          <input
+            class="form-control session-name"
+            id="session-name"
+            maxlength="32"
+            autocomplete="nickname"
+            placeholder="Blank for a random one"
+            aria-describedby="session-name-help"
+          />
+          <div class="form-text" id="session-name-help">What the others see you as.</div>
+        </div>
+        <div class="row g-3">
+          <div class="col-md-6">
+            <section class="card h-100" aria-labelledby="session-host-title">
+              <div class="card-body d-flex flex-column">
+                <h6 class="card-title" id="session-host-title">Host</h6>
+                <p class="card-text small flex-grow-1">
+                  Share this machine as it is now, discs and all. You get a link to send round, and whoever opens it
+                  joins in.
+                </p>
+                <button type="button" class="btn btn-primary align-self-start session-host">Start hosting</button>
+              </div>
+            </section>
+          </div>
+          <div class="col-md-6">
+            <form class="card h-100 session-join-form" aria-labelledby="session-join-title" novalidate>
+              <div class="card-body d-flex flex-column">
+                <h6 class="card-title" id="session-join-title">Join</h6>
+                <input
+                  class="form-control session-room"
+                  aria-label="Room name or link"
+                  placeholder="Room name, or the link you were sent"
+                  aria-describedby="session-room-invalid session-room-help"
+                />
+                <div class="invalid-feedback" id="session-room-invalid">
+                  That isn't a room name. Room names are letters, digits, - and _; or paste the whole link.
+                </div>
+                <p class="card-text small text-warning flex-grow-1 mt-1" id="session-room-help">
+                  Your machine is replaced by the host's.
+                </p>
+                <button type="submit" class="btn btn-light align-self-start session-join">Join</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div
+  class="modal fade"
+  id="benchmark"
+  tabindex="-1"
+  aria-labelledby="benchmarkModalLabel"
+  aria-hidden="true"
+  data-bs-backdrop="static"
+  data-bs-keyboard="false"
+>
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="benchmarkModalLabel">Benchmark</h5>
+        <button
+          type="button"
+          class="btn-close btn-close-white benchmark-close"
+          data-bs-dismiss="modal"
+          aria-label="Close"
+          hidden
+        ></button>
+      </div>
+      <div class="modal-body">
+        <p class="benchmark-status"></p>
+        <textarea class="form-control font-monospace benchmark-line" rows="8" readonly hidden></textarea>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-primary benchmark-copy" hidden>Copy</button>
+        <button type="button" class="btn btn-secondary benchmark-close" data-bs-dismiss="modal" hidden>Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="error-dialog" tabindex="-1" aria-labelledby="errorModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="errorModalLabel">An error occurred - sorry!</h5>
+      </div>
+      <div class="modal-body">
+        <div>While <span class="context"></span>:</div>
+        <div class="error"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="are-you-sure" tabindex="-1" aria-labelledby="aysModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="aysModalLabel">Are You Sure?</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="context"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary ays-no" data-bs-dismiss="modal">No</button>
+        <button type="button" class="btn btn-primary ays-yes">Yes</button>
+      </div>
+    </div>
+  </div>
+</div>

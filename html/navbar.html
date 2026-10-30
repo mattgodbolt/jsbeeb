@@ -1,0 +1,257 @@
+<nav id="header-bar" class="navbar navbar-dark bg-dark navbar-expand-lg not-electron" role="navigation">
+  <div class="container-fluid">
+    <a class="navbar-brand" href="https://bbc.xania.org/" target="_top" title="jsbeeb">
+      <img src="/jsbeeb-icon.png" alt="jsbeeb" width="28" height="28" />
+    </a>
+    <button
+      class="navbar-toggler"
+      type="button"
+      data-bs-toggle="collapse"
+      data-bs-target="#navbarSupportedContent"
+      aria-controls="navbarSupportedContent"
+      aria-expanded="false"
+      aria-label="Toggle navigation"
+    >
+      <span class="navbar-toggler-icon"></span>
+    </button>
+    <div class="collapse navbar-collapse" id="navbarSupportedContent">
+      <ul class="navbar-nav nav mb-2 mb-lg-0">
+        <li class="nav-item">
+          <a
+            href="#configuration"
+            class="nav-link"
+            id="model-settings"
+            data-bs-toggle="modal"
+            data-bs-target="#configuration"
+            title="Emulation settings"
+            ><span class="nav-icon me-1" data-icon="gear" aria-hidden="true"></span
+            ><span class="nav-word bbc-model-short">BBC B</span></a
+          >
+        </li>
+        <li class="nav-item embed-hide">
+          <a
+            href="#"
+            class="nav-link media-window-open"
+            id="navbarMedia"
+            role="button"
+            aria-label="Media"
+            title="Discs and tapes: what is loaded, and everything you can load"
+            ><span class="nav-icon me-1" data-icon="floppy" aria-hidden="true"></span
+            ><span class="nav-word">Media</span></a
+          >
+        </li>
+        <li class="nav-item dropdown embed-hide">
+          <a
+            href="#"
+            class="nav-link dropdown-toggle"
+            id="navbarReset"
+            role="button"
+            data-bs-toggle="dropdown"
+            aria-expanded="false"
+            aria-label="Reset"
+            title="Reset"
+            ><span class="nav-icon d-xl-none me-1" data-icon="arrow-counterclockwise" aria-hidden="true"></span
+            ><span class="nav-word d-none d-xl-inline">Reset</span></a
+          >
+          <ul class="dropdown-menu dropdown-menu-dark" aria-labelledby="navbarReset">
+            <li><a href="#" id="soft-reset" class="dropdown-item">Soft reset</a></li>
+            <li><a href="#" id="hard-reset" class="dropdown-item">Hard reset</a></li>
+          </ul>
+        </li>
+        <li class="nav-item dropdown embed-hide">
+          <a
+            href="#"
+            class="nav-link dropdown-toggle"
+            id="navbarState"
+            role="button"
+            data-bs-toggle="dropdown"
+            aria-expanded="false"
+            aria-label="State"
+            title="State"
+            ><span class="nav-icon d-xl-none me-1" data-icon="clock-history" aria-hidden="true"></span
+            ><span class="nav-word d-none d-xl-inline">State</span></a
+          >
+          <ul class="dropdown-menu dropdown-menu-dark" aria-labelledby="navbarState" data-feature="state">
+            <li><a href="#" id="save-state" class="dropdown-item">Save state</a></li>
+            <li>
+              <label class="dropdown-item" style="cursor: pointer"
+                >Load state<input
+                  type="file"
+                  id="load-state"
+                  accept=".json,.json.gz,.gz,.snp,.uef"
+                  style="display: none"
+              /></label>
+            </li>
+            <li><hr class="dropdown-divider" /></li>
+            <li><a href="#" id="rewind-open" class="dropdown-item">Rewind</a></li>
+          </ul>
+        </li>
+        <li class="nav-item dropdown embed-hide">
+          <a
+            href="#"
+            class="nav-link dropdown-toggle"
+            id="navbarDebug"
+            role="button"
+            data-bs-toggle="dropdown"
+            aria-expanded="false"
+            aria-label="Debug"
+            title="Debug"
+            ><span class="nav-icon d-xl-none me-1" data-icon="bug" aria-hidden="true"></span
+            ><span class="nav-word d-none d-xl-inline">Debug</span></a
+          >
+          <ul class="dropdown-menu dropdown-menu-dark" id="debug-menu" aria-labelledby="navbarDebug">
+            <li>
+              <a href="#" id="debugger-toggle" class="dropdown-item menu-with-key"
+                ><span class="menu-label">Enter the debugger</span><span class="menu-key">Alt-S</span></a
+              >
+            </li>
+            <li>
+              <a href="#" id="debug-views-toggle" class="dropdown-item menu-with-key"
+                ><span class="menu-label">Show the debug panels</span><span class="menu-key">Alt-D</span></a
+              >
+            </li>
+            <li><hr class="dropdown-divider" /></li>
+          </ul>
+        </li>
+        <li class="nav-item dropdown embed-hide">
+          <a
+            href="#"
+            class="nav-link dropdown-toggle"
+            id="navbarMore"
+            role="button"
+            data-bs-toggle="dropdown"
+            aria-expanded="false"
+            aria-label="More"
+            title="More"
+            ><span class="nav-icon d-xl-none me-1" data-icon="three-dots" aria-hidden="true"></span
+            ><span class="nav-word d-none d-xl-inline">More</span></a
+          >
+          <ul class="dropdown-menu dropdown-menu-dark" aria-labelledby="navbarMore">
+            <li><a href="#" id="fs" data-feature="fullscreen" class="dropdown-item">Fullscreen</a></li>
+            <li><hr class="dropdown-divider" /></li>
+            <li><a href="#" id="session-open" class="dropdown-item">Shared session</a></li>
+            <li id="fsmenuitem">
+              <a href="#econetfs" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#econetfs">
+                Econet file server</a
+              >
+            </li>
+            <li><hr class="dropdown-divider" /></li>
+            <li>
+              <a href="https://bbcmic.ro/" class="dropdown-item" target="_blank" rel="noopener"
+                >Edit BASIC with Owlet (bbcmic.ro)</a
+              >
+            </li>
+            <li><hr class="dropdown-divider" /></li>
+            <li><a href="#help" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#help">Help</a></li>
+            <li>
+              <a href="#about" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#info" id="about">
+                About jsbeeb</a
+              >
+            </li>
+            <li>
+              <a href="http://xania.org/MattGodbolt" class="dropdown-item" rel="author" target="_blank">
+                About the author</a
+              >
+            </li>
+            <li><a href="mailto:matt@godbolt.org" class="dropdown-item">Contact the author</a></li>
+            <li>
+              <a href="#pp-tos" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#pp-tos"
+                >Privacy and terms</a
+              >
+            </li>
+          </ul>
+        </li>
+      </ul>
+      <div class="d-flex align-items-center ms-auto me-3" id="quick-settings">
+        <div
+          class="btn-group btn-group-sm"
+          role="group"
+          aria-label="Sound output"
+          id="audio-output"
+          data-feature="audio_output"
+        >
+          <button
+            type="button"
+            class="btn btn-outline-light"
+            data-output="speaker"
+            title="Internal speaker: the board's output stage and the Beeb's own speaker and case"
+          >
+            <span data-icon="volume-up" aria-hidden="true"></span>
+          </button>
+          <button
+            type="button"
+            class="btn btn-outline-light"
+            data-output="board"
+            title="Line out: the board's output stage alone, as at its audio socket"
+          >
+            <span data-icon="headphones" aria-hidden="true"></span>
+          </button>
+          <button
+            type="button"
+            class="btn btn-outline-light"
+            data-output="off"
+            title="Unfiltered: the sound chip alone"
+          >
+            <span data-icon="soundwave" aria-hidden="true"></span>
+          </button>
+        </div>
+        <input
+          id="speaker-amount"
+          type="range"
+          class="form-range ms-2"
+          style="width: 4rem"
+          min="0"
+          max="1"
+          step="0.05"
+          value="1"
+          title="How much of the speaker's character to apply"
+          aria-label="Speaker amount"
+        />
+        <div class="btn-group btn-group-sm ms-3" role="group" aria-label="Display mode" id="display-mode">
+          <button type="button" class="btn btn-outline-light" data-mode="rgb" title="RGB monitor">
+            <span data-icon="display" aria-hidden="true"></span>
+          </button>
+          <button
+            type="button"
+            class="btn btn-outline-light"
+            data-mode="pal"
+            title="PAL TV, fed by the Beeb's UHF modulator"
+          >
+            <span data-icon="tv" aria-hidden="true"></span>
+          </button>
+          <button type="button" class="btn btn-outline-light" data-mode="xbr" title="Smoothed (xBR upscaler)">
+            <span data-icon="stars" aria-hidden="true"></span>
+          </button>
+        </div>
+      </div>
+      <div class="btn-group btn-group-sm me-3" role="group" aria-label="Run and pause">
+        <button
+          id="debug-play"
+          type="button"
+          class="btn btn-outline-light"
+          title="Start running the emulator (if not running already); hiding the debugger"
+        >
+          <span data-icon="play-fill" aria-hidden="true"></span>
+        </button>
+        <button
+          id="debug-pause"
+          type="button"
+          class="btn btn-outline-light"
+          title="Pause the running emulator and show the debugger"
+        >
+          <span data-icon="pause-fill" aria-hidden="true"></span>
+        </button>
+      </div>
+      <form class="d-flex" id="paste-form">
+        <input
+          id="paste-text"
+          class="form-control"
+          type="text"
+          maxlength="0"
+          placeholder="Paste here"
+          aria-label="Paste text here"
+        />
+      </form>
+    </div>
+  </div>
+</nav>
