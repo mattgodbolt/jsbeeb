@@ -14,7 +14,16 @@ import { NumRomBanks } from "../6502.js";
 import { bindGotoForm, externalLink, FittedRows, labelHtml, powerOfTwoColumnsThatFit } from "./debug-dom.js";
 import { DisassemblyView } from "./disassembly-view.js";
 import { PagingOverride } from "./paging-override.js";
-import { bankName, bankView, PagedView, parseViewedAddress, peekViewed, SidewaysStart, viewedBank } from "../paging.js";
+import {
+    bankName,
+    bankView,
+    PagedView,
+    parseViewedAddress,
+    peekViewed,
+    screenView,
+    SidewaysStart,
+    viewedBank,
+} from "../paging.js";
 import { Dropdown } from "bootstrap";
 
 const noop = () => {};
@@ -1021,13 +1030,14 @@ export class Debugger {
 
     /**
      * While the machine is stopped in the debugger, opens the memory panel at the byte drawn at a point of the
-     * screen, 0 to 1 across and down it, and takes the click; otherwise, or while the on-screen keyboard shows,
-     * the click is the machine's.
+     * screen, 0 to 1 across and down it, in the RAM it is drawn from, and takes the click; otherwise, or while the
+     * on-screen keyboard shows, the click is the machine's.
      */
     showScreenByteAt(x, y) {
         if (!this._inDebugger || this._touchKeyboardShown()) return false;
         const address = this.cpu.video.addressShownAt(x, y);
         if (address !== null) {
+            this._paging.memory.view = screenView(this.cpu, address);
             this._memoryView.update(address);
             this.panels.memory.open();
         }
