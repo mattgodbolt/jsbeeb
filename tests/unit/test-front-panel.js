@@ -24,9 +24,12 @@ describe("FrontPanel", () => {
 
     afterEach(teardownDom);
 
-    const make = (isAtom = false, printer = new Printer()) => {
-        processor.tapeInterface = isAtom ? processor.atomppia : processor.acia;
-        return new FrontPanel({ processor, model: { isAtom }, printer, loop });
+    const Bbc = { isAtom: false, hasDiscDrives: true };
+    const Atom = { isAtom: true, hasDiscDrives: false };
+    const AtomDos = { isAtom: true, hasDiscDrives: true };
+    const make = (model = Bbc, printer = new Printer()) => {
+        processor.tapeInterface = model.isAtom ? processor.atomppia : processor.acia;
+        return new FrontPanel({ processor, model, printer, loop });
     };
     const lit = (id) => document.getElementById(id).classList.contains("on");
 
@@ -51,7 +54,7 @@ describe("FrontPanel", () => {
         });
 
         it("show only the cassette motor on an Atom", () => {
-            const panel = make(true);
+            const panel = make(Atom);
             processor.atomppia.motorOn = true;
             panel.syncLights();
             expect(lit("motorlight")).toBe(true);
@@ -59,23 +62,33 @@ describe("FrontPanel", () => {
     });
 
     describe("what each machine shows", () => {
-        it("hides the BBC lights on an Atom", () => {
-            make(true);
-            expect(document.getElementById("capslight").closest(".bbc-only").style.display).toBe("none");
-            expect(document.getElementById("motorlight").closest(".slot-readout").style.display).toBe("");
-            expect(document.getElementById("speed-turbo").closest(".cell").style.display).toBe("");
-        });
+        const shown = (id) => document.getElementById(id).closest(".slot-readout, .cell").style.display !== "none";
 
-        it("shows the BBC lights on a BBC", () => {
-            make(false);
-            expect(document.getElementById("capslight").closest(".bbc-only").style.display).toBe("");
-        });
+        it.each([
+            ["a BBC", Bbc, true, true],
+            ["an Atom", Atom, false, false],
+            ["an Atom with DOS", AtomDos, false, true],
+        ])(
+            "shows %s the keyboard lights if it is a BBC, and drive lights that work if it has drives",
+            (_, model, keyboard, drives) => {
+                const panel = make(model);
+                processor.fdc.motorOn[0] = true;
+                panel.syncLights();
+                expect([shown("capslight"), shown("drive0"), shown("drive1"), lit("drive0")]).toEqual([
+                    keyboard,
+                    drives,
+                    drives,
+                    drives,
+                ]);
+                expect([shown("motorlight"), shown("speed-turbo")]).toEqual([true, true]);
+            },
+        );
     });
 
     describe("the printer window", () => {
         it("says how to open it the first time anything prints", () => {
             const printer = new Printer();
-            make(false, printer);
+            make(Bbc, printer);
             printer.dispatchEvent(new Event("first-output"));
             expect(toasts()).toEqual([expect.stringContaining("Press Alt-B to open")]);
         });
@@ -116,7 +129,7 @@ describe("FrontPanel", () => {
             };
             vi.spyOn(window, "open").mockReturnValue(fakeWindow);
             const printer = Object.assign(new EventTarget(), { text: "so far" });
-            const panel = make(false, printer);
+            const panel = make(Bbc, printer);
             panel.checkPrinterWindow();
             expect(fakeArea.value).toBe("so far");
             printer.dispatchEvent(new CustomEvent("output", { detail: "!" }));
@@ -129,7 +142,7 @@ describe("FrontPanel", () => {
         it("notes the printer opening only when a window opens", () => {
             const sent = sentEvents();
             vi.spyOn(window, "open").mockReturnValueOnce(null);
-            const panel = make(false, Object.assign(new EventTarget(), { text: "" }));
+            const panel = make(Bbc, Object.assign(new EventTarget(), { text: "" }));
             panel.checkPrinterWindow();
             window.open.mockReturnValueOnce({
                 closed: false,

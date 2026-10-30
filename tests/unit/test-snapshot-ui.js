@@ -95,7 +95,7 @@ describe("SnapshotUI", () => {
                 execute: vi.fn(),
                 debugInstruction: { stopped: false },
             },
-            model: { name: "B-DFS1.2" },
+            model: { name: "B-DFS1.2", hasDiscDrives: true },
             video: { paint: vi.fn() },
             media: {
                 loadDiscImage: vi.fn(),
@@ -247,6 +247,7 @@ describe("SnapshotUI", () => {
             deps.urlState = fakeUrlState();
             const drives = new Drives({
                 fdc,
+                hasDiscDrives: true,
                 driveTracks: [DriveTracks.auto, DriveTracks.auto],
                 urlState: deps.urlState,
             });
@@ -263,6 +264,13 @@ describe("SnapshotUI", () => {
             await reload(undefined);
             expect(deps.media.loadDiscImage).not.toHaveBeenCalled();
             expect(fdc.drives.map((drive) => drive.disc)).toEqual([undefined, undefined]);
+        });
+
+        it("leaves out the disc a state from a machine without drives recorded", async () => {
+            deps.model.hasDiscDrives = false;
+            await reload({ disc1: "elite.ssd", disc1Crc32: crc });
+            expect(deps.media.loadDiscImage).not.toHaveBeenCalled();
+            expect(toasts()).toEqual([]);
         });
 
         it("reloads a URL-sourced disc from its source and names it in the URL, but not as loaded recently", async () => {

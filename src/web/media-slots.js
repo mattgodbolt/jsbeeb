@@ -32,7 +32,7 @@ class Slot {
 
     get media() {
         const { processor } = this.slots;
-        return this.isDeck ? processor.tapeInterface.tape : processor.fdc?.drives[this.index]?.disc;
+        return this.isDeck ? processor.tapeInterface.tape : processor.fdc.drives[this.index].disc;
     }
 
     /** The URL parameters that name this slot's media, cleared when it is unnamed or empty. */

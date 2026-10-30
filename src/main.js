@@ -278,7 +278,13 @@ const { keyboard } = new KeyboardSetup({
 const modals = new Modals({ loop });
 openHelpOnTheTabForNow(() => loop.isPaused() || loop.mode === RunMode.debugging);
 
-const drives = new Drives({ fdc: processor.fdc, driveTracks, confirm: modals.confirm.bind(modals), urlState });
+const drives = new Drives({
+    fdc: processor.fdc,
+    hasDiscDrives: model.hasDiscDrives,
+    driveTracks,
+    confirm: modals.confirm.bind(modals),
+    urlState,
+});
 const media = new MediaLoader({
     processor,
     model,

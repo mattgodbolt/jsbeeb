@@ -14,24 +14,24 @@ export const tracksPerStepOf = (label) => (label === "40" ? 2 : 1);
  * Raises "tracks-changed" when a switch moves.
  */
 export class Drives extends EventTarget {
-    constructor({ fdc, driveTracks, confirm, urlState }) {
+    constructor({ fdc, hasDiscDrives, driveTracks, confirm, urlState }) {
         super();
         this.fdc = fdc;
+        this.hasDiscDrives = hasDiscDrives;
         this.driveTracks = driveTracks;
         this.confirm = confirm;
         this.urlState = urlState;
         this.saidWritesAreNotKept = false;
 
         for (const driveIndex of [0, 1]) {
-            const drive = fdc?.drives[driveIndex];
-            const fixed = drive ? this.tracksPerStepForDrive(driveIndex) : undefined;
-            if (fixed !== undefined) drive.tracksPerStep = fixed;
+            const fixed = this.tracksPerStepForDrive(driveIndex);
+            if (fixed !== undefined) fdc.drives[driveIndex].tracksPerStep = fixed;
         }
     }
 
     /** @returns {import("../disc.js").Disc|null} the disc in the drive, saying so when there is nothing to download */
     discToDownload(driveIndex) {
-        const disc = this.fdc?.drives[driveIndex].disc;
+        const disc = this.fdc.drives[driveIndex].disc;
         if (!disc) toast(`There is no disc in drive ${driveIndex} to download.`, { title: "Disc" });
         return disc ?? null;
     }
@@ -84,8 +84,7 @@ export class Drives extends EventTarget {
      * whatever is put in next, until the switch is thrown again.
      */
     setTracksPerStep(driveIndex, tracksPerStep) {
-        const drive = this.fdc?.drives[driveIndex];
-        if (!drive) return;
+        const drive = this.fdc.drives[driveIndex];
         const setting = tracksLabel(tracksPerStep);
         if (drive.tracksPerStep === tracksPerStep && this.driveTracks[driveIndex] === setting) return;
         drive.tracksPerStep = tracksPerStep;
@@ -99,13 +98,12 @@ export class Drives extends EventTarget {
      * pinned follows it, so the URL and the drive agree; one on auto has nothing to say.
      */
     followRestoredPitch(driveIndex) {
-        const drive = this.fdc?.drives[driveIndex];
-        if (drive && this.tracksPerStepForDrive(driveIndex) !== undefined)
-            this.setTracksPerStep(driveIndex, drive.tracksPerStep);
+        if (this.tracksPerStepForDrive(driveIndex) !== undefined)
+            this.setTracksPerStep(driveIndex, this.fdc.drives[driveIndex].tracksPerStep);
     }
 
     putDiscIn(driveIndex, loadedDisc) {
-        if (!this.fdc) throw new Error("This machine has no disc drives");
+        if (!this.hasDiscDrives) throw new Error("This machine has no disc drives");
         const drive = this.fdc.drives[driveIndex];
         const fixed = this.tracksPerStepForDrive(driveIndex);
         const was = drive.tracksPerStep;

@@ -69,6 +69,12 @@ describe("Model", () => {
         expect(beeb.stringToKeys("A")).toEqual([BBC.A]);
         expect(atom.pasteKeyDelayMs).toBeGreaterThan(beeb.pasteKeyDelayMs);
         expect([beeb.pasteReleaseGapMs, atom.pasteReleaseGapMs]).toEqual([0, 40]);
+        expect([beeb, master, atom, findModel("Atom-DOS")].map((m) => m.hasDiscDrives)).toEqual([
+            true,
+            true,
+            false,
+            true,
+        ]);
     });
 
     describe("the stock BBC B", () => {
