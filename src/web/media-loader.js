@@ -187,7 +187,6 @@ export class MediaLoader extends EventTarget {
             const ref = await this.loadTapeFile(name, data, entry);
             return { kind: "tape", name, ref, words: `Loaded ${name} as the tape.` };
         }
-        if (!this.model.hasDiscDrives) throw new Error("This machine has no disc drives");
         const ref = this.loadDiscFile(name, data, driveIndex, entry);
         return { kind: "disc", name, ref, driveIndex, words: `Loaded ${name} into drive ${driveIndex}.` };
     }

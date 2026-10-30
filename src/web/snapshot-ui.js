@@ -172,7 +172,8 @@ export class SnapshotUI {
     }
 
     async reloadSnapshotMedia(savedMedia) {
-        if (!savedMedia) return;
+        // An Atom without drives used to start with a disc in its hidden drive 0, which its states recorded.
+        if (!savedMedia || !this.model.hasDiscDrives) return;
         for (let driveIndex = 0; driveIndex < 2; driveIndex++) {
             const discKey = driveIndex === 0 ? "disc1" : "disc2";
             const imageDataKey = discKey + "ImageData";

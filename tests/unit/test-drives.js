@@ -28,7 +28,7 @@ describe("Drives", () => {
     afterEach(teardownDom);
 
     const make = (driveTracks = [DriveTracks.auto, DriveTracks.auto]) =>
-        new Drives({ fdc, driveTracks, confirm, urlState });
+        new Drives({ fdc, hasDiscDrives: true, driveTracks, confirm, urlState });
 
     describe("what the URL fixed each drive at", () => {
         it("loads an image contiguously for a drive fixed at 80 tracks, and lets the others be detected", () => {
@@ -77,6 +77,18 @@ describe("Drives", () => {
     });
 
     describe("what the drives hold", () => {
+        it("refuses a disc, in words, on a machine without disc drives", () => {
+            const drives = new Drives({
+                fdc,
+                hasDiscDrives: false,
+                driveTracks: [DriveTracks.auto, DriveTracks.auto],
+                confirm,
+                urlState,
+            });
+            expect(() => drives.putDiscIn(0, fakeDisc())).toThrow("This machine has no disc drives");
+            expect(fdc.loadDisc).not.toHaveBeenCalled();
+        });
+
         it("ejects a disc, leaving the drive empty", () => {
             const drives = make();
             drives.putDiscIn(0, fakeDisc());

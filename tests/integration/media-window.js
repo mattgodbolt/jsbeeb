@@ -44,6 +44,7 @@ describe("the media window against a real machine", () => {
         const urlState = fakeUrlState(search);
         const drives = new Drives({
             fdc: machine.processor.fdc,
+            hasDiscDrives: machine.model.hasDiscDrives,
             driveTracks,
             confirm: async () => false,
             urlState,

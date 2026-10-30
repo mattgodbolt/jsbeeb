@@ -41,6 +41,7 @@ describe("MediaSlots", () => {
         urlState = fakeUrlState();
         const drives = new Drives({
             fdc,
+            hasDiscDrives: true,
             driveTracks: [DriveTracks.auto, DriveTracks.auto],
             confirm: vi.fn(),
             urlState,
