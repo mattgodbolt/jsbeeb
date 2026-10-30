@@ -14,7 +14,7 @@ import { NumRomBanks } from "../6502.js";
 import { bindGotoForm, externalLink, FittedRows, labelHtml, powerOfTwoColumnsThatFit } from "./debug-dom.js";
 import { DisassemblyView } from "./disassembly-view.js";
 import { PagingOverride } from "./paging-override.js";
-import { bankView, PagedView, parseViewedAddress, peekViewed, SidewaysStart, viewedBank } from "../paging.js";
+import { bankName, bankView, PagedView, parseViewedAddress, peekViewed, SidewaysStart, viewedBank } from "../paging.js";
 import { Dropdown } from "bootstrap";
 
 const noop = () => {};
@@ -567,8 +567,8 @@ export class Debugger {
         bank.type = "button";
         bank.className = "label-bank dropdown-toggle";
         bank.dataset.bsToggle = "dropdown";
-        bank.textContent = file.bank === null ? "any bank" : `bank ${file.bank}`;
-        bank.title = `Which sideways bank ${file.title} names $8000-$bfff in`;
+        bank.textContent = file.bank === null ? "any bank" : `bank ${bankName(file.bank)}`;
+        bank.title = `Which sideways bank ${file.title} names &8000 to &BFFF in`;
         // Bootstrap focuses the toggle as its menu opens.
         bank.addEventListener("hidden.bs.dropdown", () => bank.blur());
         const banks = document.createElement("div");
@@ -579,7 +579,7 @@ export class Debugger {
                 item.type = "button";
                 item.className = "dropdown-item";
                 item.classList.toggle("active", choice === file.bank);
-                item.textContent = choice === null ? "any bank" : `${choice}`;
+                item.textContent = choice === null ? "any bank" : bankName(choice);
                 item.addEventListener("click", () => this._labelFiles.tie(file, choice));
                 return item;
             }),

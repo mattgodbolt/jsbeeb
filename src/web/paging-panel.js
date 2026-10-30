@@ -1,4 +1,4 @@
-import { bankView, describeBank, sidewaysBanks } from "../paging.js";
+import { bankName, describeBank, sidewaysBanks } from "../paging.js";
 import { decodedPanel, DecodedRegisters, fixed, lit, namedBits, register } from "./decoded-registers.js";
 import { Centred, StartEdge } from "./panel-layout.js";
 
@@ -18,10 +18,8 @@ const AccconBits = [
 
 /** @typedef {{romsel: number, acccon: number, bank: number}} PagingState */
 
-const bankName = (bank) => bankView(bank).toUpperCase();
-
 function decodeRomsel(romsel, { bank }, isMaster) {
-    const meanings = [fixed(`bank ${bankName(bank)}`, `Sideways bank ${bank} is paged in at &8000 to &BFFF`)];
+    const meanings = [fixed(`bank ${bankName(bank)}`, `Sideways bank ${bankName(bank)} is paged in at &8000 to &BFFF`)];
     if (isMaster) {
         meanings.push(lit("ANDY", "ANDY: the 4K of private RAM over &8000 to &8FFF", romsel & RomselAndyBit));
     }
