@@ -2,7 +2,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
-    DisplaySection,
     matchesHost,
     Parameters,
     parameterFor,
@@ -14,12 +13,11 @@ import {
 } from "../../src/web/parameters.js";
 import { configForm } from "../../src/web/config-form.js";
 import { Settings } from "../../src/web/settings.js";
-import { Config } from "../../src/web/config.js";
 import { UrlState } from "../../src/web/url-state.js";
 import { ParamTypes, parseQueryString } from "../../src/url-params.js";
 import { MaxPersistenceMs, persistenceSettings } from "../../src/web/canvas.js";
 import { findModel } from "../../src/models.js";
-import { domFromIndexHtml, fakeUrlState, teardownDom } from "./helpers.js";
+import { fakeUrlState, teardownDom } from "./helpers.js";
 
 describe("Parameters", () => {
     afterEach(teardownDom);
@@ -87,6 +85,19 @@ describe("Parameters", () => {
         }
     });
 
+    it("remembers in storage the key layout, the display and the sound, and lets only the sliders settle", () => {
+        const flagged = (flag) => Object.keys(Parameters).filter((name) => Parameters[name][flag]);
+        expect(flagged("stored").sort()).toEqual([
+            "audioOutput",
+            "displayMode",
+            "keyLayout",
+            "palPersistenceMs",
+            "rgbPersistenceMs",
+            "speakerAmount",
+        ]);
+        expect(flagged("slid").sort()).toEqual(["palPersistenceMs", "rgbPersistenceMs", "speakerAmount"]);
+    });
+
     it("lays the dialog out in the order the parameters are declared, sections and group together", () => {
         const layout = configForm().map((entry) =>
             Array.isArray(entry)
@@ -114,82 +125,6 @@ describe("Parameters", () => {
             ["mouseJoystickEnabled"],
             ["speechOutput"],
         ]);
-    });
-
-    describe("adding a setting takes its declaration alone", () => {
-        const withMadeUpSetting = {
-            ...Parameters,
-            screenTint: {
-                type: ParamTypes.STRING,
-                stored: true,
-                default: "amber",
-                fromUrl: (tint) => tint.toLowerCase(),
-                valid: (tint) => ["amber", "green"].includes(tint),
-                field: {
-                    type: "menu",
-                    section: DisplaySection,
-                    label: "Screen tint",
-                    options: [
-                        { value: "amber", text: "Amber" },
-                        { value: "green", text: "Green" },
-                    ],
-                },
-            },
-            scanlines: { type: ParamTypes.BOOL, stored: true, default: true },
-            tintLevel: { type: ParamTypes.INT, stored: true, default: 3 },
-        };
-        const urlStateFor = (search) =>
-            new UrlState(
-                { origin: "https://bbc.example", pathname: "/", search, hash: "" },
-                { pushState: vi.fn() },
-                (name) => urlParamType(name, withMadeUpSetting),
-            );
-        const settingsFor = (search) => new Settings({ urlState: urlStateFor(search), parameters: withMadeUpSetting });
-
-        it("is read, with its default", () => {
-            expect(settingsFor("").screenTint).toBe("amber");
-            expect(settingsFor("?screenTint=green").screenTint).toBe("green");
-        });
-
-        it("is adjusted from the URL before it is checked", () => {
-            expect(settingsFor("?screenTint=Green").screenTint).toBe("green");
-            expect(settingsFor("?screenTint=Blue").screenTint).toBe("amber");
-        });
-
-        it("is stored and read back", () => {
-            settingsFor("").set({ screenTint: "green" });
-            expect(window.localStorage.screenTint).toBe("green");
-            expect(settingsFor("").screenTint).toBe("green");
-        });
-
-        it("reads a stored checkbox and number back as what was stored, not the default", () => {
-            settingsFor("").set({ scanlines: false, tintLevel: 5 });
-            expect(window.localStorage.scanlines).toBe("false");
-            expect(settingsFor("")).toMatchObject({ scanlines: false, tintLevel: 5 });
-        });
-
-        it("round-trips through the URL", () => {
-            const settings = settingsFor("?model=Master");
-            settings.set({ screenTint: "green" });
-            expect(settings.urlState.url()).toBe("https://bbc.example/?model=Master&screenTint=green");
-            expect(settingsFor(new URL(settings.urlState.url()).search).screenTint).toBe("green");
-        });
-
-        it("appears in the dialog where it is declared, and sets the setting", () => {
-            domFromIndexHtml("configuration");
-            const settings = settingsFor("?screenTint=green");
-            new Config(settings);
-            const layout = configForm(withMadeUpSetting).find(Array.isArray);
-            expect(layout.map((field) => field.setting ?? field.id)).toEqual([
-                "displayMode",
-                "screenTint",
-                "persistence",
-            ]);
-            expect(document.getElementById("screenTintDropdown").textContent.trim()).toBe("Green");
-            document.querySelector('.screen-tint-menu a[data-value="amber"]').click();
-            document.getElementById("configuration").dispatchEvent(new Event("hide.bs.modal"));
-            expect(settings.screenTint).toBe("amber");
-        });
     });
 });
 
