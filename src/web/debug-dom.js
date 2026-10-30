@@ -83,8 +83,7 @@ export class FittedRows {
 }
 
 /**
- * Has a panel's "Go to" box hand `go` what its text resolves to, such as an address, marking the box instead when it
- * resolves to nothing.
+ * Has a panel's "Go to" box hand `go` what its text resolves to, marking the box instead when it resolves to nothing.
  * @template Target
  * @param {HTMLFormElement} form
  * @param {(text: string) => Target | undefined} resolve

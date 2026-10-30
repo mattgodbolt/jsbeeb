@@ -4,6 +4,8 @@ import { UrlState } from "../../src/web/url-state.js";
 import { FloatingPanel } from "../../src/web/floating-panel.js";
 import { StartEdge } from "../../src/web/panel-layout.js";
 import { stitchHtml } from "../../tools/html-includes.js";
+import { RomBankBytes } from "../../src/6502.js";
+import { findModel } from "../../src/models.js";
 
 let indexHtmlDoc = null;
 
@@ -284,3 +286,20 @@ export const ViaRegister = {
     IER: 0xe,
     ORAnh: 0xf,
 };
+
+/** Where `address` in sideways `bank` is in `cpu.ramRomOs`. */
+export const bankOffset = (cpu, bank, address) => cpu.romOffset + bank * RomBankBytes + address - 0x8000;
+
+/** Puts a sideways ROM header in `bank`: a title, a version string if given, and the copyright string. */
+export function fitRomHeader(cpu, bank, title, version) {
+    const strings = version === undefined ? title : `${title}\0${version}`;
+    const header = [0, 0, 0, 0, 0, 0, 0x82, 9 + strings.length, 1];
+    const bytes = [...header, ...[...`${strings}\0(C)Acorn\0`].map((c) => c.charCodeAt(0))];
+    cpu.ramRomOs.set(bytes, bankOffset(cpu, bank, 0x8000));
+}
+
+/** The model `name` finds, without its ROMs, which jsdom cannot fetch. */
+export function romless(name) {
+    const model = findModel(name);
+    return Object.assign(Object.create(Object.getPrototypeOf(model)), model, { os: [] });
+}

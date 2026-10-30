@@ -30,6 +30,7 @@ export const PanelIds = [
     "soundchip",
     "videoula",
     "fdc",
+    "paging",
     "basic",
 ];
 export const AllEdges = { left: true, right: true, top: true, bottom: true };

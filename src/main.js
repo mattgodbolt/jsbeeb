@@ -50,6 +50,7 @@ import { SysViaPanel } from "./web/sysvia-panel.js";
 import { CrtcPanel } from "./web/crtc-panel.js";
 import { UserViaPanel } from "./web/uservia-panel.js";
 import { VideoUlaPanel } from "./web/video-ula-panel.js";
+import { PagingPanel } from "./web/paging-panel.js";
 import { BasicPanel } from "./web/basic-panel.js";
 import { SoundChipPanel } from "./web/soundchip-panel.js";
 import { FdcPanel } from "./web/fdc-panel.js";
@@ -366,6 +367,8 @@ for (const DevicePanel of [SysViaPanel, UserViaPanel, CrtcPanel, SoundChipPanel,
     if (DevicePanel.fits(processor))
         new DevicePanel({ cpu: processor, arrangement: panelArrangement, audio: audioHandler });
 new FdcPanel({ cpu: processor, arrangement: panelArrangement, visualiser: discVisualiser });
+if (PagingPanel.fits(processor))
+    new PagingPanel({ cpu: processor, arrangement: panelArrangement, showBank: (bank) => dbgr.showBank(bank) });
 if (BasicPanel.fits(processor)) {
     new BasicPanel({
         cpu: processor,

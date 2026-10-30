@@ -1,5 +1,5 @@
 import { downloadBlob } from "./dom-utils.js";
-import { hexbyte, hexword, parseAddr } from "../hex.js";
+import { byteChar, hexbyte, hexword, parseAddr } from "../hex.js";
 import { NoNames } from "../symbol-names.js";
 import { isHttps } from "../symbol-sets.js";
 import { noteFeature } from "./analytics.js";
@@ -13,6 +13,8 @@ import { cycleCount } from "../lockstep.js";
 import { NumRomBanks } from "../6502.js";
 import { bindGotoForm, externalLink, FittedRows, labelHtml, powerOfTwoColumnsThatFit } from "./debug-dom.js";
 import { DisassemblyView } from "./disassembly-view.js";
+import { PagingOverride } from "./paging-override.js";
+import { bankView, PagedView, parseViewedAddress, peekViewed, SidewaysStart, viewedBank } from "../paging.js";
 import { Dropdown } from "bootstrap";
 
 const noop = () => {};
@@ -63,19 +65,20 @@ function memoryTitle(address, named, inRegion) {
 class MemoryView {
     /**
      * @param {HTMLElement} widget
-     * @param {(address: number) => number} peekMem
+     * @param {PagingOverride} paging - what it reads memory through
      * @param {() => {names: import("../symbol-names.js").SymbolNames, pc: number}} naming
      * @param {(sets: Set<import("../symbol-names.js").SymbolSet>) => void} showing - the sets whose names it shows
      * @param {() => void} redraw - redraws it, once its rows have changed in number or width
      */
-    constructor(widget, peekMem, naming, showing, redraw) {
+    constructor(widget, paging, naming, showing, redraw) {
         this._widget = widget;
-        this._peekMem = peekMem;
+        this._paging = paging;
         this._naming = naming;
         this._showing = showing;
         this._addr = 0;
         this._first = 0;
         this._prevSnapshot = new Uint8Array(65536);
+        this._snapshotView = PagedView;
         this._rows = new FittedRows(widget, InitialMemoryRows, redraw);
         this._setBytesPerRow(FewestBytesPerRow);
 
@@ -163,22 +166,21 @@ class MemoryView {
         const hex = [];
         const asc = [];
         const changed = [];
+        // Changes are marked only against a snapshot taken in the view shown.
+        const comparable = this._snapshotView === this._paging.view;
         for (let i = from; i < to; ++i) {
-            const b = this._peekMem(i);
+            const b = this._paging.peek(i);
             hex.push(hexbyte(b));
-            changed.push(i < this._prevSnapshot.length && this._prevSnapshot[i] !== b);
-            if (b >= 32 && b < 128) {
-                asc.push(String.fromCharCode(b));
-            } else {
-                asc.push(".");
-            }
+            changed.push(comparable && i < this._prevSnapshot.length && this._prevSnapshot[i] !== b);
+            asc.push(byteChar(b));
         }
         return { hex: hex, asc: asc, changed: changed };
     }
 
     snapshot() {
+        this._snapshotView = this._paging.view;
         for (let i = 0; i < 65536; ++i) {
-            this._prevSnapshot[i] = this._peekMem(i);
+            this._prevSnapshot[i] = this._paging.peek(i);
         }
     }
 
@@ -201,10 +203,10 @@ class MemoryView {
 
     /**
      * Puts a field over the byte at `address`, bringing it into view if need be. Tab hands `write` its new value and
-     * moves on to the next byte (Shift-Tab, the one before); Enter hands it over and leaves, and Escape just leaves.
-     * A value left as it was is not handed over, as a write to a register is not the same as leaving it alone.
+     * `editNext` the next byte's address (Shift-Tab, the one before's); Enter hands it over and leaves, and Escape just
+     * leaves. A value left as it was is not handed over, as a write to a register is not the same as leaving it alone.
      */
-    edit(address, write) {
+    edit(address, write, editNext) {
         if (!this._byteAt(address)) this.update(address);
         const byte = this._byteAt(address);
         const field = document.createElement("input");
@@ -226,7 +228,7 @@ class MemoryView {
             if (value === undefined) return;
             field.blur();
             if (value !== parseInt(was, 16)) write(address, value);
-            if (e.key === "Tab") this.edit((address + (e.shiftKey ? -1 : 1)) & 0xffff, write);
+            if (e.key === "Tab") editNext((address + (e.shiftKey ? -1 : 1)) & 0xffff);
         });
         field.focus();
         field.select();
@@ -380,11 +382,24 @@ export class Debugger {
             disassembly: { line: document.querySelector("#disassembly-panel .debug-symbols"), sets: null },
             memory: { line: document.querySelector("#memory-panel .debug-symbols"), sets: null },
         };
+        this.panels = Object.fromEntries(OwnPanels.map((own) => [own.id, this._makePanel(own)]));
+        /** @type {Map<PagingOverride, import("../symbol-names.js").SymbolNames>} */
+        this._viewNames = new Map();
+        this._paging = {
+            memory: new PagingOverride({
+                floating: this.panels.memory,
+                changed: () => this._viewChanged(() => this._memoryView.update()),
+            }),
+            disassembly: new PagingOverride({
+                floating: this.panels.disassembly,
+                changed: () => this._viewChanged(() => this._disassembly.redraw()),
+            }),
+        };
         this._memoryView = new MemoryView(
             document.getElementById("memory"),
-            peek,
-            () => ({ names: this._names, pc: this.cpu.pc }),
-            (sets) => this._credit(this._credits.memory, sets),
+            this._paging.memory,
+            () => ({ names: this._namesIn(this._paging.memory), pc: this.cpu.pc }),
+            (sets) => this._credit(this._credits.memory, this._namesIn(this._paging.memory), sets),
             () => this._redraw(() => this._memoryView.update()),
         );
         this.watches = new WatchPanel({ peek, resolve: (text) => this._resolveWatch(text), arrangement });
@@ -404,7 +419,6 @@ export class Debugger {
             this._renameShown();
         });
 
-        this.panels = Object.fromEntries(OwnPanels.map((own) => [own.id, this._makePanel(own)]));
         this._refresh = arrangement.refreshing(
             () => this._ownPanelsShown(),
             () => this._showOpenPanels(),
@@ -422,14 +436,13 @@ export class Debugger {
             runToCursor: () => this._fromDebugger(() => this.runToCursor()),
             runToVsync: () => this._fromDebugger(() => this.runToVsync()),
         };
-        const resolve = (text) => addressFor(this._names, text, this.cpu.pc);
         this._disassembly = new DisassemblyView({
             floating: this.panels.disassembly,
             keys,
-            names: () => this._names,
-            dump: (from, to) => this._memoryView.dump(from, to),
-            resolve,
-            showing: (sets) => this._credit(this._credits.disassembly, sets),
+            paging: this._paging.disassembly,
+            names: () => this._namesIn(this._paging.disassembly),
+            resolve: (text) => this._resolveViewed(this._paging.disassembly, text),
+            showing: (sets) => this._credit(this._credits.disassembly, this._namesIn(this._paging.disassembly), sets),
             showMemory: (address) => this._memoryView.update(address),
             offerWatch: (e, address, name) => this._offerWatch(e, address, name),
             runToCursor: this._actions.runToCursor,
@@ -442,8 +455,13 @@ export class Debugger {
         this._bindKeys(keys);
         this._bindLabelDrops();
 
-        bindGotoForm(document.getElementById("goto-mem-addr-form"), resolve, (address) =>
-            this._memoryView.update(address),
+        bindGotoForm(
+            document.getElementById("goto-mem-addr-form"),
+            (text) => this._resolveViewed(this._paging.memory, text),
+            ({ address, view }) => {
+                this._paging.memory.view = view;
+                this._memoryView.update(address);
+            },
         );
         bindGotoForm(
             document.getElementById("run-to-line-form"),
@@ -459,13 +477,29 @@ export class Debugger {
             const byte = e.target.closest("[data-addr]");
             if (!byte) return;
             const address = Number(byte.dataset.addr);
-            this._offerWatch(e, address, this._names.address(address, this.cpu.pc)?.name);
+            const named = this._paging.memory.differs(address) ? undefined : this._names.address(address, this.cpu.pc);
+            this._offerWatch(e, address, named?.name);
         });
         document.getElementById("memory").addEventListener("click", (e) => {
             if (!e.target.matches(".mem_bytes [data-addr]") || this._loop.mode !== RunMode.debugging) return;
-            this._memoryView.edit(Number(e.target.dataset.addr), (address, value) => this._writeByte(address, value));
+            this._editMemory(Number(e.target.dataset.addr));
         });
-        this._bindSaveForm(resolve);
+        this._bindSaveForm((text) => addressFor(this._namesIn(this._paging.memory), text, this.cpu.pc));
+    }
+
+    /** Edits the byte at `address`, unless the memory panel shows there other memory than the CPU writes to. */
+    _editMemory(address) {
+        if (this._paging.memory.differs(address)) {
+            toast(`$${hexword(address)} shows other memory than the CPU's; pick "paged" to edit it.`, {
+                title: "Memory",
+            });
+            return;
+        }
+        this._memoryView.edit(
+            address,
+            (at, value) => this._writeByte(at, value),
+            (next) => this._editMemory(next),
+        );
     }
 
     /** Writes as the CPU would, so that a ROM byte keeps its value and a register's device sees the write. */
@@ -505,7 +539,7 @@ export class Debugger {
             from.classList.toggle("is-invalid", start === undefined);
             to.classList.toggle("is-invalid", end === undefined || end < start);
             if (start === undefined || end === undefined || end < start) return;
-            const bytes = Uint8Array.from({ length: end - start + 1 }, (_, i) => this._peek(start + i));
+            const bytes = Uint8Array.from({ length: end - start + 1 }, (_, i) => this._paging.memory.peek(start + i));
             downloadBlob(new Blob([bytes]), `memory-${hexword(start)}-${hexword(end)}.bin`);
             close();
         });
@@ -579,6 +613,47 @@ export class Debugger {
         } catch (error) {
             toast(error.message, { title: "Label files" });
         }
+    }
+
+    /** The names matched to memory as `paging` shows it. */
+    _namesIn(paging) {
+        return paging.view === PagedView ? this._names : (this._viewNames.get(paging) ?? NoNames);
+    }
+
+    _viewChanged(redraw) {
+        if (!this.cpu) return;
+        this._matchSymbols();
+        redraw();
+    }
+
+    /**
+     * The address a Go to text names, and the view it is in: the one it qualifies the address with, or else the one
+     * `paging` shows. Names resolve as matched to memory in that view.
+     * @returns {{address: number, view: import("../paging.js").PagingView} | undefined}
+     */
+    _resolveViewed(paging, text) {
+        const parsed = parseViewedAddress(text, this.cpu.model);
+        if (!parsed) return undefined;
+        const view = parsed.view ?? paging.view;
+        const names =
+            view === paging.view
+                ? this._namesIn(paging)
+                : this._namesFor((address) => peekViewed(this.cpu, view, address), this._bankShownBy(view));
+        const address = addressFor(names, parsed.address, this.cpu.pc);
+        return address === undefined ? undefined : { address, view };
+    }
+
+    /**
+     * Shows sideways `bank` from its start: its code in the disassembly while stopped in the debugger, where the
+     * disassembly isn't following the program counter, or else its bytes in the memory panel.
+     */
+    showBank(bank) {
+        const [paging, floating, show] = this._inDebugger
+            ? [this._paging.disassembly, this.panels.disassembly, (at) => this._disassembly.update(at)]
+            : [this._paging.memory, this.panels.memory, (at) => this._memoryView.update(at)];
+        paging.view = bankView(bank);
+        show(SidewaysStart);
+        floating.open();
     }
 
     _offerWatch(e, address, name) {
@@ -775,16 +850,19 @@ export class Debugger {
      * already highlighted, which stays in its row.
      */
     updateDisassembly(address) {
+        this._paging.disassembly.relabel();
         if (address === this._disassembly.cursor && !this._loop?.isRunning()) this._disassembly.redraw();
         else this._disassembly.update(address);
     }
 
     updateMemory() {
+        this._paging.memory.relabel();
         this._memoryView.update();
     }
 
     setCpu(cpu) {
         this.cpu = cpu;
+        for (const paging of Object.values(this._paging)) paging.setCpu(cpu);
         this._disassembly.setCpu(cpu);
         this.watches.setCpu(cpu);
         if (this._ownPanelsShown()) this._refresh.drawNow();
@@ -889,12 +967,20 @@ export class Debugger {
 
     _matchSymbols() {
         this._names = this._namesNow();
+        this._viewNames = new Map(
+            Object.values(this._paging)
+                .filter((paging) => paging.view !== PagedView)
+                .map((paging) => [
+                    paging,
+                    this._namesFor((address) => paging.peek(address), this._bankShownBy(paging.view)),
+                ]),
+        );
         this._matchedAt = performance.now();
     }
 
     /** Credits the sets whose names a panel shows, in its own line. */
-    _credit(credit, sets) {
-        const credited = this._names.sets.filter((set) => sets.has(set));
+    _credit(credit, names, sets) {
+        const credited = names.sets.filter((set) => sets.has(set));
         if (credit.sets?.size === credited.length && credited.every((set) => credit.sets.has(set))) return;
         credit.sets = new Set(credited);
         credit.line.style.visibility = credited.length > 0 ? "" : "hidden";
@@ -913,7 +999,17 @@ export class Debugger {
     }
 
     _namesNow() {
-        return this._labelFiles.names(this._symbolSets?.names(this._peek) ?? NoNames, this.cpu?.pagedBank);
+        return this._namesFor(this._peek, this.cpu?.pagedBank);
+    }
+
+    /** The sideways bank whose labels apply in `view`: the bank it shows, or else the one paged. */
+    _bankShownBy(view) {
+        return viewedBank(view) ?? this.cpu?.pagedBank;
+    }
+
+    /** The names for memory as `peek` reads it, with sideways `bank` at &8000, as a label file sees it. */
+    _namesFor(peek, bank) {
+        return this._labelFiles.names(this._symbolSets?.names(peek) ?? NoNames, bank);
     }
 
     _resolveWatch(text) {
@@ -957,6 +1053,7 @@ export class Debugger {
         // A run handed to the loop keeps the memory it started from, to show what it changed.
         if (!this._runningTo) this.updatePrevMem();
         this.watches.dismissMenu();
+        for (const paging of Object.values(this._paging)) paging.dismissMenu();
         this.watches.clearFired();
         this._inDebugger = false;
         this._monitor.classList.remove("finds-bytes");
