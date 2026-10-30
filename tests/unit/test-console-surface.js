@@ -80,7 +80,7 @@ describe("exposeConsoleSurface", () => {
         expect(log).toHaveBeenCalledWith(hd((x) => x & 0x7f, 0x7c00, 0x7fe8, { width: 40, gap: false }));
     });
 
-    it("hd and m7dump only look: device state stays put and read breakpoints stay quiet", async () => {
+    it("hd, m7dump and the processor's string and area readers only look: device state stays put and read breakpoints stay quiet", async () => {
         const processor = fake6502(romless("B-DFS1.2"));
         await processor.initialise();
         const UserVia = 0xfe60;
@@ -98,6 +98,9 @@ describe("exposeConsoleSurface", () => {
         vi.spyOn(console, "log").mockImplementation(() => {});
         target.hd(UserVia, UserVia + 0x10);
         target.m7dump();
+        processor.readArea(UserVia, 0x10);
+        processor.readString(UserVia);
+        processor.findString("not in memory", 0);
 
         expect(processor.peekmem(Ifr) & T1Flag).toBe(T1Flag);
         expect(hits).toEqual([]);
