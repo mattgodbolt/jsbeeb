@@ -17,9 +17,9 @@ export function exposeConsoleSurface(target, { loop, processor, video, audioHand
     target.processor = processor;
     target.video = video;
     target.hd = (start, end) => {
-        console.log(hd((x) => processor.readmem(x), start, end));
+        console.log(hd((x) => processor.peekmem(x), start, end));
     };
     target.m7dump = () => {
-        console.log(hd((x) => processor.readmem(x) & 0x7f, 0x7c00, 0x7fe8, { width: 40, gap: false }));
+        console.log(hd((x) => processor.peekmem(x) & 0x7f, 0x7c00, 0x7fe8, { width: 40, gap: false }));
     };
 }

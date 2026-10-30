@@ -502,6 +502,25 @@ describe("Debugger", () => {
                 expect(shownPc()).toBe("2000");
             });
 
+            it.each([
+                ["a power-on reset", () => cpu.reset(true)],
+                ["a soft reset, which leaves the cycle count", () => cpu.reset(false)],
+                ["a state put in", (saved) => cpu.restoreState(saved)],
+                ["a state put in at the same program counter", (saved) => cpu.restoreState({ ...saved, pc: 0x2002 })],
+            ])("move the cursor to the program counter after %s, and only then", (_, replace) => {
+                const cursorAt = () => addrOf(currentRow()).slice(0, 4);
+                const saved = cpu.snapshotState();
+                keyPress("n");
+                goTo("goto-dis-addr-form", "3000");
+                replace(saved);
+                frames.run();
+                expect(cursorAt()).toBe(hexword(cpu.pc));
+                goTo("goto-dis-addr-form", "3000");
+                arrangement.drawAllNow();
+                frames.run();
+                expect(cursorAt()).toBe("3000");
+            });
+
             it("read nothing once closed", () => {
                 stoppedLoop.go();
                 dbgr.hidePanels();

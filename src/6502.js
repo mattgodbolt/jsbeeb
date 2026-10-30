@@ -893,7 +893,7 @@ export class Cpu6502 extends Base6502 {
     readString(addr) {
         let s = "";
         for (;;) {
-            const b = this.readmem(addr);
+            const b = this.peekmem(addr);
             addr++;
             if (b === 0 || b === 13) break;
             s += String.fromCharCode(b);
@@ -906,7 +906,7 @@ export class Cpu6502 extends Base6502 {
         for (; addr < 0xffff; ++addr) {
             let i;
             for (i = 0; i < string.length; ++i) {
-                if (this.readmem(addr + i) !== string.charCodeAt(i)) break;
+                if (this.peekmem(addr + i) !== string.charCodeAt(i)) break;
             }
             if (i === string.length) {
                 return addr;
@@ -918,7 +918,7 @@ export class Cpu6502 extends Base6502 {
     readArea(addr, len) {
         let str = "";
         for (let i = 0; i < len; ++i) {
-            str += hexbyte(this.readmem(addr + i));
+            str += hexbyte(this.peekmem(addr + i));
         }
         return str;
     }
