@@ -308,11 +308,13 @@ export function romless(name) {
     return Object.assign(Object.create(Object.getPrototypeOf(model)), model, { os: [] });
 }
 
+const FramebufferPixels = 1024 * 768;
+
 /** A fake6502 machine with a real Video and SoundChip, so their state goes into its snapshots. */
 export function machineWithRealChips(model, options) {
     return fake6502(model, {
         ...options,
-        video: new Video(false, 1024 * 768, () => {}),
+        video: new Video(false, FramebufferPixels, () => {}),
         soundChip: new SoundChip(() => {}),
     });
 }

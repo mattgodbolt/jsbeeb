@@ -17,7 +17,7 @@ describe("Snapshot coordinator", () => {
     const model = TEST_6502;
 
     beforeEach(async () => {
-        cpu = machineWithRealChips(TEST_6502, {});
+        cpu = machineWithRealChips(TEST_6502);
         await cpu.initialise();
     });
 
@@ -107,7 +107,7 @@ describe("Snapshot coordinator", () => {
             cpu.sysvia.write(0x01, 0x55);
             const saved = createSnapshot(cpu, model);
 
-            const cpu2 = machineWithRealChips(TEST_6502, {});
+            const cpu2 = machineWithRealChips(TEST_6502);
             restoreSnapshot(cpu2, model, snapshotFromJSON(snapshotToJSON(saved)));
 
             const stateOf = (machine) => JSON.parse(snapshotToJSON(createSnapshot(machine, model).state));
@@ -164,7 +164,7 @@ describe("Snapshot coordinator", () => {
                     : value,
             );
 
-            const cpu2 = machineWithRealChips(TEST_6502, {});
+            const cpu2 = machineWithRealChips(TEST_6502);
             restoreSnapshot(cpu2, model, snapshotFromJSON(v3Json));
 
             expect(cpu2.a).toBe(0x42);
@@ -197,7 +197,7 @@ describe("Snapshot coordinator", () => {
             selectPollingMode(cpu);
             const snapshot = snapshotFromJSON(snapshotToJSON(createSnapshot(cpu, model)));
 
-            const cpu2 = machineWithRealChips(TEST_6502, {});
+            const cpu2 = machineWithRealChips(TEST_6502);
             restoreSnapshot(cpu2, model, snapshot);
             cpu2.touchScreen.onMouse(0.5, 0.5, true);
             cpu2.scheduler.polltime(cpu2.touchScreen.pollCycles);
@@ -237,7 +237,7 @@ describe("Snapshot coordinator", () => {
             ["a B", TEST_6502, 0x00ff, 8],
             ["a Master", TEST_65C12, 0x00f0, 4],
         ])("packs only the banks %s has as sideways RAM", (_, cpuModel, bankMask, banks) => {
-            const { swram, swramBankMask } = machineWithRealChips(cpuModel, {}).snapshotState();
+            const { swram, swramBankMask } = machineWithRealChips(cpuModel).snapshotState();
 
             expect(swramBankMask).toBe(bankMask);
             expect(swram.length).toBe(banks * RomBankBytes);
@@ -317,7 +317,7 @@ describe("Snapshot coordinator", () => {
         const savedDisc = (machine) =>
             snapshotFromJSON(snapshotToJSON(createSnapshot(machine, model))).state.fdc.drives[0].disc;
         const machineWith = (disc) => {
-            const machine = machineWithRealChips(TEST_6502, {});
+            const machine = machineWithRealChips(TEST_6502);
             machine.fdc.loadDisc(0, disc);
             return machine;
         };

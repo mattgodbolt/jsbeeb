@@ -89,14 +89,14 @@ describe("Cpu6502 snapshotState / restoreState", () => {
     let cpu;
 
     beforeEach(async () => {
-        cpu = machineWithRealChips(TEST_6502, {});
+        cpu = machineWithRealChips(TEST_6502);
         await cpu.initialise();
     });
 
     it("round-trips a machine part way through a program, its FDC holding an NMI", async () => {
         await expectSnapshotRoundTrips(
             async () => {
-                const machine = machineWithRealChips(TEST_6502, {});
+                const machine = machineWithRealChips(TEST_6502);
                 await machine.initialise();
                 return machine;
             },
@@ -118,7 +118,7 @@ describe("Cpu6502 snapshotState / restoreState", () => {
         cpu.halted = true;
 
         const snapshot = cpu.snapshotState();
-        const cpu2 = machineWithRealChips(TEST_6502, {});
+        const cpu2 = machineWithRealChips(TEST_6502);
         await cpu2.initialise();
         cpu2.restoreState(snapshot);
 
@@ -133,7 +133,7 @@ describe("Cpu6502 snapshotState / restoreState", () => {
         expect(cpu.nmi).toBe(true);
 
         const snapshot = cpu.snapshotState();
-        const cpu2 = machineWithRealChips(TEST_6502, {});
+        const cpu2 = machineWithRealChips(TEST_6502);
         cpu2.restoreState(snapshot);
 
         expect(cpu2.nmi).toBe(true);
@@ -144,7 +144,7 @@ describe("Cpu6502 snapshotState / restoreState", () => {
         takesNmi(cpu);
 
         const snapshot = cpu.snapshotState();
-        const cpu2 = machineWithRealChips(TEST_6502, {});
+        const cpu2 = machineWithRealChips(TEST_6502);
         cpu2.restoreState(snapshot);
 
         expect(cpu2.nmi).toBe(true);
@@ -159,7 +159,7 @@ describe("Cpu6502 snapshotState / restoreState", () => {
         expect(cpu.interrupt & SysViaIrq).toBe(SysViaIrq);
 
         const snapshot = cpu.snapshotState();
-        const cpu2 = machineWithRealChips(TEST_6502, {});
+        const cpu2 = machineWithRealChips(TEST_6502);
         cpu2.restoreState(snapshot);
 
         expect(cpu2.interrupt & SysViaIrq).toBe(SysViaIrq);
@@ -173,7 +173,7 @@ describe("Cpu6502 snapshotState / restoreState", () => {
     it("restores the first 64KB of an older snapshot's 128KB ram and leaves the ROMs alone", async () => {
         const oldRam = new Uint8Array(128 * 1024).fill(0xa5);
         oldRam.fill(0x5a, 64 * 1024);
-        const cpu2 = machineWithRealChips(TEST_6502, {});
+        const cpu2 = machineWithRealChips(TEST_6502);
         await cpu2.initialise();
         cpu2.ramRomOs.fill(0x33, cpu2.romOffset);
         const romsBefore = cpu2.ramRomOs.slice(cpu2.romOffset);
@@ -655,7 +655,7 @@ describe("peeking at the hardware", () => {
     });
 
     it("shows the CRTC's readable registers", () => {
-        const cpu = machineWithRealChips(TEST_6502, {});
+        const cpu = machineWithRealChips(TEST_6502);
         cpu.writemem(CrtcAddress, CrtcStartAddressLow);
         cpu.writemem(CrtcData, StartAddressLow);
         expect(cpu.peekmem(CrtcData)).toBe(StartAddressLow);
@@ -725,7 +725,7 @@ describe("Cpu6502 debug hooks", () => {
         ["6502", TEST_6502],
         ["65C02", TEST_65C02],
     ])("is given the value each read on the %s returns", async (_name, model) => {
-        const cpu = machineWithRealChips(model, {});
+        const cpu = machineWithRealChips(model);
         await cpu.initialise();
         Program.forEach((byte, i) => cpu.writemem(ProgramAddress + i, byte));
         cpu.writemem(SubroutineAddress, 0x60); // RTS
@@ -748,7 +748,7 @@ describe("Cpu6502 debug hooks", () => {
     });
 
     async function cpuRunningStoringLoop() {
-        const cpu = machineWithRealChips(TEST_6502, {});
+        const cpu = machineWithRealChips(TEST_6502);
         await cpu.initialise();
         StoringLoop.forEach((byte, i) => cpu.writemem(ProgramAddress + i, byte));
         cpu.writemem(AbsoluteAddress, 0x99);
