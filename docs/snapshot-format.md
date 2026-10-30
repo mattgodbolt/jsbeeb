@@ -203,7 +203,7 @@ System VIA additionally includes:
 
 During autoscan, `ca2` is true while the scan finds a held key: it stands for the pulse train the scan puts on the line, not one level. `keyScanTaskOffset` is set after the CA2 flag is cleared while that is so. It is absent from snapshots written before it was saved and from imported snapshots; absent means none is pending.
 
-The caps lock and shift lock lights are IC32 bits 6 and 7 (lit when clear), so they are not saved. Older snapshots also hold `capsLockLight` and `shiftLockLight`; restoring ignores them, so dropping them needed no format version bump.
+The caps lock and shift lock lights are IC32 bits 6 and 7 (lit when clear), so they are not saved. Snapshots written before this also hold `capsLockLight` and `shiftLockLight`; restore ignores them.
 
 ### Atom PPIA (`state.atomppia`)
 

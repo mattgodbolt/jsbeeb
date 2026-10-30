@@ -59,7 +59,8 @@ describe("Via snapshotState / restoreState", () => {
     const IerSetTimers = 0xe0;
     const LatchSetBit6 = 0x0e,
         LatchSetBit3 = 0x0b,
-        LatchClearBit3 = 0x03;
+        LatchClearBit3 = 0x03,
+        LatchSetBit7 = 0x0f;
 
     let scheduler, cpu;
 
@@ -283,7 +284,6 @@ describe("Via snapshotState / restoreState", () => {
         });
 
         describe("lock lights follow IC32 bits 6 (caps) and 7 (shift), lit when clear", () => {
-            const LatchSetBit7 = 0x0f;
             function latchWritten(...writes) {
                 const via = makeSystemVia();
                 via.write(DDRB, 0x0f);
@@ -308,7 +308,6 @@ describe("Via snapshotState / restoreState", () => {
                     },
                     [false, false],
                 ],
-                ["after a restore", () => restoredFrom(latchWritten(LatchSetBit7).snapshotState()), [true, false]],
                 [
                     "after restoring an older snapshot whose saved lights disagree",
                     () =>

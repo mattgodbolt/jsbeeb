@@ -194,7 +194,6 @@ describe("parseUefSnapshot", () => {
             [],
         ],
         ["reads IC32 into the system VIA", { ic32: 0x3f }, (s) => s.state.sysvia.IC32, 0x3f],
-
         [
             "doubles the VIA timers, which BeebEm stores in 1MHz ticks",
             { sysvia: { t1c: 0x1234, t1l: 0x5678 } },
