@@ -144,6 +144,7 @@ describe("Debugger", () => {
         ["a write breakpoint in the memory view", "write", undefined, 0x1900, "paged"],
         ["one pinned to a bank in the disassembly, set to show that bank", "execute", 4, 0x8000, "bank 4"],
         ["one pinned to a bank in the memory view, set to show that bank", "write", 4, 0x8000, "bank 4"],
+        ["one pinned to a bank outside the sideways area, as paged", "write", 4, 0x1900, "paged"],
     ])("shows %s from the Breakpoints panel", (_, kind, bank, address, view) => {
         dbgr.debug(cpu.pc);
         dbgr.breakpoints.floating.open();

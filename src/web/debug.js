@@ -24,6 +24,7 @@ import {
     parseViewedAddress,
     peekViewed,
     screenView,
+    SidewaysEnd,
     SidewaysStart,
     viewedBank,
     viewsFor,
@@ -473,12 +474,12 @@ export class Debugger {
             resolve: (text) => this._resolveBreakpoint(text),
             nameOf: (address, bank) => this._breakpointNames(bank).address(address, this.cpu.pc)?.name,
             showCode: (address, bank) => {
-                this._showPinned(this._paging.disassembly, bank);
+                this._showPinned(this._paging.disassembly, bank, address);
                 this.panels.disassembly.open();
                 this._disassembly.update(address);
             },
             showMemory: (address, bank) => {
-                this._showPinned(this._paging.memory, bank);
+                this._showPinned(this._paging.memory, bank, address);
                 this.panels.memory.open();
                 this._memoryView.update(address);
             },
@@ -1031,10 +1032,10 @@ export class Debugger {
         return viewsFor(this.cpu.model).includes(view) ? view : undefined;
     }
 
-    /** Sets `paging` to show sideways `bank`, a breakpoint's, where a breakpoint is pinned to one it can show. */
-    _showPinned(paging, bank) {
+    /** Sets `paging` to show sideways `bank`, a breakpoint's at `address`, where the view can show it there. */
+    _showPinned(paging, bank, address) {
         const view = this._bankViewOf(bank);
-        if (view !== undefined) paging.view = view;
+        if (view !== undefined && address >= SidewaysStart && address < SidewaysEnd) paging.view = view;
     }
 
     _matchSymbols() {
