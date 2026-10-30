@@ -360,6 +360,8 @@ describe("the media catalogue", () => {
             expect(new RecentMedia().entries).toEqual([]);
             window.localStorage.setItem("recentMedia", '{"ref":"sth:A.zip"}');
             expect(new RecentMedia().entries).toEqual([]);
+            window.localStorage.setItem("recentMedia", '[null, {"ref":"sth:A.zip","kind":"disc"}, {"ref":3}]');
+            expect(new RecentMedia().entries).toEqual([disc("sth:A.zip")]);
         });
 
         it("still ranks what was loaded when storage will not keep it", () => {

@@ -362,6 +362,15 @@ describe("FloatingPanel", () => {
             expect(rectOf(floating)).toMatchObject({ x: 200, y: NavbarHeight + 200 });
             expect(warn).toHaveBeenCalled();
         });
+
+        it("starts from the defaults, saying so, when what storage holds is not a layout it can read", () => {
+            const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+            storage.setItem("panelLayout", "{not json");
+            const floating = watches();
+            floating.open();
+            expect(rectOf(floating)).toMatchObject({ x: 0, y: NavbarHeight });
+            expect(warn).toHaveBeenCalledWith(expect.stringContaining("Could not read the panel layout"));
+        });
     });
 
     describe("the keyboard", () => {
