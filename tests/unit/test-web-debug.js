@@ -1916,6 +1916,25 @@ describe("Debugger", () => {
             expect(watchRows().map(([name]) => name)).toEqual(["$8000", "$8000"]);
         });
 
+        it("names a breakpoint pinned to a bank from that bank, and shows its code there", async () => {
+            const romRegion = { start: "0x8000", end: "0x8100", anchors: [{ at: "0x8000", bytes: "a94460" }] };
+            load.mockImplementation(async (url) => {
+                const json = structuredClone(files.get(url));
+                if (url.endsWith("index.json")) json.sets[0].regions = { rom: romRegion };
+                else json.regions = { rom: { ...romRegion, symbols: { toolkit_entry: "0x8000" } } };
+                return json;
+            });
+            cpu.romSelect(15);
+            cpu.ramRomOs.set([0xa9, 0x44, 0x60], bankOffset(cpu, 4, 0x8000));
+            dbgr.debug(cpu.pc);
+            cpu.breakpoints.add({ kind: "execute", start: 0x8000, bank: 4 });
+            dbgr.breakpoints.floating.open();
+            const row = () => document.querySelector("#breakpoints-panel .bp-list tr");
+            await vi.waitFor(() => expect(row().querySelector(".bp-name").textContent).toBe("toolkit_entry"));
+            row().querySelector(".bp-where").click();
+            expect(addrOf(currentRow())).toBe("8000 toolkit_entry");
+        });
+
         it("fetches no names for breakpoints while the Breakpoints panel is closed", async () => {
             vi.spyOn(performance, "now").mockReturnValue(1000 * 60);
             dbgr.hidePanels();

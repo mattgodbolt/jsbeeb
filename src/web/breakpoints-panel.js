@@ -42,9 +42,10 @@ export class BreakpointsPanel {
      * @param {import("./floating-panel.js").PanelArrangement} options.arrangement
      * @param {(text: string) => {address: number, name: string | undefined} | undefined} options.resolve - the address
      * a name or number gives, and the name if it was one
-     * @param {(address: number) => string | undefined} options.nameOf - the name the debugger shows for an address
-     * @param {(address: number) => void} options.showCode
-     * @param {(address: number) => void} options.showMemory
+     * @param {(address: number, bank: number | undefined) => string | undefined} options.nameOf - the name the
+     * debugger gives an address, in sideways `bank` if a breakpoint is pinned to one
+     * @param {(address: number, bank: number | undefined) => void} options.showCode - in `bank`, or as paged
+     * @param {(address: number, bank: number | undefined) => void} options.showMemory - in `bank`, or as paged
      * @param {(() => Storage) | null} options.storage - where breakpoints are kept between visits, or null
      */
     constructor({ arrangement, resolve, nameOf, showCode, showMemory, storage }) {
@@ -128,11 +129,11 @@ export class BreakpointsPanel {
     update() {
         // Naming asks for the symbols, which a closed panel has no need of.
         if (!this._breakpoints || !this.floating.isOpen) return;
-        for (const { id, start, hits, hitCount, label } of this._breakpoints.list()) {
+        for (const { id, start, bank, hits, hitCount, label } of this._breakpoints.list()) {
             const hitText = hitCount > 1 ? `${hits} of ${hitCount}` : `${hits}`;
             const hitCell = this._hitCells.get(id);
             if (hitCell && hitCell.textContent !== hitText) hitCell.textContent = hitText;
-            const nameText = label ?? this._nameOf(start) ?? "";
+            const nameText = label ?? this._nameOf(start, bank) ?? "";
             const nameCell = this._nameCells.get(id);
             if (nameCell && nameCell.textContent !== nameText) nameCell.textContent = nameText;
         }
@@ -231,7 +232,9 @@ export class BreakpointsPanel {
         cell("bp-kind", short).title = title;
 
         const where = textButton("bp-where", rangeText(breakpoint), `Show ${rangeText(breakpoint)}`);
-        where.addEventListener("click", () => (kind === "execute" ? this._showCode(start) : this._showMemory(start)));
+        where.addEventListener("click", () =>
+            kind === "execute" ? this._showCode(start, bank) : this._showMemory(start, bank),
+        );
         const whereCell = cell("bp-address", where);
         const name = document.createElement("span");
         name.className = "bp-name";

@@ -59,6 +59,9 @@ function homeNodes(home) {
     return [externalLink(home, new URL(home).hostname.replace(/^www\./, "")), ", "];
 }
 
+/** The view showing the code or bytes a breakpoint pinned to `bank`, if it is, acts on. */
+const viewOfBank = (bank) => (bank === undefined ? PagedView : bankView(bank));
+
 function addressFor(names, text, pc) {
     return names.addressOf(text, pc) ?? parseAddr(text);
 }
@@ -397,6 +400,8 @@ export class Debugger {
         this.panels = Object.fromEntries(OwnPanels.map((own) => [own.id, this._makePanel(own)]));
         /** @type {Map<PagingOverride, import("../symbol-names.js").SymbolNames>} */
         this._viewNames = new Map();
+        /** @type {Map<number, import("../symbol-names.js").SymbolNames>} */
+        this._bankNames = new Map();
         this._paging = {
             memory: new PagingOverride({
                 floating: this.panels.memory,
@@ -468,12 +473,14 @@ export class Debugger {
         this.breakpoints = new BreakpointsPanel({
             arrangement,
             resolve: (text) => this._resolveBreakpoint(text),
-            nameOf: (address) => this._breakpointNames().address(address, this.cpu.pc)?.name,
-            showCode: (address) => {
+            nameOf: (address, bank) => this._breakpointNames(bank).address(address, this.cpu.pc)?.name,
+            showCode: (address, bank) => {
+                this._paging.disassembly.view = viewOfBank(bank);
                 this.panels.disassembly.open();
                 this._disassembly.update(address);
             },
-            showMemory: (address) => {
+            showMemory: (address, bank) => {
+                this._paging.memory.view = viewOfBank(bank);
                 this.panels.memory.open();
                 this._memoryView.update(address);
             },
@@ -1002,12 +1009,21 @@ export class Debugger {
     }
 
     /**
-     * The names, matched again as often as the debugger's own panels match them while the machine runs, so the
-     * Breakpoints panel, refreshed each frame, keeps up with memory when it is the only panel open.
+     * The names for a breakpoint pinned to sideways `bank`, matched to that bank, or for any other as paged; matched
+     * again as often as the debugger's own panels match theirs while the machine runs, so the Breakpoints panel,
+     * refreshed each frame, keeps up with memory when it is the only panel open.
      */
-    _breakpointNames() {
+    _breakpointNames(bank) {
         if (performance.now() - this._matchedAt >= RunningNameMatchMs) this._matchSymbols();
-        return this._names;
+        if (bank === undefined) return this._names;
+        if (!this._bankNames.has(bank)) {
+            const view = bankView(bank);
+            this._bankNames.set(
+                bank,
+                this._namesFor((address) => peekViewed(this.cpu, view, address), bank),
+            );
+        }
+        return this._bankNames.get(bank);
     }
 
     _matchSymbols() {
@@ -1020,6 +1036,7 @@ export class Debugger {
                     this._namesFor((address) => paging.peek(address), this._bankShownBy(paging.view)),
                 ]),
         );
+        this._bankNames = new Map();
         this._matchedAt = performance.now();
         this.breakpoints.update();
     }
