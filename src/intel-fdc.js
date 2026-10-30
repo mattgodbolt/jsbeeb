@@ -1750,7 +1750,8 @@ export class IntelFdc extends DiscController {
             sinceIndexPulse: Number.isFinite(this._lastIndexEpoch)
                 ? this._scheduler.epoch - this._lastIndexEpoch
                 : null,
-            ...this._snapshotTimerAndDrives(),
+            timerTaskOffset: this._timerTask.offset(),
+            drives: this._drives.map((d) => d.snapshotState()),
         };
     }
 
@@ -1783,7 +1784,7 @@ export class IntelFdc extends DiscController {
         this._callContext = state.callContext;
         this._didSeekStep = state.didSeekStep;
 
-        this._restoreDrives(state);
+        for (let i = 0; i < this._drives.length; i++) this._drives[i].restoreState(state.drives[i]);
 
         // Derive _currentDrive from _driveOut
         this._currentDrive = null;

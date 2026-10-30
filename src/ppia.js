@@ -235,7 +235,6 @@ export class AtomPPIA extends PPIA {
 
         this.reset();
 
-        // from ACIA
         this.runTapeTask = scheduler.newTask(() => this.runTape());
     }
 

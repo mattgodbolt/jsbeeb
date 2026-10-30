@@ -1386,7 +1386,8 @@ export class WdFdc extends DiscController {
             onDiscLength: this._onDiscLength,
             onDiscCrc: this._onDiscCrc,
             lastMfmBit: this._lastMfmBit,
-            ...this._snapshotTimerAndDrives(),
+            timerTaskOffset: this._timerTask.offset(),
+            drives: this._drives.map((d) => d.snapshotState()),
         };
     }
 
@@ -1426,7 +1427,7 @@ export class WdFdc extends DiscController {
         this._onDiscCrc = state.onDiscCrc;
         this._lastMfmBit = state.lastMfmBit;
 
-        this._restoreDrives(state);
+        for (let i = 0; i < this._drives.length; i++) this._drives[i].restoreState(state.drives[i]);
 
         // Derive _currentDrive from _controlRegister
         this._currentDrive = null;

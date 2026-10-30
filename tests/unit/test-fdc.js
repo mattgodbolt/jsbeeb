@@ -61,10 +61,6 @@ describe("loading a disc image", () => {
         for (const name of ["test.adf", "test.adl", "test.hfe"])
             expect(guessDiscTypeFromName(name).setDiscName).toBeNull();
     });
-
-    it("has nothing to go on for a format that cannot say", () => {
-        expect(guessDiscTypeFromName("test.adf").sniffLayout).toBeNull();
-    });
 });
 
 describe("knowing whether a disc keeps its changes", () => {

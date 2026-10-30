@@ -87,18 +87,6 @@ export class DiscController {
     get drives() {
         return this._drives;
     }
-
-    /** The timer and drive state each chip's snapshotState ends with. */
-    _snapshotTimerAndDrives() {
-        return {
-            timerTaskOffset: this._timerTask.offset(),
-            drives: this._drives.map((d) => d.snapshotState()),
-        };
-    }
-
-    _restoreDrives(state) {
-        for (let i = 0; i < this._drives.length; i++) this._drives[i].restoreState(state.drives[i]);
-    }
 }
 
 export function load(name) {
@@ -242,7 +230,7 @@ export function discFor(name, stringData, onChange, layout = DiscLayout.auto) {
     const data = typeof stringData !== "string" ? stringData : stringToUint8Array(stringData);
     const discType = guessDiscTypeFromName(name);
     const config = new DiscConfig();
-    const sniffed = layout === DiscLayout.auto ? (discType.sniffLayout?.(data) ?? null) : null;
+    const sniffed = layout === DiscLayout.auto ? discType.sniffLayout?.(data) : null;
     config.expandTo80 = sniffed ? sniffed.is40Track : layout === DiscLayout.expanded40;
     const disc = discType.loader(new Disc(true, config, name), data, onChange);
     let reading = sniffed;
