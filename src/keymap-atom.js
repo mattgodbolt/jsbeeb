@@ -263,7 +263,6 @@ export function getKeyMapAtom(keyLayout) {
         // Atom uses CTRL as shift, so map PC Ctrl to Atom's LOCK key
         map(keyCodes.CTRL_LEFT, ATOM.LOCK);
 
-        // should be 4th row, not enough keys
         map(keyCodes.MENU, ATOM.DELETE);
         map(keyCodes.CTRL_RIGHT, ATOM.COPY);
     } else {
