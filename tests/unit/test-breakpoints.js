@@ -173,6 +173,14 @@ describe("Breakpoints", () => {
         expect(hits).toEqual([]);
     });
 
+    it("checks a spec without adding it", () => {
+        expect(() => breakpoints.check({ kind: "read", start: 0, hitCount: 0 })).toThrow(
+            "Hit count 0 is not a whole number from 1",
+        );
+        breakpoints.check({ kind: "read", start: 0 });
+        expect(breakpoints.list()).toEqual([]);
+    });
+
     it("refuses to change or remove a breakpoint that is not there", () => {
         expect(() => breakpoints.remove(7)).toThrow("No breakpoint with id 7");
         expect(() => breakpoints.update(7, {})).toThrow("No breakpoint with id 7");

@@ -12,6 +12,8 @@ import { keyLine } from "./panel-keys.js";
 import { cycleCount } from "../lockstep.js";
 import { NumRomBanks } from "../6502.js";
 import { describeHit } from "../breakpoints.js";
+import { sheilaAddress, machineSheilaBlocks } from "../sheila.js";
+import { BreakpointsPanel } from "./breakpoints-panel.js";
 import { bindGotoForm, externalLink, FittedRows, labelHtml, powerOfTwoColumnsThatFit } from "./debug-dom.js";
 import { DisassemblyView } from "./disassembly-view.js";
 import { PagingOverride } from "./paging-override.js";
@@ -22,8 +24,10 @@ import {
     parseViewedAddress,
     peekViewed,
     screenView,
+    SidewaysEnd,
     SidewaysStart,
     viewedBank,
+    viewsFor,
 } from "../paging.js";
 import { Dropdown } from "bootstrap";
 import { TightLoopNote } from "./tight-loop-note.js";
@@ -369,8 +373,10 @@ export class Debugger {
      * @param {import("./panel-keys.js").PanelKeys} options.keys - where the panels' keys are routed from
      * @param {import("./floating-panel.js").PanelArrangement} options.arrangement - what places its panels
      * @param {HTMLElement} options.monitor - the monitor around the screen, which shows when a click finds a byte
+     * @param {(() => Storage) | null} options.breakpointStorage - where breakpoints are kept between visits, or null
+     * to keep them only for this visit
      */
-    constructor({ symbolSets, labelFiles, keys, arrangement, monitor }) {
+    constructor({ symbolSets, labelFiles, keys, arrangement, monitor, breakpointStorage }) {
         this._arrangement = arrangement;
         this._monitor = monitor;
         this.patchInstructions = new Map();
@@ -393,6 +399,8 @@ export class Debugger {
         this.panels = Object.fromEntries(OwnPanels.map((own) => [own.id, this._makePanel(own)]));
         /** @type {Map<PagingOverride, import("../symbol-names.js").SymbolNames>} */
         this._viewNames = new Map();
+        /** @type {Map<number, import("../symbol-names.js").SymbolNames>} */
+        this._bankNames = new Map();
         this._paging = {
             memory: new PagingOverride({
                 floating: this.panels.memory,
@@ -460,6 +468,25 @@ export class Debugger {
                 ),
         });
         this._loopNote = new TightLoopNote(this.panels.toolbar.panel.querySelector(".tight-loop"), arrangement);
+        this._sheila = [];
+        this.breakpoints = new BreakpointsPanel({
+            arrangement,
+            resolve: (text) => this._resolveBreakpoint(text),
+            nameOf: (address, bank) => this._breakpointNames(bank).address(address, this.cpu.pc)?.name,
+            showCode: (address, bank) => {
+                this._showPinned(this._paging.disassembly, bank, address);
+                this.panels.disassembly.open();
+                this._disassembly.update(address);
+            },
+            showMemory: (address, bank) => {
+                this._showPinned(this._paging.memory, bank, address);
+                this.panels.memory.open();
+                this._memoryView.update(address);
+            },
+            storage: breakpointStorage,
+        });
+        // So a name typed while the machine runs can resolve, and the panel names its breakpoints' addresses.
+        this.breakpoints.floating.addEventListener("open", () => this._matchSymbols());
         this._bindToolbar();
         this._bindKeys(keys);
         this._bindLabelDrops();
@@ -555,6 +582,7 @@ export class Debugger {
     }
 
     _renameShown() {
+        if (this.cpu && this.breakpoints.floating.isOpen) this._matchSymbols();
         if (!this.cpu || (!this._inDebugger && !this._ownPanelsShown())) return;
         this._matchSymbols();
         this._refresh.drawNow();
@@ -880,6 +908,8 @@ export class Debugger {
         cpu.breakpoints.onHit((hit) => {
             if (hit.action === "log") console.log(describeHit(hit));
         });
+        this._sheila = machineSheilaBlocks(cpu);
+        this.breakpoints.setCpu(cpu);
         if (this._ownPanelsShown()) this._refresh.drawNow();
     }
     updateElem(elem, val) {
@@ -977,6 +1007,37 @@ export class Debugger {
         this.cpu.video.debugPaint();
     }
 
+    /**
+     * The names for a breakpoint pinned to sideways `bank`, matched to that bank, or for any other as paged; matched
+     * again as often as the debugger's own panels match theirs while the machine runs, so the Breakpoints panel,
+     * refreshed each frame, keeps up with memory when it is the only panel open.
+     */
+    _breakpointNames(bank) {
+        if (performance.now() - this._matchedAt >= RunningNameMatchMs) this._matchSymbols();
+        const view = this._bankViewOf(bank);
+        if (view === undefined) return this._names;
+        if (!this._bankNames.has(bank)) {
+            this._bankNames.set(
+                bank,
+                this._namesFor((address) => peekViewed(this.cpu, view, address), bank),
+            );
+        }
+        return this._bankNames.get(bank);
+    }
+
+    /** The view of sideways `bank`, if there is one: none for no bank, nor on a machine without the view (the Atom). */
+    _bankViewOf(bank) {
+        if (bank === undefined) return undefined;
+        const view = bankView(bank);
+        return viewsFor(this.cpu.model).includes(view) ? view : undefined;
+    }
+
+    /** Sets `paging` to show sideways `bank`, a breakpoint's at `address`, where the view can show it there. */
+    _showPinned(paging, bank, address) {
+        const view = this._bankViewOf(bank);
+        if (view !== undefined && address >= SidewaysStart && address < SidewaysEnd) paging.view = view;
+    }
+
     _matchSymbols() {
         this._names = this._namesNow();
         this._viewNames = new Map(
@@ -987,7 +1048,9 @@ export class Debugger {
                     this._namesFor((address) => paging.peek(address), this._bankShownBy(paging.view)),
                 ]),
         );
+        this._bankNames = new Map();
         this._matchedAt = performance.now();
+        this.breakpoints.update();
     }
 
     /** Credits the sets whose names a panel shows, in its own line. */
@@ -1031,6 +1094,16 @@ export class Debugger {
         if (address === undefined) return undefined;
         const label = parseAddr(text) === address ? names.address(address, pc)?.name : text;
         return { address, label: label ?? `$${hexword(address)}` };
+    }
+
+    /**
+     * What a breakpoint's address `text` names, as a watch's does or as a SHEILA register such as SysVIA.ORB, and
+     * the name if it was one rather than a number.
+     */
+    _resolveBreakpoint(text) {
+        const address = this._resolveWatch(text)?.address ?? sheilaAddress(this._sheila, text);
+        if (address === undefined) return undefined;
+        return { address, name: parseAddr(text) === undefined ? text : undefined };
     }
 
     /** Whether the machine is stopped in the debugger. */

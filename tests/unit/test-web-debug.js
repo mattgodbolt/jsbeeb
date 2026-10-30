@@ -6,7 +6,7 @@ import { DisassemblyKeys } from "../../src/web/disassembly-view.js";
 import { Gap } from "../../src/web/panel-layout.js";
 import { RunMode } from "../../src/web/emulation-loop.js";
 import { fake6502 } from "../../src/fake6502.js";
-import { TEST_65C12 } from "../../src/models.js";
+import { findModel, TEST_65C12 } from "../../src/models.js";
 import { FakeVideo } from "../../src/video.js";
 import { hexbyte, hexword } from "../../src/hex.js";
 import { SymbolSets } from "../../src/symbol-sets.js";
@@ -93,7 +93,14 @@ describe("Debugger", () => {
         arrangement.followMachine(() => cycleCount(cpu));
         keys = new PanelKeys(arrangement);
         labelFiles = new LabelFiles({ load: vi.fn() });
-        const made = new Debugger({ symbolSets, labelFiles, keys, arrangement, monitor: monitor() });
+        const made = new Debugger({
+            symbolSets,
+            labelFiles,
+            keys,
+            arrangement,
+            monitor: monitor(),
+            breakpointStorage: null,
+        });
         made.setCpu(cpu);
         stoppedLoop = new StandInLoop(made, cpu);
         made.attachLoop(stoppedLoop);
@@ -119,6 +126,59 @@ describe("Debugger", () => {
         // Closed, they stop looking at the machine once a frame.
         dbgr.hidePanels();
         return teardownDom();
+    });
+
+    it.each([
+        ["SysVIA.ORB", 0xfe40, "SysVIA.ORB"],
+        ["fe40", 0xfe40, undefined],
+    ])("adds a breakpoint typed as %s in the Breakpoints panel", (text, address, label) => {
+        dbgr.breakpoints.floating.open();
+        const input = document.querySelector("#breakpoints-panel .bp-add");
+        input.value = text;
+        document.querySelector("#breakpoints-panel .bp-add-form").requestSubmit();
+        expect(cpu.breakpoints.list()).toEqual([expect.objectContaining({ start: address, label })]);
+    });
+
+    it.each([
+        ["an execute breakpoint in the disassembly", "execute", undefined, 0x3000, "paged"],
+        ["a write breakpoint in the memory view", "write", undefined, 0x1900, "paged"],
+        ["one pinned to a bank in the disassembly, set to show that bank", "execute", 4, 0x8000, "bank 4"],
+        ["one pinned to a bank in the memory view, set to show that bank", "write", 4, 0x8000, "bank 4"],
+        ["one pinned to a bank outside the sideways area, as paged", "write", 4, 0x1900, "paged"],
+    ])("shows %s from the Breakpoints panel", (_, kind, bank, address, view) => {
+        dbgr.debug(cpu.pc);
+        dbgr.breakpoints.floating.open();
+        cpu.breakpoints.add({ kind, start: address, bank });
+        document.querySelector("#breakpoints-panel .bp-where").click();
+        const [panel, shown] =
+            kind === "execute"
+                ? ["disassembly-panel", addrOf(currentRow()).slice(0, 4)]
+                : ["memory-panel", hexword(Number(memTarget().dataset.addr))];
+        expect(shown).toBe(hexword(address));
+        expect(document.querySelector(`#${panel} .paging-picker`).textContent).toMatch(new RegExp(`^${view}`));
+    });
+
+    it("shows and names a breakpoint pinned to a bank on the Atom, which has no bank to show, as paged", () => {
+        cpu = fake6502(findModel("Atom"));
+        cpu.video.debugPaint = () => {};
+        dbgr.setCpu(cpu);
+        labelFiles.add({ key: "four", title: "four.txt", source: "", text: "four_entry=8000", bank: 4 });
+        dbgr.debug(cpu.pc);
+        dbgr.breakpoints.floating.open();
+        cpu.breakpoints.add({ kind: "write", start: 0x8000, bank: 4 });
+        expect(document.querySelector("#breakpoints-panel .bp-name").textContent).toBe("");
+        document.querySelector("#breakpoints-panel .bp-where").click();
+        expect(memTarget().textContent).toBe(hexbyte(cpu.peekmem(0x8000)));
+    });
+
+    it("leaves the view a panel is set to for a breakpoint pinned to no bank", () => {
+        dbgr.debug(cpu.pc);
+        goTo("goto-dis-addr-form", "8000`5");
+        dbgr.breakpoints.floating.open();
+        cpu.breakpoints.add({ kind: "execute", start: 0x3000 });
+        document.querySelector("#breakpoints-panel .bp-where").click();
+        expect(addrOf(currentRow()).slice(0, 4)).toBe("3000");
+        expect(document.querySelector("#disassembly-panel .paging-picker").textContent).toMatch(/^bank 5/);
     });
 
     it("logs each hit of a log breakpoint to the console", () => {
@@ -269,6 +329,7 @@ describe("Debugger", () => {
                 "Disassembly",
                 "Memory",
                 "Registers",
+                "Breakpoints",
             ]);
         });
 
@@ -579,6 +640,7 @@ describe("Debugger", () => {
                 keys: new PanelKeys(arrangement),
                 arrangement,
                 monitor: monitor(),
+                breakpointStorage: null,
             });
             dbgr.watches.floating.open();
             dbgr.panels.registers.open();
@@ -1638,6 +1700,17 @@ describe("Debugger", () => {
                 expect(cpu.onFastPath).toBe(true);
             });
 
+            it("lists its break in the Breakpoints panel, whose × turns the break off", () => {
+                addWatch("$70");
+                pickBreak(0, "on change");
+                dbgr.breakpoints.floating.open();
+                const row = document.querySelector("#breakpoints-panel .bp-list tr");
+                expect(row.querySelector(".bp-address").textContent).toBe("$0070 (from watch)");
+                row.querySelector(".bp-remove").click();
+                expect(watchRows()[0][3]).toBe("brk");
+                expect(cpu.onFastPath).toBe(true);
+            });
+
             it("shows every watch one write fires", () => {
                 addWatch("$70");
                 addWatch("$70");
@@ -1871,6 +1944,59 @@ describe("Debugger", () => {
             rightClick(memByte(0x8000));
             pickFromMenu("Watch hex");
             expect(watchRows().map(([name]) => name)).toEqual(["$8000", "$8000"]);
+        });
+
+        it("names a breakpoint pinned to a bank from that bank, and shows its code there", async () => {
+            const romRegion = { start: "0x8000", end: "0x8100", anchors: [{ at: "0x8000", bytes: "a94460" }] };
+            load.mockImplementation(async (url) => {
+                const json = structuredClone(files.get(url));
+                if (url.endsWith("index.json")) json.sets[0].regions = { rom: romRegion };
+                else json.regions = { rom: { ...romRegion, symbols: { toolkit_entry: "0x8000" } } };
+                return json;
+            });
+            cpu.romSelect(15);
+            cpu.ramRomOs.set([0xa9, 0x44, 0x60], bankOffset(cpu, 4, 0x8000));
+            dbgr.debug(cpu.pc);
+            cpu.breakpoints.add({ kind: "execute", start: 0x8000, bank: 4 });
+            dbgr.breakpoints.floating.open();
+            const row = () => document.querySelector("#breakpoints-panel .bp-list tr");
+            await vi.waitFor(() => expect(row().querySelector(".bp-name").textContent).toBe("toolkit_entry"));
+            row().querySelector(".bp-where").click();
+            expect(addrOf(currentRow())).toBe("8000 toolkit_entry");
+        });
+
+        it("fetches no names for breakpoints while the Breakpoints panel is closed", async () => {
+            vi.spyOn(performance, "now").mockReturnValue(1000 * 60);
+            dbgr.hidePanels();
+            cpu.breakpoints.add({ kind: "execute", start: OswrchAt });
+            await new Promise((resolve) => setTimeout(resolve, 0));
+            expect(load).not.toHaveBeenCalled();
+        });
+
+        it("names a breakpoint's address in the Breakpoints panel with only that panel open", async () => {
+            dbgr.hidePanels();
+            cpu.breakpoints.add({ kind: "execute", start: OswrchAt });
+            dbgr.breakpoints.floating.open();
+            await vi.waitFor(() =>
+                expect(document.querySelector("#breakpoints-panel .bp-name").textContent).toBe("oswrch"),
+            );
+        });
+
+        it("names a breakpoint's address once a program loaded later matches, with only the Breakpoints panel open", async () => {
+            const now = vi.spyOn(performance, "now").mockReturnValue(0);
+            const anchor = cpu.peekmem(OswrchAt);
+            cpu.writemem(OswrchAt, anchor ^ 0xff);
+            dbgr.hidePanels();
+            cpu.breakpoints.add({ kind: "execute", start: OswrchAt });
+            dbgr.breakpoints.floating.open();
+            await vi.waitFor(() => expect(load).toHaveBeenCalledWith(`${BaseUrl}index.json`));
+            await new Promise((resolve) => setTimeout(resolve, 0));
+            const name = () => document.querySelector("#breakpoints-panel .bp-name").textContent;
+            expect(name()).toBe("");
+            cpu.writemem(OswrchAt, anchor);
+            now.mockReturnValue(1000 * 60);
+            dbgr.breakpoints.update();
+            await vi.waitFor(() => expect(name()).toBe("oswrch"));
         });
 
         it("keeps a program's own name for a SHEILA register, over the register's", async () => {

@@ -75,6 +75,11 @@ export class Breakpoints {
         return id;
     }
 
+    /** Throws, saying why, if `spec` does not describe a breakpoint this CPU can take. */
+    check(spec) {
+        this._checked(spec);
+    }
+
     /**
      * Changes the fields `changes` gives of breakpoint `id`, keeping its hits. A new start without an end makes it
      * a single address.

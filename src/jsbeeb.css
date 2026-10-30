@@ -1042,6 +1042,96 @@ small {
   color: #aaaaaa;
 }
 
+#breakpoints-panel {
+  width: min(540px, 90vw);
+  font-family: monospace;
+  font-size: 9pt;
+}
+
+#breakpoints-panel table {
+  width: 100%;
+}
+
+#breakpoints-panel td {
+  padding: 1px 4px;
+  white-space: nowrap;
+}
+
+#breakpoints-panel .txt-btn {
+  color: #cccccc;
+  font-family: inherit;
+  text-decoration-color: rgba(255, 255, 255, 0.45);
+}
+
+#breakpoints-panel .bp-enabled {
+  padding: 0;
+  vertical-align: middle;
+}
+
+#breakpoints-panel .bp-kind {
+  color: #aaaaaa;
+}
+
+#breakpoints-panel .bp-address,
+#breakpoints-panel .bp-address .txt-btn {
+  color: #f0d080;
+}
+
+#breakpoints-panel .bp-name {
+  margin-left: 1ch;
+}
+
+#breakpoints-panel .bp-bank {
+  margin-left: 1ch;
+}
+
+#breakpoints-panel .bp-name:empty {
+  display: none;
+}
+
+#breakpoints-panel .bp-condition {
+  width: 100%;
+}
+
+#breakpoints-panel .bp-placeholder,
+#breakpoints-panel .bp-empty {
+  color: #888888;
+}
+
+#breakpoints-panel .bp-hit-count {
+  color: #80d0d0;
+  text-align: right;
+}
+
+#breakpoints-panel .bp-stopped {
+  background: rgba(224, 32, 32, 0.25);
+}
+
+#breakpoints-panel .bp-edit {
+  font-family: inherit;
+  font-size: inherit;
+  padding: 0 4px;
+  height: auto;
+}
+
+#breakpoints-panel .bp-add-form {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  margin-top: 6px;
+}
+
+#breakpoints-panel .bp-add-kind {
+  flex: none;
+  width: 16ch;
+  text-align: left;
+}
+
+#breakpoints-panel .bp-remove {
+  font-size: 14px;
+  line-height: 1;
+}
+
 .decoded-panel {
   font-family: monospace;
   font-size: 9pt;
