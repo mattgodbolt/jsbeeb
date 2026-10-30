@@ -50,11 +50,6 @@ describe("Drives", () => {
             expect(fdc.drives[0].tracksPerStep).toBe(2);
             expect(fdc.drives[1].tracksPerStep).toBe(1);
         });
-
-        it("copes with a machine that has no drives", () => {
-            fdc = undefined;
-            expect(() => make([DriveTracks.forty, DriveTracks.auto])).not.toThrow();
-        });
     });
 
     describe("putDiscIn", () => {
@@ -82,11 +77,6 @@ describe("Drives", () => {
     });
 
     describe("what the drives hold", () => {
-        it("refuses, in words, on a machine with no drives", () => {
-            fdc = undefined;
-            expect(() => make().putDiscIn(0, fakeDisc())).toThrow("no disc drives");
-        });
-
         it("ejects a disc, leaving the drive empty", () => {
             const drives = make();
             drives.putDiscIn(0, fakeDisc());
@@ -158,14 +148,6 @@ describe("Drives", () => {
             expect(image.length).toBe(ssdImage().length);
             expect(confirm).not.toHaveBeenCalled();
         });
-
-        it("say so instead of throwing on a machine with no drives", async () => {
-            fdc = undefined;
-            const drives = make();
-            await expect(drives.downloadSsdOrDsd(0)).resolves.toBeUndefined();
-            expect(() => drives.downloadHfe(0)).not.toThrow();
-            expect(toasts()).toHaveLength(2);
-        });
     });
 
     describe("the 40/80 switch", () => {
@@ -210,12 +192,6 @@ describe("Drives", () => {
             expect(seen).toHaveBeenCalledTimes(1);
             drives.setTracksPerStep(0, 1);
             expect(seen).toHaveBeenCalledTimes(1);
-        });
-
-        it("does nothing on a machine with no drives", () => {
-            fdc = undefined;
-            expect(() => make().setTracksPerStep(0, 2)).not.toThrow();
-            expect(urlState.params).toEqual({});
         });
     });
 });

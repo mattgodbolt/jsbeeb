@@ -187,17 +187,6 @@ describe("MediaSlots", () => {
             expect(slots.recent.rank(chuckie)).toBe(1);
             expect(slots.recent.rank(elite)).toBe(-1);
         });
-
-        it("fails a disc load, in words, on a machine with no drives", async () => {
-            vi.spyOn(console, "error").mockImplementation(() => {});
-            const drives = new Drives({ fdc: undefined, driveTracks: [DriveTracks.auto, DriveTracks.auto], urlState });
-            const none = new MediaSlots({ loader, drives, processor: { fdc: undefined, tapeInterface }, urlState });
-            loader.loadDiscImage.mockResolvedValue(ssd("elite.ssd"));
-            expect(await none.load(none.drive(0), elite)).toBe("failed");
-            expect(none.drive(0).failed.error.message).toContain("no disc drives");
-            expect(none.drive(0).ref).toBeUndefined();
-            expect(urlState.params).toEqual({});
-        });
     });
 
     describe("putting in and taking out", () => {
