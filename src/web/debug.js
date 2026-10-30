@@ -11,6 +11,7 @@ import { EndEdge, Gap, StartEdge } from "./panel-layout.js";
 import { keyLine } from "./panel-keys.js";
 import { cycleCount } from "../lockstep.js";
 import { NumRomBanks } from "../6502.js";
+import { describeHit } from "../breakpoints.js";
 import { bindGotoForm, externalLink, FittedRows, labelHtml, powerOfTwoColumnsThatFit } from "./debug-dom.js";
 import { DisassemblyView } from "./disassembly-view.js";
 import { PagingOverride } from "./paging-override.js";
@@ -876,6 +877,9 @@ export class Debugger {
         this._disassembly.setCpu(cpu);
         this._loopNote.setCpu(cpu);
         this.watches.setCpu(cpu);
+        cpu.breakpoints.onHit((hit) => {
+            if (hit.action === "log") console.log(describeHit(hit));
+        });
         if (this._ownPanelsShown()) this._refresh.drawNow();
     }
     updateElem(elem, val) {

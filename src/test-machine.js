@@ -14,9 +14,6 @@ import { Typist } from "./typist.js";
 import { keyCodes } from "./keymap.js";
 
 export const MaxCyclesPerIter = 100 * 1000;
-const RomselAndy = 0x80;
-const AndyStart = 0x8000;
-const AndyEnd = 0x9000;
 const VblankSearchCycles = 10 * 1000 * 1000;
 export const RepoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const HostKeyCodes = new Set(Object.values(keyCodes));
@@ -180,14 +177,9 @@ export class TestMachine {
         return this.processor.pagedBank;
     }
 
-    /**
-     * Whether sideways `bank` is paged in and, at `address`, not hidden by
-     * the Master's ANDY RAM, which ROMSEL bit 7 pages over &8000 to &8FFF.
-     */
+    /** Whether sideways `bank` is paged in at `address`; see the CPU's isBankPagedAt. */
     isBankPagedAt(bank, address) {
-        const andyPaged = this.model.isMaster && (this.processor.romsel & RomselAndy) !== 0;
-        if (andyPaged && address >= AndyStart && address < AndyEnd) return false;
-        return this.pagedBank === bank;
+        return this.processor.isBankPagedAt(bank, address);
     }
 
     /**
@@ -204,26 +196,22 @@ export class TestMachine {
      * while sideways `bank` is paged in there if one is given, calling
      * `onHit` first with the byte read or written. An execute breakpoint
      * never fires for the instruction the CPU resumes at after a stop.
-     * Returns the debug hook, whose `remove()` ends the watch.
-     * @param {"execute"|"read"|"write"} type
+     * Returns a handle whose `remove()` ends the watch.
+     * @param {"execute"|"read"|"write"|"access"} type
      * @param {number} address
      * @param {{bank: (number|undefined)}} opts
      * @param {function(number=): void} onHit
      */
     addBreakpoint(type, address, { bank }, onHit) {
-        const cpu = this.processor;
-        const debugHook = new Map([
-            ["execute", cpu.debugInstruction],
-            ["read", cpu.debugRead],
-            ["write", cpu.debugWrite],
-        ]).get(type);
-        if (!debugHook) throw new Error(`Unknown breakpoint type: ${type}`);
-        return debugHook.add((addr, value) => {
-            if (addr !== address || (type === "execute" && cpu.resumingFromStop)) return false;
-            if (bank !== undefined && !this.isBankPagedAt(bank, address)) return false;
-            onHit(type === "execute" ? undefined : value);
-            return true;
+        const { breakpoints } = this.processor;
+        const id = breakpoints.add({
+            kind: type,
+            start: address,
+            bank,
+            owner: "TestMachine",
+            onHit: ({ value }) => onHit(value),
         });
+        return { remove: () => breakpoints.remove(id) };
     }
 
     async _runUntilAddress(address, cycles, { bank } = {}) {

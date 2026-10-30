@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { MachineSession } from "../../src/machine-session.js";
+import { MachineSession, MaxLoggedHits } from "../../src/machine-session.js";
 import { BBC, keyCodes } from "../../src/keymap.js";
 import { ATOM } from "../../src/keymap-atom.js";
 import { RepoRoot } from "./helpers.js";
@@ -174,6 +174,70 @@ describe("MachineSession watching execution", () => {
         if (!keepBreakpoint) session.removeBreakpoint(id);
         session.resetBreakpointHits();
     }
+
+    it("logs, lists and changes breakpoints with a range, a condition and a hit count", async () => {
+        await stopAtProgramStart();
+        const logged = session.addBreakpoint("execute", ProgramPcs[1], { end: ProgramPcs[3], action: "log" });
+        const stopping = session.addBreakpoint("execute", ProgramPcs[0], { condition: "A = 1", hitCount: 2 });
+        session.updateBreakpoint(stopping, { enabled: false, type: "read", address: 0, kind: "read", start: 0 });
+
+        await session.runFor(CyclesPerInterlacedFrame);
+
+        expect(session.hitBreakpoint()).toBeNull();
+        expect(session.drainBreakpointLog().hits.map(({ id, address }) => [id, address])).toEqual(
+            ProgramPcs.slice(1).map((address) => [logged, address]),
+        );
+        expect(session.drainBreakpointLog()).toEqual({ hits: [], dropped: 0 });
+        expect(session.listBreakpoints()).toEqual([
+            expect.objectContaining({ id: logged, type: "execute", address: ProgramPcs[1], end: ProgramPcs[3] }),
+            expect.objectContaining({
+                id: stopping,
+                type: "execute",
+                address: ProgramPcs[0],
+                condition: "A = 1",
+                hitCount: 2,
+                enabled: false,
+                hits: 0,
+            }),
+        ]);
+    });
+
+    it("reports the byte a read-modify-write stores, after the 6502's dummy write of the old one", async () => {
+        const Counter = 0x1900;
+        const IncrementCounter = [0xee, Counter & 0xff, Counter >> 8, 0x60]; // INC &1900, RTS
+        session.writeMemory(Counter, [0x41]);
+        await stopAtProgramStart(IncrementCounter);
+        const id = session.addBreakpoint("write", Counter);
+
+        await session.runFor(CyclesPerInterlacedFrame);
+
+        expect(session.hitBreakpoint()).toEqual({ id, type: "write", address: Counter, value: 0x42 });
+    });
+
+    it("keeps the first hits a log breakpoint logs between drains, counting the rest", async () => {
+        const id = session.addBreakpoint("execute", 0x0000, { end: 0xffff, action: "log" });
+        await session.runFor(3 * CyclesPerInterlacedFrame);
+        session.removeBreakpoint(id);
+
+        const { hits, dropped } = session.drainBreakpointLog();
+
+        expect(hits).toHaveLength(MaxLoggedHits);
+        expect(dropped).toBeGreaterThan(0);
+    });
+
+    it("keeps a breakpoint's hit count across resetBreakpointHits, so it stops again at the next hit", async () => {
+        const handler = irqHandler();
+        const id = session.addBreakpoint("execute", handler, { hitCount: 2 });
+        const runToHit = async () => {
+            while (!session.hitBreakpoint()) await session.runFor(CyclesPerInterlacedFrame);
+            session.resetBreakpointHits();
+        };
+
+        await runToHit();
+        await runToHit();
+
+        expect(session.listBreakpoints()[0]).toMatchObject({ id, hits: 3 });
+    });
 
     it("keeps running whatever the watcher returns", async () => {
         const remove = session.onExecute(() => true);

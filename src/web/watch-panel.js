@@ -9,6 +9,8 @@ const RowCells = 5;
 // As the CPU's memStat marks a page: a write to ROM changes nothing, and one to neither reaches a device.
 const RamStat = 1;
 const RomStat = 2;
+const AddressSpace = 0x10000;
+const MaxAddress = AddressSpace - 1;
 const DeviceNote = "A device register stops it on every write to it, never on a change the device makes itself.";
 
 /**
@@ -30,7 +32,6 @@ export class WatchPanel {
         /** @type {Watch[]} */
         this._watches = [];
         this._cpu = null;
-        this._writeHook = null;
         /** @type {{watches: Watch[], target: number} | null} */
         this._fired = null;
         /** @type {{opener: HTMLElement | null, popup: HTMLElement} | null} */
@@ -87,12 +88,27 @@ export class WatchPanel {
         });
     }
 
-    /** Watches `cpu`'s writes for the watches that stop the machine, and no longer the last one's. */
+    /** Sets the breakpoints of the watches that stop the machine on `cpu`, and no longer on the last one. */
     setCpu(cpu) {
-        this._writeHook?.remove();
-        this._writeHook = null;
+        for (const watch of this._watches) this._unregister(watch);
         this._cpu = cpu;
-        this._watchWrites();
+        for (const watch of this._watches) this._register(watch);
+        // When a watch's breakpoint is changed elsewhere, such as from the console, so that it is no longer a stopping
+        // write breakpoint over the watch's bytes, the watch stops breaking.
+        cpu.breakpoints.onChange(() => {
+            const now = new Map(cpu.breakpoints.list().map((bp) => [bp.id, bp]));
+            for (const watch of this._watches) {
+                const intact = watch.breakpoints.every((id, i) => {
+                    const bp = now.get(id);
+                    const [start, end] = watch.ranges[i];
+                    const covers = bp?.kind === "write" && bp.start === start && bp.end === end;
+                    return covers && bp.enabled && bp.action === "stop";
+                });
+                if (intact) continue;
+                watch.breakpoints = watch.breakpoints.filter((id) => now.has(id));
+                watch.disarm();
+            }
+        });
     }
 
     /** Highlights the watches that stopped the machine, opening the panel to show them, or none if none did. */
@@ -110,25 +126,43 @@ export class WatchPanel {
         this.showWhichFired();
     }
 
-    _watchWrites() {
-        const breaking = this._watches.some((watch) => watch.breaks);
-        if (breaking && !this._writeHook && this._cpu) {
-            const cpu = this._cpu;
-            this._writeHook = cpu.debugWrite.add((address, byte) => {
-                const stat = cpu.memStat[cpu.memStatOffset + (address >>> 8)];
-                if (stat === RomStat) return false;
-                const toRam = stat === RamStat;
-                const fired = this._watches.filter(
-                    (watch) => watch.breaks && writeStops(this._peek, watch, address, byte, toRam),
-                );
-                if (fired.length === 0) return false;
-                this._fired = { watches: fired, target: cpu.targetCycles };
-                return true;
-            });
-        } else if (!breaking && this._writeHook) {
-            this._writeHook.remove();
-            this._writeHook = null;
+    /** Sets `watch`'s write breakpoints over its bytes, wrapping past &FFFF, if it stops the machine. */
+    _register(watch) {
+        this._unregister(watch);
+        const cpu = this._cpu;
+        if (!watch.breaks || !cpu) return;
+        const last = watch.address + watch.format.bytes - 1;
+        const ranges =
+            last <= MaxAddress
+                ? [[watch.address, last]]
+                : [
+                      [watch.address, MaxAddress],
+                      [0, last - AddressSpace],
+                  ];
+        const accepts = (address, byte, pc) => {
+            const stat = cpu.memStat[cpu.memStatOffset + (address >>> 8)];
+            return stat !== RomStat && writeStops(this._peek, watch, address, byte, stat === RamStat, cpu, pc);
+        };
+        const onHit = () => {
+            const target = cpu.targetCycles;
+            if (this._fired?.target !== target) this._fired = { watches: [], target };
+            if (!this._fired.watches.includes(watch)) this._fired.watches.push(watch);
+        };
+        const named = watch.label !== `$${hexword(watch.address)}`;
+        watch.ranges = ranges;
+        for (const [start, end] of ranges) {
+            const label = named && start === watch.address ? watch.label : undefined;
+            watch.breakpoints.push(
+                cpu.breakpoints.add({ kind: "write", start, end, accepts, onHit, owner: "watch", label }),
+            );
         }
+    }
+
+    _unregister(watch) {
+        const ids = watch.breakpoints;
+        // Emptied first, so that removing them is not taken for their being removed elsewhere.
+        watch.breakpoints = [];
+        for (const id of ids) this._cpu.breakpoints.remove(id);
     }
 
     update() {
@@ -167,7 +201,18 @@ export class WatchPanel {
         name.title = `${label}: $${hexword(address)}`;
         const value = cell("watch-value", "");
         /** @type {Watch} */
-        const watch = { address, format: initialFormat, value, row, breaks: false, condition: null };
+        const watch = {
+            address,
+            label,
+            format: initialFormat,
+            value,
+            row,
+            breaks: false,
+            condition: null,
+            breakpoints: [],
+            ranges: [],
+            disarm: () => {},
+        };
 
         const picker = textButton("watch-format dropdown-toggle", "", "");
         const [choices, choiceCell] = this._popupRow(picker, "watch-formats");
@@ -175,6 +220,7 @@ export class WatchPanel {
             watch.format = format;
             picker.textContent = format.name;
             picker.title = `Shown as ${format.description}`;
+            this._register(watch);
         };
         show(watch.format);
         for (const format of WatchFormats) {
@@ -197,8 +243,9 @@ export class WatchPanel {
             breaker.classList.toggle("armed", on);
             const when = condition ? `on a write that makes it ${condition.text}` : "on a write that changes it";
             breaker.title = `${on ? "Stops the machine" : "Stop the machine"} ${when}. ${DeviceNote}`;
-            this._watchWrites();
+            this._register(watch);
         };
+        watch.disarm = () => arm(false, null);
         arm(false, null);
         const choose = (on, condition) => {
             arm(on, condition);
@@ -235,7 +282,7 @@ export class WatchPanel {
             choices.remove();
             breaks.remove();
             this._empty.hidden = this._watches.length > 0;
-            this._watchWrites();
+            this._unregister(watch);
         });
         cell("", "").append(remove);
         this._list.append(row, choices, breaks);
@@ -278,6 +325,10 @@ export class WatchPanel {
  * @property {import("../watches.js").WatchFormat} format
  * @property {HTMLElement} value
  * @property {HTMLElement} row
+ * @property {string} label
  * @property {boolean} breaks - whether a write changing it stops the machine
+ * @property {number[]} breakpoints - the ids of its write breakpoints, while it breaks
+ * @property {number[][]} ranges - the first and last address each of them covers
+ * @property {() => void} disarm
  * @property {import("../watches.js").WatchCondition | null} condition - what the new value must be to stop it
  */

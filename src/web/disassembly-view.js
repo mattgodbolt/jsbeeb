@@ -1,5 +1,6 @@
 import { byteChar, hexbyte, hexword } from "../hex.js";
 import { nameUrl } from "../symbol-sets.js";
+import { SidewaysEnd, SidewaysStart, viewedBank } from "../paging.js";
 import { machineSheilaBlocks, sheilaName } from "../sheila.js";
 import { bindGotoForm, externalLink, FittedRows, labelHtml } from "./debug-dom.js";
 import { keyLine } from "./panel-keys.js";
@@ -80,7 +81,7 @@ export class DisassemblyView {
         this._cursor = 0;
         this._cursorRow = Math.floor(InitialRows / 2);
         this._backStack = [];
-        this._breakpoints = new Map();
+        this._unwatchBreakpoints = null;
         this._widget = floating.panel.querySelector("#disassembly");
         this._rows = new FittedRows(this._widget, InitialRows, refit);
 
@@ -120,10 +121,7 @@ export class DisassemblyView {
             table: DisassemblyKeys,
             actions: {
                 runToCursor,
-                toggleBreakpoint: () => {
-                    this._toggleBreakpoint(this._cursor);
-                    this.redraw();
-                },
+                toggleBreakpoint: () => this._toggleBreakpoint(this._cursor),
                 down: () => this.update(this._nextInstruction(this._cursor)),
                 up: () => this.update(this._prevInstruction(this._cursor)),
                 back: () => {
@@ -138,6 +136,8 @@ export class DisassemblyView {
 
     setCpu(cpu) {
         this._cpu = cpu;
+        this._unwatchBreakpoints?.();
+        this._unwatchBreakpoints = cpu.breakpoints.onChange(() => this.redraw());
         this._sheila = machineSheilaBlocks(cpu);
     }
 
@@ -226,7 +226,13 @@ export class DisassemblyView {
         for (const ref of disNode.querySelectorAll(".instr_instr_ref")) {
             ref.addEventListener("click", (e) => this._followJump(e));
         }
-        row.querySelector(".bp_gutter").classList.toggle("active", this._breakpoints.has(address));
+        const executes = this._executeBreakpoints(address);
+        const gutter = row.querySelector(".bp_gutter");
+        gutter.classList.toggle(
+            "active",
+            executes.some((bp) => bp.enabled),
+        );
+        gutter.classList.toggle("disabled", executes.length > 0 && !executes.some((bp) => bp.enabled));
         row.dataset.addr = address;
         if (jumpTarget !== undefined) {
             row.dataset.ref = jumpTarget;
@@ -252,23 +258,46 @@ export class DisassemblyView {
         this.update(ref);
     }
 
+    /**
+     * The execute breakpoints on the code the row at `address` shows: unpinned, pinned to the bank the panel is set to
+     * show there, or anywhere it is not set to a bank, pinned to a bank the CPU would stop in there now.
+     */
+    _executeBreakpoints(address) {
+        const cpu = this._cpu;
+        const viewed = this._viewedBankAt(address);
+        const applies = (bank) =>
+            bank === undefined || (viewed === undefined ? cpu.isBankPagedAt(bank, address) : bank === viewed);
+        return cpu.breakpoints
+            .list()
+            .filter((bp) => bp.kind === "execute" && bp.start <= address && address <= bp.end && applies(bp.bank));
+    }
+
+    /** The sideways bank the panel is set to show at `address`, if it is set to show one there. */
+    _viewedBankAt(address) {
+        return address >= SidewaysStart && address < SidewaysEnd ? viewedBank(this._paging.view) : undefined;
+    }
+
+    /**
+     * Removes the plain breakpoints on just `address`, or with none there, sets one: pinned to the bank shown, when the
+     * panel is set to show one, so that it stops in the code shown. One with a condition, a hit count or logging is
+     * left for the Breakpoints panel or the console to change.
+     */
     _toggleBreakpoint(address) {
-        if (this._breakpoints.has(address)) {
-            console.log("Removing breakpoint from address " + hexword(address));
-            this._breakpoints.get(address).remove();
-            this._breakpoints.delete(address);
-        } else {
-            console.log("Adding breakpoint to address " + hexword(address));
-            this._breakpoints.set(
-                address,
-                this._cpu.debugInstruction.add((x) => x === address),
-            );
-        }
+        const { breakpoints } = this._cpu;
+        const pin = this._viewedBankAt(address);
+        const onAddress = this._executeBreakpoints(address).filter(
+            (bp) =>
+                bp.start === bp.end &&
+                bp.owner === "user" &&
+                bp.condition === undefined &&
+                bp.hitCount === 1 &&
+                bp.action === "stop",
+        );
+        if (!onAddress.length) breakpoints.add({ kind: "execute", start: address, bank: pin });
+        for (const { id } of onAddress) breakpoints.remove(id);
     }
 
     _gutterClick(e) {
-        const address = parseInt(e.target.closest(".dis_elem").dataset.addr, 10);
-        this._toggleBreakpoint(address);
-        e.target.closest(".bp_gutter").classList.toggle("active", this._breakpoints.has(address));
+        this._toggleBreakpoint(parseInt(e.target.closest(".dis_elem").dataset.addr, 10));
     }
 }

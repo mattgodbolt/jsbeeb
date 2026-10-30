@@ -14,7 +14,7 @@ export const ShadowView = "s";
 export const MainView = "m";
 
 export const SidewaysStart = 0x8000;
-const SidewaysEnd = 0xc000;
+export const SidewaysEnd = 0xc000;
 const AndyEnd = 0x9000;
 const ShadowStart = 0x3000;
 const ShadowEnd = 0x8000;

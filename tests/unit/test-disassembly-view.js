@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DisassemblyView } from "../../src/web/disassembly-view.js";
 import { PagingOverride } from "../../src/web/paging-override.js";
+import { SidewaysStart } from "../../src/paging.js";
 import { FloatingPanel, PanelArrangement } from "../../src/web/floating-panel.js";
 import { PanelKeys } from "../../src/web/panel-keys.js";
 import { StartEdge } from "../../src/web/panel-layout.js";
@@ -77,6 +78,7 @@ describe("DisassemblyView", () => {
     afterEach(teardownDom);
 
     const rows = () => [...document.querySelectorAll("#disassembly .dis_elem:not(.template)")];
+    const rowAtAddress = (address) => rows().find((row) => Number(row.dataset.addr) === address);
     const currentRow = () => document.querySelector("#disassembly .highlight");
     const addrOf = (row) => row.querySelector(".dis_addr").textContent;
     const codeAt = (address) =>
@@ -171,11 +173,54 @@ describe("DisassemblyView", () => {
         expect(gutter().classList.contains("active")).toBe(false);
     });
 
-    it("toggles a breakpoint at the cursor with the t key", () => {
+    it("toggles a breakpoint at the cursor with the t key, in the CPU's breakpoints", () => {
         view.update(cpu.pc);
         keys.press("t");
         expect(currentRow().querySelector(".bp_gutter").classList.contains("active")).toBe(true);
+        expect(cpu.breakpoints.list()).toEqual([expect.objectContaining({ kind: "execute", start: cpu.pc })]);
     });
+
+    it("shows breakpoints set elsewhere as they change, hollow while disabled, and leaves a conditional one", () => {
+        view.update(cpu.pc);
+        const gutter = () => currentRow().querySelector(".bp_gutter");
+        const id = cpu.breakpoints.add({ kind: "execute", start: cpu.pc, condition: "A = 1" });
+        expect(gutter().classList.contains("active")).toBe(true);
+        cpu.breakpoints.update(id, { enabled: false });
+        expect([...gutter().classList]).toEqual(["bp_gutter", "disabled"]);
+        click(gutter());
+        click(gutter());
+        expect(cpu.breakpoints.list().map((bp) => bp.id)).toEqual([id]);
+    });
+
+    it("pins a breakpoint set in a bank the panel is set to show to that bank, and clears it there", () => {
+        cpu.romSelect(5);
+        paging.view = "4";
+        view.update(SidewaysStart);
+        const gutter = () => rowAtAddress(SidewaysStart).querySelector(".bp_gutter");
+        click(gutter());
+        expect(cpu.breakpoints.list()).toEqual([expect.objectContaining({ start: SidewaysStart, bank: 4 })]);
+        click(gutter());
+        expect(cpu.breakpoints.list()).toEqual([]);
+    });
+
+    it.each([
+        ["paged", true, "", 4, SidewaysStart],
+        ["paged, another bank paged", false, "", 5, SidewaysStart],
+        ["set to its bank, another paged", true, "4", 5, SidewaysStart],
+        ["set to another bank, its bank paged", false, "5", 4, SidewaysStart],
+        ["paged, outside the sideways area", true, "", 4, 0xc000],
+        ["set to another bank, outside the sideways area", true, "5", 4, 0xc000],
+        ["paged, another bank paged, outside the sideways area", false, "", 5, 0xc000],
+    ])(
+        "whether the gutter shows a breakpoint pinned to bank 4 where the panel shows %s: %s",
+        (_, dot, shown, paged, address) => {
+            cpu.romSelect(paged);
+            paging.view = shown;
+            cpu.breakpoints.add({ kind: "execute", start: address, bank: 4 });
+            view.update(address);
+            expect(rowAtAddress(address).querySelector(".bp_gutter").classList.contains("active")).toBe(dot);
+        },
+    );
 
     describe("SHEILA registers", () => {
         const program = (bytes) => bytes.forEach((byte, i) => cpu.writemem(0x2002 + i, byte));

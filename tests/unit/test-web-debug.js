@@ -121,6 +121,12 @@ describe("Debugger", () => {
         return teardownDom();
     });
 
+    it("logs each hit of a log breakpoint to the console", () => {
+        cpu.breakpoints.add({ kind: "execute", start: 0x2000, action: "log" });
+        cpu.execute(1);
+        expect(console.log).toHaveBeenCalledWith("Breakpoint 1: execute $2000 at pc $2000, hit 1");
+    });
+
     const visible = (id) => !document.getElementById(id).hidden;
     const disRows = () => [...document.querySelectorAll("#disassembly .dis_elem:not(.template)")];
     const currentRow = () => document.querySelector("#disassembly .highlight");
@@ -1601,6 +1607,37 @@ describe("Debugger", () => {
                 expect(cpu.onFastPath).toBe(true);
             });
 
+            it("breaks through the CPU's breakpoints over the watch's bytes, following its format", () => {
+                const ranges = () =>
+                    cpu.breakpoints.list().map(({ kind, start, end, owner }) => [kind, start, end, owner]);
+                addWatch("$ffff");
+                pickBreak(0, "on change");
+                expect(ranges()).toEqual([["write", 0xffff, 0xffff, "watch"]]);
+                watchControl(0, "watch-format").click();
+                [...watchChoices(0).querySelectorAll("button")]
+                    .find((choice) => choice.textContent === "hex16")
+                    .click();
+                expect(ranges()).toEqual([
+                    ["write", 0xffff, 0xffff, "watch"],
+                    ["write", 0x0000, 0x0000, "watch"],
+                ]);
+            });
+
+            it.each([
+                ["removed", (id) => cpu.breakpoints.remove(id)],
+                ["disabled", (id) => cpu.breakpoints.update(id, { enabled: false })],
+                ["made to log", (id) => cpu.breakpoints.update(id, { action: "log" })],
+                ["moved", (id) => cpu.breakpoints.update(id, { start: 0x80 })],
+                ["made a read", (id) => cpu.breakpoints.update(id, { kind: "read" })],
+            ])("stops breaking when its breakpoint is %s elsewhere", (_, change) => {
+                addWatch("$70");
+                pickBreak(0, "on change");
+                change(cpu.breakpoints.list()[0].id);
+                expect(cpu.breakpoints.list()).toEqual([]);
+                expect(watchRows()[0][3]).toBe("brk");
+                expect(cpu.onFastPath).toBe(true);
+            });
+
             it("shows every watch one write fires", () => {
                 addWatch("$70");
                 addWatch("$70");
@@ -1630,6 +1667,13 @@ describe("Debugger", () => {
                 expect(watchRows()[0][3]).toBe("brk>=$10");
                 run();
                 expect(cpu.pc).toBe(0x200c);
+            });
+
+            it("tests a condition naming PC against the instruction that writes", () => {
+                addWatch("$70");
+                breakWhen(0, "= PC - $2000");
+                run();
+                expect(cpu.pc).toBe(0x2008);
             });
 
             it("gives the keyboard back when its choices close with the condition box still focused", () => {
