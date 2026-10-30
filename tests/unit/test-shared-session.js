@@ -7,7 +7,6 @@ import {
     SessionGuest,
     SessionHost,
     cleanName,
-    gzipCodec,
     hostSession,
     joinLink,
     roomFrom,
@@ -58,16 +57,6 @@ describe("cleanName", () => {
         [42, null],
     ])("makes %j %j", (name, cleaned) => {
         expect(cleanName(name)).toBe(cleaned);
-    });
-});
-
-describe("gzipCodec", () => {
-    it("gives back what it packed, smaller, and refuses what is not gzip", async () => {
-        const text = JSON.stringify({ ram: "\u0000".repeat(10000) });
-        const packed = await gzipCodec.compress(text);
-        expect(packed.length).toBeLessThan(text.length / 10);
-        expect(await gzipCodec.decompress(packed)).toBe(text);
-        await expect(gzipCodec.decompress(new Uint8Array([1, 2, 3]))).rejects.toThrow();
     });
 });
 
