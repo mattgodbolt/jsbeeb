@@ -1043,7 +1043,7 @@ small {
 }
 
 #breakpoints-panel {
-  width: min(460px, 90vw);
+  width: min(540px, 90vw);
   font-family: monospace;
   font-size: 9pt;
 }
@@ -1078,6 +1078,10 @@ small {
 }
 
 #breakpoints-panel .bp-name {
+  margin-left: 1ch;
+}
+
+#breakpoints-panel .bp-bank {
   margin-left: 1ch;
 }
 
