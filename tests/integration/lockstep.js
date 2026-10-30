@@ -185,8 +185,7 @@ function expectIdentical(host, guests) {
     for (const { machine } of guests) {
         expect(cycleCount(machine.processor)).toBe(cycleCount(processor));
         expect(stateHash(machine.processor)).toBe(stateHash(processor));
-        // Buffer.compare rather than toEqual, which takes seconds over this many bytes.
-        expect(Buffer.compare(machine.processor.ramRomOs, processor.ramRomOs)).toBe(0);
+        expect(machine.processor.ramRomOs).toEqual(processor.ramRomOs);
         expect(machine.processor.sysvia.cmos.store).toEqual(processor.sysvia.cmos.store);
         expect(mode7Text(machine)).toBe(mode7Text(host));
     }

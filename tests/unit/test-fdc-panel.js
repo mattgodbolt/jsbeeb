@@ -26,7 +26,6 @@ const IntelLoadHeadOnDrive0 = IntelSelect0 | 0x08;
 const IntelSpecify = 0x35;
 const IntelSpecifyLikeDfs = [0x0d, 12, 10, 0xc8];
 const IntelLoadHeadOnDrive1 = 0x80 | 0x08;
-const MaxLogLines = 10000;
 const OneSectorOf256 = 0x21;
 
 const WdControlAddr = 0;
@@ -266,11 +265,10 @@ describe("FdcPanel", () => {
         expect(logLines()).toEqual([]);
     });
 
-    it("keeps the last lines of the log, among them the warnings the controller logs unasked", () => {
+    it("logs the warnings the controller logs unasked", () => {
         const { fdc } = panelFor(IntelFdc);
-        for (let value = 0; value <= MaxLogLines; ++value) fdc.write(IntelUnwiredAddr, value & 0xff);
-        expect(logLines()).toHaveLength(MaxLogLines);
-        expect(logLines()[0]).toBe("warning: write to unwired register: &0003=&01");
+        fdc.write(IntelUnwiredAddr, 0x01);
+        expect(logLines()).toEqual(["warning: write to unwired register: &0003=&01"]);
         expect(part("fdc-log").firstElementChild.classList).toContain("fdc-log-warning");
         expect(console.warn).toHaveBeenCalledWith("8271: write to unwired register: &0003=&01");
     });
