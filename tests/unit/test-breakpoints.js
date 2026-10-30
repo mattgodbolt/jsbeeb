@@ -162,11 +162,11 @@ describe("Breakpoints", () => {
         [{ kind: "read", start: 0, condition: "A =" }, 'Bad condition "A =": expected a value at column 4'],
         [{ kind: "read", start: 0, condition: 5 }, "Breakpoint condition 5 is not text"],
         [{ kind: "read", start: 0, enabled: "false" }, "Breakpoint enabled false is not true or false"],
-        [{ kind: "brk", start: 0 }, "A brk breakpoint has no address"],
-        [{ kind: "irq", bank: 1 }, "A irq breakpoint has no address"],
+        [{ kind: "brk", start: 0 }, "A breakpoint of kind brk has no address"],
+        [{ kind: "irq", bank: 1 }, "A breakpoint of kind irq has no address"],
         [{ kind: "line" }, "Line undefined is not a whole number from 0"],
         [{ kind: "line", line: -1 }, "Line -1 is not a whole number from 0"],
-        [{ kind: "read", start: 0, line: 3 }, "A read breakpoint has no line"],
+        [{ kind: "read", start: 0, line: 3 }, "A breakpoint of kind read has no line"],
     ])("refuses %j", (spec, message) => {
         expect(() => breakpoints.add(spec)).toThrow(message);
         expect(breakpoints.list()).toEqual([]);

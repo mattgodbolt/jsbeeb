@@ -203,7 +203,7 @@ export class Breakpoints {
         if (!event && !AccessesOfKind.has(kind)) throw new Error(`Unknown breakpoint type: ${kind}`);
         if (event) {
             if (start !== undefined || end !== undefined || bank !== undefined)
-                throw new Error(`A ${kind} breakpoint has no address`);
+                throw new Error(`A breakpoint of kind ${kind} has no address`);
         } else {
             end ??= start;
             requireAddress("start", start);
@@ -213,7 +213,7 @@ export class Breakpoints {
         }
         if (kind === "line" && (!Number.isInteger(line) || line < 0))
             throw new Error(`Line ${line} is not a whole number from 0`);
-        if (kind !== "line" && line !== undefined) throw new Error(`A ${kind} breakpoint has no line`);
+        if (kind !== "line" && line !== undefined) throw new Error(`A breakpoint of kind ${kind} has no line`);
         if (condition !== undefined && typeof condition !== "string")
             throw new Error(`Breakpoint condition ${condition} is not text`);
         condition = condition?.trim() || undefined;

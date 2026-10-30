@@ -223,12 +223,24 @@ describe("MachineSession watching execution", () => {
         const id = session.addBreakpoint("irq", undefined, { condition: "?&FE4D AND 2" });
 
         for (let stop = 0; stop < Stops; stop++) {
-            await session.runFor(CyclesPerInterlacedFrame);
+            await session.runFor(2 * CyclesPerInterlacedFrame);
             expect(session.hitBreakpoint()).toEqual({ id, type: "irq", address: vectorAt(session, IrqVector) });
             expect(session.readMemory(SysViaIfr, 1)[0] & VsyncFlag).toBe(VsyncFlag);
             session.resetBreakpointHits();
         }
         expect(session.listBreakpoints()).toEqual([expect.objectContaining({ id, type: "irq", address: undefined })]);
+    });
+
+    it("stops at the start of a TV line, changing and listing it by its line", async () => {
+        const Line = 100;
+        const LaterLine = 120;
+        const id = session.addBreakpoint("line", undefined, { line: Line });
+        session.updateBreakpoint(id, { line: LaterLine });
+
+        await session.runFor(2 * CyclesPerInterlacedFrame);
+
+        expect(session.hitBreakpoint()).toMatchObject({ id, type: "line" });
+        expect(session.listBreakpoints()).toEqual([expect.objectContaining({ id, type: "line", line: LaterLine })]);
     });
 
     it("keeps the first hits a log breakpoint logs between drains, counting the rest", async () => {
