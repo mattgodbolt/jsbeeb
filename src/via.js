@@ -683,6 +683,7 @@ export class SysVia extends Via {
         // Mouse joystick button state
         this.mouseButton1 = false;
         this.mouseButton2 = false;
+        this.keyChanges = 0;
         this.keyboardEnabled = true;
         this.shift = new ShiftOverride(BBC.SHIFT);
         this.setKeyLayout(initialLayout);
@@ -830,9 +831,9 @@ export class SysVia extends Via {
         this._keysChanged();
     }
 
-    /** A key can go up while the machine is stopped, taking no cycles, so it counts towards `machineMoment`. */
+    /** A key can go up while the machine is stopped, taking no cycles, so it is counted for `machineMoment`. */
     _keysChanged() {
-        ++this.cpu.zeroCycleChanges;
+        ++this.keyChanges;
         this.updateKeys();
     }
 

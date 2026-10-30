@@ -27,12 +27,14 @@ export function cycleCount(cpu) {
     return cpu.cycleSeconds * cpu.model.cyclesPerSecond + cpu.currentCycles;
 }
 
-/**
- * Changes whenever the machine does: as its cycle count moves, and at a change that need not move it, as a reset, a
- * state load or a key going down or up.
- */
+/** Changes whenever the processor does: as its cycle count moves, and at a reset or state load, which need not move it. */
+export function cpuMoment(cpu) {
+    return `${cpu.resetsAndLoads}:${cycleCount(cpu)}`;
+}
+
+/** Changes whenever the machine does: as its processor does, and as a key goes down or up, which takes no cycles. */
 export function machineMoment(cpu) {
-    return `${cpu.zeroCycleChanges}:${cycleCount(cpu)}`;
+    return `${cpuMoment(cpu)}:${cpu.sysvia.keyChanges}`;
 }
 
 // The CPU runs whole instructions until it reaches its target, so asking for a

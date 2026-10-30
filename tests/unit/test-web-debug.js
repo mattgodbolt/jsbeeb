@@ -517,7 +517,7 @@ describe("Debugger", () => {
                 ["by its key code", (via) => via.keyUp("KeyA")],
                 ["by its place in the matrix", (via) => via.keyUpRaw(BBC.A)],
                 ["with every other key", (via) => via.clearKeys()],
-            ])("show a key held into a stop as let go of when it is released %s", (_, release) => {
+            ])("show a key held into a stop as released %s, without moving the cursor", (_, release) => {
                 const held = () => document.querySelectorAll("#sysvia-panel .key-matrix td.held").length;
                 new SysViaPanel({ cpu, arrangement }).floating.open();
                 stoppedLoop.go();
@@ -526,9 +526,11 @@ describe("Debugger", () => {
                 frames.run();
                 expect(held()).toBe(1);
                 stoppedLoop.stop(true);
+                goTo("goto-dis-addr-form", "3000");
                 release(cpu.sysvia);
                 frames.run();
                 expect(held()).toBe(0);
+                expect(addrOf(currentRow()).slice(0, 4)).toBe("3000");
             });
 
             it("read nothing once closed", () => {
