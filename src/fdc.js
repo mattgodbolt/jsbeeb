@@ -272,7 +272,8 @@ export function discFor(name, stringData, onChange, layout = DiscLayout.auto) {
     // A flux image of a 40 track disc read in an 80 track drive already holds it spread across the
     // surface, so nothing needs moving and only the drive needs telling to step twice.
     if (layout === DiscLayout.auto && discType.isFluxImage && !disc.is40Track) {
-        reading = sniffSurfaceLayout(disc);
+        // Both heads move together, so a disc has one pitch and the side that boots can speak for it.
+        reading = sniffSurfaceLayout(disc, false);
         disc.is40Track = reading.is40Track;
     }
     if (reading) disc.loadNotes.unshift(layoutNote(reading));

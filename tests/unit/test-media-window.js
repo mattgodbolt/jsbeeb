@@ -295,6 +295,7 @@ describe("MediaWindow", () => {
             expect([...notes.querySelectorAll(".warn")].map(text)).toEqual([
                 "a bit rate far from 250 kbit/s on track 3",
             ]);
+            expect(notes.title).toBe("40 track, as its catalogue says so\na bit rate far from 250 kbit/s on track 3");
             putDiscIn(0, discFor("plain.ssd", titledImage("PLAIN", 1), undefined, DiscLayout.contiguous));
             expect(notes.hidden).toBe(true);
         });

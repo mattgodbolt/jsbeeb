@@ -690,20 +690,23 @@ const MinDoubleSteppedTracks = 4;
  * layout is the loader's own doing.
  *
  * @param {Disc} disc
+ * @param {boolean} isSideUpper - the side to ask; a dual format disc's sides can differ
  * @returns {{is40Track: boolean, reason: string}}
  */
-export function sniffSurfaceLayout(disc) {
+export function sniffSurfaceLayout(disc, isSideUpper) {
     let doubleStepped = 0;
-    // Both heads move together, so a disc has one pitch and the side that boots can speak for it.
     // Track 0 is where it claims to be at either pitch, so it says nothing.
     for (let trackNum = 1; trackNum < disc.tracksUsed; ++trackNum) {
-        const sectors = disc.getTrack(false, trackNum).findSectorIds();
+        const sectors = disc.getTrack(isSideUpper, trackNum).findSectorIds();
         if (!sectors.length) continue;
         if (trackNum & 1) return { is40Track: false, reason: `track ${trackNum} holds sectors of its own` };
         if (sectors.some((sector) => sector.trackNumber === trackNum / 2)) doubleStepped++;
     }
-    if (doubleStepped < MinDoubleSteppedTracks)
-        return { is40Track: false, reason: `only ${doubleStepped} tracks sit at twice their own number` };
+    if (!doubleStepped) return { is40Track: false, reason: "no track sits at twice the number its sectors claim" };
+    if (doubleStepped < MinDoubleSteppedTracks) {
+        const sit = doubleStepped === 1 ? "track sits" : "tracks sit";
+        return { is40Track: false, reason: `only ${doubleStepped} ${sit} at twice the number their sectors claim` };
+    }
     return { is40Track: true, reason: `${doubleStepped} tracks sit at twice the number their sectors claim` };
 }
 
@@ -1283,10 +1286,10 @@ export class Disc {
     }
 }
 
-/** @returns {string} ascending numbers, each once, with runs of consecutive ones folded, as "3-5, 9" */
+/** @returns {string} the numbers in order, each once, with runs of consecutive ones folded, as "3-5, 9" */
 export function numberRuns(numbers) {
     const runs = [];
-    for (const number of new Set(numbers)) {
+    for (const number of new Set(numbers.toSorted((a, b) => a - b))) {
         const last = runs.at(-1);
         if (last && last.to === number - 1) last.to = number;
         else runs.push({ from: number, to: number });
@@ -1311,14 +1314,16 @@ const StandardMfmSectors = [16, 18];
  */
 export function discReport(disc, isSideUpper) {
     const findings = [];
-    const step = disc.is40Track ? 2 : 1;
-    let unformatted = null;
-    const endUnformatted = () => {
-        if (!unformatted) return;
-        const { from, to } = unformatted;
+    // A dual format disc can be 80 track on its other side, so the side is asked, but only on a disc that has any.
+    const step = disc.is40Track && sniffSurfaceLayout(disc, isSideUpper).is40Track ? 2 : 1;
+    // Tracks with no sectors and nothing else to say come in runs, each told in one line.
+    let run = null;
+    const endRun = () => {
+        if (!run) return;
+        const { from, to, what } = run;
         const tracks = from === to ? `track ${from / step}` : `tracks ${from / step}-${to / step}`;
-        findings.push({ trackNum: from, fraction: 0, text: `${tracks}: unformatted` });
-        unformatted = null;
+        findings.push({ trackNum: from, fraction: 0, text: `${tracks}: ${what}` });
+        run = null;
     };
     for (let trackNum = 0; trackNum < disc.tracksUsed; trackNum += step) {
         const track = disc.getTrack(isSideUpper, trackNum);
@@ -1328,12 +1333,15 @@ export function discReport(disc, isSideUpper) {
         const note = (text, pulse) =>
             onTrack.push({ trackNum, fraction: pulse / pulsesRound, text: `track ${claimed}: ${text}` });
         const sectors = track.findSectors(note);
-        // Unformatted as the surface shows it: no flux at all.
-        if (!sectors.length && track.pulses2Us.subarray(0, track.length).every((pulses) => pulses === 0)) {
-            unformatted = { from: unformatted?.from ?? trackNum, to: trackNum };
+        if (!sectors.length && !onTrack.length) {
+            // Unformatted as the surface shows it: no flux at all.
+            const isBlank = track.pulses2Us.subarray(0, track.length).every((pulses) => pulses === 0);
+            const what = isBlank ? "unformatted" : "flux, but no sector IDs";
+            if (run?.what !== what) endRun();
+            run = { from: run?.from ?? trackNum, to: trackNum, what };
             continue;
         }
-        endUnformatted();
+        endRun();
         if (!sectors.length) {
             note("flux, but no sector IDs", 0);
             findings.push(...onTrack);
@@ -1358,12 +1366,9 @@ export function discReport(disc, isSideUpper) {
             if (sector.hasDataCrcError) fault("a bad data CRC", sector);
         }
         for (const [what, { at, sectorNums }] of faults)
-            note(
-                `${sectorNums.length === 1 ? "sector" : "sectors"} ${numberRuns(sectorNums.toSorted((a, b) => a - b))} with ${what}`,
-                at,
-            );
+            note(`${sectorNums.length === 1 ? "sector" : "sectors"} ${numberRuns(sectorNums)} with ${what}`, at);
         findings.push(...onTrack);
     }
-    endUnformatted();
+    endRun();
     return findings;
 }

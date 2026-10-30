@@ -15,6 +15,9 @@ const HfeV3OpcodeSetBitrate = 0xf2;
 const HfeV3OpcodeSkipBits = 0xf3;
 const HfeV3OpcodeRand = 0xf4;
 const HfeTrackCountOffset = 9;
+// SETBITRATE's argument is 72 for 250 kbit/s, the BBC's rate; these are as far from it as is believable.
+const MinBitRate = 64;
+const MaxBitRate = 80;
 const HfeBlockSideSize = 256;
 const HfeBlockSize = HfeBlockSideSize * 2;
 const HfeShugartDdFloppyMode = 7;
@@ -160,8 +163,7 @@ export function loadHfe(disc, data, onChange) {
 
                 if (isSetBitRate) {
                     isSetBitRate = false;
-                    // 72 is 250 kbit/s, the BBC's rate.
-                    if (byte < 64 || byte > 80) wildBitRateTracks.add(trackNum);
+                    if (byte < MinBitRate || byte > MaxBitRate) wildBitRateTracks.add(trackNum);
                     continue;
                 } else if (isSkipBits) {
                     isSkipBits = false;

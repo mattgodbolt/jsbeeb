@@ -111,7 +111,6 @@ describe("BbcDiscArchive", () => {
             expect(url).toBe(`${ArchiveBase}/hfe/B88911B2-BF6048A8.hfe`);
             return bytesResponse(hfe);
         });
-        vi.spyOn(console, "log").mockImplementation(() => {});
 
         expect(await archive().fetch("B88911B2-BF6048A8.hfe")).toEqual(hfe);
     });

@@ -20,16 +20,14 @@ function reloaded(disc) {
 }
 
 const sectorsOf = (track) =>
-    track
-        .findSectors(() => {})
-        .map((sector) => ({
-            header: [...sector.header],
-            isMfm: sector.isMfm,
-            isDeleted: sector.isDeleted,
-            hasHeaderCrcError: sector.hasHeaderCrcError,
-            hasDataCrcError: sector.hasDataCrcError,
-            sectorData: sector.sectorData && Buffer.from(sector.sectorData).toString("hex"),
-        }));
+    track.findSectors().map((sector) => ({
+        header: [...sector.header],
+        isMfm: sector.isMfm,
+        isDeleted: sector.isDeleted,
+        hasHeaderCrcError: sector.hasHeaderCrcError,
+        hasDataCrcError: sector.hasDataCrcError,
+        sectorData: sector.sectorData && Buffer.from(sector.sectorData).toString("hex"),
+    }));
 
 function expectSameSectors(original, copy) {
     let sectorsCompared = 0;
@@ -186,27 +184,23 @@ describe("telling a 40 track HFE from an 80 track one", () => {
     it("reads a capture that already holds one spread across the surface", { timeout: 30000 }, () => {
         // Elite is a 40 track disc as an 80 track drive sees it, so its header cannot say so.
         expect(sniffHfeLayout(EliteHfe).is40Track).toBe(false);
-        expect(sniffSurfaceLayout(elite()).is40Track).toBe(true);
+        expect(sniffSurfaceLayout(elite(), false).is40Track).toBe(true);
     });
 
     it("takes an 80 track disc at its word", () => {
-        expect(sniffSurfaceLayout(reloaded(countingImage(80 * TrackBytes, false))).is40Track).toBe(false);
+        expect(sniffSurfaceLayout(reloaded(countingImage(80 * TrackBytes, false)), false).is40Track).toBe(false);
     });
 
     it("judges a disc whose sides disagree on the one that boots", { timeout: 30000 }, () => {
         // Elite is a dual format disc: side 0 written for a 40 track drive, side 1 for an 80 track
         // one, the same game on both. A drive's 40/80 switch is not per side, so the side DFS boots
         // from decides, and reaching the other one means setting the switch by hand.
-        const lower = elite()
-            .getTrack(false, 78)
-            .findSectors(() => {});
-        const upper = elite()
-            .getTrack(true, 39)
-            .findSectors(() => {});
+        const lower = elite().getTrack(false, 78).findSectors();
+        const upper = elite().getTrack(true, 39).findSectors();
         expect(lower[0].trackNumber).toBe(39);
         expect(upper[0].trackNumber).toBe(39);
 
-        expect(sniffSurfaceLayout(elite()).is40Track).toBe(true);
+        expect(sniffSurfaceLayout(elite(), false).is40Track).toBe(true);
     });
 
     it("wants more than a track or two before it believes", () => {
@@ -216,7 +210,7 @@ describe("telling a 40 track HFE from an 80 track one", () => {
         // A capture holding only the first couple of tracks cannot say which pitch it was at.
         for (let trackNum = 4; trackNum < disc.tracksUsed; ++trackNum) disc.eraseTrack(false, trackNum);
 
-        expect(sniffSurfaceLayout(disc).is40Track).toBe(false);
+        expect(sniffSurfaceLayout(disc, false).is40Track).toBe(false);
     });
 
     it("expands a 40 track capture across the surface", () => {

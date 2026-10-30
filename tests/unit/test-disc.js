@@ -19,7 +19,7 @@ import { crc32 } from "../../src/archive.js";
 import { ssdImage } from "./helpers.js";
 import { discFor } from "../../src/fdc.js";
 import { expectSnapshotRoundTrips } from "../helpers/snapshot-round-trip.js";
-import { corruptSectorData, fmDiscWithSector, mfmDiscWithSector } from "../helpers/disc-builders.js";
+import { appendFmSector, corruptSectorData, fmDiscWithSector, mfmDiscWithSector } from "../helpers/disc-builders.js";
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -345,14 +345,57 @@ describe("the report on a side of a disc", () => {
         expect(discReport(disc, false)).toContainEqual({ trackNum: 1, fraction: 0, text: "tracks 1-3: unformatted" });
     });
 
-    it("tells a track with flux but no sector IDs from an unformatted one", () => {
+    it("tells tracks with flux but no sector IDs from unformatted ones, a run of each", () => {
         const disc = Disc.createBlank();
-        disc.buildTrack(false, 0).fillFmByte(0xff);
-        disc.setTrackUsed(false, 1);
+        for (const trackNum of [0, 1]) disc.buildTrack(false, trackNum).fillFmByte(0xff);
+        disc.setTrackUsed(false, 2);
         expect(discReport(disc, false).map(({ text }) => text)).toEqual([
-            "track 0: flux, but no sector IDs",
-            "track 1: unformatted",
+            "tracks 0-1: flux, but no sector IDs",
+            "track 2: unformatted",
         ]);
+    });
+
+    /** A track 0 of ten FM sectors, each as `options` says, ending where `finish` leaves it. */
+    const tenSectors = (options, finish) => {
+        const disc = Disc.createBlank();
+        const builder = disc.buildTrack(false, 0);
+        for (let sector = 0; sector < 10; ++sector) appendFmSector(builder, { sector, ...options });
+        finish(builder);
+        return disc;
+    };
+    const standard = (builder) => builder.fillFmByte(0xff);
+
+    it.each([
+        [
+            "a short track",
+            tenSectors({}, (builder) => builder.setTrackLength()),
+            /^track 0: short, \d+% of the standard length$/,
+        ],
+        [
+            "a long track",
+            tenSectors({}, (builder) =>
+                builder.appendRepeatFmByte(0xff, IbmDiscFormat.bytesPerTrack / 2).setTrackLength(),
+            ),
+            /^track 0: long, \d+% of the standard length$/,
+        ],
+        ["an unusual sector count", fmDiscWithSector(), /^track 0: 1 FM sector$/],
+        [
+            "sectors claiming another track",
+            tenSectors({ track: 5 }, standard),
+            /^track 0: sectors 0-9 with a header claiming track 5$/,
+        ],
+    ])("reports %s", (_, disc, finding) => {
+        expect(discReport(disc, false).map(({ text }) => text)).toContainEqual(expect.stringMatching(finding));
+    });
+
+    it("reports a bad header CRC", () => {
+        const disc = tenSectors({}, standard);
+        const track = disc.getTrack(false, 0);
+        const headerWord = Math.floor(track.findSectors()[3].idPosBitOffset / 32) + 1;
+        track.pulses2Us[headerWord] = IbmDiscFormat.fmTo2usPulses(0xff, 0x55);
+        expect(discReport(disc, false).map(({ text }) => text)).toContainEqual(
+            expect.stringMatching(/^track 0: sector \d+ with a bad header CRC$/),
+        );
     });
 
     it("names the sectors that share a fault together", () => {
@@ -537,7 +580,6 @@ describe("track write listeners", () => {
     });
 
     it("writes an image back for a track holding a sector it cannot read", () => {
-        vi.spyOn(globalThis.console, "log").mockImplementation(() => {});
         const sectorsPerTrack = 10;
         const sectorSize = 256;
         const data = new Uint8Array(sectorsPerTrack * sectorSize).fill(0xa5);
