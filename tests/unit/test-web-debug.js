@@ -15,6 +15,7 @@ import { Dropdown } from "bootstrap";
 import { PanelKeys } from "../../src/web/panel-keys.js";
 import { PanelArrangement } from "../../src/web/floating-panel.js";
 import { SysViaPanel } from "../../src/web/sysvia-panel.js";
+import { FdcPanel } from "../../src/web/fdc-panel.js";
 import { cycleCount } from "../../src/lockstep.js";
 import {
     bankOffset,
@@ -487,6 +488,14 @@ describe("Debugger", () => {
                     opener.click();
                     opener.click();
                     expect(visible("sysvia-panel")).toBe(true);
+                });
+
+                it("names a device's panel by the panel's own title", () => {
+                    new FdcPanel({ cpu, arrangement, visualiser: { zoomToHead: () => {} } });
+                    stopIn([0x2c, 0x80, 0xfe, 0x30, 0xfb]);
+                    expect(loopLine().textContent).toBe(
+                        "In a loop at $3000-$3003 polling FDC.STATUS ($fe80) open Disc controller",
+                    );
                 });
 
                 it.each([

@@ -6,7 +6,6 @@ import { DebugGroup } from "./floating-panel.js";
 /** The decoded panel, by id, of each SHEILA device that has one, by its block's `device`. */
 const DevicePanels = {
     CRTC: "crtc",
-    VideoULA: "videoula",
     FDC: "fdc",
     Paging: "paging",
     SysVIA: "sysvia",
@@ -49,7 +48,7 @@ export class TightLoopNote {
         const loop = tightLoopAt(this._cpu.disassembler, this._cpu.pc);
         if (!loop) return this.clear();
         const reads = loop.reads.map((address) => this._polled(address));
-        const panels = new Map(reads.flatMap(({ panel, block }) => (panel ? [[panel, block]] : [])));
+        const panels = new Set(reads.flatMap(({ panel }) => (panel ? [panel] : [])));
         const polling = reads.length
             ? [" polling ", ...inProse(reads.map(({ node }) => node))]
             : [" that reads nothing"];
@@ -57,7 +56,7 @@ export class TightLoopNote {
         this._line.replaceChildren(
             `In a loop at ${loopAddresses(loop)}`,
             ...polling,
-            ...[...panels].flatMap(([panel, block]) => [" ", this._opener(panel, block)]),
+            ...[...panels].flatMap((panel) => [" ", this._opener(panel)]),
         );
     }
 
@@ -75,15 +74,15 @@ export class TightLoopNote {
         if (named) node.title = named.title;
         const id = found && DevicePanels[found.block.device];
         const panel = id && this._arrangement.panelsIn(DebugGroup).find((floating) => floating.id === id);
-        return { node, panel, block: found?.block };
+        return { node, panel };
     }
 
-    _opener(floating, block) {
+    _opener(floating) {
         const button = document.createElement("button");
         button.type = "button";
         button.className = "txt-btn";
         button.tabIndex = -1;
-        button.textContent = `open ${block.title}`;
+        button.textContent = `open ${floating.title}`;
         button.addEventListener("click", () => floating.open());
         return button;
     }
