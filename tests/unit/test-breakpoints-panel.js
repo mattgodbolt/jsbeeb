@@ -399,11 +399,10 @@ describe("BreakpointsPanel", () => {
             expect(rowText(rows()[0])).toEqual(["", "LN", "line 120", "always", "0", "stop", "×"]);
         });
 
-        it("closes on a click elsewhere, adding nothing", () => {
+        it("closes as its panel closes", () => {
             openMenu();
-            document.body.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true }));
+            panel.floating.close();
             expect(menu().hidden).toBe(true);
-            expect(cpu.breakpoints.list()).toEqual([]);
         });
 
         it("saves a raster line, and puts it back on the next visit", async () => {

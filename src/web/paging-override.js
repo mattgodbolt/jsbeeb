@@ -45,6 +45,10 @@ export class PagingOverride {
         });
     }
 
+    dismissMenu() {
+        this._menu.show(false);
+    }
+
     setCpu(cpu) {
         this._cpu = cpu;
         this._picker.hidden = viewsFor(cpu.model).length === 1;

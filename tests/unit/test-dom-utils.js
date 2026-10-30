@@ -59,6 +59,7 @@ describe("dom-utils", () => {
     });
 
     describe("PopupMenu", () => {
+        const OpenerLeft = 10;
         const OpenerTop = 100;
         const OpenerBottom = 120;
         const MenuHeight = 50;
@@ -70,7 +71,7 @@ describe("dom-utils", () => {
             opener = textButton("opener", "Open", "");
             document.body.append(opener);
             vi.spyOn(opener, "getBoundingClientRect").mockReturnValue({
-                left: 10,
+                left: OpenerLeft,
                 top: OpenerTop,
                 bottom: OpenerBottom,
             });
@@ -109,6 +110,7 @@ describe("dom-utils", () => {
             vi.stubGlobal("innerHeight", OpenerBottom + MenuHeight - 1);
             opener.click();
             expect(menu().style.top).toBe(`${OpenerTop - MenuHeight}px`);
+            opener.click();
         });
 
         it("keeps its buttons from focus, closing on a press elsewhere, its panel closing, or Escape alone", () => {

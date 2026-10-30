@@ -1024,10 +1024,14 @@ describe("Debugger", () => {
             expect(changed()).toBe(true);
         });
 
-        it("closes its menu on its panel closing", () => {
+        it("closes its menu on leaving the debugger or its panel closing", () => {
             const menu = () => document.querySelector(".paging-menu:not([hidden])");
             picker("memory-panel").click();
             expect(menu()).not.toBeNull();
+            dbgr.hide();
+            expect(menu()).toBeNull();
+            dbgr.debug(cpu.pc);
+            picker("memory-panel").click();
             dbgr.panels.memory.close();
             expect(menu()).toBeNull();
         });
@@ -1595,6 +1599,14 @@ describe("Debugger", () => {
             expect(watchMenu().hidden).toBe(true);
             expect(pageSaw).not.toHaveBeenCalled();
             expect(watchRows()).toEqual([]);
+        });
+
+        it("closes the menu on leaving the debugger", () => {
+            dbgr.debug(cpu.pc);
+            goTo("goto-mem-addr-form", "$70");
+            rightClick(memByte(0x70));
+            dbgr.hide();
+            expect(watchMenu().hidden).toBe(true);
         });
 
         it("leaves a watch's list of formats open when the machine steps or goes", () => {
