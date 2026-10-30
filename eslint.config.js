@@ -57,6 +57,7 @@ export default [
         ignores: ["src/app/**"],
         plugins: { compat },
         rules: { "compat/compat": "error" },
-        settings: { lintAllEsApis: true },
+        // jsbeeb names its own Scheduler instances `scheduler`, which the rule takes for the browser global.
+        settings: { lintAllEsApis: true, polyfills: ["scheduler"] },
     },
 ];

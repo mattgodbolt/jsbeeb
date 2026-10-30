@@ -2,14 +2,13 @@
 // https://github.com/scarybeasts/beebjit
 // eslint-disable-next-line no-unused-vars
 import { Cpu6502, NmiSource } from "./6502.js";
-// eslint-disable-next-line no-unused-vars
-import { Disc } from "./disc.js";
 import { IbmDiscFormat } from "./disc-format.js";
 
 // eslint-disable-next-line no-unused-vars
-import { attachDriveNoise, BaseDiscDrive, DiscDrive } from "./disc-drive.js";
+import { attachDriveNoise, DiscDrive } from "./disc-drive.js";
 // eslint-disable-next-line no-unused-vars
 import { Scheduler } from "./scheduler.js";
+import { DiscController } from "./fdc.js";
 import { hexbyte, hexword } from "./hex.js";
 
 // TODOs remaining for intel-fdc and related functionality
@@ -300,7 +299,7 @@ const Call = Object.freeze({
     formatData: 11,
 });
 
-export class IntelFdc {
+export class IntelFdc extends DiscController {
     static get NumRegisters() {
         return 32;
     }
@@ -308,22 +307,12 @@ export class IntelFdc {
     /**
      * @param {Cpu6502} cpu
      * @param {Scheduler} scheduler
-     * @param {BaseDiscDrive[] | undefined} drives
+     * @param {DiscDrive[] | undefined} drives
      */
     constructor(cpu, scheduler, drives) {
-        this._cpu = cpu;
-        if (drives) this._drives = drives;
-        else
-            this._drives = [
-                new DiscDrive(0, scheduler, cpu.peripheralCyclesPerSecond),
-                new DiscDrive(1, scheduler, cpu.peripheralCyclesPerSecond),
-            ];
+        super(cpu, scheduler, drives);
         this._cyclesPerMs = cpu.peripheralCyclesPerSecond / 1000;
         this._readyTimeoutTicks = (ReadyTimeoutCounts * cpu.peripheralCyclesPerSecond) / ReadyClockHz;
-        /** @type {BaseDiscDrive} */
-        this._currentDrive = null;
-        this._lastSelectedDrive = this._drives[0];
-        this._scheduler = scheduler;
         this._ready = false;
         this._readyPulses = 0;
         this._lastIndexEpoch = -Infinity;
@@ -349,19 +338,6 @@ export class IntelFdc {
         this._stateIsIndexPulse = false;
         this._crc = 0;
         this._onDiscCrc = 0;
-
-        this.logCommands = false;
-        this.logStateChanges = false;
-        /** @type {((entry: import("./fdc.js").FdcLogEntry) => void) | null} */
-        this.onLog = null;
-
-        this._timerTask = scheduler.newTask(() => this._timerFired());
-
-        for (const drive of this._drives) {
-            drive.setPulsesCallback((pulses, count) => {
-                if (drive === this._currentDrive) this._pulsesCallback(pulses, count);
-            });
-        }
 
         this.powerOnReset();
     }
@@ -451,21 +427,12 @@ export class IntelFdc {
             case Address.unknown_read_3:
                 return this._regs[Registers.internalCountLsb];
             default:
-                throw new Error(`"Unexpected read of addr ${hexword(addr)}"`);
+                throw new Error(`Unexpected read of addr ${hexword(addr)}`);
         }
     }
 
-    _log(entry) {
-        this.onLog?.(entry);
-    }
-
-    _note(text) {
-        if (this.logCommands) this._log({ kind: "note", text });
-    }
-
-    _warn(text) {
-        console.warn(`8271: ${text}`);
-        this._log({ kind: "warning", text });
+    get chip() {
+        return "8271";
     }
 
     /**
@@ -1267,7 +1234,7 @@ export class IntelFdc {
 
     /**
      * @param {DriveOut|Number} driveOut
-     * @returns {BaseDiscDrive|null} the drive its select bits pick, or null for both or neither
+     * @returns {DiscDrive|null} the drive its select bits pick, or null for both or neither
      */
     _driveSelectedBy(driveOut) {
         // Note: unclear what to do if both drives are selected. We select no drive
@@ -1759,7 +1726,6 @@ export class IntelFdc {
     }
 
     snapshotState() {
-        const scheduler = this._timerTask.scheduler;
         return {
             regs: this._regs.slice(),
             status: this._status,
@@ -1781,9 +1747,10 @@ export class IntelFdc {
             didSeekStep: this._didSeekStep,
             ready: this._ready,
             readyPulses: this._readyPulses,
-            sinceIndexPulse: Number.isFinite(this._lastIndexEpoch) ? scheduler.epoch - this._lastIndexEpoch : null,
-            timerTaskOffset: this._timerTask.scheduled() ? this._timerTask.expireEpoch - scheduler.epoch : null,
-            drives: this._drives.map((d) => d.snapshotState()),
+            sinceIndexPulse: Number.isFinite(this._lastIndexEpoch)
+                ? this._scheduler.epoch - this._lastIndexEpoch
+                : null,
+            ...this._snapshotTimerAndDrives(),
         };
     }
 
@@ -1816,10 +1783,7 @@ export class IntelFdc {
         this._callContext = state.callContext;
         this._didSeekStep = state.didSeekStep;
 
-        // Restore drives
-        for (let i = 0; i < this._drives.length; i++) {
-            this._drives[i].restoreState(state.drives[i]);
-        }
+        this._restoreDrives(state);
 
         // Derive _currentDrive from _driveOut
         this._currentDrive = null;
@@ -1829,44 +1793,16 @@ export class IntelFdc {
         if (!(this._driveOut & DriveOut.loadHead)) this._currentDrive = null;
         if (this._currentDrive) this._lastSelectedDrive = this._currentDrive;
 
-        // Restore timer
-        this._timerTask.cancel();
-        if (state.timerTaskOffset !== null) this._timerTask.schedule(state.timerTaskOffset);
+        this._timerTask.restoreOffset(state.timerTaskOffset);
 
         this._updateNmi();
-    }
-
-    /// jsbeeb compatibility stuff
-    /**
-     *
-     * @param {Number} drive
-     * @param {Disc} disc
-     */
-    /**
-     * @param {Number} drive
-     * @param {Disc} disc
-     * @param {Number} [tracksPerStep] where to leave the drive's 40/80 switch, which by default
-     *   follows the disc, since no drive can tell what pitch the disc in it was written at
-     */
-    loadDisc(drive, disc, tracksPerStep = disc?.is40Track ? 2 : 1) {
-        this._drives[drive].setDisc(disc);
-        this._drives[drive].tracksPerStep = tracksPerStep;
-    }
-
-    /** Each drive's activity light, which follows its select line: the controller's select gated by the motor. */
-    get motorOn() {
-        return [0, 1].map((i) => !!this._drives[i]?.spinning && this._drives[i] === this._currentDrive);
-    }
-
-    get drives() {
-        return this._drives;
     }
 
     /** The registers the debugger shows, read without disturbing anything. */
     inspect() {
         const regs = this._regs;
         return {
-            chip: "8271",
+            chip: this.chip,
             command: this._internalCommand,
             params: CommandParams.map((reg) => regs[reg]),
             status: this._status,

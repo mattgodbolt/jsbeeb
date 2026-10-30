@@ -21,7 +21,7 @@ const AtSpeed = 0.9999;
 
 /**
  * Plays the spin and seek noises for a set of drives.
- * @param {BaseDiscDrive[]} drives
+ * @param {DiscDrive[]} drives
  * @param {import("./ddnoise.js").DdNoise|import("./ddnoise.js").FakeDdNoise} ddNoise
  */
 export function attachDriveNoise(drives, ddNoise) {
@@ -61,139 +61,7 @@ class SeekEndEvent extends Event {
     }
 }
 
-/**
- * Abstract base class defining the interface for disc drives.
- * All disc drive implementations must extend this class.
- */
-export class BaseDiscDrive extends EventTarget {
-    /** @returns {Disc|undefined} */
-    get disc() {
-        throw new Error("Not implemented: disc getter");
-    }
-
-    /** @returns {number} */
-    get track() {
-        throw new Error("Not implemented: track getter");
-    }
-
-    /** @returns {number} */
-    get headPosition() {
-        throw new Error("Not implemented: headPosition getter");
-    }
-
-    /** @returns {boolean} */
-    get isSideUpper() {
-        throw new Error("Not implemented: isSideUpper getter");
-    }
-
-    /** @returns {Number} */
-    get tracksPerStep() {
-        throw new Error("Not implemented: tracksPerStep getter");
-    }
-
-    /** @param {Number} _tracksPerStep */
-    set tracksPerStep(_tracksPerStep) {
-        throw new Error("Not implemented: tracksPerStep setter");
-    }
-
-    /** @returns {boolean} */
-    get indexPulse() {
-        throw new Error("Not implemented: indexPulse getter");
-    }
-
-    /** @returns {boolean} */
-    get spinning() {
-        throw new Error("Not implemented: spinning getter");
-    }
-
-    /** @returns {boolean} */
-    get writeProtect() {
-        throw new Error("Not implemented: writeProtect getter");
-    }
-
-    /** @returns {number} */
-    get trackLength() {
-        throw new Error("Not implemented: trackLength getter");
-    }
-
-    /** @returns {number} */
-    get positionFraction() {
-        throw new Error("Not implemented: positionFraction getter");
-    }
-
-    /** @returns {number} */
-    get positionTime() {
-        throw new Error("Not implemented: positionTime getter");
-    }
-
-    /**
-     * @param {Disc|undefined} _disc
-     */
-    setDisc(_disc) {
-        throw new Error("Not implemented: setDisc");
-    }
-
-    /**
-     * @param {function(number, number): void} _callback
-     */
-    setPulsesCallback(_callback) {
-        throw new Error("Not implemented: setPulsesCallback");
-    }
-
-    startSpinning() {
-        throw new Error("Not implemented: startSpinning");
-    }
-
-    stopSpinning() {
-        throw new Error("Not implemented: stopSpinning");
-    }
-
-    /**
-     * @param {boolean} _isSideUpper
-     */
-    selectSide(_isSideUpper) {
-        throw new Error("Not implemented: selectSide");
-    }
-
-    /**
-     * @param {number} _delta
-     */
-    seekOneTrack(_delta) {
-        throw new Error("Not implemented: seekOneTrack");
-    }
-
-    /**
-     * @param {number} _delta
-     */
-    notifySeekAmount(_delta, _stepMs) {
-        throw new Error("Not implemented: notifySeekAmount");
-    }
-
-    notifySeekEnd() {
-        throw new Error("Not implemented: notifySeekEnd");
-    }
-
-    /**
-     * @param {boolean} _isDoubleDensity
-     */
-    set32usMode(_isDoubleDensity) {
-        throw new Error("Not implemented: set32usMode");
-    }
-
-    /**
-     * @param {number} _pulses
-     */
-    writePulses(_pulses) {
-        throw new Error("Not implemented: writePulses");
-    }
-
-    /** @returns {number} */
-    getQuasiRandomPulses() {
-        throw new Error("Not implemented: getQuasiRandomPulses");
-    }
-}
-
-export class DiscDrive extends BaseDiscDrive {
+export class DiscDrive extends EventTarget {
     // scarybeast's Chinon drive holds the index pulse low for about 4ms. */
     static get DiscIndexMs() {
         return 4;
@@ -496,7 +364,7 @@ export class DiscDrive extends BaseDiscDrive {
             spinning: this._spinning,
             speed: this.speed,
             is40Track: this._tracksPerStep === 2,
-            timerTaskOffset: this._timer.scheduled() ? this._timer.expireEpoch - this._scheduler.epoch : null,
+            timerTaskOffset: this._timer.offset(),
             disc: this._disc ? this._disc.snapshotState() : null,
         };
     }

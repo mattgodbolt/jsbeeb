@@ -27,7 +27,7 @@ export class TouchScreen {
         return {
             mode: this.mode,
             outBuffer: this.outBuffer.toArray(),
-            pollTaskOffset: this.pollTask.scheduled() ? this.pollTask.expireEpoch - this.scheduler.epoch : null,
+            pollTaskOffset: this.pollTask.offset(),
         };
     }
 
@@ -35,8 +35,7 @@ export class TouchScreen {
         this.mode = state.mode;
         this.outBuffer.clear();
         for (const byte of state.outBuffer) this.store(byte);
-        this.pollTask.cancel();
-        if (state.pollTaskOffset !== null) this.pollTask.schedule(state.pollTaskOffset);
+        this.pollTask.restoreOffset(state.pollTaskOffset);
     }
 
     tryReceive(rts) {
