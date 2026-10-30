@@ -1437,7 +1437,7 @@ describe("MediaWindow", () => {
     });
 
     it("offers only the deck, unfolded, and tapes on a machine without disc drives", async () => {
-        Object.assign(deps.model, { isAtom: true, hasDiscDrives: false });
+        deps.model.hasDiscDrives = false;
         putDiscIn(0, ssd());
         const window = await openWith([elite, chuckie]);
         expect(panel().querySelector(".media-case").hidden).toBe(true);
