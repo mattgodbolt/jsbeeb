@@ -952,7 +952,8 @@ small {
   font-family: inherit;
 }
 
-#watch-menu {
+#watch-menu,
+.paging-menu {
   position: fixed;
   z-index: 20;
   display: flex;
@@ -965,11 +966,13 @@ small {
   font-size: 9pt;
 }
 
-#watch-menu[hidden] {
+#watch-menu[hidden],
+.paging-menu[hidden] {
   display: none;
 }
 
-#watch-menu .txt-btn {
+#watch-menu .txt-btn,
+.paging-menu .txt-btn {
   color: #cccccc;
   text-align: left;
   font-family: inherit;
@@ -1073,6 +1076,80 @@ small {
 
 .uservia-control .decoded-meaning {
   width: 50ch;
+}
+
+.paging-registers .decoded-meaning {
+  width: 32ch;
+}
+
+/* Down the columns from the highest bank. */
+.paging-socket-grid {
+  display: grid;
+  grid-template-rows: repeat(8, auto);
+  grid-auto-flow: column;
+  grid-auto-columns: max-content;
+  column-gap: 2ch;
+}
+
+.paging-sockets-heading {
+  padding-left: 4px;
+}
+
+.paging-socket {
+  display: grid;
+  /* A fixed width for the title keeps a loaded ROM from resizing the panel. */
+  grid-template-columns: max-content max-content 20ch;
+  gap: 0 1ch;
+  padding: 0 4px;
+  line-height: 20px;
+  cursor: pointer;
+}
+
+.paging-socket:hover {
+  text-decoration: underline;
+}
+
+.paging-socket.paged {
+  color: #000000;
+  background: #80d0d0;
+}
+
+.paging-socket-bank {
+  color: #f0d080;
+}
+
+.paging-socket-kind {
+  color: #aaaaaa;
+}
+
+.paging-socket.paged span {
+  color: inherit;
+}
+
+.paging-socket-contents {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The Go to box gives way first; its full label is in its tooltip. */
+.paging-picker {
+  flex: none;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #aaaaaa;
+  font-family: monospace;
+  font-size: 11px;
+}
+
+.paging-picker.overridden {
+  color: #f0d080;
+}
+
+.paging-menu .paging-choice[aria-checked="true"] {
+  color: #f0d080;
 }
 
 .crtc-timing .decoded-meaning {

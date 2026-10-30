@@ -2,6 +2,7 @@ import { hexword } from "../hex.js";
 import { formatWatch, parseCondition, WatchFormats, writeStops } from "../watches.js";
 import { FloatingPanel } from "./floating-panel.js";
 import { StartEdge } from "./panel-layout.js";
+import { placePopup, popupBehaviour, textButton } from "./dom-utils.js";
 
 const MinPanelSize = { w: 200, h: 80 };
 const RowCells = 5;
@@ -67,27 +68,10 @@ export class WatchPanel {
         );
         this.floating.addEventListener("open", () => refresh.drawNow());
         this.floating.addEventListener("close", () => this._showPopup(null));
-        // Outside the panel, so its buttons are kept from focus here rather than by the panel.
-        this._menu.addEventListener("mousedown", (e) => {
-            if (e.target.closest("button")) e.preventDefault();
-        });
-        this._menu.addEventListener("contextmenu", (e) => e.preventDefault());
-        // pointerdown, as the panel's drag handle cancels the mousedown that would follow.
-        document.addEventListener(
-            "pointerdown",
-            (e) => {
-                const open = this._openPopup;
-                if (open && !open.opener?.contains(e.target) && !open.popup.contains(e.target)) this._showPopup(null);
-            },
-            true,
-        );
-        // Escape goes on to the page as well, as if nothing had been open.
-        document.addEventListener(
-            "keydown",
-            (e) => {
-                if (e.key === "Escape") this._showPopup(null);
-            },
-            true,
+        popupBehaviour(
+            this._menu,
+            () => (this._openPopup ? [this._openPopup.opener, this._openPopup.popup] : null),
+            () => this._showPopup(null),
         );
         this._input.addEventListener("input", () => this._input.classList.remove("is-invalid"));
         document.getElementById("watch-add-form").addEventListener("submit", (e) => {
@@ -163,8 +147,7 @@ export class WatchPanel {
     offer(what, x, y) {
         this._offered = what;
         this._showPopup({ opener: null, popup: this._menu });
-        this._menu.style.left = `${Math.max(0, Math.min(x, window.innerWidth - this._menu.offsetWidth))}px`;
-        this._menu.style.top = `${Math.max(0, Math.min(y, window.innerHeight - this._menu.offsetHeight))}px`;
+        placePopup(this._menu, x, y);
     }
 
     dismissMenu() {
@@ -298,14 +281,3 @@ export class WatchPanel {
  * @property {boolean} breaks - whether a write changing it stops the machine
  * @property {import("../watches.js").WatchCondition | null} condition - what the new value must be to stop it
  */
-
-function textButton(className, text, title) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = `txt-btn ${className}`;
-    button.textContent = text;
-    button.title = title;
-    // Out of the tab order, so Tab from the add box can't reach it either.
-    button.tabIndex = -1;
-    return button;
-}

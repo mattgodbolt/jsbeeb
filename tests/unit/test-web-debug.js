@@ -6,7 +6,7 @@ import { DisassemblyKeys } from "../../src/web/disassembly-view.js";
 import { Gap } from "../../src/web/panel-layout.js";
 import { RunMode } from "../../src/web/emulation-loop.js";
 import { fake6502 } from "../../src/fake6502.js";
-import { findModel, TEST_65C12 } from "../../src/models.js";
+import { TEST_65C12 } from "../../src/models.js";
 import { FakeVideo } from "../../src/video.js";
 import { hexbyte, hexword } from "../../src/hex.js";
 import { SymbolSets } from "../../src/symbol-sets.js";
@@ -17,9 +17,12 @@ import { PanelArrangement } from "../../src/web/floating-panel.js";
 import { SysViaPanel } from "../../src/web/sysvia-panel.js";
 import { cycleCount } from "../../src/lockstep.js";
 import {
+    bankOffset,
     captureDownloads,
     domFromIndexHtml,
     fakeAnimationFrames,
+    fitRomHeader,
+    romless,
     sentEvents,
     stubResizeObserver,
     teardownDom,
@@ -136,6 +139,11 @@ describe("Debugger", () => {
         [...document.querySelectorAll("#memory > div")]
             .find((row) => addrOf(row) === hexword(address & ~7))
             .querySelectorAll(".mem_bytes span")[address & 7];
+    const editField = () => document.querySelector("#memory .mem-edit");
+    const type = (text, key, shiftKey) => {
+        editField().value = text;
+        editField().dispatchEvent(new KeyboardEvent("keydown", { key, shiftKey, bubbles: true, cancelable: true }));
+    };
     const watchBox = () => document.getElementById("watch-add");
     const addWatch = (text) => {
         watchBox().value = text;
@@ -533,8 +541,7 @@ describe("Debugger", () => {
 
         /** A BBC B, as the test CPU has no I/O, without the ROMs jsdom cannot fetch; its system VIA has CA1 flagged. */
         const useModelB = async () => {
-            const beeb = findModel("B-DFS1.2");
-            cpu = fake6502(Object.assign(Object.create(Object.getPrototypeOf(beeb)), beeb, { os: [] }), { video });
+            cpu = fake6502(romless("B-DFS1.2"), { video });
             await cpu.initialise();
             dbgr.setCpu(cpu);
             stoppedLoop.cpu = cpu;
@@ -589,14 +596,6 @@ describe("Debugger", () => {
         });
 
         describe("edited in place", () => {
-            const editField = () => document.querySelector("#memory .mem-edit");
-            const type = (text, key, shiftKey) => {
-                editField().value = text;
-                editField().dispatchEvent(
-                    new KeyboardEvent("keydown", { key, shiftKey, bubbles: true, cancelable: true }),
-                );
-            };
-
             beforeEach(() => {
                 cpu.writemem(0x1234, 0x48);
                 cpu.writemem(0x1235, 0x49);
@@ -760,6 +759,136 @@ describe("Debugger", () => {
             stoppedLoop.go();
             expect(findsBytes()).toBe(false);
             expect(dbgr.showScreenByteAt(0.25, 0.25)).toBe(false);
+        });
+    });
+
+    describe("viewing another bank", () => {
+        const picker = (panelId) => document.querySelector(`#${panelId} .paging-picker`);
+        const pick = (panelId, text) => {
+            picker(panelId).click();
+            [...document.querySelectorAll(".paging-menu:not([hidden]) button")]
+                .find((choice) => choice.textContent.startsWith(text))
+                .click();
+        };
+
+        beforeEach(() => {
+            cpu.romSelect(15);
+            cpu.ramRomOs[bankOffset(cpu, 15, 0x8100)] = 0xff;
+            cpu.ramRomOs[bankOffset(cpu, 4, 0x8100)] = 0x44;
+            fitRomHeader(cpu, 4, "TOOLKIT", "1.2");
+            dbgr.debug(cpu.pc);
+        });
+
+        it("shows the bank a Go to names in memory, as it holds now, until paged is picked again", () => {
+            goTo("goto-mem-addr-form", "$8100`4");
+            expect(memTarget().textContent).toBe("44");
+            expect(picker("memory-panel").textContent).toBe("bank 4: TOOLKIT 1.2");
+            expect(picker("memory-panel").classList.contains("overridden")).toBe(true);
+            goTo("goto-mem-addr-form", "$8101");
+            expect(picker("memory-panel").textContent).toBe("bank 4: TOOLKIT 1.2");
+            fitRomHeader(cpu, 4, "EDITOR");
+            dbgr.debug(cpu.pc);
+            expect(picker("memory-panel").textContent).toBe("bank 4: EDITOR");
+            pick("memory-panel", "paged");
+            goTo("goto-mem-addr-form", "$8100");
+            expect(memTarget().textContent).toBe("ff");
+            expect(picker("memory-panel").classList.contains("overridden")).toBe(false);
+            expect(cpu.romsel).toBe(15);
+        });
+
+        it("saves the bank the memory panel shows, and edits none of it where the CPU reads other memory, by click or Tab", async () => {
+            const downloads = captureDownloads();
+            goTo("goto-mem-addr-form", "4:8100");
+            document.getElementById("memory-save-open").click();
+            const form = document.getElementById("memory-save-form");
+            form.elements.namedItem("from").value = "$8100";
+            form.elements.namedItem("to").value = "$8100";
+            form.dispatchEvent(new Event("submit", { cancelable: true }));
+            const [saved] = downloads();
+            expect([...new Uint8Array(await saved.blob.arrayBuffer())]).toEqual([0x44]);
+            memByte(0x8100).click();
+            expect(editField()).toBeNull();
+            goTo("goto-mem-addr-form", "$7fff");
+            memByte(0x7fff).click();
+            type("12", "Tab", false);
+            expect([editField(), cpu.peekmem(0x7fff)]).toEqual([null, 0x12]);
+            expect(toasts()).toEqual([
+                expect.stringContaining("$8100 shows other memory"),
+                expect.stringContaining("$8000 shows other memory"),
+            ]);
+        });
+
+        it("refuses a view the machine doesn't have", () => {
+            goTo("goto-mem-addr-form", "$3000`s");
+            expect(document.querySelector("#goto-mem-addr-form .goto-addr").classList.contains("is-invalid")).toBe(
+                true,
+            );
+        });
+
+        it("disassembles the bank picked, not marking the program counter where it reads other than the CPU", () => {
+            cpu.ramRomOs.set([0xa9, 0x44], bankOffset(cpu, 4, 0x8000));
+            cpu.ramRomOs.set([0xa9, 0xff], bankOffset(cpu, 15, 0x8000));
+            cpu.pc = 0x8000;
+            dbgr.debug(cpu.pc);
+            pick("disassembly-panel", "4 ");
+            expect(currentRow().querySelector(".disassembly").textContent).toBe("LDA #$44");
+            expect(currentRow().classList.contains("current")).toBe(false);
+            goTo("goto-dis-addr-form", "f:8000");
+            expect(currentRow().querySelector(".disassembly").textContent).toBe("LDA #$ff");
+            expect(currentRow().classList.contains("current")).toBe(true);
+            expect(picker("memory-panel").textContent).toBe("paged");
+        });
+
+        it("walks back through the bank shown without steering by a program counter in another", () => {
+            cpu.ramRomOs.fill(0xa9, bankOffset(cpu, 4, 0x8000), bankOffset(cpu, 4, 0x802f));
+            cpu.ramRomOs[bankOffset(cpu, 4, 0x802f)] = 0xea;
+            cpu.pc = 0x802f;
+            dbgr.debug(cpu.pc);
+            goTo("goto-dis-addr-form", "4:8030");
+            keyPress("k");
+            expect(addrOf(currentRow())).toBe("802e");
+        });
+
+        it("marks changes only against a snapshot taken in the view shown", () => {
+            const changed = () => memTarget().classList.contains("changed");
+            dbgr.hide();
+            dbgr.debug(cpu.pc);
+            goTo("goto-mem-addr-form", "4:8100");
+            expect(changed()).toBe(false);
+            dbgr.hide();
+            cpu.ramRomOs[bankOffset(cpu, 4, 0x8100)] = 0x45;
+            dbgr.debug(cpu.pc);
+            expect(changed()).toBe(true);
+        });
+
+        it("keeps its menu from focus, closing it on Escape, a press elsewhere, or its panel closing", () => {
+            const menu = () => document.querySelector(".paging-menu:not([hidden])");
+            picker("memory-panel").click();
+            const press = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
+            menu().querySelector("button").dispatchEvent(press);
+            expect(press.defaultPrevented).toBe(true);
+            document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+            expect(menu()).toBeNull();
+            picker("memory-panel").click();
+            document.getElementById("memory").dispatchEvent(new Event("pointerdown", { bubbles: true }));
+            expect(menu()).toBeNull();
+            picker("memory-panel").click();
+            dbgr.hide();
+            expect(menu()).toBeNull();
+            picker("memory-panel").click();
+            dbgr.panels.memory.close();
+            expect(menu()).toBeNull();
+        });
+
+        it("shows a bank from its start, as code while stopped and as bytes while running", () => {
+            dbgr.showBank(4);
+            expect(addrOf(currentRow())).toBe("8000");
+            expect(picker("disassembly-panel").textContent).toBe("bank 4: TOOLKIT 1.2");
+            stoppedLoop.go();
+            dbgr.showBank(4);
+            expect(visible("memory-panel")).toBe(true);
+            expect(addrOf(memHighlight())).toBe("8000");
+            expect(picker("memory-panel").textContent).toBe("bank 4: TOOLKIT 1.2");
         });
     });
 
@@ -1441,8 +1570,7 @@ describe("Debugger", () => {
 
             /** A BBC B, without the ROMs jsdom cannot fetch, as the test CPU has neither ROM nor I/O. */
             const switchToBeeb = async () => {
-                const beeb = findModel("B-DFS1.2");
-                cpu = fake6502(Object.assign(Object.create(Object.getPrototypeOf(beeb)), beeb, { os: [] }), { video });
+                cpu = fake6502(romless("B-DFS1.2"), { video });
                 await cpu.initialise();
                 loadProgram();
                 cpu.pc = 0x2000;
@@ -1594,6 +1722,33 @@ describe("Debugger", () => {
             expect(symbolsLine().querySelector(".symbol-set").title).toBe("MIT\n\nCopyright the test");
             expect(symbolsLine().title).toBe("names from Test MOS (source)");
             expect(symbolsLine().querySelector("a").href).toBe("https://example.com/mos.lst");
+        });
+
+        it("resolves a name in the bank a Go to names, crediting its set, but offers a watch there unnamed", async () => {
+            const romRegion = { start: "0x8000", end: "0x8100", anchors: [{ at: "0x8000", bytes: "a94460" }] };
+            load.mockImplementation(async (url) => {
+                const json = structuredClone(files.get(url));
+                if (url.endsWith("index.json")) json.sets[0].regions = { rom: romRegion };
+                else json.regions = { rom: { ...romRegion, symbols: { toolkit_entry: "0x8000" } } };
+                return json;
+            });
+            cpu.romSelect(15);
+            cpu.ramRomOs.set([0xa9, 0x44, 0x60], bankOffset(cpu, 4, 0x8000));
+            dbgr.debug(cpu.pc);
+            const box = document.querySelector("#goto-dis-addr-form .goto-addr");
+            goTo("goto-dis-addr-form", "toolkit_entry");
+            expect(box.classList.contains("is-invalid")).toBe(true);
+            await vi.waitFor(() => {
+                goTo("goto-dis-addr-form", "toolkit_entry`4");
+                expect(addrOf(currentRow())).toBe("8000 toolkit_entry");
+            });
+            expect(symbolsLine().textContent).toBe("names from Test MOS (source)");
+            rightClick(currentRow().querySelector(".dis_addr"));
+            pickFromMenu("Watch hex");
+            goTo("goto-mem-addr-form", "toolkit_entry`4");
+            rightClick(memByte(0x8000));
+            pickFromMenu("Watch hex");
+            expect(watchRows().map(([name]) => name)).toEqual(["$8000", "$8000"]);
         });
 
         it("keeps a program's own name for a SHEILA register, over the register's", async () => {
@@ -2021,6 +2176,16 @@ describe("Debugger", () => {
             expect(labelsLine().hidden).toBe(false);
             expect(labelsLine().textContent).toMatch(/^labels from game.txt any bank/);
             goTo("goto-dis-addr-form", "service");
+            expect(addrOf(currentRow())).toBe("8003 service");
+        });
+
+        it("names a bank's labels in a panel showing that bank, whatever is paged", () => {
+            labelFiles.add({ key: "toolkit", title: "toolkit.txt", source: "", text: "service=8003", bank: 4 });
+            goTo("goto-dis-addr-form", "service");
+            expect(document.querySelector("#goto-dis-addr-form .goto-addr").classList.contains("is-invalid")).toBe(
+                true,
+            );
+            goTo("goto-dis-addr-form", "4:service");
             expect(addrOf(currentRow())).toBe("8003 service");
         });
 

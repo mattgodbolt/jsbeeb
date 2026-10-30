@@ -1014,6 +1014,11 @@ class Disassemble6502 {
         this.undocumented = undocumented;
     }
 
+    /** The same disassembler reading memory with `peek` instead of the CPU's peekmem. */
+    reading(peek) {
+        return new Disassemble6502({ peekmem: peek }, this.opcodes, this.undocumented);
+    }
+
     isDocumented(addr) {
         const op = this.cpu.peekmem(addr);
         return op in this.opcodes && !this.undocumented.has(op);
