@@ -136,7 +136,7 @@ describe("Building a key map", function () {
     it.each([
         ["BBC", getKeyMap],
         ["Atom", getKeyMapAtom],
-    ])("binds each host key once in every layout of the %s", function (_machine, build) {
+    ])("binds no host key to two machine keys in any layout of the %s", function (_machine, build) {
         const log = vi.spyOn(console, "log").mockImplementation(() => {});
         for (const layout of ["physical", "gaming", "natural"]) build(layout);
         expect(log).not.toHaveBeenCalled();
