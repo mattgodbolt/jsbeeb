@@ -1,4 +1,4 @@
-import { createZipBlob, unzip } from "./archive.js";
+import { unzip } from "./archive.js";
 import { loadData } from "./loader.js";
 
 /*
@@ -127,25 +127,6 @@ export class WFNFile {
         this.path = path;
         this.data = data instanceof Uint8Array ? data : new Uint8Array();
     }
-}
-
-// Sanitize a WFNFile path for use as a ZIP entry name.
-function sanitizeZipEntryName(path) {
-    const name = path.startsWith("/") ? path.slice(1) : path;
-    if (!name || name.includes("\\") || name.split("/").some((seg) => seg === "..")) return null;
-    return name;
-}
-
-// Create a ZIP blob from an array of WFNFile entries (stored, no compression).
-export async function toMMCZipAsync(data) {
-    const files = [];
-    for (const entry of data) {
-        if (entry.path.startsWith("§")) continue; // skip unlinked files
-        const name = sanitizeZipEntryName(entry.path);
-        if (!name) continue;
-        files.push({ name, data: entry.data });
-    }
-    return createZipBlob(files);
 }
 
 // Extract all files from a ZIP archive into WFNFile entries.
@@ -821,45 +802,6 @@ export class AtomMMC2 {
     }
 
     /**
-     * clear
-     * @returns
-     */
-    ClearMMCData() {
-        const fname = "README".padEnd(16, "\0");
-        const loadaddr = 0x2900;
-        const basicstart = 0xb2c2;
-        const flen = 0x003e;
-        const basicfile = "\r\0\n REM created by jsatom\r\0\x14 REM \x19commandercoder.com\r\0\x1E END\r";
-        const fend = 0xc3;
-
-        // Build the byte array for the README file
-        // Format: [fname (16 bytes), loadaddr (2 bytes LE), basicstart (2 bytes LE), flen (2 bytes LE), basicfile (flen bytes), fend (1 byte)]
-        const readmeBytes = new Uint8Array(16 + 2 + 2 + 2 + basicfile.length + 1);
-        let offset = 0;
-        // fname (16 bytes)
-        for (let i = 0; i < 16; i++) {
-            readmeBytes[offset++] = fname.charCodeAt(i);
-        }
-        // loadaddr (2 bytes, little endian)
-        readmeBytes[offset++] = loadaddr & 0xff;
-        readmeBytes[offset++] = (loadaddr >> 8) & 0xff;
-        // basicstart (2 bytes, little endian)
-        readmeBytes[offset++] = basicstart & 0xff;
-        readmeBytes[offset++] = (basicstart >> 8) & 0xff;
-        // flen (2 bytes, little endian)
-        readmeBytes[offset++] = flen & 0xff;
-        readmeBytes[offset++] = (flen >> 8) & 0xff;
-        // basicfile (flen bytes)
-        for (let i = 0; i < basicfile.length; i++) {
-            readmeBytes[offset++] = basicfile.charCodeAt(i);
-        }
-        // fend (1 byte)
-        readmeBytes[offset] = fend;
-
-        this.WFN.allfiles = [new WFNFile("/README", readmeBytes)];
-    }
-
-    /**
      * @param {Object} cpu - The CPU instance.
      */
     constructor(cpu) {
@@ -890,14 +832,6 @@ export class AtomMMC2 {
         this.MMCtoAtom = b;
         this.MCUStatus &= ~MMC_MCU_BUSY;
         this.MCUStatus |= MMC_MCU_WROTE;
-    }
-
-    // Set the WROTE bit and return the data from the Atom
-    ReadDataPort() {
-        this.MCUStatus &= ~MMC_MCU_READ;
-        this.MCUStatus |= MMC_MCU_WROTE;
-
-        return this.MMCtoAtom;
     }
 
     // CPU is writing to 0xb400-0xb40c

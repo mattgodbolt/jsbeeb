@@ -13,6 +13,7 @@ import { RomBankBytes } from "../../src/6502.js";
 import { snapshotFromJSON, snapshotToJSON } from "../../src/snapshot.js";
 import { TestMachine } from "../../src/test-machine.js";
 import * as fdc from "../../src/fdc.js";
+import { loadData } from "../../src/loader.js";
 import { keyCodes } from "../../src/keymap.js";
 import { mode7Text } from "./helpers.js";
 import { keyCodeFor } from "../helpers/session-fakes.js";
@@ -262,7 +263,7 @@ describe("lockstep sessions", () => {
 
         it("gives the guest the host's discs, even in a drive it had empty, never writing to its own", async () => {
             const image = "discs/elite.ssd";
-            const data = await fdc.load(image);
+            const data = await loadData(image);
             const guestDisc = fdc.discFor(image, data, () => {});
             const { host, guest } = await pair({
                 prepareHost: ({ processor }) => processor.fdc.loadDisc(1, fdc.discFor(image, data)),

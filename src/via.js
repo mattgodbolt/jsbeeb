@@ -485,7 +485,7 @@ class Via {
             case IFR:
                 return this.ifr;
             default:
-                throw "Unknown VIA read";
+                throw new Error(`Unknown VIA read of register ${addr & 0xf}`);
         }
     }
 
@@ -1033,9 +1033,8 @@ export class SysVia extends Via {
 }
 
 export class UserVia extends Via {
-    constructor(cpu, scheduler, isMaster, userPortPeripheral) {
+    constructor(cpu, scheduler, userPortPeripheral) {
         super(cpu, scheduler, 0x02);
-        this.isMaster = isMaster;
         this.userPortPeripheral = userPortPeripheral;
         this.reset();
     }

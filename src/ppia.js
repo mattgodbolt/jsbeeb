@@ -229,8 +229,6 @@ export class AtomPPIA extends PPIA {
         // when shiftLockLight).
         this.capsLockLight = true;
         this.shiftLockLight = false;
-        this.tapeCarrierCount = 0;
-        this.tapeDcdLineLevel = false;
         this.motorOn = false;
 
         this.reset();
@@ -363,29 +361,8 @@ export class AtomPPIA extends PPIA {
         else toneGen.tone(freq);
     }
 
-    // nothing on ATOM
-    dcdLineUpdated() {}
-
-    // set by TAPE
-    setTapeCarrier(level) {
-        if (!level) {
-            this.tapeCarrierCount = 0;
-            this.tapeDcdLineLevel = false;
-        } else {
-            this.tapeCarrierCount++;
-            // The tape hardware doesn't raise DCD until the carrier tone
-            // has persisted for a while. The BBC service manual opines,
-            // "The DCD flag in the 6850 should change 0.1 to 0.4 seconds
-            // after a continuous tone appears".
-            // Star Drifter doesn't load without this.
-            // We use 0.174s, measured on an issue 3 model B.
-            // Testing on real hardware, DCD is blipped, it lowers about
-            // 210us after it raises, even though the carrier tone
-            // may be continuing.
-            this.tapeDcdLineLevel = this.tapeCarrierCount === 209;
-        }
-        this.dcdLineUpdated();
-    }
+    // The Atom has no carrier detect.
+    setTapeCarrier() {}
 
     // Receive bits from tape (called by tape.poll via PPIA, not ACIA like BBC).
     // Called once every ~208 clock cycles (208us at 1 MHz).
@@ -442,7 +419,6 @@ export class AtomPPIA extends PPIA {
             const toneGen = this.cpu.soundChip.toneGenerator;
             toneGen.mute();
             this.runTapeTask.cancel();
-            this.setTapeCarrier(false);
         }
     }
 

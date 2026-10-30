@@ -62,7 +62,7 @@ class UefTape {
         this.stream.seek(10);
         const minor = this.stream.readByte();
         const major = this.stream.readByte();
-        if (major !== 0x00) throw "Unsupported UEF version " + major + "." + minor;
+        if (major !== 0x00) throw new Error(`Unsupported UEF version ${major}.${minor}`);
         // No chunk yet: the first poll reads one. null, later, means the tape has run off the end.
         this.curChunk = undefined;
     }
@@ -317,7 +317,7 @@ class TapefileTape {
                 // Simulate 5 seconds of carrier.
                 return secsToClocks(5, this.cpuSpeed);
             } else if (byte !== 0xff) {
-                throw "Got a weird byte in the tape";
+                throw new Error(`Unexpected byte ${byte} in the tape`);
             }
         }
         acia.receive(byte);

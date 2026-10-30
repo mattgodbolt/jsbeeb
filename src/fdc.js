@@ -11,7 +11,6 @@ import {
 } from "./disc.js";
 import { loadHfe, sniffHfeLayout, toHfe } from "./disc-hfe.js";
 import { stringToUint8Array } from "./binary.js";
-import { loadData } from "./loader.js";
 
 /**
  * What a disc controller reports to its log, for the Disc controller panel to spell out: a command, its result, a
@@ -19,10 +18,6 @@ import { loadData } from "./loader.js";
  * fields depend on the kind and the chip.
  * @typedef {{kind: "command" | "result" | "state" | "control" | "note" | "warning"} & Object<string, *>} FdcLogEntry
  */
-
-export function load(name) {
-    return loadData(name);
-}
 
 /**
  * Class representing a disc format type with associated loader and saver functions

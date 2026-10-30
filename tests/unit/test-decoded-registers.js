@@ -69,7 +69,7 @@ describe("decoded panels", () => {
                     isMaster: false,
                     initialLayout: "physical",
                 }),
-                uservia: new UserVia({ interrupt: 0 }, scheduler, false, { read: () => 0xff, write: () => {} }),
+                uservia: new UserVia({ interrupt: 0 }, scheduler, { read: () => 0xff, write: () => {} }),
             };
             via = cpu[id];
             panel = new Panel({ cpu, arrangement });

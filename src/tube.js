@@ -1,5 +1,4 @@
 import { NmiSource } from "./6502.js";
-import { hexbyte, hexword } from "./hex.js";
 
 //  this one should be declared more globally
 const HOST_CPU_FLAG_IRQ_TUBE_ULA = 8;
@@ -60,7 +59,6 @@ export class Tube {
         this.parasiteToHostFifoByteCount3 = 0;
         this.hostToParasiteFifoByteCount3 = 0;
         this.parasiteNmi = false;
-        this.debug = false;
     }
     reset(updateInternalStatusRegister = true) {
         if (updateInternalStatusRegister) {
@@ -204,15 +202,9 @@ export class Tube {
                 break;
         }
         this.updateInterrupts();
-        if (this.debug) {
-            console.log("TUBE ULA: host read " + hexword(address) + " = " + hexbyte(result));
-        }
         return result;
     }
     hostWrite(address, value) {
-        if (this.debug) {
-            console.log("TUBE ULA: host write " + hexword(address) + " = " + hexbyte(value));
-        }
         switch (address & 7) {
             case TUBE_ULA_R1_STATUS_ADDRESS: {
                 //  M and V both feed the NMI, so a write here can raise or drop the request on its own
@@ -336,9 +328,6 @@ export class Tube {
                 break;
         }
         this.updateInterrupts();
-        if (this.debug) {
-            console.log("TUBE ULA: parasite read " + hexword(address) + " = " + hexbyte(result));
-        }
         return result;
     }
     snapshotState() {
@@ -381,9 +370,6 @@ export class Tube {
         //  Not implemented - needs to be integrated with the parasite CPU code:
         //  Boot mode is terminated by the software when it selects any one of the Tube addresses.
         //  This deselects the ROM
-        if (this.debug) {
-            console.log("TUBE ULA: parasite write " + hexword(address) + " = " + hexbyte(value));
-        }
         switch (address & 7) {
             case TUBE_ULA_R1_DATA_ADDRESS:
                 if (this.parasiteStatus[TUBE_ULA_R1] & TUBE_ULA_FLAG_DATA_REGISTER_NOT_FULL) {

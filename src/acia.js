@@ -317,7 +317,6 @@ export class Acia extends EventTarget {
 
     rewindTape() {
         if (!this.tape) return;
-        console.log("rewinding tape");
         this.tape.rewind();
         // A tape that had run out stopped being polled; rewound, it has something to play again.
         if (this.shouldRun) this.runTape();
