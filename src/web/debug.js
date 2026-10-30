@@ -25,6 +25,7 @@ import {
     viewedBank,
 } from "../paging.js";
 import { Dropdown } from "bootstrap";
+import { TightLoopNote } from "./tight-loop-note.js";
 
 const noop = () => {};
 
@@ -457,6 +458,7 @@ export class Debugger {
                     this._loop?.isRunning() ? this._disassembly.update(this.cpu.pc) : this._disassembly.redraw(),
                 ),
         });
+        this._loopNote = new TightLoopNote(this.panels.toolbar.panel.querySelector(".tight-loop"), arrangement);
         this._bindToolbar();
         this._bindKeys(keys);
         this._bindLabelDrops();
@@ -842,6 +844,8 @@ export class Debugger {
         // Names are matched to what is in memory now; while it runs, not every frame, as matching peeks at it.
         if (!this._loop?.isRunning() || now - this._matchedAt >= RunningNameMatchMs) this._matchSymbols();
         for (const own of OwnPanels) if (this.panels[own.id].isOpen) own.show(this, this._disassemblyAt());
+        // A state put in under a stopped machine, as the rewind scrubber does, moves it without a stop.
+        if (this._inDebugger && !this._loop?.isRunning()) this._loopNote.show();
         // Not while it runs, when the names in view, and so the credit's height, can change every frame.
         if (!this._loop?.isRunning()) this._arrangement.keepAttached();
     }
@@ -870,6 +874,7 @@ export class Debugger {
         this.cpu = cpu;
         for (const paging of Object.values(this._paging)) paging.setCpu(cpu);
         this._disassembly.setCpu(cpu);
+        this._loopNote.setCpu(cpu);
         this.watches.setCpu(cpu);
         if (this._ownPanelsShown()) this._refresh.drawNow();
     }
@@ -955,6 +960,7 @@ export class Debugger {
         this.cancelRun();
         this._matchSymbols();
         for (const own of OwnPanels) own.show(this, where);
+        this._loopNote.show();
         this.watches.showWhichFired();
         this._refresh.drawn();
         if (!this._inDebugger) {
@@ -1059,6 +1065,8 @@ export class Debugger {
         for (const paging of Object.values(this._paging)) paging.dismissMenu();
         this.watches.clearFired();
         this._inDebugger = false;
+        this._loopNote.clear();
+        this._arrangement.keepAttached();
         this._monitor.classList.remove("finds-bytes");
         // Focus left in a goto box would keep the keyboard from the machine.
         const focused = document.activeElement;

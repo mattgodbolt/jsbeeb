@@ -1,6 +1,6 @@
 import { byteChar, hexbyte, hexword } from "../hex.js";
 import { nameUrl } from "../symbol-sets.js";
-import { sheilaBlocks, sheilaName } from "../sheila.js";
+import { machineSheilaBlocks, sheilaName } from "../sheila.js";
 import { bindGotoForm, externalLink, FittedRows, labelHtml } from "./debug-dom.js";
 import { keyLine } from "./panel-keys.js";
 
@@ -138,12 +138,7 @@ export class DisassemblyView {
 
     setCpu(cpu) {
         this._cpu = cpu;
-        this._sheila = sheilaBlocks({
-            model: cpu.model,
-            hasTube: cpu.hasTube,
-            hasEconet: !!cpu.econet,
-            hasVideoNula: cpu.video.ula.hasVideoNula,
-        });
+        this._sheila = machineSheilaBlocks(cpu);
     }
 
     /** The highlighted instruction's address. */

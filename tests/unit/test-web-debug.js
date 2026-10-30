@@ -15,6 +15,7 @@ import { Dropdown } from "bootstrap";
 import { PanelKeys } from "../../src/web/panel-keys.js";
 import { PanelArrangement } from "../../src/web/floating-panel.js";
 import { SysViaPanel } from "../../src/web/sysvia-panel.js";
+import { FdcPanel } from "../../src/web/fdc-panel.js";
 import { cycleCount } from "../../src/lockstep.js";
 import {
     bankOffset,
@@ -465,6 +466,81 @@ describe("Debugger", () => {
                 const press = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
                 button("step").dispatchEvent(press);
                 expect(press.defaultPrevented).toBe(true);
+            });
+
+            describe("stopped in a tight loop", () => {
+                const loopLine = () => document.querySelector("#toolbar-panel .tight-loop");
+                const stopIn = (code) => {
+                    code.forEach((byte, i) => cpu.writemem(0x3000 + i, byte));
+                    cpu.pc = 0x3000;
+                    dbgr.debug(cpu.pc);
+                };
+                const SysViaFlagWait = [0xad, 0x4d, 0xfe, 0x29, 0x02, 0xf0, 0xf9];
+
+                it("names the loop and the register it polls, and opens that device's panel", () => {
+                    new SysViaPanel({ cpu, arrangement });
+                    stopIn(SysViaFlagWait);
+                    expect(loopLine().hidden).toBe(false);
+                    expect(loopLine().textContent).toBe(
+                        "In a loop at $3000-$3005 polling SysVIA.IFR ($fe4d) open System VIA",
+                    );
+                    const opener = loopLine().querySelector("button");
+                    opener.click();
+                    opener.click();
+                    expect(visible("sysvia-panel")).toBe(true);
+                });
+
+                it("names a device's panel by the panel's own title", () => {
+                    new FdcPanel({ cpu, arrangement, visualiser: { zoomToHead: () => {} } });
+                    stopIn([0x2c, 0x80, 0xfe, 0x30, 0xfb]);
+                    expect(loopLine().textContent).toBe(
+                        "In a loop at $3000-$3003 polling FDC.STATUS ($fe80) open Disc controller",
+                    );
+                });
+
+                it.each([
+                    [
+                        "an address that is no device's",
+                        [0x58, 0x78, 0xcd, 0x40, 0x02, 0xf0, 0xf9],
+                        "$3000-$3005 polling $0240",
+                    ],
+                    [
+                        "two addresses",
+                        [0xa5, 0xa2, 0x10, 0x04, 0xa5, 0xff, 0x10, 0xf8],
+                        "$3000-$3006 polling $00a2 and $00ff",
+                    ],
+                    [
+                        "a device with no panel",
+                        [0x2c, 0x08, 0xfe, 0x10, 0xfb],
+                        "$3000-$3003 polling ACIA.STATUS ($fe08)",
+                    ],
+                    ["a loop of one instruction that reads nothing", [0x4c, 0x00, 0x30], "$3000 that reads nothing"],
+                ])("names %s", (_, code, text) => {
+                    stopIn(code);
+                    expect(loopLine().textContent).toBe(`In a loop at ${text}`);
+                });
+
+                it("says nothing once the machine runs on", () => {
+                    stopIn(SysViaFlagWait);
+                    stoppedLoop.go();
+                    expect(loopLine().hidden).toBe(true);
+                });
+
+                it("says nothing stopped outside a loop", () => {
+                    stopIn(SysViaFlagWait);
+                    cpu.pc = 0x2000;
+                    dbgr.debug(cpu.pc);
+                    expect(loopLine().hidden).toBe(true);
+                });
+
+                it("follows the machine moved while stopped, as by the rewind scrubber", () => {
+                    const frames = fakeAnimationFrames();
+                    stopIn(SysViaFlagWait);
+                    cpu.pc = 0x2000;
+                    cpu.currentCycles += 100;
+                    frames.run();
+                    expect(loopLine().hidden).toBe(true);
+                });
             });
         });
 
