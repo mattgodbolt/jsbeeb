@@ -10,6 +10,7 @@ import {
     PagedView,
     parseViewedAddress,
     peekViewed,
+    screenView,
     ShadowView,
     viewDiffers,
     viewsFor,
@@ -19,6 +20,7 @@ const Master = findModel("Master");
 const ModelB = findModel("B-DFS1.2");
 const FourSocketB = findModel("B-stock");
 const Atom = findModel("Atom");
+const AccconD = 0x01;
 const AccconX = 0x04;
 const RomselAndy = 0x80;
 
@@ -48,6 +50,18 @@ describe("paging views", () => {
         [Atom, "a000", { address: "a000", view: undefined }],
     ])("reads a Go to on %s: %s", (model, text, parsed) => {
         expect(parseViewedAddress(text, model)).toEqual(parsed);
+    });
+
+    it.each([
+        [Master, 0, PagedView],
+        [Master, AccconD, ShadowView],
+        [Master, AccconX, MainView],
+        [Master, AccconX | AccconD, PagedView],
+        [ModelB, 0, PagedView],
+    ])("shows the RAM a %s's video reads with ACCCON %i", async (model, acccon, view) => {
+        const cpu = await machine(model);
+        if (model.isMaster) cpu.writeAcccon(acccon);
+        expect(screenView(cpu, 0x3456)).toBe(view);
     });
 
     it("offers each model the views it has", () => {

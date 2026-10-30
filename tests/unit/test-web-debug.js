@@ -747,7 +747,9 @@ describe("Debugger", () => {
 
             expect(dbgr.showScreenByteAt(0.25, 0.75)).toBe(true);
             expect(visible("memory-panel")).toBe(false);
+            goTo("goto-mem-addr-form", "$8000`4");
             expect(dbgr.showScreenByteAt(0.25, 0.25)).toBe(true);
+            expect(document.querySelector("#memory-panel .paging-picker").textContent).toBe("paged");
             expect(picture).toHaveBeenLastCalledWith(0.25, 0.25);
             expect(visible("memory-panel")).toBe(true);
             expect(memTarget().dataset.addr).toBe(`${0x3456}`);

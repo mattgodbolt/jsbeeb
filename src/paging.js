@@ -109,6 +109,12 @@ export function viewDiffers(cpu, view, address) {
     return cpu.memLook[cpu.memStatOffset + (address >>> 8)] + address !== offset;
 }
 
+/** The view showing the RAM the video reads at screen `address`: the paged one wherever the CPU reads the same. */
+export function screenView(cpu, address) {
+    const view = cpu.videoDisplayPage ? ShadowView : MainView;
+    return viewDiffers(cpu, view, address) ? view : PagedView;
+}
+
 function text(peek, from, to) {
     let read = "";
     for (let address = from; address < to; ++address) read += byteChar(peek(address));
