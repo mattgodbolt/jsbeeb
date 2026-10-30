@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 import { inspect } from "node:util";
 import * as Tokeniser from "./basic-tokenise.js";
 import { VduTextCapture } from "./vdu-capture.js";
-import { setNodeBasePath } from "./loader.js";
+import { loadData, setNodeBasePath } from "./loader.js";
 import { Typist } from "./typist.js";
 import { keyCodes } from "./keymap.js";
 import { cycleCount } from "./lockstep.js";
@@ -223,7 +223,7 @@ export class TestMachine {
     }
 
     async loadDisc(image) {
-        const data = await fdc.load(image);
+        const data = await loadData(image);
         this.processor.fdc.loadDisc(0, fdc.discFor(image, data));
     }
 

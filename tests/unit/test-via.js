@@ -69,7 +69,7 @@ describe("Via snapshotState / restoreState", () => {
     });
 
     function makeUserVia() {
-        return new UserVia(cpu, scheduler, false, makeFakeUserPortPeripheral());
+        return new UserVia(cpu, scheduler, makeFakeUserPortPeripheral());
     }
 
     const makeSystemVia = () => makeSysVia(cpu, scheduler);
@@ -304,7 +304,7 @@ describe("Via CA2 write handshake", () => {
 
     beforeEach(() => {
         scheduler = new Scheduler();
-        via = new UserVia(makeFakeCpu(), scheduler, false, makeFakeUserPortPeripheral());
+        via = new UserVia(makeFakeCpu(), scheduler, makeFakeUserPortPeripheral());
         via.write(DDRA, 0xff);
         via.write(DDRB, 0xff);
         via.write(ORAnh, SeededByte);
@@ -370,7 +370,7 @@ describe("Via CA2 write handshake", () => {
         via.write(ORA, WrittenByte);
         scheduler.polltime(PulseWidthCycles - 1);
 
-        const restored = new UserVia(makeFakeCpu(), scheduler, false, makeFakeUserPortPeripheral());
+        const restored = new UserVia(makeFakeCpu(), scheduler, makeFakeUserPortPeripheral());
         restored.restoreState(via.snapshotState());
         expect(restored.ca2).toBe(false);
 
@@ -464,7 +464,7 @@ describe("Via T2 clocking the shift register", () => {
     beforeEach(() => {
         scheduler = new Scheduler();
         cpu = makeFakeCpu();
-        via = new UserVia(cpu, scheduler, false, makeFakeUserPortPeripheral());
+        via = new UserVia(cpu, scheduler, makeFakeUserPortPeripheral());
         via.write(ACR, AcrShiftOutFreeRunningT2);
     });
 
@@ -580,7 +580,7 @@ describe("Via T2 clocking the shift register", () => {
         runMicroseconds(3 * 9 + 2);
         const { t2High, ...older } = via.snapshotState();
         older.t2c += t2High << 9;
-        const restored = new UserVia(cpu, scheduler, false, makeFakeUserPortPeripheral());
+        const restored = new UserVia(cpu, scheduler, makeFakeUserPortPeripheral());
         restored.restoreState(older);
         expect([restored.read(T2CH), restored.read(T2CL)]).toEqual([via.read(T2CH), via.read(T2CL)]);
     });
@@ -618,7 +618,7 @@ describe("Via T2 toggling PB6 pulse counting", () => {
 
     beforeEach(() => {
         scheduler = new Scheduler();
-        via = new UserVia(makeFakeCpu(), scheduler, false, makeFakeUserPortPeripheral());
+        via = new UserVia(makeFakeCpu(), scheduler, makeFakeUserPortPeripheral());
     });
 
     function runMicroseconds(us) {
@@ -631,7 +631,7 @@ describe("Via T2 toggling PB6 pulse counting", () => {
     }
 
     it("should count PB6 held low from power-on as one pulse at the first look at the port", () => {
-        via = new UserVia(makeFakeCpu(), scheduler, false, { read: () => 0xff & ~Pb6, write: () => {} });
+        via = new UserVia(makeFakeCpu(), scheduler, { read: () => 0xff & ~Pb6, write: () => {} });
         via.write(ACR, AcrT2CountsPb6);
         start(0x80, 0x10);
         const frozen = via.read(T2CL);
@@ -728,7 +728,7 @@ describe("Via peek", () => {
     beforeEach(() => {
         scheduler = new Scheduler();
         cpu = makeFakeCpu();
-        via = new UserVia(cpu, scheduler, false, makeFakeUserPortPeripheral());
+        via = new UserVia(cpu, scheduler, makeFakeUserPortPeripheral());
         via.reset();
         via.write(IER, 0x80 | Timer1Int | Ca1Int | Cb1Int);
         via.write(ACR, AcrT1Continuous);

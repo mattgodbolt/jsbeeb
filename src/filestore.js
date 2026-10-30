@@ -153,8 +153,6 @@ export class Filestore {
                     if (this.econet.nextReceiveBlockNumber === 0) {
                         this.econet.nextReceiveBlockNumber = 1;
                     }
-
-                    //console.log("Filestore: new receive block " + rxBuffer.id + " " + rxBuffer.receivePort.toString(16) + " " + rxBuffer.bufferStart.toString(16) + " " + rxBuffer.bufferEnd.toString(16));
                 } // Read and delete receive block
                 else {
                     let rxblock = this.econet.receiveBlocks.find((e) => e.id === this.ram[p + 0]);
@@ -183,7 +181,6 @@ export class Filestore {
                     }
 
                     this.econet.deleteReceiveBlock(this.ram[p]);
-                    //console.log("Filestore: read and delete receive block " + this.ram[p]);
                 }
                 break;
             }
@@ -271,7 +268,6 @@ export class Filestore {
 
                     if (this.X >= 0x80) {
                         this.X = rxblock.controlFlag;
-                        //console.log("osbyte found received block id " + rxblock.id + " " + this.X.toString(16) + " " + this.Y.toString(16));
                     }
                 }
                 break;

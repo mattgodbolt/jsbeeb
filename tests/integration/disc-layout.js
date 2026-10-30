@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { TestMachine } from "../../src/test-machine.js";
-import { discFor, load } from "../../src/fdc.js";
+import { discFor } from "../../src/fdc.js";
+import { loadData } from "../../src/loader.js";
 
 const SectorSize = 256;
 const SectorsPerTrack = 10;
@@ -60,7 +61,7 @@ describe("disc track layouts", function () {
         // else on every other track. D.MOP is DFS track 36, so the head has to reach past 70.
         const testMachine = new TestMachine();
         await testMachine.initialise();
-        const image = await load("discs/elite.hfe");
+        const image = await loadData("discs/elite.hfe");
         testMachine.processor.fdc.loadDisc(0, discFor("elite.hfe", image));
         await testMachine.runUntilInput();
         const seen = [];
@@ -75,7 +76,7 @@ describe("disc track layouts", function () {
     });
 
     it("leaves an 80 track disc where it has always been", async () => {
-        const { testMachine, seen } = await machineWith(await load("discs/Welcome.ssd"));
+        const { testMachine, seen } = await machineWith(await loadData("discs/Welcome.ssd"));
 
         await testMachine.type("*CAT");
         await testMachine.runUntilInput();

@@ -63,7 +63,7 @@ async function readDiscImages(media = {}) {
             images.push(null);
             continue;
         }
-        const data = await fdc.load(`discs/${name}`);
+        const data = await loadData(`discs/${name}`);
         if (crc32(data) !== media[`${key}Crc32`]) {
             throw new Error(`discs/${name} is not the disc the workload was made with`);
         }

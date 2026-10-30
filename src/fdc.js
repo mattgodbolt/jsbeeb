@@ -11,7 +11,6 @@ import {
 } from "./disc.js";
 import { loadHfe, sniffHfeLayout, toHfe } from "./disc-hfe.js";
 import { stringToUint8Array } from "./binary.js";
-import { loadData } from "./loader.js";
 import { DiscDrive } from "./disc-drive.js";
 
 /**
@@ -87,10 +86,6 @@ export class DiscController {
     get drives() {
         return this._drives;
     }
-}
-
-export function load(name) {
-    return loadData(name);
 }
 
 /**

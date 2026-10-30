@@ -19,7 +19,7 @@ describe("UserViaPanel", () => {
     beforeEach(() => {
         scheduler = new Scheduler();
         userPortInputs = 0xff;
-        via = new UserVia({ interrupt: 0 }, scheduler, false, { read: () => userPortInputs, write: () => {} });
+        via = new UserVia({ interrupt: 0 }, scheduler, { read: () => userPortInputs, write: () => {} });
         panel = new UserViaPanel({
             cpu: { uservia: via },
             arrangement: new PanelArrangement(() => window.localStorage),

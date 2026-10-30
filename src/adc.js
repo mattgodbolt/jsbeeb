@@ -45,72 +45,14 @@ export class Adc {
     }
 
     /**
-     * Set the source for a specific channel
+     * Set the source for a specific channel, disposing of the one it replaces.
      * @param {number} channel - The channel number (0-3)
      * @param {AnalogueSource} source - The source to assign to the channel
-     * @returns {boolean} True if the assignment was successful
      */
     setChannelSource(channel, source) {
-        if (channel < 0 || channel > 3) {
-            console.error(`ADC: Invalid channel number: ${channel}`);
-            return false;
-        }
-
-        // Dispose of the old source if one exists and is different
         const oldSource = this.channelSources[channel];
-        if (oldSource && oldSource !== source) {
-            oldSource.dispose();
-        }
-
-        // Set the channel source
+        if (oldSource && oldSource !== source) oldSource.dispose();
         this.channelSources[channel] = source;
-        return true;
-    }
-
-    /**
-     * Get the source for a specific channel
-     * @param {number} channel - The channel number (0-3)
-     * @returns {AnalogueSource|null} The source for the channel or null if none
-     */
-    getChannelSource(channel) {
-        if (channel < 0 || channel > 3) {
-            return null;
-        }
-        return this.channelSources[channel];
-    }
-
-    /**
-     * Clear the source for a specific channel
-     * @param {number} channel - The channel number (0-3)
-     * @returns {boolean} True if successful
-     */
-    clearChannelSource(channel) {
-        if (channel < 0 || channel > 3) {
-            console.error(`ADC: Invalid channel number: ${channel}`);
-            return false;
-        }
-
-        const source = this.channelSources[channel];
-        if (source) {
-            source.dispose();
-            this.channelSources[channel] = null;
-        }
-
-        return true;
-    }
-
-    /**
-     * Clear all sources
-     */
-    clearSources() {
-        // Dispose and clear all channel sources
-        for (let i = 0; i < 4; i++) {
-            const source = this.channelSources[i];
-            if (source) {
-                source.dispose();
-                this.channelSources[i] = null;
-            }
-        }
     }
 
     snapshotState() {
