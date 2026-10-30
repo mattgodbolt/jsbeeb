@@ -517,7 +517,6 @@ exposeConsoleSurface(window, { loop, processor, video, audioHandler });
 electron({
     settings,
     media,
-    drives,
     modals,
     loadStateFile: snapshots.loadStateFromFile.bind(snapshots),
     panels: panelArrangement,
