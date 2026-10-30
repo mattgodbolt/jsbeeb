@@ -114,6 +114,9 @@ describe("what loading an HFE notes for the media window", () => {
     const SetIndex = 0xf1;
     const SetBitRate = 0xf2;
     const SlowBitRate = 10;
+    const EncodingOffset = 11;
+    const UnknownEncoding = 0xff;
+    const TrackCountOffset = 9;
 
     /** An HFE v3 image with opcodes written over the flux a little way into each of the tracks given. */
     const withOpcodes = (hfe, trackNums, opcodes) => {
@@ -131,6 +134,21 @@ describe("what loading an HFE notes for the media window", () => {
         expect(load(toHfe(countingImage(80 * TrackBytes, false))).loadNotes).toEqual([
             { text: "HFE v3, 1 side, 80 tracks", isOdd: false },
         ]);
+    });
+
+    it("notes a 40 track image spread over 80, with both its sides", () => {
+        const config = new DiscConfig();
+        config.expandTo80 = true;
+        const data = toHfe(countingImage(80 * 2 * TrackBytes, true));
+        data[TrackCountOffset] = 40;
+        const loaded = loadHfe(new Disc(true, config, "test.hfe"), data);
+        expect(loaded.loadNotes).toEqual([{ text: "HFE v3, 2 sides, 40 tracks spread over 80", isOdd: false }]);
+    });
+
+    it("notes an encoding it does not know, and reads the image anyway", () => {
+        const data = toHfe(countingImage(80 * TrackBytes, false));
+        data[EncodingOffset] = UnknownEncoding;
+        expect(load(data).loadNotes).toContainEqual({ text: "unknown encoding &ff, read as FM or MFM", isOdd: true });
     });
 
     it("notes the tracks with a wild bit rate or a late index, folded into runs", () => {

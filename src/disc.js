@@ -665,7 +665,7 @@ const isPrintableAscii = (byte) => byte >= 0x20 && byte < 0x7f;
  */
 export function dfsCatalogue(disc, isSideUpper = false) {
     const sectors = new Map();
-    for (const sector of disc.getTrack(isSideUpper, 0).findSectors(() => {})) {
+    for (const sector of disc.getTrack(isSideUpper, 0).findSectors()) {
         const usable =
             !sector.hasHeaderCrcError && !sector.hasDataCrcError && sector.sectorData?.length === SsdFormat.sectorSize;
         if (usable && !sectors.has(sector.sectorNumber)) sectors.set(sector.sectorNumber, sector.sectorData);
@@ -697,7 +697,7 @@ export function sniffSurfaceLayout(disc) {
     // Both heads move together, so a disc has one pitch and the side that boots can speak for it.
     // Track 0 is where it claims to be at either pitch, so it says nothing.
     for (let trackNum = 1; trackNum < disc.tracksUsed; ++trackNum) {
-        const sectors = disc.getTrack(false, trackNum).findSectorIds(() => {});
+        const sectors = disc.getTrack(false, trackNum).findSectorIds();
         if (!sectors.length) continue;
         if (trackNum & 1) return { is40Track: false, reason: `track ${trackNum} holds sectors of its own` };
         if (sectors.some((sector) => sector.trackNumber === trackNum / 2)) doubleStepped++;
@@ -1283,10 +1283,10 @@ export class Disc {
     }
 }
 
-/** @returns {string} ascending numbers with each run of consecutive ones folded, as "3-5, 9" */
+/** @returns {string} ascending numbers, each once, with runs of consecutive ones folded, as "3-5, 9" */
 export function numberRuns(numbers) {
     const runs = [];
-    for (const number of numbers) {
+    for (const number of new Set(numbers)) {
         const last = runs.at(-1);
         if (last && last.to === number - 1) last.to = number;
         else runs.push({ from: number, to: number });
@@ -1328,11 +1328,17 @@ export function discReport(disc, isSideUpper) {
         const note = (text, pulse) =>
             onTrack.push({ trackNum, fraction: pulse / pulsesRound, text: `track ${claimed}: ${text}` });
         const sectors = track.findSectors(note);
-        if (!sectors.length) {
+        // Unformatted as the surface shows it: no flux at all.
+        if (!sectors.length && track.pulses2Us.subarray(0, track.length).every((pulses) => pulses === 0)) {
             unformatted = { from: unformatted?.from ?? trackNum, to: trackNum };
             continue;
         }
         endUnformatted();
+        if (!sectors.length) {
+            note("flux, but no sector IDs", 0);
+            findings.push(...onTrack);
+            continue;
+        }
         const lengthRatio = track.length / IbmDiscFormat.bytesPerTrack;
         if (Math.abs(lengthRatio - 1) >= TrackLengthTolerance)
             note(`${lengthRatio > 1 ? "long" : "short"}, ${Math.round(lengthRatio * 100)}% of the standard length`, 0);

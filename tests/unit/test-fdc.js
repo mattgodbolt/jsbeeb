@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import * as fs from "node:fs";
 
 import { discFor, guessDiscTypeFromName } from "../../src/fdc.js";
 import { Disc, DiscConfig, DiscLayout, loadSsd } from "../../src/disc.js";
@@ -33,6 +34,19 @@ describe("loading a disc image", () => {
         expect(forty.loadNotes).toEqual([{ text: expect.stringMatching(/^40 track, as /), isOdd: false }]);
         expect(discFor("test.ssd", ssdImage(800)).is40Track).toBe(false);
     });
+
+    it(
+        "notes what a flux image's surface says of its layout ahead of the image's own notes",
+        { timeout: 30000 },
+        () => {
+            const elite = discFor("elite.hfe", fs.readFileSync("public/discs/elite.hfe"));
+            expect(elite.is40Track).toBe(true);
+            expect(elite.loadNotes.map(({ text }) => text)).toEqual([
+                expect.stringMatching(/^40 track, as \d+ tracks sit at twice the number their sectors claim$/),
+                "HFE v3, 2 sides, 81 tracks",
+            ]);
+        },
+    );
 
     it("does as it is told when a snapshot says how the disc was laid out, with nothing to note", () => {
         const told = discFor("test.ssd", ssdImage(400), null, DiscLayout.contiguous);

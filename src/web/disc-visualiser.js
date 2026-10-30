@@ -32,7 +32,8 @@ const MarkOutline = "#0d0d0d";
 const ScanBudgetMs = 16;
 
 const HeadZoom = 6;
-const ReportRefreshMs = 500;
+// Decoding a side takes tens of milliseconds, so while a program writes the report waits for it to stop.
+const ReportSettleMs = 500;
 
 /** A trackpad reports deltas in the tens, a mouse notch about 100. */
 const WheelZoomRate = 0.003;
@@ -53,7 +54,7 @@ const Views = {
     },
     format: {
         palette: RegionPalette,
-        analyse: (track, warn) => trackRegions(track, warn),
+        analyse: (track) => trackRegions(track),
         describe: ({ codes, sectorNumbers, errors }, word) => {
             const what = RegionStyles[codes[word]].name;
             const named = sectorNumbers[word] < 0 ? what : `sector ${sectorNumbers[word]} ${what}`;
@@ -65,8 +66,6 @@ const Views = {
         legend: () => RegionStyles.map(({ hex, name }) => swatch(hex, name)).join("") + swatch(ErrorHex, "CRC error"),
     },
 };
-
-const ignoreWarning = () => {};
 
 /** These lines are rewritten every frame, so skip the ones that have not changed. */
 function setText(element, text) {
@@ -123,12 +122,14 @@ export class DiscVisualiser {
         this._surfaceStale = false;
         this._showingReport = false;
         this._reportStale = true;
-        this._reportMadeAt = -Infinity;
+        this._lastWriteAt = -Infinity;
 
         this._onTrackWrite = (isSideUpper, trackNum) => {
             if (isSideUpper !== this._isSideUpper) return;
             this._staleTracks.add(trackNum);
             this._reportStale = true;
+            this._lastWriteAt = performance.now();
+            this._refresh.drawSoon();
         };
         this._onResize = () => this._resize();
         this._resizeObserver = new ResizeObserver(this._onResize);
@@ -296,7 +297,7 @@ export class DiscVisualiser {
     /** Lists the findings at the next draw, for a disc or side that is new to the list. */
     _reportAfresh() {
         this._reportStale = true;
-        this._reportMadeAt = -Infinity;
+        this._lastWriteAt = -Infinity;
     }
 
     _showReport(on) {
@@ -307,16 +308,14 @@ export class DiscVisualiser {
         this.reportToggle.setAttribute("aria-pressed", String(on));
     }
 
-    /** Lists the side's findings again, but as a program writes to the disc no more than once a while. */
+    /** Lists the side's findings again, once any writes to the disc have stopped. */
     _updateReport() {
         if (!this._showingReport || !this._reportStale) return;
-        const now = performance.now();
-        if (now - this._reportMadeAt < ReportRefreshMs) {
+        if (performance.now() - this._lastWriteAt < ReportSettleMs) {
             this._refresh.drawSoon();
             return;
         }
         this._reportStale = false;
-        this._reportMadeAt = now;
         const findings = this._disc ? discReport(this._disc, this._isSideUpper) : [];
         const items = findings.map(({ trackNum, fraction, text }) => {
             const item = document.createElement("li");
@@ -434,7 +433,7 @@ export class DiscVisualiser {
     /** @returns {{codes: Uint8Array, sectorNumbers: Int16Array|null, errors: object[]|null}|null} */
     _analyse(trackNum) {
         if (!this._disc) return null;
-        return Views[this._view].analyse(this._disc.getTrack(this._isSideUpper, trackNum), ignoreWarning);
+        return Views[this._view].analyse(this._disc.getTrack(this._isSideUpper, trackNum));
     }
 
     _blit() {

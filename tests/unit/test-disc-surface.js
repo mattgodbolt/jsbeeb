@@ -188,7 +188,7 @@ describe("trackRegions", function () {
     }
 
     it("finds a header and a data field for every sector of a formatted track", () => {
-        const { codes, sectorNumbers, errors } = trackRegions(ssdDisc().getTrack(false, 0), () => {});
+        const { codes, sectorNumbers, errors } = trackRegions(ssdDisc().getTrack(false, 0));
         expect(errors).toHaveLength(0);
         expect(new Set([...sectorNumbers].filter((n) => n >= 0))).toEqual(new Set([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]));
         expect(wordsWith(codes, Region.Header).size).toBeGreaterThan(0);
@@ -198,7 +198,7 @@ describe("trackRegions", function () {
     });
 
     it("puts each sector's header before its data", () => {
-        const { codes, sectorNumbers } = trackRegions(ssdDisc().getTrack(false, 0), () => {});
+        const { codes, sectorNumbers } = trackRegions(ssdDisc().getTrack(false, 0));
         for (let sector = 0; sector < 10; ++sector) {
             const headers = [];
             const data = [];
@@ -212,7 +212,7 @@ describe("trackRegions", function () {
     });
 
     it("calls a track that was never formatted exactly that", () => {
-        const { codes, errors } = trackRegions(Disc.createBlank().getTrack(false, 0), () => {});
+        const { codes, errors } = trackRegions(Disc.createBlank().getTrack(false, 0));
         expect(errors).toHaveLength(0);
         expect(wordsWith(codes, Region.Unformatted).size).toBe(codes.length);
     });
@@ -220,7 +220,7 @@ describe("trackRegions", function () {
     it("reports a CRC error over the sector it belongs to, without touching the fills", () => {
         const disc = ssdDisc();
         const track = disc.getTrack(false, 0);
-        const { codes, sectorNumbers } = trackRegions(track, () => {});
+        const { codes, sectorNumbers } = trackRegions(track);
         const payload = [];
         codes.forEach((code, word) => code === Region.Data && sectorNumbers[word] === 4 && payload.push(word));
         // Not the first word: that is the address mark, and losing it costs the sector its data
@@ -228,7 +228,7 @@ describe("trackRegions", function () {
         const damaged = payload[payload.length >> 1];
         track.pulses2Us[damaged] ^= 0xf;
 
-        const after = trackRegions(track, () => {});
+        const after = trackRegions(track);
         expect(after.errors).toHaveLength(1);
         expect(after.errors[0]).toMatchObject({ kind: "data CRC", sectorNumber: 4 });
         expect(damaged).toBeGreaterThanOrEqual(after.errors[0].firstWord);
@@ -237,7 +237,7 @@ describe("trackRegions", function () {
     });
 
     it("finds MFM sectors, whose bytes are half a word each", () => {
-        const { codes, sectorNumbers, errors } = trackRegions(adfDisc().getTrack(false, 0), () => {});
+        const { codes, sectorNumbers, errors } = trackRegions(adfDisc().getTrack(false, 0));
         expect(errors).toHaveLength(0);
         // An ADF track holds 16 sectors, against an SSD's 10.
         expect(new Set([...sectorNumbers].filter((n) => n >= 0)).size).toBe(16);
@@ -248,48 +248,30 @@ describe("trackRegions", function () {
     it("marks a header whose own CRC fails", () => {
         const disc = ssdDisc();
         const track = disc.getTrack(false, 0);
-        const { codes, sectorNumbers } = trackRegions(track, () => {});
+        const { codes, sectorNumbers } = trackRegions(track);
         const header = [];
         codes.forEach((code, word) => code === Region.Header && sectorNumbers[word] === 6 && header.push(word));
         // The second word in: the first is the address mark, and losing that loses the sector.
         track.pulses2Us[header[1]] ^= 0xf;
 
-        const after = trackRegions(track, () => {});
+        const after = trackRegions(track);
         expect(after.errors.map((e) => e.kind)).toContain("header CRC");
     });
 
     it("tells a deleted data field from a live one", () => {
         const disc = ssdDisc();
         const track = disc.getTrack(false, 0);
-        const { codes, sectorNumbers } = trackRegions(track, () => {});
+        const { codes, sectorNumbers } = trackRegions(track);
         const mark = codes.findIndex((code, word) => code === Region.Data && sectorNumbers[word] === 2);
         track.pulses2Us[mark] = IbmDiscFormat.fmTo2usPulses(
             IbmDiscFormat.markClockPattern,
             IbmDiscFormat.deletedDataMarkDataPattern,
         );
 
-        const after = trackRegions(track, () => {});
+        const after = trackRegions(track);
         const deleted = [...after.codes].filter((code) => code === Region.Deleted);
         expect(deleted.length).toBeGreaterThan(0);
         expect(wordsWith(after.codes, Region.Data).size).toBeGreaterThan(0);
-    });
-
-    it("sends the decoder's complaints to the caller instead of the console", () => {
-        const disc = ssdDisc();
-        const track = disc.getTrack(false, 0);
-        const { codes, sectorNumbers } = trackRegions(track, () => {});
-        // Leaves the header pointing at nothing, which the decoder complains about.
-        codes.forEach((code, word) => {
-            if (code === Region.Data && sectorNumbers[word] === 4)
-                track.pulses2Us[word] = IbmDiscFormat.fmTo2usPulses(0xff, 0xff);
-        });
-
-        const console = vi.spyOn(globalThis.console, "log");
-        const warnings = [];
-        trackRegions(track, (message) => warnings.push(message));
-
-        expect(warnings.length).toBeGreaterThan(0);
-        expect(console).not.toHaveBeenCalled();
     });
 });
 

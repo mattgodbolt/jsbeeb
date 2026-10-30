@@ -6,6 +6,7 @@ import { PanelArrangement } from "../../src/web/floating-panel.js";
 import { DiscGeometry } from "../../src/disc-surface.js";
 import { IbmDiscFormat } from "../../src/disc-format.js";
 import { discFor } from "../../src/fdc.js";
+import { corruptSectorData } from "../helpers/disc-builders.js";
 import { domFromIndexHtml, fakeAnimationFrames, ssdImage, teardownDom } from "./helpers.js";
 
 const CanvasSize = 100;
@@ -190,9 +191,7 @@ describe("DiscVisualiser", () => {
             expect(document.getElementById("disc-report").hidden).toBe(false);
             expect(findings()).toEqual(["Nothing odd on this side."]);
             const odd = discFor("odd.ssd", ssdImage());
-            const track = odd.getTrack(false, OddTrack);
-            const dataWord = Math.floor(track.findSectors()[OddSector].dataPosBitOffset / 32) + 2;
-            track.pulses2Us[dataWord] = IbmDiscFormat.fmTo2usPulses(0xff, 0x55);
+            corruptSectorData(odd.getTrack(false, OddTrack), OddSector);
             fdc.drives[0].disc = odd;
             visualiser.redraw();
             frames.run();
@@ -208,6 +207,33 @@ describe("DiscVisualiser", () => {
             );
             document.getElementById("disc-report-toggle").click();
             expect(document.getElementById("disc-report").hidden).toBe(true);
+        });
+
+        it("lists the side shown, and lists it again once writes to it have stopped", () => {
+            const now = vi.spyOn(performance, "now").mockReturnValue(1000);
+            const odd = discFor("odd.dsd", ssdImage(800, { length: 2 * 80 * 10 * 256 }));
+            corruptSectorData(odd.getTrack(true, OddTrack), OddSector);
+            fdc.drives[0].disc = odd;
+            const visualiser = make();
+            visualiser.openReport(0);
+            frames.run();
+            const findings = () => [...document.querySelectorAll("#disc-report li")].map((item) => item.textContent);
+            expect(findings()).toEqual(["Nothing odd on this side."]);
+            document.querySelector("[data-side='1']").click();
+            frames.run();
+            expect(findings()).toEqual([`track ${OddTrack}: sector ${OddSector} with a bad data CRC`]);
+
+            const track = odd.getTrack(true, OddTrack);
+            const dataWord = Math.floor(track.findSectors()[OddSector + 1].dataPosBitOffset / 32) + 2;
+            odd.writePulses(true, OddTrack, dataWord, IbmDiscFormat.fmTo2usPulses(0xff, 0x55));
+            odd.flushWrites();
+            frames.run();
+            expect(findings()).toHaveLength(1);
+            now.mockReturnValue(1000 + 1000);
+            frames.run();
+            expect(findings()).toEqual([
+                `track ${OddTrack}: sectors ${OddSector}-${OddSector + 1} with a bad data CRC`,
+            ]);
         });
 
         it("opens zoomed in on the head, wherever it is", () => {

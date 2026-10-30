@@ -6,6 +6,7 @@ import {
     DiscConfig,
     dfsCatalogue,
     discReport,
+    numberRuns,
     DiscLayout,
     loadSsd,
     loadAdf,
@@ -18,7 +19,7 @@ import { crc32 } from "../../src/archive.js";
 import { ssdImage } from "./helpers.js";
 import { discFor } from "../../src/fdc.js";
 import { expectSnapshotRoundTrips } from "../helpers/snapshot-round-trip.js";
-import { fmDiscWithSector, mfmDiscWithSector } from "../helpers/disc-builders.js";
+import { corruptSectorData, fmDiscWithSector, mfmDiscWithSector } from "../helpers/disc-builders.js";
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -316,6 +317,16 @@ function eraseDataField(track, sectorNumber) {
     for (let word = start; word < start + 256; ++word) track.pulses2Us[word] = IbmDiscFormat.fmTo2usPulses(0xff, 0xff);
 }
 
+describe("numbers folded into runs", () => {
+    it.each([
+        [[9], "9"],
+        [[3, 4, 5, 9], "3-5, 9"],
+        [[3, 3, 4], "3-4"],
+    ])("writes %j as %s", (numbers, text) => {
+        expect(numberRuns(numbers)).toBe(text);
+    });
+});
+
 describe("the report on a side of a disc", () => {
     const TracksWithData = 10;
     const ssd = (sectors, layout) =>
@@ -334,13 +345,19 @@ describe("the report on a side of a disc", () => {
         expect(discReport(disc, false)).toContainEqual({ trackNum: 1, fraction: 0, text: "tracks 1-3: unformatted" });
     });
 
+    it("tells a track with flux but no sector IDs from an unformatted one", () => {
+        const disc = Disc.createBlank();
+        disc.buildTrack(false, 0).fillFmByte(0xff);
+        disc.setTrackUsed(false, 1);
+        expect(discReport(disc, false).map(({ text }) => text)).toEqual([
+            "track 0: flux, but no sector IDs",
+            "track 1: unformatted",
+        ]);
+    });
+
     it("names the sectors that share a fault together", () => {
         const disc = unobservedDisc();
-        const track = disc.getTrack(false, 0);
-        for (const sectorNumber of [2, 5]) {
-            const dataWord = Math.floor(track.findSectors()[sectorNumber].dataPosBitOffset / 32) + 2;
-            track.pulses2Us[dataWord] = IbmDiscFormat.fmTo2usPulses(0xff, 0x55);
-        }
+        for (const sectorNumber of [2, 5]) corruptSectorData(disc.getTrack(false, 0), sectorNumber);
         expect(discReport(disc, false).map(({ text }) => text)).toEqual(["track 0: sectors 2, 5 with a bad data CRC"]);
     });
 
@@ -561,7 +578,7 @@ describe("erasing a track", () => {
 });
 
 describe("sector decoding warnings", () => {
-    it("goes to the caller rather than the console", () => {
+    it("goes to the caller that asks for it, and never to the console", () => {
         const disc = unobservedDisc();
         const track = disc.getTrack(false, 0);
         eraseDataField(track, 4);
@@ -569,19 +586,9 @@ describe("sector decoding warnings", () => {
         const console = vi.spyOn(globalThis.console, "log");
         const warnings = [];
         track.findSectors((message) => warnings.push(message));
-
-        expect(warnings.length).toBeGreaterThan(0);
-        expect(console).not.toHaveBeenCalled();
-    });
-
-    it("goes nowhere when no caller asks for it", () => {
-        const disc = unobservedDisc();
-        const track = disc.getTrack(false, 0);
-        eraseDataField(track, 4);
-
-        const console = vi.spyOn(globalThis.console, "log");
         track.findSectors();
 
+        expect(warnings.length).toBeGreaterThan(0);
         expect(console).not.toHaveBeenCalled();
     });
 
