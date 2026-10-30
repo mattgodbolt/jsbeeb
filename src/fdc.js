@@ -12,6 +12,7 @@ import {
 import { loadHfe, sniffHfeLayout, toHfe } from "./disc-hfe.js";
 import { stringToUint8Array } from "./binary.js";
 import { loadData } from "./loader.js";
+import { DiscDrive } from "./disc-drive.js";
 
 /**
  * What a disc controller reports to its log, for the Disc controller panel to spell out: a command, its result, a
@@ -20,145 +21,92 @@ import { loadData } from "./loader.js";
  * @typedef {{kind: "command" | "result" | "state" | "control" | "note" | "warning"} & Object<string, *>} FdcLogEntry
  */
 
+/**
+ * What the 8271 and the WD1770 share: two drives, a timer, a log, and the calls the rest of jsbeeb makes. Each chip
+ * supplies `chip` (its name), `_timerFired()` and `_pulsesCallback(pulses, count)`.
+ */
+export class DiscController {
+    /**
+     * @param {import("./6502.js").Cpu6502} cpu
+     * @param {import("./scheduler.js").Scheduler} scheduler
+     * @param {DiscDrive[] | undefined} drives
+     */
+    constructor(cpu, scheduler, drives) {
+        this._cpu = cpu;
+        this._scheduler = scheduler;
+        this._drives = drives ?? [
+            new DiscDrive(0, scheduler, cpu.peripheralCyclesPerSecond),
+            new DiscDrive(1, scheduler, cpu.peripheralCyclesPerSecond),
+        ];
+        /** @type {DiscDrive|null} */
+        this._currentDrive = null;
+        this._lastSelectedDrive = this._drives[0];
+        this._timerTask = this._scheduler.newTask(() => this._timerFired());
+
+        this.logCommands = false;
+        this.logStateChanges = false;
+        /** @type {((entry: FdcLogEntry) => void) | null} */
+        this.onLog = null;
+
+        for (const drive of this._drives) {
+            drive.setPulsesCallback((pulses, count) => {
+                if (drive === this._currentDrive) this._pulsesCallback(pulses, count);
+            });
+        }
+    }
+
+    _log(entry) {
+        this.onLog?.(entry);
+    }
+
+    _note(text) {
+        if (this.logCommands) this._log({ kind: "note", text });
+    }
+
+    _warn(text) {
+        console.warn(`${this.chip}: ${text}`);
+        this._log({ kind: "warning", text });
+    }
+
+    /**
+     * @param {Number} drive
+     * @param {Disc} disc
+     * @param {Number} [tracksPerStep] where to leave the drive's 40/80 switch, which by default
+     *   follows the disc, since no drive can tell what pitch the disc in it was written at
+     */
+    loadDisc(drive, disc, tracksPerStep = disc?.is40Track ? 2 : 1) {
+        this._drives[drive].setDisc(disc);
+        this._drives[drive].tracksPerStep = tracksPerStep;
+    }
+
+    /** Each drive's activity light, which follows its select line: the controller's select gated by the motor. */
+    get motorOn() {
+        return [0, 1].map((i) => !!this._drives[i]?.spinning && this._drives[i] === this._currentDrive);
+    }
+
+    get drives() {
+        return this._drives;
+    }
+}
+
 export function load(name) {
     return loadData(name);
 }
 
 /**
- * Class representing a disc format type with associated loader and saver functions
+ * A disc image format: how to load and save it, and what it can say about itself.
+ * @typedef {Object} DiscType
+ * @property {string} extension including the dot
+ * @property {function(Disc, Uint8Array, function?): Disc} loader
+ * @property {function(Disc): Uint8Array} saver
+ * @property {number|undefined} byteSize undefined for a format of no fixed size
+ * @property {boolean} isFluxImage whether the image is a picture of the surface, so that where its tracks sit is a
+ *   fact about the disc rather than a decision the loader made
+ * @property {(function(Uint8Array, string): void)|null} setDiscName null for a format with no catalogue to title
+ * @property {(function(Uint8Array): {is40Track: boolean, reason: string})|null} sniffLayout null for a format that
+ *   cannot tell a 40 track image from an 80 track one
  */
-class DiscType {
-    /**
-     * Create a new disc type.
-     * @param {Object} [options] - Configuration options for this disc type.
-     * @param {string} options.extension - File extension for this disc type (e.g. ".ssd", ".hfe").
-     * @param {function(Disc, Uint8Array, function?): Disc} options.loader - Function to load this disc type.
-     * @param {function(Disc): Uint8Array} options.saver - Function to save this disc type.
-     * @param {function(Uint8Array, string): void|null} [options.nameSetter] - Function to set the name/label in the disc image, or null if not supported.
-     * @param {function(Uint8Array): {is40Track: boolean, reason: string}} [options.layoutSniffer] - Function to tell a 40 track image from an 80 track one, for formats that carry the evidence.
-     * @param {boolean} [options.isFluxImage] - Whether the image is a picture of the surface rather than a list of the sectors on it.
-     * @param {boolean} [options.isDoubleSided] - Whether the disc format is double-sided.
-     * @param {boolean} [options.isDoubleDensity] - Whether the disc format is double density.
-     * @param {number|undefined} [options.byteSize] - The size in bytes of this disc format, or undefined if variable.
-     */
-    constructor({
-        extension,
-        loader,
-        saver,
-        nameSetter = null,
-        layoutSniffer,
-        isFluxImage,
-        isDoubleSided,
-        isDoubleDensity,
-        byteSize,
-    } = {}) {
-        this._extension = extension;
-        this._loader = loader;
-        this._saver = saver;
-        this._nameSetter = nameSetter;
-        this._layoutSniffer = layoutSniffer;
-        this._isFluxImage = isFluxImage;
-        this._isDoubleSided = isDoubleSided;
-        this._isDoubleDensity = isDoubleDensity;
-        this._byteSize = byteSize;
-    }
 
-    /**
-     * Get the file extension for this disc type
-     * @returns {string} File extension including dot
-     */
-    get name() {
-        return this._extension;
-    }
-
-    /**
-     * Get the file extension for this disc type
-     * @returns {string} File extension including dot
-     */
-    get extension() {
-        return this._extension;
-    }
-
-    /**
-     * Get the loader function for this disc type
-     * @returns {function} Function that loads the disc
-     */
-    get loader() {
-        return this._loader;
-    }
-
-    /**
-     * Get the saver function for this disc type
-     * @returns {function} Function that saves the disc
-     */
-    get saver() {
-        return this._saver;
-    }
-
-    /**
-     * Get whether this disc format is double-sided
-     * @returns {boolean} True if double-sided, false otherwise
-     */
-    get isDoubleSided() {
-        return this._isDoubleSided;
-    }
-
-    /**
-     * Get whether this disc format is double density
-     * @returns {boolean} True if double density, false otherwise
-     */
-    get isDoubleDensity() {
-        return this._isDoubleDensity;
-    }
-
-    /**
-     * Get the size in bytes of this disc format
-     * @returns {number|undefined} The size in bytes, or undefined if variable
-     */
-    get byteSize() {
-        return this._byteSize;
-    }
-
-    /**
-     * Whether this disc format supports setting a catalogue name
-     * @returns {boolean} True if a name setter function exists
-     */
-    get supportsCatalogue() {
-        return this._nameSetter !== null;
-    }
-
-    /**
-     * Whether the image holds a picture of the surface, so that where its tracks sit is a fact
-     * about the disc rather than a decision the loader made.
-     * @returns {boolean}
-     */
-    get isFluxImage() {
-        return !!this._isFluxImage;
-    }
-
-    /**
-     * What an image of this type says about its track layout.
-     * @param {Uint8Array} data - The disc image data
-     * @returns {?{is40Track: boolean, reason: string}} null for formats that cannot say
-     */
-    sniffLayout(data) {
-        return this._layoutSniffer ? this._layoutSniffer(data) : null;
-    }
-
-    /**
-     * Sets the disc name in the disc data using the format-specific setter
-     * @param {Uint8Array} data - The disc data to modify
-     * @param {string} name - The name to set
-     * @throws {Error} If the disc format doesn't support setting a name
-     */
-    setDiscName(data, name) {
-        if (!this.supportsCatalogue) {
-            throw new Error(`Cannot set disc name for ${this._extension} format`);
-        }
-
-        this._nameSetter(data, name);
-    }
-}
 // Standard sizes
 const SsdByteSize = 80 * 10 * 256; // 80 tracks, 10 sectors, 256 bytes/sector
 const DsdByteSize = SsdByteSize * 2; // Double-sided
@@ -177,70 +125,68 @@ function setDfsDiscName(data, name) {
     }
 }
 
-// HFE disc type - variable size
-const hfeDiscType = new DiscType({
+/** @type {DiscType} */
+const hfeDiscType = Object.freeze({
     extension: ".hfe",
     loader: loadHfe,
     saver: toHfe,
-    layoutSniffer: sniffHfeLayout,
+    byteSize: undefined,
     isFluxImage: true,
-    isDoubleSided: true,
-    isDoubleDensity: true,
+    setDiscName: null,
+    sniffLayout: sniffHfeLayout,
 });
 
-// ADFS (Large) discs are double density, double sided
-const adlDiscType = new DiscType({
+/** @type {DiscType} */
+const adlDiscType = Object.freeze({
     extension: ".adl",
-    loader: (disc, data, _onChange) => {
-        // TODO(#822) handle onChange
-        return loadAdf(disc, data, true);
-    },
-    saver: (_data) => {
+    // TODO(#822) handle onChange
+    loader: (disc, data, _onChange) => loadAdf(disc, data, true),
+    saver: (_disc) => {
         throw new Error("ADL unsupported");
     },
-    isDoubleSided: true,
-    isDoubleDensity: true,
     byteSize: AdfsLargeByteSize,
+    isFluxImage: false,
+    setDiscName: null,
+    sniffLayout: null,
 });
 
 // ADFS M and S: single sided, and sized as the larger of the two.
-const adfDiscType = new DiscType({
+/** @type {DiscType} */
+const adfDiscType = Object.freeze({
     extension: ".adf",
-    loader: (disc, data, _onChange) => {
-        // TODO(#822) handle onChange
-        return loadAdf(disc, data, false);
-    },
-    saver: (_data) => {
+    // TODO(#822) handle onChange
+    loader: (disc, data, _onChange) => loadAdf(disc, data, false),
+    saver: (_disc) => {
         throw new Error("ADF unsupported");
     },
-    isDoubleSided: false,
-    isDoubleDensity: true,
     byteSize: AdfsMediumByteSize,
+    isFluxImage: false,
+    setDiscName: null,
+    sniffLayout: null,
 });
 
-// DSD (Double-sided disc)
-const dsdDiscType = new DiscType({
+/** @type {DiscType} */
+const dsdDiscType = Object.freeze({
     extension: ".dsd",
     loader: (disc, data, onChange) => loadSsd(disc, data, true, onChange),
     saver: toSsdOrDsd,
-    nameSetter: setDfsDiscName,
-    layoutSniffer: (data) => sniffDfsLayout(data, true),
-    isDoubleSided: true,
-    isDoubleDensity: false,
     byteSize: DsdByteSize,
+    isFluxImage: false,
+    setDiscName: setDfsDiscName,
+    sniffLayout: (data) => sniffDfsLayout(data, true),
 });
 
-// SSD (Single-sided disc)
-const ssdDiscType = new DiscType({
+/** @type {DiscType} */
+const ssdDiscType = Object.freeze({
     extension: ".ssd",
     loader: (disc, data, onChange) => loadSsd(disc, data, false, onChange),
     saver: toSsdOrDsd,
-    nameSetter: setDfsDiscName,
-    layoutSniffer: (data) => sniffDfsLayout(data, false),
-    isDoubleSided: false,
-    isDoubleDensity: false,
     byteSize: SsdByteSize,
+    isFluxImage: false,
+    setDiscName: setDfsDiscName,
+    sniffLayout: (data) => sniffDfsLayout(data, false),
 });
+
 /**
  * Determine the disc type based on the file name extension
  * @param {string} name - The file name with extension
@@ -253,6 +199,18 @@ export function guessDiscTypeFromName(name) {
     if (lowerName.endsWith(".adf") || lowerName.endsWith(".adm")) return adfDiscType;
     if (lowerName.endsWith(".dsd")) return dsdDiscType;
     return ssdDiscType;
+}
+
+/**
+ * @param {DiscType} discType a format of fixed size
+ * @param {string} name
+ * @returns {Uint8Array} an empty sector image, its catalogue titled from `name` where the format has one
+ */
+export function blankImage(discType, name) {
+    if (!discType.byteSize) throw new Error(`Cannot create blank disc of type ${discType.extension} - unknown size`);
+    const data = new Uint8Array(discType.byteSize);
+    discType.setDiscName?.(data, name);
+    return data;
 }
 
 const layoutNote = ({ is40Track, reason }) => ({
@@ -272,7 +230,7 @@ export function discFor(name, stringData, onChange, layout = DiscLayout.auto) {
     const data = typeof stringData !== "string" ? stringData : stringToUint8Array(stringData);
     const discType = guessDiscTypeFromName(name);
     const config = new DiscConfig();
-    const sniffed = layout === DiscLayout.auto ? discType.sniffLayout(data) : null;
+    const sniffed = layout === DiscLayout.auto ? discType.sniffLayout?.(data) : null;
     config.expandTo80 = sniffed ? sniffed.is40Track : layout === DiscLayout.expanded40;
     const disc = discType.loader(new Disc(true, config, name), data, onChange);
     let reading = sniffed;

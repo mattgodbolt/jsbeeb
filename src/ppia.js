@@ -230,8 +230,6 @@ export class AtomPPIA extends WithKeyMatrix(PPIA) {
 
         this.reset();
 
-        // from ACIA; compat ignores parameters as shadowing, so takes our Scheduler for the browser's global.
-        // eslint-disable-next-line compat/compat
         this.runTapeTask = scheduler.newTask(() => this.runTape());
     }
 

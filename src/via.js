@@ -530,15 +530,6 @@ class Via {
         this.portBUpdated();
     }
 
-    _taskOffset(task) {
-        return task.scheduled() ? task.expireEpoch - this.scheduler.epoch : null;
-    }
-
-    _restoreTask(task, offset) {
-        if (offset === null || offset === undefined) task.cancel();
-        else task.reschedule(offset);
-    }
-
     snapshotState() {
         return {
             ora: this.ora,
@@ -568,9 +559,9 @@ class Via {
             justhit: this.justhit,
             t1_pb7: this.t1_pb7,
             lastPolltime: this.lastPolltime,
-            taskOffset: this._taskOffset(this.task),
-            ca2PulseTaskOffset: this._taskOffset(this.ca2PulseTask),
-            cb2PulseTaskOffset: this._taskOffset(this.cb2PulseTask),
+            taskOffset: this.task.offset(),
+            ca2PulseTaskOffset: this.ca2PulseTask.offset(),
+            cb2PulseTaskOffset: this.cb2PulseTask.offset(),
         };
     }
 
@@ -605,9 +596,9 @@ class Via {
         this.t1_pb7 = state.t1_pb7;
         this.lastPolltime = state.lastPolltime;
         this.updateIFR();
-        this._restoreTask(this.task, state.taskOffset);
-        this._restoreTask(this.ca2PulseTask, state.ca2PulseTaskOffset);
-        this._restoreTask(this.cb2PulseTask, state.cb2PulseTaskOffset);
+        this.task.restoreOffset(state.taskOffset);
+        this.ca2PulseTask.restoreOffset(state.ca2PulseTaskOffset);
+        this.cb2PulseTask.restoreOffset(state.cb2PulseTaskOffset);
     }
 
     setca1(level) {
@@ -714,7 +705,7 @@ export class SysVia extends WithKeyMatrix(Via) {
             IC32: this.IC32,
             capsLockLight: this.capsLockLight,
             shiftLockLight: this.shiftLockLight,
-            keyScanTaskOffset: this._taskOffset(this.keyScanTask),
+            keyScanTaskOffset: this.keyScanTask.offset(),
         };
     }
 
@@ -737,7 +728,7 @@ export class SysVia extends WithKeyMatrix(Via) {
 
     restoreState(state) {
         super.restoreState(state);
-        this._restoreTask(this.keyScanTask, state.keyScanTaskOffset);
+        this.keyScanTask.restoreOffset(state.keyScanTaskOffset);
         this.IC32 = state.IC32;
         this.capsLockLight = state.capsLockLight;
         this.shiftLockLight = state.shiftLockLight;

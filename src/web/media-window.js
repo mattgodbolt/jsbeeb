@@ -951,7 +951,7 @@ export class MediaWindow {
         const copyFrom = this.list.copyFrom;
         const discType = guessDiscTypeFromName(name);
         const blankFluxOnDrive = discType.isFluxImage && copyFrom === null && where === "gdrive";
-        if (!discType.supportsCatalogue && !blankFluxOnDrive) name = replaceOrAddExtension(name, ".ssd");
+        if (!discType.setDiscName && !blankFluxOnDrive) name = replaceOrAddExtension(name, ".ssd");
         const driveIndex = copyFrom ?? this.targetDrive;
         this.list.newDiscForm.hidden = true;
         if (copyFrom === null && where === "browser")

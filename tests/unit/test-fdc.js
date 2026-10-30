@@ -50,15 +50,10 @@ describe("loading a disc image", () => {
     });
 
     it("knows which formats hold a catalogue name", () => {
-        expect(guessDiscTypeFromName("test.ssd").supportsCatalogue).toBe(true);
-        expect(guessDiscTypeFromName("test.dsd").supportsCatalogue).toBe(true);
-        // Naming one of these would call a setter it does not have.
+        expect(guessDiscTypeFromName("test.ssd").setDiscName).not.toBeNull();
+        expect(guessDiscTypeFromName("test.dsd").setDiscName).not.toBeNull();
         for (const name of ["test.adf", "test.adl", "test.hfe"])
-            expect(guessDiscTypeFromName(name).supportsCatalogue).toBe(false);
-    });
-
-    it("has nothing to go on for a format that cannot say", () => {
-        expect(guessDiscTypeFromName("test.adf").sniffLayout(new Uint8Array(80 * 16 * SectorSize))).toBe(null);
+            expect(guessDiscTypeFromName(name).setDiscName).toBeNull();
     });
 });
 
