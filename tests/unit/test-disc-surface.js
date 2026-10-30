@@ -1,6 +1,7 @@
 import { afterEach, describe, it, expect, vi } from "vitest";
 
-import { Disc, DiscConfig, loadAdf, loadSsd } from "../../src/disc.js";
+import { Disc, DiscConfig, loadAdf } from "../../src/disc.js";
+import { ssdDisc } from "../helpers/disc-builders.js";
 import { IbmDiscFormat } from "../../src/disc-format.js";
 import {
     DensityPalette,
@@ -28,11 +29,7 @@ function adfDisc() {
 }
 
 /** An SSD's worth of surface, so the tests see real FM pulse data. */
-function ssdDisc() {
-    const disc = new Disc(true, new DiscConfig(), "test.ssd");
-    loadSsd(disc, new Uint8Array(IbmDiscFormat.bytesPerTrack), false, null);
-    return disc;
-}
+const blankSsd = () => ssdDisc(new Uint8Array(IbmDiscFormat.bytesPerTrack));
 
 describe("pulseDensity", function () {
     it("counts the flux transitions in a word", () => {
@@ -50,12 +47,12 @@ describe("pulseDensity", function () {
 
 describe("trackPulseDensity", function () {
     it("covers exactly the words the track uses", () => {
-        const track = ssdDisc().getTrack(false, 0);
+        const track = blankSsd().getTrack(false, 0);
         expect(trackPulseDensity(track)).toHaveLength(track.length);
     });
 
     it("stays inside the ramp's range for a formatted track", () => {
-        const density = trackPulseDensity(ssdDisc().getTrack(false, 0));
+        const density = trackPulseDensity(blankSsd().getTrack(false, 0));
         expect(Math.min(...density)).toBeGreaterThanOrEqual(MinDensity);
         expect(Math.max(...density)).toBeLessThanOrEqual(MaxDensity);
     });
@@ -188,7 +185,7 @@ describe("trackRegions", function () {
     }
 
     it("finds a header and a data field for every sector of a formatted track", () => {
-        const { codes, sectorNumbers, errors } = trackRegions(ssdDisc().getTrack(false, 0));
+        const { codes, sectorNumbers, errors } = trackRegions(blankSsd().getTrack(false, 0));
         expect(errors).toHaveLength(0);
         expect(new Set([...sectorNumbers].filter((n) => n >= 0))).toEqual(new Set([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]));
         expect(wordsWith(codes, Region.Header).size).toBeGreaterThan(0);
@@ -198,7 +195,7 @@ describe("trackRegions", function () {
     });
 
     it("puts each sector's header before its data", () => {
-        const { codes, sectorNumbers } = trackRegions(ssdDisc().getTrack(false, 0));
+        const { codes, sectorNumbers } = trackRegions(blankSsd().getTrack(false, 0));
         for (let sector = 0; sector < 10; ++sector) {
             const headers = [];
             const data = [];
@@ -218,7 +215,7 @@ describe("trackRegions", function () {
     });
 
     it("reports a CRC error over the sector it belongs to, without touching the fills", () => {
-        const disc = ssdDisc();
+        const disc = blankSsd();
         const track = disc.getTrack(false, 0);
         const { codes, sectorNumbers } = trackRegions(track);
         const payload = [];
@@ -246,7 +243,7 @@ describe("trackRegions", function () {
     });
 
     it("marks a header whose own CRC fails", () => {
-        const disc = ssdDisc();
+        const disc = blankSsd();
         const track = disc.getTrack(false, 0);
         const { codes, sectorNumbers } = trackRegions(track);
         const header = [];
@@ -259,7 +256,7 @@ describe("trackRegions", function () {
     });
 
     it("tells a deleted data field from a live one", () => {
-        const disc = ssdDisc();
+        const disc = blankSsd();
         const track = disc.getTrack(false, 0);
         const { codes, sectorNumbers } = trackRegions(track);
         const mark = codes.findIndex((code, word) => code === Region.Data && sectorNumbers[word] === 2);

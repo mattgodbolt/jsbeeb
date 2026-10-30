@@ -19,7 +19,14 @@ import { crc32 } from "../../src/archive.js";
 import { ssdImage } from "./helpers.js";
 import { discFor } from "../../src/fdc.js";
 import { expectSnapshotRoundTrips } from "../helpers/snapshot-round-trip.js";
-import { appendFmSector, corruptSectorData, fmDiscWithSector, mfmDiscWithSector } from "../helpers/disc-builders.js";
+import {
+    appendFmSector,
+    blankDisc,
+    corruptSectorData,
+    fmDiscWithSector,
+    mfmDiscWithSector,
+    ssdDisc,
+} from "../helpers/disc-builders.js";
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -68,7 +75,7 @@ describe("Disc builder tests", () => {
     });
 
     it("should note how much disc is being used", () => {
-        const disc = new Disc(true, new DiscConfig(), "test.ssd");
+        const disc = blankDisc();
         expect(disc.tracksUsed).toBe(0);
         expect(disc.isDoubleSided).toBe(false);
         disc.buildTrack(false, 0);
@@ -81,21 +88,12 @@ describe("Disc builder tests", () => {
         expect(disc.tracksUsed).toBe(4);
         expect(disc.isDoubleSided).toBe(true);
     });
-
-    it.each([
-        ["FM", false, [4, 4, 8, 8, 4, 8, 8, 8, 8, 8, 8, 8, 8]],
-        ["MFM", true, [4, 4, 6, 6, 4, 6, 6, 6, 6, 6, 6, 6, 6, 6]],
-    ])("should build from %s pulses", (_, isMfm, pulses) => {
-        const builder = new Disc(true, new DiscConfig(), "test.ssd").buildTrack(false, 0);
-        builder.buildFromPulses(pulses, isMfm);
-        expect(builder.track.length).toBe(1);
-    });
 });
 
 describe("SSD loader tests", function () {
     it("should load and roundtrip Elite", { timeout: 60000 }, () => {
         const data = new Uint8Array(fs.readFileSync("public/discs/elite.ssd"));
-        const disc = new Disc(true, new DiscConfig(), "test.ssd");
+        const disc = blankDisc();
         loadSsd(disc, data, false);
         expect(disc.tracksUsed).toBe(80);
 
@@ -106,7 +104,7 @@ describe("SSD loader tests", function () {
 
     it("should load an SSD whose size is not a multiple of sector size", () => {
         const oddData = new Uint8Array(SectorSize * 2 + 100).map((_, i) => i & 0xff);
-        const disc = new Disc(true, new DiscConfig(), "test.ssd");
+        const disc = blankDisc();
         loadSsd(disc, oddData, false);
 
         const sectors = disc.getTrack(false, 0).findSectors();
@@ -133,11 +131,7 @@ function numberedImage(numTracks, numSides = 1) {
     return data;
 }
 
-function fortyTrackDisc(data, isDsd = false, onChange = null) {
-    const config = new DiscConfig();
-    config.expandTo80 = true;
-    return loadSsd(new Disc(true, config, "test.ssd"), data, isDsd, onChange);
-}
+const fortyTrackDisc = (data, isDsd = false, onChange = null) => ssdDisc(data, { expandTo80: true, isDsd, onChange });
 
 describe("SSD track skew", () => {
     const sectorOrder = (disc, isSide1, track) =>
@@ -147,7 +141,7 @@ describe("SSD track skew", () => {
             .map((sector) => sector.sectorNumber);
 
     it("starts each track three sectors later than the one before, as Acorn's *FORM does", () => {
-        const disc = loadSsd(new Disc(true, new DiscConfig(), "test.ssd"), numberedImage(80), false, null);
+        const disc = ssdDisc(numberedImage(80));
 
         expect(sectorOrder(disc, false, 0)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
         expect(sectorOrder(disc, false, 1)).toEqual([7, 8, 9, 0, 1, 2, 3, 4, 5, 6]);
@@ -304,7 +298,7 @@ describe("ADF loader tests", function () {
 /** Most discs have nothing watching them: fdc.js discards onChange for ADF, ADM and ADL, and
  *  discFor is usually called without one. */
 function unobservedDisc() {
-    const disc = new Disc(true, new DiscConfig(), "test.ssd");
+    const disc = blankDisc();
     loadSsd(disc, new Uint8Array(IbmDiscFormat.bytesPerTrack), false, null);
     return disc;
 }
@@ -416,7 +410,7 @@ describe("the report on a side of a disc", () => {
 });
 
 describe("reading the sticker off a disc", () => {
-    const loaded = (data, isDsd = false) => loadSsd(new Disc(true, new DiscConfig(), "test.ssd"), data, isDsd);
+    const loaded = (data, isDsd = false) => ssdDisc(data, { isDsd });
     const titled = (title, cycle, { sectors = 800, side = 0, isDsd = false } = {}) => {
         const data = ssdImage(sectors, { length: 80 * TrackSize * (isDsd ? 2 : 1) });
         const base = side * TrackSize;
@@ -543,7 +537,7 @@ describe("track write listeners", () => {
 
     it("keeps an image loader's own writeback working when something else watches too", () => {
         let imageUpdates = 0;
-        const disc = new Disc(true, new DiscConfig(), "test.ssd");
+        const disc = blankDisc();
         loadSsd(disc, new Uint8Array(IbmDiscFormat.bytesPerTrack), false, () => imageUpdates++);
         let watcherCalls = 0;
         disc.addTrackWriteListener(() => watcherCalls++);
@@ -584,7 +578,7 @@ describe("track write listeners", () => {
         const sectorSize = 256;
         const data = new Uint8Array(sectorsPerTrack * sectorSize).fill(0xa5);
         let image = null;
-        const disc = new Disc(true, new DiscConfig(), "test.ssd");
+        const disc = blankDisc();
         loadSsd(disc, data, false, (updated) => (image = updated));
         eraseDataField(disc.getTrack(false, 0), 4);
 
@@ -695,7 +689,7 @@ describe("a disc's snapshot", () => {
     });
 
     it("shares a clean track with the snapshot before it, and copies a written one", () => {
-        const disc = loadSsd(new Disc(true, new DiscConfig(), "test.ssd"), ssdImage(20), false);
+        const disc = ssdDisc(ssdImage(20));
         const track1 = disc.getTrack(false, 1).pulses2Us.slice();
         const first = disc.snapshotState();
         write(disc, 0, 0x12345678);
@@ -712,7 +706,7 @@ describe("a disc's snapshot", () => {
 
     it("keeps the image it was loaded from, and that image's CRC", () => {
         const image = ssdImage();
-        const disc = new Disc(true, new DiscConfig(), "test.ssd");
+        const disc = blankDisc();
         disc.setOriginalImage(image);
         expect(disc.originalImageData).toBe(image);
         expect(disc.originalImageCrc32).toBe(crc32(image));

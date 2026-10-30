@@ -1,27 +1,20 @@
 import { afterEach, describe, it, expect, vi } from "vitest";
 
-import { Disc, DiscConfig, loadSsd } from "../../src/disc.js";
+import { Disc } from "../../src/disc.js";
 import { IbmDiscFormat } from "../../src/disc-format.js";
 import { attachDriveNoise, DiscDrive } from "../../src/disc-drive.js";
 import { Scheduler } from "../../src/scheduler.js";
 import { expectSnapshotRoundTrips } from "../helpers/snapshot-round-trip.js";
+import { ms, ssdDisc } from "../helpers/disc-builders.js";
 
 const SectorsPerTrack = 10;
 const SectorSize = 256;
 const BbcCyclesPerSecond = 2 * 1000 * 1000;
 const AtomCyclesPerSecond = 1000 * 1000;
 
-function ssdDisc(numTracks, is40Track) {
-    const config = new DiscConfig();
-    config.expandTo80 = is40Track;
-    const data = new Uint8Array(numTracks * SectorsPerTrack * SectorSize).fill(0x55);
-    return loadSsd(new Disc(true, config, "test.ssd"), data, false, null);
-}
-
-const eightyTrackDisc = () => ssdDisc(80, false);
-const fortyTrackDisc = () => ssdDisc(40, true);
-
-const ms = (n) => n * 2000;
+const filledImage = (numTracks) => new Uint8Array(numTracks * SectorsPerTrack * SectorSize).fill(0x55);
+const eightyTrackDisc = () => ssdDisc(filledImage(80));
+const fortyTrackDisc = () => ssdDisc(filledImage(40), { expandTo80: true });
 
 function spinningDrive(cyclesPerSecond = BbcCyclesPerSecond) {
     const scheduler = new Scheduler();

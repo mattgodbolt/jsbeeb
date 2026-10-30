@@ -7,11 +7,10 @@ import { DiscDrive } from "../../src/disc-drive.js";
 import { Disc, DiscConfig, loadSsd } from "../../src/disc.js";
 import { findModel } from "../../src/models.js";
 import { expectSnapshotRoundTrips } from "../helpers/snapshot-round-trip.js";
-import { SectorBytes, appendFmSector } from "../helpers/disc-builders.js";
+import { SectorBytes, appendFmSector, ms, ssdDisc } from "../helpers/disc-builders.js";
 
 const AtomModel = findModel("Atom");
 
-const ms = (n) => n * 2000;
 const WriteEnable = 0x01;
 const ResetAddr = 2;
 
@@ -123,7 +122,7 @@ function dfsFdc({
 } = {}) {
     const data = new Uint8Array(Tracks * SectorsPerTrack * SectorBytes);
     for (let track = 0; track < Tracks; ++track) data[track * SectorsPerTrack * SectorBytes] = track;
-    const disc = loadSsd(new Disc(true, new DiscConfig(), "test.ssd"), data, false, null);
+    const disc = ssdDisc(data);
     alterDisc(disc);
     const { fdc, scheduler, drive } = makeFdc({
         makeDrives: (scheduler, cpu) => {
