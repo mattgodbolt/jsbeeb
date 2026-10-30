@@ -19,6 +19,7 @@ describe("Help", () => {
             "Debugger",
             "Disassembly",
             "Memory",
+            "BASIC",
         ]);
     });
 

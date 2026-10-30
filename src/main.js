@@ -51,6 +51,7 @@ import { CrtcPanel } from "./web/crtc-panel.js";
 import { UserViaPanel } from "./web/uservia-panel.js";
 import { VideoUlaPanel } from "./web/video-ula-panel.js";
 import { PagingPanel } from "./web/paging-panel.js";
+import { BasicPanel } from "./web/basic-panel.js";
 import { SoundChipPanel } from "./web/soundchip-panel.js";
 import { FdcPanel } from "./web/fdc-panel.js";
 import { cycleCount } from "./lockstep.js";
@@ -368,6 +369,15 @@ for (const DevicePanel of [SysViaPanel, UserViaPanel, CrtcPanel, SoundChipPanel,
 new FdcPanel({ cpu: processor, arrangement: panelArrangement, visualiser: discVisualiser });
 if (PagingPanel.fits(processor))
     new PagingPanel({ cpu: processor, arrangement: panelArrangement, showBank: (bank) => dbgr.showBank(bank) });
+if (BasicPanel.fits(processor)) {
+    new BasicPanel({
+        cpu: processor,
+        arrangement: panelArrangement,
+        keys: panelKeys,
+        runUntil: (stopsHere) => dbgr.runUntil(stopsHere),
+        inDebugger: () => dbgr.inDebugger(),
+    });
+}
 new DebugMenu({ arrangement: panelArrangement, dbgr });
 
 if (!parsedQuery.embed && !model.isAtom) {

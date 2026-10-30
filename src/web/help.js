@@ -1,5 +1,6 @@
 import * as bootstrap from "bootstrap";
 
+import { BasicKeys } from "./basic-panel.js";
 import { MemoryKeys, ToolbarKeys } from "./debug.js";
 import { DisassemblyKeys } from "./disassembly-view.js";
 import { PauseKeys } from "./keyboard-setup.js";
@@ -12,6 +13,7 @@ const KeyTables = [
     ["Debugger", ToolbarKeys],
     ["Disassembly", DisassemblyKeys],
     ["Memory", MemoryKeys],
+    ["BASIC", BasicKeys],
 ];
 const StartTab = "#help-start";
 const DebuggingTab = "#help-debugging";

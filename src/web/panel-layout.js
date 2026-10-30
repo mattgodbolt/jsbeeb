@@ -31,6 +31,7 @@ export const PanelIds = [
     "videoula",
     "fdc",
     "paging",
+    "basic",
 ];
 export const AllEdges = { left: true, right: true, top: true, bottom: true };
 export const StartEdge = { anchor: "start", offset: 0, fraction: 0 };

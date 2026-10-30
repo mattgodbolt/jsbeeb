@@ -15,6 +15,7 @@ import { bindGotoForm, externalLink, FittedRows, labelHtml, powerOfTwoColumnsTha
 import { DisassemblyView } from "./disassembly-view.js";
 import { PagingOverride } from "./paging-override.js";
 import {
+    bankName,
     bankView,
     PagedView,
     parseViewedAddress,
@@ -37,10 +38,7 @@ const FewestBytesPerRow = 8;
 const MemoryPageRows = 8;
 const QuickRunsPerSecond = 50;
 const ResetVector = 0xfffc;
-const UnconditionalJump = /^(JMP|RTS|RTI|BRK)\b/;
-const Branch = /^(B(CC|CS|EQ|NE|MI|PL|VC|VS|RA)|BB[RS][0-7])\b/;
-const Call = /^JSR\b/;
-const ReturnOpcodes = new Set([0x60, 0x40]); // RTS, RTI
+const NeverFallsThrough = new Set(["jump", "return", "interrupt"]);
 const HexByte = /^[0-9a-f]{1,2}$/i;
 
 // S counts down and wraps, so "not deeper" is a difference of under half the page, either way round $00.
@@ -578,8 +576,8 @@ export class Debugger {
         bank.type = "button";
         bank.className = "label-bank dropdown-toggle";
         bank.dataset.bsToggle = "dropdown";
-        bank.textContent = file.bank === null ? "any bank" : `bank ${file.bank}`;
-        bank.title = `Which sideways bank ${file.title} names $8000-$bfff in`;
+        bank.textContent = file.bank === null ? "any bank" : `bank ${bankName(file.bank)}`;
+        bank.title = `Which sideways bank ${file.title} names &8000 to &BFFF in`;
         // Bootstrap focuses the toggle as its menu opens.
         bank.addEventListener("hidden.bs.dropdown", () => bank.blur());
         const banks = document.createElement("div");
@@ -590,7 +588,7 @@ export class Debugger {
                 item.type = "button";
                 item.className = "dropdown-item";
                 item.classList.toggle("active", choice === file.bank);
-                item.textContent = choice === null ? "any bank" : `${choice}`;
+                item.textContent = choice === null ? "any bank" : bankName(choice);
                 item.addEventListener("click", () => this._labelFiles.tie(file, choice));
                 return item;
             }),
@@ -875,10 +873,6 @@ export class Debugger {
         this.watches.setCpu(cpu);
         if (this._ownPanelsShown()) this._refresh.drawNow();
     }
-    disassemble(addr) {
-        return this.cpu.disassembler.disassemble(addr);
-    }
-
     updateElem(elem, val) {
         const prevVal = elem.textContent;
         if (prevVal !== val) {
@@ -1162,28 +1156,35 @@ export class Debugger {
 
     stepOver() {
         const { pc, s } = this.cpu;
-        const [text, end, target] = this.disassemble(pc);
+        const { flow, next: end, target } = this.cpu.disassembler.instructionAt(pc);
         const next = end & 0xffff;
         const entry = this.resetEntry();
-        if (UnconditionalJump.test(text)) return this.step();
-        if (Branch.test(text) && target <= pc) {
+        if (NeverFallsThrough.has(flow)) return this.step();
+        if (flow === "branch" && target <= pc) {
             return this.runTo(() => notDeeper(this.cpu.s, s) && (this.cpu.pc < target || this.cpu.pc > pc), false);
         }
-        if (Branch.test(text)) {
+        if (flow === "branch") {
             return this.runTo(() => this.cpu.pc === next || this.cpu.pc === target, next === entry || target === entry);
         }
-        if (Call.test(text)) return this.runTo(() => this.cpu.pc === next && notDeeper(this.cpu.s, s), next === entry);
+        if (flow === "call") return this.runTo(() => this.cpu.pc === next && notDeeper(this.cpu.s, s), next === entry);
         this.runTo(() => this.cpu.pc === next, next === entry);
     }
 
     stepOut() {
-        const s = this.cpu.s;
-        let returning = ReturnOpcodes.has(this.cpu.peekmem(this.cpu.pc));
+        const { cpu } = this;
+        const s = cpu.s;
+        const returnsHere = () => cpu.disassembler.describeOpcode(cpu.peekmem(cpu.pc)).flow === "return";
+        let returning = returnsHere();
         this.runTo(() => {
             if (returning) return true;
-            returning = notDeeper(this.cpu.s, s) && ReturnOpcodes.has(this.cpu.peekmem(this.cpu.pc));
+            returning = notDeeper(cpu.s, s) && returnsHere();
             return false;
         }, false);
+    }
+
+    /** Runs the machine, from the debugger, until `stopsHere()` holds before an instruction; see runTo. */
+    runUntil(stopsHere) {
+        this._fromDebugger(() => this.runTo(stopsHere, false));
     }
 
     runToCursor() {

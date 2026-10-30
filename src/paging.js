@@ -44,6 +44,8 @@ export function requireBank(bank, model) {
 
 export const bankView = (bank) => bank.toString(16);
 
+export const bankName = (bank) => bankView(bank).toUpperCase();
+
 /** @returns {number | undefined} the sideways bank `view` shows, if it shows one */
 export function viewedBank(view) {
     return /^[0-9a-f]$/.test(view) ? parseInt(view, 16) : undefined;
