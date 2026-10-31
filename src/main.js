@@ -86,7 +86,6 @@ configureAnalytics();
 installIcons();
 fillHelp();
 labelPageShortcuts();
-const plan = startupPlan(parsedQuery);
 const { settings: driveTracks, warnings: driveTrackWarnings } = processDriveTrackParams(parsedQuery);
 
 const extraRoms = (parsedQuery.rom ?? []).filter(Boolean);
@@ -128,6 +127,7 @@ const accessibilitySwitches = new AccessibilitySwitches();
 const settings = new Settings({ urlState });
 const { keyLayout, displayMode, audioOutput, speakerAmount } = settings;
 const { model, hasVideoNula } = settings;
+const plan = startupPlan(parsedQuery, model);
 const gamepad = new GamePad(model);
 const takenFromHost = takenFromHostValues(settings, parsedQuery);
 const config = new Config(settings);

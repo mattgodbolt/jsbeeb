@@ -167,15 +167,6 @@ describe("Machine", () => {
             });
         });
 
-        it("puts no default disc in a machine without drives, but still tries one the URL names", async () => {
-            deps.model = { ...deps.model, hasDiscDrives: false };
-            const started = startDeps();
-            await make().start({ ...started, discImage: "elite.ssd", discImageInUrl: false });
-            expect(started.media.slots.load).not.toHaveBeenCalled();
-            await make().start({ ...started, discImage: "chuckie.ssd", discImageInUrl: true });
-            expect(started.media.slots.load).toHaveBeenCalledWith("drive 0", expect.anything(), expect.anything());
-        });
-
         it("counts nothing a page starts with as loaded recently, even what the URL names", async () => {
             const machine = make();
             const started = startDeps();

@@ -173,7 +173,7 @@ export class Machine {
 
         // The slots report their own failures; the page's default disc is not named in the URL.
         const { slots } = media;
-        if (discImage && (discImageInUrl || this.model.hasDiscDrives))
+        if (discImage)
             startImageLoad(`disc ${discImage}`, () =>
                 slots.load(slots.drive(0), describeRef(discImage, "disc"), {
                     inUrl: discImageInUrl,

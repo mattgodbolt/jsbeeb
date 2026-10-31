@@ -3,19 +3,20 @@ import { RunMode } from "./emulation-loop.js";
 import { bootModeOf, parseMediaParams, processAutobootParams } from "../url-params.js";
 
 /**
- * What the URL asks the page to start with.
+ * What the URL asks the page to start with, on `model`.
  * @returns {{media: object, autoboot: string, autoType: string, bootMode: string, mayNeedAnotherModel: boolean,
  *   patch: string|undefined}} `media` is what `Machine.start` loads; the rest is for `startAsTheUrlAsks`
  */
-export function startupPlan(parsedQuery) {
+export function startupPlan(parsedQuery, model) {
     const { needsAutoboot, autoType } = processAutobootParams(parsedQuery);
     const { discImage, secondDiscImage, mmcImage } = parseMediaParams(parsedQuery);
-    const { loadBasic, embedBasic, tape, model, patch } = parsedQuery;
+    const { loadBasic, embedBasic, tape, patch } = parsedQuery;
     // A BASIC program in the URL is the boot, which basicNeedsRun says whether to run.
     const autoboot = loadBasic ? "" : needsAutoboot;
     return {
         media: {
-            discImage: discImage || BuiltInImages[0].file,
+            // Every built-in disc is a BBC one.
+            discImage: discImage || (model.isAtom ? null : BuiltInImages[0].file),
             discImageInUrl: !!discImage,
             secondDiscImage: secondDiscImage || null,
             tape,
@@ -27,7 +28,7 @@ export function startupPlan(parsedQuery) {
         autoboot,
         autoType,
         bootMode: bootModeOf(parsedQuery),
-        mayNeedAnotherModel: autoboot === "boot" && !model,
+        mayNeedAnotherModel: autoboot === "boot" && !!discImage && !parsedQuery.model,
         patch,
     };
 }

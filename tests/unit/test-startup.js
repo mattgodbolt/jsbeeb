@@ -14,9 +14,11 @@ const paradroid = { ref: "bitshifters:bs-paradroid.ssd", title: "Paradroid", req
 
 afterEach(teardownDom);
 
+const beeb = findModel("B-DFS1.2");
+
 describe("startupPlan", () => {
     it("loads the page's own disc when the URL names none, and boots nothing", () => {
-        expect(startupPlan({})).toEqual({
+        expect(startupPlan({}, beeb)).toEqual({
             media: {
                 discImage: BuiltInImages[0].file,
                 discImageInUrl: false,
@@ -35,8 +37,21 @@ describe("startupPlan", () => {
         });
     });
 
+    it.each([
+        ["B-DFS1.2", BuiltInImages[0].file],
+        ["Master", BuiltInImages[0].file],
+        ["Atom-DOS", null],
+        ["Atom", null],
+    ])("starts %s with the default disc %s, or the one the URL names", (name, defaultDisc) => {
+        expect(startupPlan({}, findModel(name)).media.discImage).toBe(defaultDisc);
+        expect(startupPlan({ disc: "a.ssd" }, findModel(name)).media.discImage).toBe("a.ssd");
+    });
+
     it("loads the media the URL names, disc1 over the older disc", () => {
-        const { media } = startupPlan({ disc: "old.ssd", disc1: "a.ssd", disc2: "b.ssd", tape: "t.uef", mmc: "m.zip" });
+        const { media } = startupPlan(
+            { disc: "old.ssd", disc1: "a.ssd", disc2: "b.ssd", tape: "t.uef", mmc: "m.zip" },
+            beeb,
+        );
         expect(media).toMatchObject({
             discImage: "a.ssd",
             discImageInUrl: true,
@@ -52,26 +67,27 @@ describe("startupPlan", () => {
         [{ autorun: "" }, "run", ""],
         [{ autotype: "PRINT 1\n" }, "type", "PRINT 1\n"],
     ])("takes %j as the autoboot %s", (query, autoboot, autoType) => {
-        expect(startupPlan(query)).toMatchObject({ autoboot, autoType, bootMode: autoboot });
+        expect(startupPlan(query, beeb)).toMatchObject({ autoboot, autoType, bootMode: autoboot });
     });
 
     it("lets a BASIC program in the URL be the boot, running it when asked to autorun", () => {
-        expect(startupPlan({ loadBasic: "a.bas", autoboot: "" })).toMatchObject({
+        expect(startupPlan({ loadBasic: "a.bas", autoboot: "" }, beeb)).toMatchObject({
             autoboot: "",
             bootMode: "basic",
             mayNeedAnotherModel: false,
             media: { loadBasic: "a.bas", basicNeedsRun: false },
         });
-        expect(startupPlan({ loadBasic: "a.bas", autorun: "" })).toMatchObject({
+        expect(startupPlan({ loadBasic: "a.bas", autorun: "" }, beeb)).toMatchObject({
             autoboot: "",
             media: { basicNeedsRun: true },
         });
     });
 
-    it("checks the boot disc's machine only for a boot from a link that names no model", () => {
-        expect(startupPlan({ disc: "a.ssd", autoboot: "" }).mayNeedAnotherModel).toBe(true);
-        expect(startupPlan({ disc: "a.ssd", autoboot: "", model: "B" }).mayNeedAnotherModel).toBe(false);
-        expect(startupPlan({ disc: "a.ssd", autotype: "x" }).mayNeedAnotherModel).toBe(false);
+    it("checks the boot disc's machine only for a boot from a link that names a disc and no model", () => {
+        expect(startupPlan({ disc: "a.ssd", autoboot: "" }, beeb).mayNeedAnotherModel).toBe(true);
+        expect(startupPlan({ disc: "a.ssd", autoboot: "", model: "B" }, beeb).mayNeedAnotherModel).toBe(false);
+        expect(startupPlan({ disc: "a.ssd", autotype: "x" }, beeb).mayNeedAnotherModel).toBe(false);
+        expect(startupPlan({ autoboot: "" }, findModel("Atom-DOS")).mayNeedAnotherModel).toBe(false);
     });
 });
 
@@ -109,7 +125,7 @@ describe("startAsTheUrlAsks", () => {
             },
             loop,
         };
-        const started = startAsTheUrlAsks(startupPlan(urlState.params), deps);
+        const started = startAsTheUrlAsks(startupPlan(urlState.params, findModel(model)), deps);
         return { started, log, urlState };
     };
 
