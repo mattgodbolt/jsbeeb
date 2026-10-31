@@ -1,5 +1,20 @@
 # Changelog
 
+## [2.17.0](https://github.com/mattgodbolt/jsbeeb/compare/v2.16.1...v2.17.0) (2026-10-31)
+
+
+### Features
+
+* step back one instruction, or back over a call, in the debugger ([#1762](https://github.com/mattgodbolt/jsbeeb/issues/1762)) ([f4dc1f4](https://github.com/mattgodbolt/jsbeeb/commit/f4dc1f4aa83f5073ebc40bec2fc131579cfa05e5))
+
+
+### Bug Fixes
+
+* an Atom or Master restored from its own snapshot runs on as it did ([#1758](https://github.com/mattgodbolt/jsbeeb/issues/1758)) ([ad6ff12](https://github.com/mattgodbolt/jsbeeb/commit/ad6ff12730f74301920dccef19974faa37cbf188))
+* hold the WD1770's mark detector in a BitWindow64, not a BigInt ([#1754](https://github.com/mattgodbolt/jsbeeb/issues/1754)) ([aa790a2](https://github.com/mattgodbolt/jsbeeb/commit/aa790a2a975926bf782a6bc816eec4930147f595))
+* save the Atom's MMC interface in snapshots ([#1760](https://github.com/mattgodbolt/jsbeeb/issues/1760)) ([d3c3ac7](https://github.com/mattgodbolt/jsbeeb/commit/d3c3ac7185f781be8ce13da80d78dfbb76b35906))
+* stop iOS selecting the page when an on-screen key is held ([#1751](https://github.com/mattgodbolt/jsbeeb/issues/1751)) ([32f6235](https://github.com/mattgodbolt/jsbeeb/commit/32f623567b89790886d8692e837bb9f8d7dfcd5d))
+
 ## [2.16.1](https://github.com/mattgodbolt/jsbeeb/compare/v2.16.0...v2.16.1) (2026-10-31)
 
 

@@ -10,7 +10,7 @@
     "type": "git",
     "url": "git+https://github.com/mattgodbolt/jsbeeb.git"
   },
-  "version": "2.16.1",
+  "version": "2.17.0",
   "//engines": "If you change the version of Node, it must also be updated at the top of the Dockerfile.",
   "engines": {
     "node": ">=24.15.0"
