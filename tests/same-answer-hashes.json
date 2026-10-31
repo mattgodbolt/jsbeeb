@@ -32,6 +32,14 @@
       "cycles": "f62dffab17ab1472",
       "sound": "72ec8ef50df8dc18",
       "peripherals": "20a45052702b5025"
+    },
+    "master-disc-cat": {
+      "framebuffer": "b96b7b7448c4e07d",
+      "registers": "ca7607211c82904b",
+      "memory": "822922765d3cfce4",
+      "cycles": "946a74abb174f0e3",
+      "sound": "a807248309f9973c",
+      "peripherals": "c4922b215a0e95a8"
     }
   }
 }
