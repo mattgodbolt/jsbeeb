@@ -155,6 +155,8 @@ nobody asked.
 
 - **Pre-commit Hooks**:
   - The project uses lint-staged with ESLint
+  - It runs the unit tests related to the staged files, on vitest's usual one worker per two hardware threads;
+    `VITEST_MAX_WORKERS=<n>` caps that, here and in every other vitest run
   - Watch for unused variables and ensure proper error handling
   - YOU MUST NEVER bypass git commit hooks on checkins. This leads to failures in CI later on
 

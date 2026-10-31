@@ -515,6 +515,10 @@ Tests are run via npm scripts: `npm test` runs the whole suite. The vitest suite
 `npm run test:e2e` (the shader and browser tests need Chrome installed). Please note it can take a while to run the
 whole test suite.
 
+The pre-commit hook runs the unit tests related to the staged files. Like every vitest run, it uses one worker per two
+hardware threads; set `VITEST_MAX_WORKERS` (vitest's own variable) to run fewer, for example `VITEST_MAX_WORKERS=1` to
+run them one file at a time on a machine the full count would swamp.
+
 ## Thanks
 
 jsbeeb was heavily based on Sarah Walker's C [B-Em emulator](https://github.com/stardot/b-em); thanks to her for her
