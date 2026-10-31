@@ -1885,13 +1885,14 @@ export class Cpu6502 extends Base6502 {
 
     /**
      * Runs `run` as a replay of time the machine has run already, or is only previewing: every debug hook detached
-     * but `onInstruction(pc, opcode)`, or null for none, and `replaying` set, so that output devices send the host
-     * nothing it has had or will have from the run itself.
+     * but `onInstruction(pc, opcode)` and `onWrite(address, value)`, either null for none, and `replaying` set, so
+     * that output devices send the host nothing it has had or will have from the run itself.
      */
-    asReplay(onInstruction, run) {
+    asReplay(onInstruction, onWrite, run) {
         const attached = [this._debugInstruction, this._debugRead, this._debugWrite, this._debugInterrupt];
         this._debugInstruction = onInstruction;
-        this._debugRead = this._debugWrite = this._debugInterrupt = null;
+        this._debugWrite = onWrite;
+        this._debugRead = this._debugInterrupt = null;
         this.replaying = true;
         this.refreshLook();
         try {

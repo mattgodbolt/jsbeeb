@@ -3,7 +3,7 @@ import { byteChar, hexbyte, hexword, parseAddr } from "../hex.js";
 import { NoNames } from "../symbol-names.js";
 import { isHttps } from "../symbol-sets.js";
 import { noteFeature } from "./analytics.js";
-import { toast } from "./toast.js";
+import { dismissToast, toast } from "./toast.js";
 import { WatchPanel } from "./watch-panel.js";
 import { RunMode } from "./emulation-loop.js";
 import { DebugGroup, FloatingPanel, MenuGroup } from "./floating-panel.js";
@@ -50,6 +50,7 @@ const NeverFallsThrough = new Set(["jump", "return", "interrupt"]);
 const HexByte = /^[0-9a-f]{1,2}$/i;
 const NoHistory = "There is nothing to step back to here.";
 const NoStepBackInSession = "Step back is not available in a shared session.";
+const NoSearchInSession = "Searching back is not available in a shared session.";
 const StepBackRuns = ["stepBack", "stepBackOver"];
 
 function sourceNode(source) {
@@ -422,7 +423,13 @@ export class Debugger {
             (sets) => this._credit(this._credits.memory, this._namesIn(this._paging.memory), sets),
             () => this._redraw(() => this._memoryView.update()),
         );
-        this.watches = new WatchPanel({ peek, resolve: (text) => this._resolveWatch(text), arrangement });
+        this.watches = new WatchPanel({
+            peek,
+            resolve: (text) => this._resolveWatch(text),
+            arrangement,
+            searchWrites: (address) => this.whoWrote(address),
+        });
+        this._searching = null;
         // Fetches the index, and the sets matching memory now, so names typed while the machine runs can resolve.
         this.watches.floating.addEventListener("open", () => this._namesNow());
         this._symbolSets = symbolSets;
@@ -466,7 +473,7 @@ export class Debugger {
             resolve: (text) => this._resolveViewed(this._paging.disassembly, text),
             showing: (sets) => this._credit(this._credits.disassembly, this._namesIn(this._paging.disassembly), sets),
             showMemory: (address) => this._memoryView.update(address),
-            offerWatch: (e, address, name) => this._offerWatch(e, address, name),
+            offerWatch: (e, address, name) => this._offerWatch(e, address, name, this._paging.disassembly),
             runToCursor: this._actions.runToCursor,
             refit: () =>
                 this._redraw(() =>
@@ -520,7 +527,7 @@ export class Debugger {
             if (!byte) return;
             const address = Number(byte.dataset.addr);
             const named = this._paging.memory.differs(address) ? undefined : this._names.address(address, this.cpu.pc);
-            this._offerWatch(e, address, named?.name);
+            this._offerWatch(e, address, named?.name, this._paging.memory);
         });
         document.getElementById("memory").addEventListener("click", (e) => {
             if (!e.target.matches(".mem_bytes [data-addr]") || this._loop.mode !== RunMode.debugging) return;
@@ -700,9 +707,11 @@ export class Debugger {
         floating.open();
     }
 
-    _offerWatch(e, address, name) {
+    // Who wrote a byte is offered only while stopped, of the memory the CPU writes to, which `paging` may not show.
+    _offerWatch(e, address, name, paging) {
         e.preventDefault();
-        this.watches.offer({ address, label: name ?? `$${hexword(address)}` }, e.clientX, e.clientY);
+        const searchable = !this._loop.isRunning() && !paging.differs(address);
+        this.watches.offer({ address, label: name ?? `$${hexword(address)}` }, e.clientX, e.clientY, searchable);
     }
 
     _makePanel(own) {
@@ -1285,17 +1294,90 @@ export class Debugger {
 
     /** Steps back one instruction, or with `over` back over the call just returned from; see ReplayHistory. */
     stepBack(over) {
-        const refusal = this._stepBackRefusal() ?? this._steppedBack(over);
+        this._stepBackBy(() => this._history.stepBack(over));
+    }
+
+    /** Steps back to `cycle`, as `whoWrote` finds one; see ReplayHistory. */
+    stepBackTo(cycle) {
+        this._stepBackBy(() => this._history.stepBackTo(cycle));
+    }
+
+    _stepBackBy(goBack) {
+        const refusal = this._stepBackRefusal() ?? this._steppedBack(goBack);
         if (refusal) toast(refusal, { title: "Step back" });
         this.debug(this.cpu.pc);
     }
 
-    _steppedBack(over) {
+    _steppedBack(goBack) {
         this.updatePrevMem();
-        const refusal = this._history.stepBack(over);
+        const refusal = goBack();
         // Gone back past where the stopwatch was started, it has nothing to time from.
         if (this._stopwatchFrom > this.cpu.scheduler.epoch) this._stopwatchFrom = null;
         return refusal;
+    }
+
+    /**
+     * Finds what last wrote the byte at `address`, as the CPU pages it now, by searching back through the history
+     * step back keeps (see ReplayHistory's lastWrite), and says so, offering to step back to the instruction. It
+     * stops the machine in the debugger first. The search lets the page go on between stretches of the history; a
+     * later search ends one still going. Resolves to what lastWrite returns, or null if a later search ended it.
+     */
+    async whoWrote(address) {
+        if (this._loop.mode !== RunMode.debugging) this._loop.stop(true);
+        const where = `$${hexword(address)}`;
+        const title = `Who wrote ${where}`;
+        const unavailable = this._loop.lockstep ? NoSearchInSession : this._history ? null : NoHistory;
+        if (unavailable) {
+            toast(unavailable, { title });
+            return { refusal: unavailable };
+        }
+        const searching = (this._searching = this._history.lastWrite(address));
+        let step = searching.next();
+        const notice = step.done ? null : toast(`Searching back for the last write to ${where}.`, { title });
+        try {
+            while (!step.done) {
+                await new Promise((resolve) => setTimeout(resolve, 0));
+                if (this._searching !== searching) return null;
+                step = searching.next();
+            }
+        } finally {
+            if (notice) dismissToast(notice);
+        }
+        this._searching = null;
+        const found = step.value;
+        const { write } = found;
+        const action =
+            write && write.pc !== null ? { label: "Step back to it", run: () => this.stepBackTo(write.cycle) } : null;
+        toast(this._lastWriteText(where, found), { title, action });
+        return found;
+    }
+
+    _lastWriteText(where, { refusal, write, searched, stoppedBy }) {
+        if (refusal) return refusal;
+        const cpu = this.cpu;
+        const ago = (cycles) => {
+            const seconds = cycles / cpu.model.cyclesPerSecond;
+            const time =
+                seconds < 1e-3
+                    ? `${(seconds * 1e6).toFixed(1)} µs`
+                    : seconds < 1
+                      ? `${(seconds * 1e3).toFixed(1)} ms`
+                      : `${seconds.toFixed(1)} s`;
+            return `${cycles} cycles (${time})`;
+        };
+        if (!write) {
+            const why = stoppedBy
+                ? `; the search cannot go back past ${stoppedBy}`
+                : ", as far back as the history step back keeps goes";
+            return `Nothing wrote ${where} in the last ${ago(searched)}${why}.`;
+        }
+        const { pc, cycle, value } = write;
+        const name = pc === null ? undefined : this._names.address(pc, cpu.pc)?.name;
+        const by =
+            pc === null
+                ? "an edit in the memory panel"
+                : `the instruction at $${hexword(pc)}${name ? ` (${name})` : ""}`;
+        return `${where} was last written $${hexbyte(value)} by ${by}, at cycle ${cycle}, ${ago(cycleCount(cpu) - cycle)} ago.`;
     }
 
     stepOver() {

@@ -1405,6 +1405,32 @@ describe("Debugger", () => {
                 expect(button("stepBack").title).toMatch(/\(p\)$/);
                 expect(button("stepBackOver").title).toMatch(/\(P\)$/);
             });
+
+            it("finds who wrote a byte from its menu while stopped, and steps back to the instruction", async () => {
+                // LDA #$41; STA $70; NOP; NOP
+                load(0x2000, [0xa9, 0x41, 0x85, 0x70, 0xea, 0xea]);
+                const history = stepBackHere();
+                keyPress("n");
+                keyPress("n");
+                history.taken(cpu.snapshotState(), null);
+                keyPress("n");
+                goTo("goto-mem-addr-form", "$70");
+                const whoWrote = () => watchMenu().querySelector(".watch-menu-choice:last-child");
+                loop.go();
+                rightClick(memByte(0x70));
+                expect(whoWrote().hidden).toBe(true);
+                loop.stop(true);
+                rightClick(memByte(0x70));
+                expect(whoWrote().hidden).toBe(false);
+                pickFromMenu("Who wrote this?");
+                await vi.waitFor(() =>
+                    expect(toasts()).toContainEqual(
+                        expect.stringMatching(/\$0070 was last written \$41 by the instruction at \$2002, at cycle/),
+                    ),
+                );
+                document.querySelector(".toast .toast-action:not([hidden])").click();
+                expect(pc()).toBe("2002");
+            });
         });
 
         describe("past a fiftieth of a second", () => {
@@ -1698,9 +1724,10 @@ describe("Debugger", () => {
             memByte(0x70).dispatchEvent(click);
             expect(click.defaultPrevented).toBe(true);
             expect(watchMenu().hidden).toBe(false);
-            expect([...watchMenu().querySelectorAll("button")].map((choice) => choice.textContent)).toEqual(
-                ["dec", "hex", "dec16", "hex16", "dec32", "hex32"].map((name) => `Watch ${name}`),
-            );
+            expect([...watchMenu().querySelectorAll("button")].map((choice) => choice.textContent)).toEqual([
+                ...["dec", "hex", "dec16", "hex16", "dec32", "hex32"].map((name) => `Watch ${name}`),
+                "Who wrote this?",
+            ]);
             expect(panelOpen()).toBe(false);
             pickFromMenu("Watch hex16");
             expect(watchMenu().hidden).toBe(true);

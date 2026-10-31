@@ -77,7 +77,7 @@ export function toast(message, { title = "", quietKey = "", action = null } = {}
     if (action) {
         actionButton.textContent = action.label;
         actionButton.addEventListener("click", () => {
-            bootstrap.Toast.getInstance(element)?.hide();
+            dismissToast(element);
             action.run();
         });
     }
@@ -94,4 +94,9 @@ export function toast(message, { title = "", quietKey = "", action = null } = {}
     });
     bootstrap.Toast.getOrCreateInstance(element, { autohide: !action }).show();
     return element;
+}
+
+/** Closes a notice `toast` showed, if it is still showing. */
+export function dismissToast(element) {
+    bootstrap.Toast.getInstance(element)?.hide();
 }

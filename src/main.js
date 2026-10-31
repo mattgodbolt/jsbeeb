@@ -511,7 +511,7 @@ const startPromise = machine.start({ media, autoBoot, ...plan.media });
 // The console surface the wiki documents, and the desktop app's hooks.
 // ------------------------------------------------------------------------
 
-exposeConsoleSurface(window, { loop, processor, video, audioHandler });
+exposeConsoleSurface(window, { loop, processor, video, audioHandler, dbgr });
 
 // Hooks for electron.
 electron({

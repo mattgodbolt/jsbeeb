@@ -6,13 +6,14 @@ import { debounce } from "../debounce.js";
  * app). The bench/profile calls are debounced so that they can be safely run
  * from the JS console in firefox.
  */
-export function exposeConsoleSurface(target, { loop, processor, video, audioHandler }) {
+export function exposeConsoleSurface(target, { loop, processor, video, audioHandler, dbgr }) {
     target.benchmarkCpu = debounce((numCycles) => loop.benchmarkCpu(numCycles), 1);
     target.profileCpu = debounce((arg) => loop.profileCpu(arg), 1);
     target.benchmarkVideo = debounce((numCycles) => loop.benchmarkVideo(numCycles), 1);
     target.profileVideo = debounce((arg) => loop.profileVideo(arg), 1);
     target.go = () => loop.go();
     target.stop = (debug) => loop.stop(debug);
+    target.whoWrote = (address) => dbgr.whoWrote(address);
     target.soundChip = audioHandler.soundChip;
     target.processor = processor;
     target.video = video;

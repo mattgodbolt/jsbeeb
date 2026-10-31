@@ -26,8 +26,9 @@ export class WatchPanel {
      * @param {(address: number) => number} options.peek - reads without side effects
      * @param {(text: string) => {address: number, label: string} | undefined} options.resolve
      * @param {import("./floating-panel.js").PanelArrangement} options.arrangement
+     * @param {(address: number) => void} options.searchWrites - finds what last wrote the byte at `address`
      */
-    constructor({ peek, resolve, arrangement }) {
+    constructor({ peek, resolve, arrangement, searchWrites }) {
         this._peek = peek;
         /** @type {Watch[]} */
         this._watches = [];
@@ -51,6 +52,16 @@ export class WatchPanel {
             });
             this._menu.append(choice);
         }
+        this._searchWrites = textButton(
+            "watch-menu-choice",
+            "Who wrote this?",
+            "Replay the history step back keeps to find the last write to this byte",
+        );
+        this._searchWrites.addEventListener("click", () => {
+            this._showPopup(null);
+            searchWrites(this._offered.address);
+        });
+        this._menu.append(this._searchWrites);
 
         this.floating = new FloatingPanel({
             panel: this.panel,
@@ -157,13 +168,16 @@ export class WatchPanel {
     }
 
     /**
-     * Offers a menu of formats to watch `what` in, at the window position `x`, `y`.
+     * Offers a menu of formats to watch `what` in, at the window position `x`, `y`, and if `searchable` to find
+     * what last wrote it.
      * @param {{address: number, label: string}} what
      * @param {number} x
      * @param {number} y
+     * @param {boolean} searchable
      */
-    offer(what, x, y) {
+    offer(what, x, y, searchable) {
         this._offered = what;
+        this._searchWrites.hidden = !searchable;
         this._showPopup({ opener: null, popup: this._menu });
         placePopup(this._menu, x, y);
     }
