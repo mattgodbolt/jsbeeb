@@ -200,8 +200,11 @@ System VIA additionally includes:
 | ------------------- | ------------ | --------------------------------------------------------------------------------- |
 | `IC32`              | number       | IC32 latch (keyboard, sound, screen select)                                       |
 | `keyScanTaskOffset` | number\|null | Offset at which the autoscan next sets the CA2 flag for a held key (null if none) |
+| `cmos`              | object       | Master only: the CMOS/RTC chip's bus, below                                       |
 
 During autoscan, `ca2` is true while the scan finds a held key: it stands for the pulse train the scan puts on the line, not one level. `keyScanTaskOffset` is set after the CA2 flag is cleared while that is so. It is absent from snapshots written before it was saved and from imported snapshots; absent means none is pending.
+
+`cmos` holds how far through an access the Master's CMOS/RTC bus is: `enabled` (chip enable, port B bit 6), `addressSelect` (port B bit 7), `dataSelect` and `isRead` (IC32 bits 2 and 1), each a boolean, and `cmosAddr`, the register the last address strobe latched. A restore takes the bus up as saved, strobing nothing, so it writes nothing. The chip's settings and clock are this machine's own and are not saved. Snapshots written before the bus was saved, and imported snapshots, lack the field; the lines are then taken from `portbpins` and `IC32` with nothing strobed (with the chip disabled only `enabled` is, as when running), and the latched register is left as it is. Absence being handled, the field needed no format version bump.
 
 The caps lock and shift lock lights are IC32 bits 6 and 7 (lit when clear), so they are not saved. Snapshots written before this also hold `capsLockLight` and `shiftLockLight`; restore ignores them.
 
