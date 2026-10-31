@@ -9,7 +9,7 @@ export const MaxBufferedChars = 64 * 1024;
 export class Printer extends EventTarget {
     constructor() {
         super();
-        this._uservia = null;
+        this._cpu = null;
         this._olderText = "";
         this._newerText = "";
         this._hasPrinted = false;
@@ -18,17 +18,17 @@ export class Printer extends EventTarget {
     outputStrobe(level, output) {
         if (!output || level) return;
 
-        const uservia = this._uservia;
+        const { uservia, replaying } = this._cpu;
         // Ack the character by pulsing CA1 low.
         uservia.setca1(false);
         uservia.setca1(true);
-        this._append(String.fromCharCode(uservia.ora));
+        if (!replaying) this._append(String.fromCharCode(uservia.ora));
     }
 
-    attach(uservia) {
-        this._uservia = uservia;
+    attach(cpu) {
+        this._cpu = cpu;
         // The ack line idles high, so that each ack is a falling edge.
-        uservia.setca1(true);
+        cpu.uservia.setca1(true);
     }
 
     /** The most recent output, at most MaxBufferedChars of it. */

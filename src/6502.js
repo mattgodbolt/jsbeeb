@@ -797,6 +797,7 @@ export class Cpu6502 extends Base6502 {
 
         this._debugRead = this._debugWrite = this._debugInstruction = this._debugInterrupt = null;
         this.resumingFromStop = false;
+        this.replaying = false;
         this.debugInstruction = new DebugHook(this, "_debugInstruction", { remembersStop: true });
         this.debugRead = new DebugHook(this, "_debugRead");
         this.debugWrite = new DebugHook(this, "_debugWrite");
@@ -1882,21 +1883,22 @@ export class Cpu6502 extends Base6502 {
         this.halted = true;
     }
 
-    /** Runs `run` with every debug hook detached, so nothing it executes is seen by a hook or halts at one. */
-    withoutDebugHooks(run) {
-        return this.withOnlyInstructionHook(null, run);
-    }
-
-    /** As withoutDebugHooks, but with `onInstruction(pc, opcode)` called before each instruction, or null for none. */
-    withOnlyInstructionHook(onInstruction, run) {
+    /**
+     * Runs `run` as a replay of time the machine has run already, or is only previewing: every debug hook detached
+     * but `onInstruction(pc, opcode)`, or null for none, and `replaying` set, so that output devices send the host
+     * nothing it has had or will have from the run itself.
+     */
+    asReplay(onInstruction, run) {
         const attached = [this._debugInstruction, this._debugRead, this._debugWrite, this._debugInterrupt];
         this._debugInstruction = onInstruction;
         this._debugRead = this._debugWrite = this._debugInterrupt = null;
+        this.replaying = true;
         this.refreshLook();
         try {
             return run();
         } finally {
             [this._debugInstruction, this._debugRead, this._debugWrite, this._debugInterrupt] = attached;
+            this.replaying = false;
             this.refreshLook();
         }
     }

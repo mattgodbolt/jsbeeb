@@ -2,7 +2,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Machine, buildEmulationConfig } from "../../src/web/machine.js";
-import { domFromIndexHtml, teardownDom } from "./helpers.js";
+import { nullIo } from "../../src/machine-spec.js";
+import { findModel } from "../../src/models.js";
+import { Printer } from "../../src/printer.js";
+import { ReplayHistory } from "../../src/replay.js";
+import { executeUntilFrame } from "../../src/web/rewind-thumbnail.js";
+import { IntCa1, PcrCa2High, PcrCa2Low, ViaRegister, domFromIndexHtml, loadBytes, teardownDom } from "./helpers.js";
+import { singleStep } from "../helpers/single-step.js";
 
 const settings = (overrides = {}) => ({
     tubeCpuMultiplier: 1,
@@ -90,7 +96,7 @@ describe("Machine", () => {
         expect(fittings.config).toBe(machine.spec);
         expect(Object.isFrozen(fittings.config)).toBe(true);
         expect(fittings.music5000).toBeNull();
-        expect(deps.printer.attach).toHaveBeenCalledWith(fakeProcessor.uservia);
+        expect(deps.printer.attach).toHaveBeenCalledWith(fakeProcessor);
     });
 
     it("hands an Atom's AtoMMC the gamepad, so the pad works its joystick port", () => {
@@ -197,5 +203,76 @@ describe("Machine", () => {
             await machine.start({ ...started, embedBasic: "10 PRINT", basicNeedsRun: false });
             expect(started.autoBoot.insertBasic).toHaveBeenCalledWith(expect.anything(), true);
         });
+    });
+
+    describe("replaying what the machine has run", () => {
+        const ProgramAt = 0x2000;
+        const UserVia = 0xfe60;
+        const AciaData = 0xfe09;
+        const SerialUla = 0xfe10;
+        const SerialUlaRs423 = 0x40;
+        const word = (address) => [address & 0xff, address >>> 8];
+        const sta = (address) => [0x8d, ...word(address)];
+        const lda = (value) => [0xa9, value];
+        const jmp = (address) => [0x4c, ...word(address)];
+        const Printed = "P";
+        // A digit, which the touchscreen on the same RS-423 takes as its mode.
+        const Spoken = "1".charCodeAt(0);
+        const PrintAndSpeak = [
+            ...lda(Printed.charCodeAt(0)),
+            ...sta(UserVia + ViaRegister.ORAnh),
+            ...lda(PcrCa2High),
+            ...sta(UserVia + ViaRegister.PCR),
+            ...lda(PcrCa2Low),
+            ...sta(UserVia + ViaRegister.PCR),
+            ...lda(SerialUlaRs423),
+            ...sta(SerialUla),
+            ...lda(Spoken),
+            ...sta(AciaData),
+        ];
+        const SpinAt = ProgramAt + PrintAndSpeak.length;
+
+        it.each([
+            ["stepping back", ({ history }) => expect(history.stepBack(false)).toBeNull()],
+            [
+                "previewing a rewind",
+                ({ cpu, start }) => {
+                    cpu.restoreState(start);
+                    executeUntilFrame(cpu, cpu.video);
+                },
+            ],
+        ])(
+            "sends the host nothing it printed or spoke again when %s, and the machine still has it all",
+            (_, replay) => {
+                deps.model = findModel("B-DFS1.2");
+                deps.printer = new Printer();
+                deps.build = (model, { config }) => new model.Cpu(model, { ...nullIo({ model }), config });
+                const machine = make();
+                const cpu = machine.processor;
+                cpu.reset(true);
+                machine.setupRs423Handler();
+                loadBytes(cpu, ProgramAt, [...PrintAndSpeak, ...jmp(SpinAt)]);
+                cpu.pc = ProgramAt;
+                const history = new ReplayHistory(cpu);
+                const start = cpu.snapshotState();
+                history.taken(start, null);
+                const runProgram = () => {
+                    while (cpu.pc !== SpinAt) singleStep(cpu);
+                    singleStep(cpu);
+                };
+                runProgram();
+                const sent = () => [deps.printer.text, deps.speechOutput.onTransmit.mock.calls];
+                expect(sent()).toEqual([Printed, [[Spoken]]]);
+
+                replay({ cpu, history, start });
+
+                expect(sent()).toEqual([Printed, [[Spoken]]]);
+                expect(cpu.uservia.ifr & IntCa1).toBe(IntCa1);
+                expect(cpu.touchScreen.mode).toBe(1);
+                cpu.restoreState(start);
+                runProgram();
+                expect(sent()).toEqual([Printed + Printed, [[Spoken], [Spoken]]]);
+            },
+        );
     });
 });

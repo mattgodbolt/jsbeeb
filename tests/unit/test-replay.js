@@ -4,6 +4,7 @@ import { ReplayHistory } from "../../src/replay.js";
 import { fake6502 } from "../../src/fake6502.js";
 import { findModel } from "../../src/models.js";
 import { singleStep } from "../helpers/single-step.js";
+import { loadBytes } from "./helpers.js";
 
 const CallAt = 0x2000;
 const SubroutineAt = 0x3000;
@@ -22,8 +23,6 @@ async function machineAt(pc, options) {
     cpu.pc = pc;
     return cpu;
 }
-
-const load = (cpu, address, bytes) => bytes.forEach((byte, i) => cpu.writemem(address + i, byte));
 
 function runTo(cpu, address) {
     const hook = cpu.debugInstruction.add((pc) => pc === address);
@@ -47,7 +46,7 @@ describe("ReplayHistory", () => {
         ],
     ])("refuses to step back %s", async (_, options, set, why) => {
         const cpu = await machineAt(CallAt, options);
-        load(cpu, CallAt, Call);
+        loadBytes(cpu, CallAt, Call);
         const history = new ReplayHistory(cpu);
         history.taken(cpu.snapshotState(), null);
         set(cpu);
@@ -58,8 +57,8 @@ describe("ReplayHistory", () => {
 
     it("gives up looking for the call it is to step back over more than two seconds back, leaving the machine be", async () => {
         const cpu = await machineAt(CallAt, {});
-        load(cpu, CallAt, Call);
-        load(cpu, SubroutineAt, [...LongSubroutine, ...LongSubroutineEnd]);
+        loadBytes(cpu, CallAt, Call);
+        loadBytes(cpu, SubroutineAt, [...LongSubroutine, ...LongSubroutineEnd]);
         const history = new ReplayHistory(cpu);
         history.taken(cpu.snapshotState(), null);
         runTo(cpu, ReturnAt);
