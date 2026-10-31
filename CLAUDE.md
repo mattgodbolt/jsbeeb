@@ -50,6 +50,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - HTML report includes line-by-line coverage visualization
 - The published coverage badge reports the unit suite only; the CPU-bound integration tests time out
   under v8 instrumentation, so they run uninstrumented
+- CI measures coverage nightly on main (`.github/workflows/coverage.yml`, which can also be dispatched by hand),
+  not on each push or PR, so the gating unit job stays as fast as the integration job
 
 ## Code Style Guidelines
 
