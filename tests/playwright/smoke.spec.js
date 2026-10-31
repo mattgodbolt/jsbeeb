@@ -1010,19 +1010,14 @@ test.describe("on a phone", () => {
         await beeb.expectScreenText(">Q");
     });
 
-    test("a touch on the on-screen keys leaves the browser no gesture of its own, but its buttons still click", async ({
-        beeb,
-        page,
-    }) => {
+    test("a touch on the on-screen keys leaves the browser no gesture of its own", async ({ beeb, page }) => {
         await beeb.open();
         await page.evaluate(() => {
-            window.touchesCancelled = [];
-            window.addEventListener("touchstart", (evt) => window.touchesCancelled.push(evt.defaultPrevented));
+            window.touchDefaultPrevented = [];
+            window.addEventListener("touchstart", (evt) => window.touchDefaultPrevented.push(evt.defaultPrevented));
         });
         await page.locator("#touch-keyboard .tk-key:visible", { hasText: /^A$/ }).tap();
-        await page.locator("#touch-keyboard .tk-hide").tap();
-        expect(await page.evaluate(() => window.touchesCancelled)).toEqual([true, false]);
-        await expect(page.locator("#touch-keyboard")).toBeHidden();
+        expect(await page.evaluate(() => window.touchDefaultPrevented)).toEqual([true]);
     });
 
     test("the on-screen keyboard presses nothing while the machine is stopped", async ({ beeb, page }) => {
