@@ -2,12 +2,9 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { Printer, MaxBufferedChars } from "../../src/printer.js";
 import { UserVia } from "../../src/via.js";
 import { Scheduler } from "../../src/scheduler.js";
-import { ViaRegister } from "./helpers.js";
+import { IntCa1, PcrCa2High, PcrCa2Low, ViaRegister } from "./helpers.js";
 
 const { ORAnh, PCR, IFR } = ViaRegister;
-const PcrCa2High = 0x0e;
-const PcrCa2Low = 0x0c;
-const IntCa1 = 0x02;
 
 function makeUserVia() {
     return new UserVia({ interrupt: 0 }, new Scheduler(), { read: () => 0xff, write: () => {} });

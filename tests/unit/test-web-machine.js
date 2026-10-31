@@ -7,7 +7,7 @@ import { findModel } from "../../src/models.js";
 import { Printer } from "../../src/printer.js";
 import { ReplayHistory } from "../../src/replay.js";
 import { executeUntilFrame } from "../../src/web/rewind-thumbnail.js";
-import { ViaRegister, domFromIndexHtml, loadBytes, teardownDom } from "./helpers.js";
+import { IntCa1, PcrCa2High, PcrCa2Low, ViaRegister, domFromIndexHtml, loadBytes, teardownDom } from "./helpers.js";
 import { singleStep } from "../helpers/single-step.js";
 
 const settings = (overrides = {}) => ({
@@ -211,9 +211,6 @@ describe("Machine", () => {
         const AciaData = 0xfe09;
         const SerialUla = 0xfe10;
         const SerialUlaRs423 = 0x40;
-        const PcrCa2High = 0x0e;
-        const PcrCa2Low = 0x0c;
-        const IntCa1 = 0x02;
         const word = (address) => [address & 0xff, address >>> 8];
         const sta = (address) => [0x8d, ...word(address)];
         const lda = (value) => [0xa9, value];
