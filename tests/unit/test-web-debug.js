@@ -1477,13 +1477,10 @@ describe("Debugger", () => {
                     expect(pc()).toBe("2002");
                 });
 
-                it("leaves the stopped machine's picture on the screen after a search through several stretches", async () => {
-                    const painted = [];
-                    video.debugPaint.mockImplementation(() => painted.push(video.fb32.slice()));
-                    const picture = video.fb32.slice();
+                it("repaints the stopped machine's picture after each stretch a search replays", async () => {
+                    video.debugPaint.mockClear();
                     await dbgr.whoWrote(0x70);
-                    expect(painted.length).toBeGreaterThan(1);
-                    expect(painted.at(-1)).toEqual(picture);
+                    expect(video.debugPaint).toHaveBeenCalledTimes(2);
                 });
 
                 it("ends a search when the machine is run on, leaving the run to its stop", async () => {

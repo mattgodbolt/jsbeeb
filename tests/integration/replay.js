@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { ReplayHistory, snapshotCycle } from "../../src/replay.js";
+import { finished, ReplayHistory, snapshotCycle } from "../../src/replay.js";
 import { snapshotToJSON } from "../../src/snapshot.js";
 import { Video } from "../../src/video.js";
 import { AtomSoundChip, SoundChip } from "../../src/soundchip.js";
@@ -14,6 +14,8 @@ const FbHeight = 768;
 const KeyHoldSeconds = 0.05;
 const CatalogueSeconds = 2;
 const AroundAnInputSeconds = 0.1;
+// Half a blink of the cursor, so that the picture differs from one snapshot to the next.
+const CursorBlinkSeconds = 0.3;
 const ClockAtRecording = Date.UTC(2026, 9, 31, 12, 0, 0);
 const ClockAtReplay = ClockAtRecording + 10 * 1000;
 const WaitThenCatalogue = ["10 A=GET", "20 *CAT"];
@@ -241,6 +243,18 @@ describe.each([
         singleStep(machine.processor);
         const before = machineNow(machine);
         expect(history.stepBack(false)).toMatch(why);
+        expect(machineNow(machine)).toEqual(before);
+    });
+
+    it("searches several stretches for a write nothing made, leaving the machine and its picture alone", async () => {
+        const machine = await booted(model);
+        const history = historyFromHere(machine);
+        await seconds(machine, CursorBlinkSeconds);
+        history.taken(machine.processor.snapshotState(), null);
+        await seconds(machine, CursorBlinkSeconds);
+        const before = machineNow(machine);
+        const { write, stoppedBy } = finished(history.lastWrite(ScratchAddress));
+        expect([write, stoppedBy]).toEqual([null, null]);
         expect(machineNow(machine)).toEqual(before);
     });
 });
