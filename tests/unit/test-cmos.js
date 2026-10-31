@@ -20,6 +20,7 @@ describe("CMOS", () => {
         CONFIG_1: 12,
         CONFIG_2: 13,
         FILING_SYSTEM: 19,
+        LAST: 63,
     };
 
     const PORT_B_ENABLE = 0x40;
@@ -261,6 +262,18 @@ describe("CMOS", () => {
             expect(store[CMOS_ADDR.FILING_SYSTEM]).toBe(0x42);
         });
 
+        it("refuses settings from the host that are not the chip's, changing nothing", () => {
+            const host = new Cmos(null);
+            host.writeControl(PORT_B_ENABLE | PORT_B_ADDR_SEL, CMOS_ADDR.FILING_SYSTEM, 0);
+            host.writeControl(PORT_B_ENABLE, CMOS_ADDR.FILING_SYSTEM, 0);
+            host.writeControl(PORT_B_ENABLE, 0x42, IC32_DATA_SEL);
+            const before = cmos.sessionState();
+            expect(() => cmos.joinSession({ ...host.sessionState(), store: [1, 2, 3] }, () => 0)).toThrow(
+                "not 48 to 64 bytes",
+            );
+            expect(cmos.sessionState()).toEqual(before);
+        });
+
         it("reads the session's clock in UTC, so every time zone shows the host's time", () => {
             vi.stubEnv("TZ", "America/New_York");
             cmos.joinSession(sessionState(), () => Date.UTC(1999, 11, 31, 23, 59, 58));
@@ -333,17 +346,26 @@ describe("CMOS", () => {
         });
         afterEach(() => vi.restoreAllMocks());
 
-        it("keeps what was written for the next session", () => {
-            const storage = {};
+        it.each([48, 50])(
+            "keeps what was written anywhere in the chip for the next session, from an older page's %i bytes",
+            (olderBytes) => {
+                const olderStore = defaultCmos.slice(0, olderBytes);
+                olderStore[CMOS_ADDR.FILING_SYSTEM] = 0x42;
+                const storage = { cmosRam: JSON.stringify(olderStore) };
 
-            writeRegister(CMOS_ADDR.CONFIG_1, 0x42, new Cmos(localStoragePersistence(() => storage, onSaveFailure)));
+                const cmos = new Cmos(localStoragePersistence(() => storage, onSaveFailure));
+                writeRegister(CMOS_ADDR.CONFIG_1, 0x43, cmos);
+                writeRegister(CMOS_ADDR.LAST, 0x44, cmos);
 
-            const reloaded = new Cmos(localStoragePersistence(() => storage, onSaveFailure));
-            expect(readRegister(CMOS_ADDR.CONFIG_1, reloaded)).toBe(0x42);
-            expect(onSaveFailure).not.toHaveBeenCalled();
-        });
+                const reloaded = new Cmos(localStoragePersistence(() => storage, onSaveFailure));
+                expect(
+                    [CMOS_ADDR.FILING_SYSTEM, CMOS_ADDR.CONFIG_1, CMOS_ADDR.LAST].map((a) => readRegister(a, reloaded)),
+                ).toEqual([0x42, 0x43, 0x44]);
+                expect(onSaveFailure).not.toHaveBeenCalled();
+            },
+        );
 
-        it.each(["[0, 1, tru", '"nonsense"', "[1, 2, 3]", '{"config": 1}', "null"])(
+        it.each(["[0, 1, tru", '"nonsense"', "[1, 2, 3]", '{"config": 1}', "null", JSON.stringify(Array(65).fill(0))])(
             "starts from the defaults when the stored settings are %s",
             (cmosRam) => {
                 const cmos = new Cmos(localStoragePersistence(() => ({ cmosRam }), onSaveFailure));

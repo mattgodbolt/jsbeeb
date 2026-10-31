@@ -10,8 +10,19 @@
 const defaultCmos = Object.freeze([
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xfe, 0x00, 0xeb, 0x00,
     0xc9, 0xff, 0xff, 0x12, 0x00, 0x17, 0xc8, 0x1e, 0x05, 0x00, 0x35, 0xa6, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 ]);
+
+// A store saved before it held the whole chip: its first 48 bytes, longer if a program wrote past them.
+const OldestStoreBytes = 48;
+
+/** A copy of `bytes` as a whole store, the defaults filling what an older page's lacks; throws on any other shape. */
+function fullStore(bytes) {
+    if (!Array.isArray(bytes) || bytes.length < OldestStoreBytes || bytes.length > defaultCmos.length)
+        throw new Error(`the settings are not ${OldestStoreBytes} to ${defaultCmos.length} bytes`);
+    return Array.from(defaultCmos, (byte, address) => bytes[address] ?? byte);
+}
 
 // The RTC holds a two-digit year and MOS 3.20 prints it after a fixed century (LDA #&19 at &9880 in ROM 15);
 // the ROM jsbeeb ships has that byte patched to &20 (#362), so every year it shows is 20yy.
@@ -73,10 +84,7 @@ export function localStoragePersistence(getStorage, onSaveFailure) {
             try {
                 const stored = getStorage().cmosRam;
                 if (!stored) return null;
-                const parsed = JSON.parse(stored);
-                if (!Array.isArray(parsed) || parsed.length !== defaultCmos.length)
-                    throw new Error(`the stored settings are not ${defaultCmos.length} bytes`);
-                return parsed;
+                return fullStore(JSON.parse(stored));
             } catch (error) {
                 console.log(`Unable to read the stored CMOS settings: ${error?.message ?? error}`);
                 return null;
@@ -169,14 +177,15 @@ export class Cmos {
      * milliseconds.
      */
     joinSession(state, now) {
+        const store = fullStore(state.store);
         if (!this.beforeSession) {
             const { persistence, store, utc, timeOffset, heldDate, heldTime } = this;
             this.beforeSession = { persistence, store, now: this.now, utc, timeOffset, heldDate, heldTime };
         }
-        const { store, timeOffset, heldDate, heldTime } = state;
+        const { timeOffset, heldDate, heldTime } = state;
         this.restoreState(state);
         this.timeOffset = timeOffset;
-        this.store = [...store];
+        this.store = store;
         this.heldDate = heldDate && { ...heldDate };
         this.heldTime = { ...heldTime };
         this.persistence = null;
