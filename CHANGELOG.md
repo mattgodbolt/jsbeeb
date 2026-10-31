@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.16.1](https://github.com/mattgodbolt/jsbeeb/compare/v2.16.0...v2.16.1) (2026-10-31)
+
+
+### Bug Fixes
+
+* latch the joystick fire buttons once a frame, and hold them released in a shared session ([#1746](https://github.com/mattgodbolt/jsbeeb/issues/1746)) ([681c404](https://github.com/mattgodbolt/jsbeeb/commit/681c404b3fc7a561710ed2189ef718470a344228))
+
 ## [2.16.0](https://github.com/mattgodbolt/jsbeeb/compare/v2.15.0...v2.16.0) (2026-10-31)
 
 
