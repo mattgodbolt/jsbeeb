@@ -22,6 +22,8 @@ describe("CMOS", () => {
         FILING_SYSTEM: 19,
     };
 
+    const LastAddress = 63;
+
     const PORT_B_ENABLE = 0x40;
     const PORT_B_ADDR_SEL = 0x80;
     const IC32_READ = 2;
@@ -261,6 +263,10 @@ describe("CMOS", () => {
             expect(store[CMOS_ADDR.FILING_SYSTEM]).toBe(0x42);
         });
 
+        it("refuses settings from the host that are not the chip's", () => {
+            expect(() => cmos.joinSession(sessionState({ store: [1, 2, 3] }), () => 0)).toThrow("not 64 bytes");
+        });
+
         it("reads the session's clock in UTC, so every time zone shows the host's time", () => {
             vi.stubEnv("TZ", "America/New_York");
             cmos.joinSession(sessionState(), () => Date.UTC(1999, 11, 31, 23, 59, 58));
@@ -333,13 +339,19 @@ describe("CMOS", () => {
         });
         afterEach(() => vi.restoreAllMocks());
 
-        it("keeps what was written for the next session", () => {
-            const storage = {};
+        it("keeps what was written anywhere in the chip for the next session, from an older page's settings", () => {
+            const olderStore = defaultCmos.slice(0, 48);
+            olderStore[CMOS_ADDR.FILING_SYSTEM] = 0x42;
+            const storage = { cmosRam: JSON.stringify(olderStore) };
 
-            writeRegister(CMOS_ADDR.CONFIG_1, 0x42, new Cmos(localStoragePersistence(() => storage, onSaveFailure)));
+            const cmos = new Cmos(localStoragePersistence(() => storage, onSaveFailure));
+            writeRegister(CMOS_ADDR.CONFIG_1, 0x43, cmos);
+            writeRegister(LastAddress, 0x44, cmos);
 
             const reloaded = new Cmos(localStoragePersistence(() => storage, onSaveFailure));
-            expect(readRegister(CMOS_ADDR.CONFIG_1, reloaded)).toBe(0x42);
+            expect(
+                [CMOS_ADDR.FILING_SYSTEM, CMOS_ADDR.CONFIG_1, LastAddress].map((a) => readRegister(a, reloaded)),
+            ).toEqual([0x42, 0x43, 0x44]);
             expect(onSaveFailure).not.toHaveBeenCalled();
         });
 

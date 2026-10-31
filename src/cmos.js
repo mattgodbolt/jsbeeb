@@ -10,8 +10,19 @@
 const defaultCmos = Object.freeze([
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xfe, 0x00, 0xeb, 0x00,
     0xc9, 0xff, 0xff, 0x12, 0x00, 0x17, 0xc8, 0x1e, 0x05, 0x00, 0x35, 0xa6, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 ]);
+
+// Pages before the store was the chip's full size kept only its first 48 bytes.
+const OlderStoreBytes = 48;
+
+/** A copy of `bytes` as a whole store, padding one saved by an older page; throws if it is neither. */
+function fullStore(bytes) {
+    if (!Array.isArray(bytes) || (bytes.length !== defaultCmos.length && bytes.length !== OlderStoreBytes))
+        throw new Error(`the settings are not ${defaultCmos.length} bytes`);
+    return [...bytes, ...defaultCmos.slice(bytes.length)];
+}
 
 // The RTC holds a two-digit year and MOS 3.20 prints it after a fixed century (LDA #&19 at &9880 in ROM 15);
 // the ROM jsbeeb ships has that byte patched to &20 (#362), so every year it shows is 20yy.
@@ -73,10 +84,7 @@ export function localStoragePersistence(getStorage, onSaveFailure) {
             try {
                 const stored = getStorage().cmosRam;
                 if (!stored) return null;
-                const parsed = JSON.parse(stored);
-                if (!Array.isArray(parsed) || parsed.length !== defaultCmos.length)
-                    throw new Error(`the stored settings are not ${defaultCmos.length} bytes`);
-                return parsed;
+                return fullStore(JSON.parse(stored));
             } catch (error) {
                 console.log(`Unable to read the stored CMOS settings: ${error?.message ?? error}`);
                 return null;
@@ -176,7 +184,7 @@ export class Cmos {
         const { store, timeOffset, heldDate, heldTime } = state;
         this.restoreState(state);
         this.timeOffset = timeOffset;
-        this.store = [...store];
+        this.store = fullStore(store);
         this.heldDate = heldDate && { ...heldDate };
         this.heldTime = { ...heldTime };
         this.persistence = null;
