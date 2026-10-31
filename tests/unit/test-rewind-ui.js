@@ -53,11 +53,16 @@ describe("RewindUI", () => {
     const lastRestored = () => processor.restoreState.mock.calls.at(-1)[0];
     const key = (name) => document.dispatchEvent(new KeyboardEvent("keydown", { key: name, cancelable: true }));
 
-    // The loop asking for captures, once a RewindUI is listening.
+    const frameSnapshot = (i) => ({ snapshot: i, ram: new Uint8Array([i]), swram: new Uint8Array([i]) });
+    const frame = (snapshot) => {
+        processor.snapshotState.mockReturnValueOnce(snapshot);
+        loop.dispatchEvent(new Event("frame-capture"));
+    };
+    // The loop asking for captures, once a RewindUI is listening: a frame, then a rewind capture of it.
     const captured = (count) => {
-        const snapshots = Array.from({ length: count }, (_, i) => ({ snapshot: i }));
+        const snapshots = Array.from({ length: count }, (_, i) => frameSnapshot(i));
         for (const snapshot of snapshots) {
-            processor.snapshotState.mockReturnValueOnce(snapshot);
+            frame(snapshot);
             loop.dispatchEvent(new Event("rewind-capture"));
         }
         return snapshots;
@@ -83,7 +88,7 @@ describe("RewindUI", () => {
                 "now",
             ]);
             expect(selectedIndex()).toBe(2);
-            expect(lastRestored()).toBe(snapshots[2]);
+            expect(lastRestored()).toEqual(snapshots[2]);
             expect(video.paint).toHaveBeenCalled();
         });
 
@@ -132,7 +137,7 @@ describe("RewindUI", () => {
             ui.open();
             thumbs()[0].click();
             expect(selectedIndex()).toBe(0);
-            expect(lastRestored()).toBe(snapshots[0]);
+            expect(lastRestored()).toEqual(snapshots[0]);
         });
 
         it("walks the filmstrip with the arrow keys, stopping at the ends", () => {
@@ -167,7 +172,7 @@ describe("RewindUI", () => {
             ui.open();
             key("ArrowLeft");
             key("Enter");
-            expect(lastRestored()).toBe(snapshots[0]);
+            expect(lastRestored()).toEqual(snapshots[0]);
             expect(panel().hidden).toBe(true);
             expect(thumbs()).toHaveLength(0);
             expect(resume).toHaveBeenCalledTimes(1);
@@ -230,6 +235,34 @@ describe("RewindUI", () => {
             ui.reset();
             expect(panel().hidden).toBe(true);
             expect(document.getElementById("rewind-open").classList.contains("disabled")).toBe(true);
+            expect(ui.frames.length).toBe(0);
+        });
+    });
+
+    describe("capturing", () => {
+        it("snapshots each frame into the slot of the oldest once the frames are full", () => {
+            const ui = make();
+            const snapshots = Array.from({ length: 4 }, (_, i) => frameSnapshot(i));
+            snapshots.forEach(frame);
+            expect(processor.snapshotState.mock.calls.map(([options]) => options.into)).toEqual([
+                null,
+                null,
+                null,
+                snapshots[0],
+            ]);
+            expect(ui.frames.getAll()).toEqual(snapshots.slice(1));
+        });
+
+        it("keeps a copy of the newest frame in the rewind history, in the storage of the one it replaces", () => {
+            const ui = make();
+            captured(30);
+            const firstKept = ui.rewindBuffer.getAll()[0];
+            frame(frameSnapshot(99));
+            loop.dispatchEvent(new Event("rewind-capture"));
+            const newest = ui.rewindBuffer.peek();
+            expect(newest).toEqual(frameSnapshot(99));
+            expect(newest.ram).toBe(firstKept.ram);
+            expect(newest.ram).not.toBe(ui.frames.peek().ram);
         });
     });
 });

@@ -170,4 +170,14 @@ describe("RewindBuffer", () => {
         expect(buf.pop().id).toBe(1);
         expect(buf.length).toBe(0);
     });
+
+    it("offers the oldest snapshot to be replaced only once full, and none after a pop", () => {
+        const buf = new RewindBuffer(2);
+        buf.push(makeSnapshot(1));
+        expect(buf.nextToReplace()).toBeNull();
+        buf.push(makeSnapshot(2));
+        expect(buf.nextToReplace().id).toBe(1);
+        buf.pop();
+        expect(buf.nextToReplace()).toBeNull();
+    });
 });

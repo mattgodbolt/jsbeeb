@@ -392,15 +392,15 @@ describe("EmulationLoop", () => {
         expect(ticks).toHaveBeenCalledTimes(10);
     });
 
-    it("asks for a rewind capture every interval", () => {
+    it("asks for a frame capture every frame, and a rewind capture straight after every fiftieth", () => {
         const loop = started();
-        const captures = vi.fn();
-        loop.addEventListener("rewind-capture", captures);
-        // The capture interval is one emulated second.
+        const captures = [];
+        loop.addEventListener("frame-capture", () => captures.push("frame"));
+        loop.addEventListener("rewind-capture", () => captures.push("rewind"));
         vi.advanceTimersByTime(1500);
-        expect(captures).toHaveBeenCalledTimes(1);
+        expect(captures.slice(0, 52)).toEqual([...Array(50).fill("frame"), "rewind", "frame"]);
         vi.advanceTimersByTime(1000);
-        expect(captures).toHaveBeenCalledTimes(2);
+        expect(captures.filter((capture) => capture === "rewind")).toHaveLength(2);
     });
 
     it("starts once however often it is asked to go", () => {

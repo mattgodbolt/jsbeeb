@@ -38,6 +38,7 @@ async function station(transport, { boot }) {
         model: machine.model,
         takenFromHost: StockTakenFromHost,
         loop: { setLockstep: (lockstep) => (page.lockstep = lockstep), replacingState: () => {} },
+        rewind: { reset: () => {} },
         keyboard,
         version: "test",
         transport,

@@ -203,6 +203,7 @@ function fakeContext({
         model: { name: "BBC B with 8271 (DFS 1.2)", cyclesPerSecond: CyclesPerSecond, ...model },
         takenFromHost,
         loop: { setLockstep: vi.fn(), replacingState: vi.fn() },
+        rewind: { reset: vi.fn() },
         keyboard: { isPasting: false, setInput: vi.fn(), cancelPaste: vi.fn() },
         version: "1.0",
         transport: sessionTransport,
@@ -1452,9 +1453,10 @@ describe("SessionGuest", () => {
         });
     });
 
-    it("ends a debugger run to a stop when it takes the host's machine", async () => {
+    it("ends a debugger run to a stop and forgets the rewind history when it takes the host's machine", async () => {
         const { context } = await joinedAt(150);
         expect(context.loop.replacingState).toHaveBeenCalled();
+        expect(context.rewind.reset).toHaveBeenCalled();
     });
 
     it("tells the host once a second how it kept up", async () => {

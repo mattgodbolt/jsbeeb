@@ -4,6 +4,7 @@ import { toast } from "./toast.js";
 import { shortcutLabel } from "./shortcuts.js";
 
 export const RewindCaptureInterval = 50; // emulated frames, ~1 second
+const FramesPerSecond = 50;
 
 /**
  * Why the machine is or is not running: stopped until it is first started, then
@@ -68,8 +69,9 @@ class VirtualSpeedUpdater {
  * cycles, starting and stopping, the audio lead, fast-forward and the speed
  * readout. Owns `running`, and dispatches a "running" event whenever it
  * changes hands, "tick" on every timer tick and on every vsync that runs the
- * machine (the first tick only takes the time), and "rewind-capture" every
- * RewindCaptureInterval frames for whoever keeps the rewind history.
+ * machine (the first tick only takes the time), "frame-capture" after each
+ * emulated frame's worth of cycles, and "rewind-capture" straight after every
+ * RewindCaptureInterval-th of those, for whoever keeps the machine's history.
  *
  * `mode` is a RunMode. Anything that needs the machine held still while it
  * works (a dialog, a snapshot, the rewind panel, a hidden tab) takes a `hold()`,
@@ -96,7 +98,7 @@ export class EmulationLoop extends EventTarget {
         this.gamepad = gamepad;
         this.clocksPerSecond = clocksPerSecond;
         this.maxCyclesPerTick = clocksPerSecond / 10;
-        this.rewindCaptureCycles = (RewindCaptureInterval * clocksPerSecond) / 50;
+        this.frameCycles = clocksPerSecond / FramesPerSecond;
         this.fastTape = fastTape;
         this.audioStatsNode = audioStatsNode;
 
@@ -109,7 +111,8 @@ export class EmulationLoop extends EventTarget {
         this.tickToken = null;
         this.vsyncToken = null;
         this.emulationLeadMs = 0;
-        this.rewindCycleCounter = 0;
+        this.frameCycleCounter = 0;
+        this.framesSinceRewindCapture = 0;
         this.holds = new Set();
         this.resumeOnVisible = null;
         this.lockstep = null;
@@ -310,10 +313,14 @@ export class EmulationLoop extends EventTarget {
                 this.virtualSpeedUpdater.update(cycles, end - start, speedy);
                 const paintMs = display.takePaintMs();
                 let snapshotMs = 0;
-                this.rewindCycleCounter += cycles;
-                if (this.rewindCycleCounter >= this.rewindCaptureCycles) {
-                    this.rewindCycleCounter -= this.rewindCaptureCycles;
-                    this.dispatchEvent(new Event("rewind-capture"));
+                this.frameCycleCounter += cycles;
+                if (this.frameCycleCounter >= this.frameCycles) {
+                    this.frameCycleCounter -= this.frameCycles;
+                    this.dispatchEvent(new Event("frame-capture"));
+                    if (++this.framesSinceRewindCapture === RewindCaptureInterval) {
+                        this.framesSinceRewindCapture = 0;
+                        this.dispatchEvent(new Event("rewind-capture"));
+                    }
                     snapshotMs = performance.now() - end;
                 }
                 if (this.audioStatsNode)

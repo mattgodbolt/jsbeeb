@@ -1,7 +1,6 @@
 /**
- * Circular buffer of emulator state snapshots for rewind functionality.
- * Snapshots are stored directly without deep-copying, since
- * snapshotState() already clones all TypedArrays via .slice().
+ * Circular buffer of emulator state snapshots, for rewind and the frame ring that feeds it.
+ * Snapshots are stored directly, so the caller hands over ones nothing else holds.
  */
 export class RewindBuffer {
     /**
@@ -15,11 +14,8 @@ export class RewindBuffer {
     }
 
     /**
-     * Push a snapshot into the buffer.
-     * The caller must ensure the snapshot's typed arrays are already
-     * independent copies (e.g. from snapshotState() which uses .slice()).
-     * Overwrites the oldest snapshot when full.
-     * @param {object} snapshot - emulator state snapshot (already cloned)
+     * Push a snapshot into the buffer, overwriting the oldest when full.
+     * @param {object} snapshot - emulator state snapshot that nothing else holds
      */
     push(snapshot) {
         this.snapshots[this.writeIndex] = snapshot;
@@ -38,6 +34,14 @@ export class RewindBuffer {
         const snapshot = this.snapshots[this.writeIndex];
         this.snapshots[this.writeIndex] = null;
         return snapshot;
+    }
+
+    /**
+     * The snapshot the next push overwrites, whose storage that push may reuse.
+     * @returns {object|null} the oldest snapshot when full, or null
+     */
+    nextToReplace() {
+        return this.count === this.maxSnapshots ? this.snapshots[this.writeIndex] : null;
     }
 
     /**
