@@ -14,13 +14,13 @@ const defaultCmos = Object.freeze([
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 ]);
 
-// Pages before the store was the chip's full size kept only its first 48 bytes.
-const OlderStoreBytes = 48;
+// Pages before the store was the chip's full size kept its first 48 bytes, and grew it by a write past them.
+const OldestStoreBytes = 48;
 
 /** A copy of `bytes` as a whole store, padding one saved by an older page; throws if it is neither. */
 function fullStore(bytes) {
-    if (!Array.isArray(bytes) || (bytes.length !== defaultCmos.length && bytes.length !== OlderStoreBytes))
-        throw new Error(`the settings are not ${defaultCmos.length} bytes`);
+    if (!Array.isArray(bytes) || bytes.length < OldestStoreBytes || bytes.length > defaultCmos.length)
+        throw new Error(`the settings are not ${OldestStoreBytes} to ${defaultCmos.length} bytes`);
     return [...bytes, ...defaultCmos.slice(bytes.length)];
 }
 
@@ -181,10 +181,11 @@ export class Cmos {
             const { persistence, store, utc, timeOffset, heldDate, heldTime } = this;
             this.beforeSession = { persistence, store, now: this.now, utc, timeOffset, heldDate, heldTime };
         }
-        const { store, timeOffset, heldDate, heldTime } = state;
+        const { timeOffset, heldDate, heldTime } = state;
+        const store = fullStore(state.store);
         this.restoreState(state);
         this.timeOffset = timeOffset;
-        this.store = fullStore(store);
+        this.store = store;
         this.heldDate = heldDate && { ...heldDate };
         this.heldTime = { ...heldTime };
         this.persistence = null;
