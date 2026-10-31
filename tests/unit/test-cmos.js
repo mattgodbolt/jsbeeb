@@ -338,6 +338,21 @@ describe("CMOS", () => {
             expect(readRegister(CMOS_ADDR.MINUTES)).toBe(0xa5);
         });
 
+        it("as the host, whose chip the session starts from, goes back to its own after the session", () => {
+            const settingsAndClock = ({ store, timeOffset, heldDate, heldTime }) => ({
+                store,
+                timeOffset,
+                heldDate,
+                heldTime,
+            });
+            const own = settingsAndClock(cmos.snapshotState());
+            cmos.joinSession(() => 0);
+            writeRegister(CMOS_ADDR.FILING_SYSTEM, 0x42);
+            writeRegister(CMOS_ADDR.MINUTES, 0xa5);
+            cmos.leaveSession();
+            expect(settingsAndClock(cmos.snapshotState())).toEqual(own);
+        });
+
         it("goes back to its own settings, clock and saving after the session, however often it rejoined", () => {
             vi.stubEnv("TZ", "America/New_York");
             writeRegister(CMOS_ADDR.HOURS, 0x10);

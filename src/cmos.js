@@ -196,6 +196,7 @@ export class Cmos {
             this.beforeSession = { persistence, store, now: this.now, utc, timeOffset, heldDate, heldTime };
         }
         this.store = [...this.store];
+        this.heldTime = { ...this.heldTime };
         this.persistence = null;
         this.now = now;
         this.utc = true;
