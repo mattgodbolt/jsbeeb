@@ -18,6 +18,7 @@ import { SysViaPanel } from "../../src/web/sysvia-panel.js";
 import { FdcPanel } from "../../src/web/fdc-panel.js";
 import { cycleCount, machineMoment } from "../../src/lockstep.js";
 import { BBC } from "../../src/keymap.js";
+import { ReplayHistory } from "../../src/replay.js";
 import {
     bankOffset,
     captureDownloads,
@@ -1292,6 +1293,71 @@ describe("Debugger", () => {
             expect(pc()).toBe("3000");
             keyPress("o");
             expect(pc()).toBe("2003");
+        });
+
+        describe("back", () => {
+            const button = (run) => document.querySelector(`#toolbar-panel [data-run="${run}"]`);
+            const x = () => document.getElementById("cpu6502_x").textContent;
+            const stepBackHere = () => {
+                const history = new ReplayHistory(cpu);
+                history.taken(cpu.snapshotState(), null);
+                dbgr.attachStepBack(history);
+                dbgr.debug(cpu.pc);
+            };
+
+            beforeEach(() => {
+                // JSR $3000; LDA #$41, and at $3000 LDX #5; RTS.
+                load(0x2000, [0x20, 0x00, 0x30, 0xa9, 0x41]);
+                load(0x3000, [0xa2, 0x05, 0x60]);
+            });
+
+            it("goes back one instruction on p, and on P back over the call just returned from, as things were there", () => {
+                stepBackHere();
+                const xAtCall = x();
+                for (let i = 0; i < 3; i++) keyPress("n");
+                expect(pc()).toBe("2003");
+                keyPress("p");
+                expect([pc(), x()]).toEqual(["3002", "05"]);
+                keyPress("n");
+                keyPress("P");
+                expect([pc(), x()]).toEqual(["2000", xAtCall]);
+                expect(addrOf(currentRow())).toBe("2000");
+            });
+
+            it.each([
+                ["with nothing earlier to go back to", stepBackHere, /There is nothing to step back to/],
+                [
+                    "in a shared session",
+                    () => {
+                        stepBackHere();
+                        keyPress("n");
+                        loop.lockstep = {};
+                    },
+                    /Step back is not available in a shared session/,
+                ],
+            ])(
+                "says why it cannot %s, in its buttons' tooltips and on a press, leaving the machine alone",
+                (_, set, why) => {
+                    set();
+                    dbgr.debug(cpu.pc);
+                    const stoppedAt = pc();
+                    for (const run of ["stepBack", "stepBackOver"]) {
+                        expect(button(run).getAttribute("aria-disabled")).toBe("true");
+                        expect(button(run).title).toMatch(why);
+                    }
+                    keyPress("p");
+                    expect(pc()).toBe(stoppedAt);
+                    expect(toasts()).toEqual([expect.stringMatching(why)]);
+                },
+            );
+
+            it("names its keys in its buttons' tooltips while it can step back", () => {
+                stepBackHere();
+                keyPress("n");
+                expect(button("stepBack").getAttribute("aria-disabled")).toBe("false");
+                expect(button("stepBack").title).toMatch(/\(p\)$/);
+                expect(button("stepBackOver").title).toMatch(/\(P\)$/);
+            });
         });
 
         describe("past a fiftieth of a second", () => {
