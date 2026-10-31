@@ -365,6 +365,10 @@ body.touch-keyboard-beside-picture #header-bar {
   border-radius: 999px;
 }
 
+#touch-keyboard .tk-pad-fire .tk-key.small {
+  font-size: 15px;
+}
+
 #touch-keyboard .tk-pad-fire .meaning .tk-meaning {
   font-size: 15px;
 }
