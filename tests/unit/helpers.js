@@ -292,6 +292,12 @@ export const ViaRegister = {
     ORAnh: 0xf,
 };
 
+export const PcrCa2High = 0x0e;
+export const PcrCa2Low = 0x0c;
+export const IntCa1 = 0x02;
+
+export const loadBytes = (cpu, address, bytes) => bytes.forEach((byte, i) => cpu.writemem(address + i, byte));
+
 /** Where `address` in sideways `bank` is in `cpu.ramRomOs`. */
 export const bankOffset = (cpu, bank, address) => cpu.romOffset + bank * RomBankBytes + address - 0x8000;
 

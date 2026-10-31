@@ -109,7 +109,7 @@ export class Machine {
             config: this.spec,
         });
 
-        printer.attach(this.processor.uservia);
+        printer.attach(this.processor);
         // The same pad presses the Atom's keys too.
         if (model.isAtom) this.processor.atommc.attachGamepad(gamepad);
         this.processor.teletextAdaptor?.addEventListener("notice", showNotice);
@@ -126,7 +126,7 @@ export class Machine {
         processor.acia.setRs423Handler({
             onTransmit(val) {
                 processor.touchScreen.onTransmit(val);
-                speechOutput.onTransmit(val);
+                if (!processor.replaying) speechOutput.onTransmit(val);
             },
             tryReceive(rts) {
                 return processor.touchScreen.tryReceive(rts);
