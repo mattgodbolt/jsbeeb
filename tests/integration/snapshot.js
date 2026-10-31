@@ -15,7 +15,8 @@ import {
     restoreInto,
     runCpuCycles,
 } from "../helpers/atom-video.js";
-import { mode7Text } from "./helpers.js";
+import { WFNFile } from "../../src/mmc.js";
+import { bootedTestMachine, mode7Text } from "./helpers.js";
 
 const FbWidth = 1024;
 const FbHeight = 768;
@@ -26,6 +27,9 @@ const AtomCyclesAfterRestore = 5000;
 const MidPictureLine = 94;
 const LinesPerRow = 3;
 const SnowAddr = 0x8123;
+const MmcLoadAddress = 0x3000;
+const MmcFileBytes = 2000;
+const AtmNameBytes = 16;
 
 const withVideo = (model, options) =>
     new TestMachine(model, { video: new Video(false, FbWidth * FbHeight, () => {}, options) });
@@ -39,6 +43,18 @@ function* ownedArrays(value) {
     } else if (value && typeof value === "object") {
         for (const [key, inner] of Object.entries(value)) if (!SharedByReference.has(key)) yield* ownedArrays(inner);
     }
+}
+
+// An AtoMMC file: the ATM header (name, load address, execution address, length), then the body.
+function atmFile(name, loadAddress, body) {
+    const file = new Uint8Array(AtmNameBytes + 6 + body.length);
+    file.set(new TextEncoder().encode(name));
+    const view = new DataView(file.buffer);
+    view.setUint16(AtmNameBytes, loadAddress, true);
+    view.setUint16(AtmNameBytes + 2, loadAddress, true);
+    view.setUint16(AtmNameBytes + 4, body.length, true);
+    file.set(body, AtmNameBytes + 6);
+    return file;
 }
 
 const stateOf = (machine) => JSON.parse(snapshotToJSON(createSnapshot(machine.processor, machine.model).state));
@@ -97,6 +113,27 @@ describe("save state round trip", () => {
         );
         const fb = original.processor.video.fb32;
         expect(restored.processor.video.fb32.filter((pixel, i) => pixel !== fb[i]).length).toBe(0);
+    });
+
+    it("finishes an Atom's MMC load in a fresh machine restored part way through it", async () => {
+        const body = Uint8Array.from({ length: MmcFileBytes }, (_, i) => (i * 7 + 3) & 0xff);
+        const atomWithCard = async () => {
+            const machine = await bootedTestMachine("Atom");
+            machine.processor.atommc.SetMMCData([new WFNFile("/DATA", atmFile("DATA", MmcLoadAddress, body))]);
+            return machine;
+        };
+        const loaded = (machine) => Uint8Array.from(body, (_, i) => machine.readbyte(MmcLoadAddress + i));
+        const original = await atomWithCard();
+        const halfway = original.addBreakpoint("write", MmcLoadAddress + MmcFileBytes / 2, {}, () => {});
+        await original.type('*LOAD "DATA"');
+        halfway.remove();
+        const snapshot = snapshotFromJSON(snapshotToJSON(createSnapshot(original.processor, original.model)));
+
+        const restored = await atomWithCard();
+        restoreSnapshot(restored.processor, restored.model, snapshot);
+        await restored.runUntilInput();
+
+        expect(loaded(restored)).toEqual(body);
     });
 });
 
