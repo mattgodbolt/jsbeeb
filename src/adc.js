@@ -7,6 +7,7 @@
 export const AdcCentreValue = 0x8000;
 // The uPD7002 converts to 12 bits; the AUG gives bits 3-0 of the low byte as always zero.
 const LowByteResultBits = 0xf0;
+const AdcChannelKeys = ["adc0", "adc1", "adc2", "adc3"];
 
 export class Adc {
     /**
@@ -24,6 +25,8 @@ export class Adc {
         // Initialize channel sources (one source per channel)
         this.channelSources = [null, null, null, null];
         this.fixedValue = null;
+        /** @type {import("./replay.js").InputLog | null} */
+        this.inputLog = null;
     }
 
     /**
@@ -117,14 +120,20 @@ export class Adc {
         this.sysvia.setcb1(true);
     }
 
+    sourceValue(channel) {
+        const source = this.channelSources[channel];
+        if (!source) return AdcCentreValue;
+        const value = source.getValue(channel);
+        return this.inputLog ? this.inputLog.sample(AdcChannelKeys[channel], value) : value;
+    }
+
     /**
      * Called when the ADC conversion is complete
      */
     onComplete() {
         const channel = this.status & 0x03;
 
-        const source = this.channelSources[channel];
-        const val = this.fixedValue ?? (source ? source.getValue(channel) : AdcCentreValue);
+        const val = this.fixedValue ?? this.sourceValue(channel);
 
         // The AUG puts the result's top two bits in status bits 5 and 4.
         this.status = (this.status & 0x0f) | 0x40 | ((val >>> 10) & 0x30);

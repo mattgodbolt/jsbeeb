@@ -170,6 +170,7 @@ export function sessionInput(sysvia, send, { allowBreak }) {
 // no other machine has, and the OS converts continuously into RAM; so in a session
 // every channel reads the centre. The fire buttons are local the same way.
 function holdLocalInputs(processor, held) {
+    processor.inputLog?.refuse(held ? "the start of a shared session" : "the end of a shared session");
     processor.adconverter.setFixedValue(held ? AdcCentreValue : null);
     processor.sysvia.holdFireButtons(held);
 }

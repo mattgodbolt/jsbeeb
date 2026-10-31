@@ -40,6 +40,7 @@ import { SpeechOutput } from "./web/speech-output.js";
 import { Printer } from "./printer.js";
 import { DefaultStationId } from "./econet.js";
 import { RewindUI } from "./web/rewind-ui.js";
+import { ReplayHistory } from "./replay.js";
 import { DiscVisualiser } from "./web/disc-visualiser.js";
 import { MediaWindow } from "./web/media-window.js";
 import { PanelArrangement } from "./web/floating-panel.js";
@@ -336,8 +337,10 @@ const frontPanel = new FrontPanel({ processor, model, printer, loop });
 // Rewind, the visualiser and the layout.
 // ------------------------------------------------------------------------
 
-const rewindUI = new RewindUI({ processor, video, loop });
+const replayHistory = new ReplayHistory(processor);
+const rewindUI = new RewindUI({ processor, video, loop, history: replayHistory });
 rewindUI.updateButtonState();
+dbgr.attachStepBack(replayHistory);
 
 const discVisualiser = new DiscVisualiser({ fdc: processor.fdc, arrangement: panelArrangement });
 const mediaWindow = new MediaWindow({

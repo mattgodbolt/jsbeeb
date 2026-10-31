@@ -710,23 +710,6 @@ export class SysVia extends WithKeyMatrix(Via) {
         };
     }
 
-    /**
-     * The keys held down, which snapshots leave out so that a rewind or a loaded state
-     * keeps the keys the person is actually holding.
-     */
-    keyboardState() {
-        return {
-            keys: this.keys.map((column) => Array.from(column)),
-            ...this.shift.state(),
-        };
-    }
-
-    restoreKeyboard(state) {
-        state.keys.forEach((column, col) => this.keys[col].set(column));
-        this.shift.restore(state);
-        this.updateKeys();
-    }
-
     restoreState(state) {
         super.restoreState(state);
         this.keyScanTask.restoreOffset(state.keyScanTaskOffset);
@@ -899,7 +882,10 @@ export class SysVia extends WithKeyMatrix(Via) {
      * @param {boolean} button2
      */
     setGamepadFire(button1, button2) {
-        this.gamepadFire = (button1 ? JoystickFire1 : 0) | (button2 ? JoystickFire2 : 0);
+        const fire = (button1 ? JoystickFire1 : 0) | (button2 ? JoystickFire2 : 0);
+        if (fire === this.gamepadFire) return;
+        this.gamepadFire = fire;
+        this.inputLog?.record({ kind: "gamepadFire", button1, button2 });
     }
 
     /**
@@ -911,6 +897,13 @@ export class SysVia extends WithKeyMatrix(Via) {
         const bit = buttonNumber === 0 ? JoystickFire1 : JoystickFire2;
         this.mouseFire = pressed ? this.mouseFire | bit : this.mouseFire & ~bit;
         this.recalculatePortBPins();
+        this.inputLog?.record({ kind: "joystickButton", button: buttonNumber, pressed });
+    }
+
+    /** Which FIRE buttons the host holds, as `setGamepadFire` and `setJoystickButton` (by button number) set them. */
+    fireButtons() {
+        const held = (bits) => [!!(bits & JoystickFire1), !!(bits & JoystickFire2)];
+        return { gamepad: held(this.gamepadFire), mouse: held(this.mouseFire) };
     }
 
     /** @param {boolean} held whether the FIRE buttons read released whatever is pressed */

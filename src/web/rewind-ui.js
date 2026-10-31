@@ -17,17 +17,25 @@ export class RewindUI {
      * @param {object} options.processor - Cpu6502 instance
      * @param {object} options.video - Video instance
      * @param {object} options.loop - the emulation loop: says when to capture, and is held while the panel is open
+     * @param {import("../replay.js").ReplayHistory} options.history - what the debugger steps back through, told of
+     * every snapshot kept and when they are all forgotten, and telling of a step back that leaves the newer ones
+     * a future the machine no longer has
      */
-    constructor({ processor, video, loop }) {
+    constructor({ processor, video, loop, history }) {
         this.rewindBuffer = new RewindBuffer(RewindBufferSnapshots);
         // The last few frames, newest last; the rewind history is copied from them.
         this.frames = new RewindBuffer(FrameSnapshots);
+        this.history = history;
         this.processor = processor;
         this.video = video;
         this.loop = loop;
         loop.addEventListener("frame-capture", () => this.captureFrame());
         loop.addEventListener("rewind-capture", () => this.capture());
-        loop.addEventListener("replacing-state", () => this.frames.clear());
+        loop.addEventListener("replacing-state", () => {
+            this.frames.clear();
+            this.history.restart();
+        });
+        history.addEventListener("landed", ({ detail }) => this.forget(detail.forgotten));
 
         this.panel = document.getElementById("rewind-panel");
         this.filmstrip = document.getElementById("rewind-filmstrip");
@@ -49,11 +57,26 @@ export class RewindUI {
     }
 
     captureFrame() {
-        this.frames.push(this.processor.snapshotState({ into: this.frames.nextToReplace() }));
+        const replacing = this.frames.nextToReplace();
+        const snapshot = this.processor.snapshotState({ into: replacing });
+        this.frames.push(snapshot);
+        this.history.taken(snapshot, replacing);
     }
 
     capture() {
-        this.rewindBuffer.push(copySnapshot(this.frames.peek(), this.rewindBuffer.nextToReplace()));
+        const replacing = this.rewindBuffer.nextToReplace();
+        const snapshot = copySnapshot(this.frames.peek(), replacing);
+        this.rewindBuffer.push(snapshot);
+        this.history.taken(snapshot, replacing);
+        this.history.trim();
+        this.updateButtonState();
+    }
+
+    /** Forgets `forgotten`, the newest snapshots, as the machine has stepped back before them. */
+    forget(forgotten) {
+        for (const ring of [this.frames, this.rewindBuffer]) {
+            while (ring.length > 0 && forgotten.has(ring.peek())) ring.pop();
+        }
         this.updateButtonState();
     }
 
@@ -62,6 +85,7 @@ export class RewindUI {
         this.close();
         this.rewindBuffer.clear();
         this.frames.clear();
+        this.history.restart();
         this.updateButtonState();
     }
 
@@ -158,6 +182,8 @@ export class RewindUI {
         this.filmstrip.innerHTML = "";
         this.snapshots = [];
         this.savedState = null;
+        // What the previews read and ran into is not the machine's own past.
+        this.history.restart();
         document.removeEventListener("keydown", this._onKeyDown, true);
         this.resumeLoop?.();
         this.resumeLoop = null;

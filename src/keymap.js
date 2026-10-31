@@ -706,7 +706,7 @@ export class ShiftOverride {
         }
     }
 
-    // Part of SysVia.keyboardState(), which shared-session peers on different deploys of one
+    // Part of keyboardState(), which shared-session peers on different deploys of one
     // package version exchange.
     state() {
         return {
@@ -751,6 +751,25 @@ export const WithKeyMatrix = (Base) =>
             this.keyColumns = columns;
             this.shift = new ShiftOverride(shiftKey);
             this.keyboardEnabled = true;
+            /** @type {import("./replay.js").InputLog | null} */
+            this.inputLog = null;
+        }
+
+        /**
+         * The keys held down, which snapshots leave out so that a rewind or a loaded state
+         * keeps the keys the person is actually holding.
+         */
+        keyboardState() {
+            return {
+                keys: this.keys.map((column) => Array.from(column)),
+                ...this.shift.state(),
+            };
+        }
+
+        restoreKeyboard(state) {
+            state.keys.forEach((column, col) => this.keys[col].set(column));
+            this.shift.restore(state);
+            this.updateKeys();
         }
 
         clearKeys() {
@@ -815,6 +834,7 @@ export const WithKeyMatrix = (Base) =>
 
         _keysChanged() {
             this.updateKeys();
+            this.inputLog?.record({ kind: "keyboard", state: this.keyboardState() });
         }
 
         hasAnyKeyDown() {

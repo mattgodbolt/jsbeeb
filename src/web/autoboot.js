@@ -63,6 +63,7 @@ export class Autoboot {
         const idleAddr = this.model.idleAddress;
         const hook = processor.debugInstruction.add((addr) => {
             if (addr !== idleAddr) return;
+            processor.inputLog?.refuse("the BASIC program from the URL going into memory");
             installBasic(tokenised, {
                 readByte: (a) => processor.readmem(a),
                 writeByte: (a, value) => processor.writemem(a, value),

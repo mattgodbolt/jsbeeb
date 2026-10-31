@@ -10,6 +10,7 @@ import { DebugGroup, FloatingPanel, MenuGroup } from "./floating-panel.js";
 import { EndEdge, Gap, StartEdge } from "./panel-layout.js";
 import { keyLine } from "./panel-keys.js";
 import { cpuMoment, cycleCount } from "../lockstep.js";
+import { notDeeper } from "../replay.js";
 import { NumRomBanks } from "../6502.js";
 import { describeHit } from "../breakpoints.js";
 import { sheilaAddress, machineSheilaBlocks } from "../sheila.js";
@@ -47,11 +48,9 @@ const QuickRunsPerSecond = 50;
 const ResetVector = 0xfffc;
 const NeverFallsThrough = new Set(["jump", "return", "interrupt"]);
 const HexByte = /^[0-9a-f]{1,2}$/i;
-
-// S counts down and wraps, so "not deeper" is a difference of under half the page, either way round $00.
-function notDeeper(s, startS) {
-    return ((s - startS) & 0xff) < 0x80;
-}
+const NoHistory = "There is nothing to step back to here.";
+const NoStepBackInSession = "Step back is not available in a shared session.";
+const StepBackRuns = ["stepBack", "stepBackOver"];
 
 function sourceNode(source) {
     return isHttps(source) ? externalLink(source, "source") : document.createTextNode(source);
@@ -259,6 +258,13 @@ export const ToolbarKeys = [
     { key: "n", run: "step" },
     { key: "N", run: "stepCycle" },
     {
+        combo: "p P",
+        label: "step back",
+        description: "Step back one instruction (P: back over the call just returned from)",
+    },
+    { key: "p", run: "stepBack" },
+    { key: "P", run: "stepBackOver" },
+    {
         combo: "m",
         key: "m",
         run: "stepOver",
@@ -375,6 +381,8 @@ export class Debugger {
         this._monitor = monitor;
         this.patchInstructions = new Map();
         this._loop = null;
+        /** @type {import("../replay.js").ReplayHistory | null} */
+        this._history = null;
         this._runningTo = null;
         // On the scheduler's clock, which a power-on reset leaves running. Null once the state it started in is
         // replaced, until it is reset.
@@ -445,6 +453,8 @@ export class Debugger {
             stepCycle: () => this.stepCycle(),
             stepOver: () => this._fromDebugger(() => this.stepOver()),
             stepOut: () => this._fromDebugger(() => this.stepOut()),
+            stepBack: () => this._fromDebugger(() => this.stepBack(false)),
+            stepBackOver: () => this._fromDebugger(() => this.stepBack(true)),
             runToCursor: () => this._fromDebugger(() => this.runToCursor()),
             runToVsync: () => this._fromDebugger(() => this.runToVsync()),
         };
@@ -536,6 +546,7 @@ export class Debugger {
 
     /** Writes as the CPU would, so that a ROM byte keeps its value and a register's device sees the write. */
     _writeByte(address, value) {
+        this.cpu.inputLog?.record({ kind: "write", address, value });
         this.cpu.writemem(address, value);
         const reads = this.cpu.peekmem(address);
         if (reads !== value && !this.cpu.isDevice(address)) {
@@ -749,6 +760,7 @@ export class Debugger {
         const panel = this.panels.toolbar.panel;
         this._buttons = Object.fromEntries([...panel.querySelectorAll("[data-run]")].map((b) => [b.dataset.run, b]));
         for (const [run, button] of Object.entries(this._buttons)) button.addEventListener("click", this._actions[run]);
+        this._stepBackTitles = Object.fromEntries(StepBackRuns.map((run) => [run, this._buttons[run].title]));
     }
 
     _bindKeys(keys) {
@@ -961,6 +973,7 @@ export class Debugger {
     }
 
     execPatch(instString) {
+        this.cpu.inputLog?.refuse("a patch from the URL");
         for (const inst of instString.split(",")) {
             if (!inst) continue;
             const ops = inst.split(":");
@@ -1013,6 +1026,7 @@ export class Debugger {
             if (!this._touchKeyboardShown()) this.showPanels();
         }
         this._arrangement.keepAttached();
+        this._showStepBack();
         this.cpu.video.debugPaint();
     }
 
@@ -1166,9 +1180,30 @@ export class Debugger {
         this._showRunning();
     }
 
+    /** What the machine steps back through; until there is one, there is nothing to step back to. */
+    attachStepBack(history) {
+        this._history = history;
+    }
+
     _showRunning() {
         const running = this._loop.isRunning();
         for (const [run, button] of Object.entries(this._buttons)) button.disabled = running !== (run === "stop");
+        if (!running) this._showStepBack();
+    }
+
+    _stepBackRefusal() {
+        if (this._loop.lockstep) return NoStepBackInSession;
+        return this._history ? this._history.refusal() : NoHistory;
+    }
+
+    // Left able to be pressed, so that its tooltip and a press say why it cannot step back.
+    _showStepBack() {
+        const refusal = this._stepBackRefusal();
+        for (const run of StepBackRuns) {
+            const button = this._buttons[run];
+            button.setAttribute("aria-disabled", String(refusal !== null));
+            button.title = refusal ?? this._stepBackTitles[run];
+        }
     }
 
     /** Runs one instruction, stepping off a breakpoint on it; false when a watch stopped the machine in it. */
@@ -1246,6 +1281,21 @@ export class Debugger {
         this.updatePrevMem();
         this.executeOne();
         this.debug(this.cpu.pc);
+    }
+
+    /** Steps back one instruction, or with `over` back over the call just returned from; see ReplayHistory. */
+    stepBack(over) {
+        const refusal = this._stepBackRefusal() ?? this._steppedBack(over);
+        if (refusal) toast(refusal, { title: "Step back" });
+        this.debug(this.cpu.pc);
+    }
+
+    _steppedBack(over) {
+        this.updatePrevMem();
+        const refusal = this._history.stepBack(over);
+        // Gone back past where the stopwatch was started, it has nothing to time from.
+        if (this._stopwatchFrom > this.cpu.scheduler.epoch) this._stopwatchFrom = null;
+        return refusal;
     }
 
     stepOver() {

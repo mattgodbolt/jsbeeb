@@ -113,6 +113,8 @@ export class Cmos {
         // Likewise a seconds, minutes or hours byte that is not a time, keyed by register, while the clock runs on.
         this.heldTime = {};
         this.beforeSession = null;
+        /** @type {import("./replay.js").InputLog | null} */
+        this.inputLog = null;
 
         if (!this.store) {
             this.store = [...defaultCmos];
@@ -182,8 +184,14 @@ export class Cmos {
         this.beforeSession = null;
     }
 
+    // Whole seconds, all the clock keeps, so that a replay is handed the second each read saw.
+    clockMs() {
+        const ms = Math.floor(this.now() / 1000) * 1000;
+        return this.inputLog ? this.inputLog.sample("rtc", ms) : ms;
+    }
+
     bbcDateTime() {
-        const result = new Date(this.now() + this.timeOffset);
+        const result = new Date(this.clockMs() + this.timeOffset);
         result.setMilliseconds(0);
         return this.utc ? utcView(result) : result;
     }
@@ -199,11 +207,16 @@ export class Cmos {
     }
 
     setTimeFrom(bbcTime) {
-        const secondsNow = Math.floor(this.now() / 1000) * 1000;
-        this.timeOffset = bbcTime.getTime() - secondsNow;
+        this.timeOffset = bbcTime.getTime() - this.clockMs();
+    }
+
+    // Snapshots leave the CMOS out, so a replay from before a write would read what it wrote.
+    refuseReplays() {
+        this.inputLog?.refuse("a write to the CMOS");
     }
 
     writeTime(register, value) {
+        this.refuseReplays();
         const { limit, set } = TimeRegisters[register];
         if (!isBcdBelow(value, limit)) {
             this.heldTime[register] = value;
@@ -216,6 +229,7 @@ export class Cmos {
     }
 
     writeCalendar(field, value) {
+        this.refuseReplays();
         const bbcTime = this.bbcDateTime();
         const registers = { ...this.calendarRegisters(bbcTime), [field]: value };
         const { day, month, year } = registers;
@@ -276,6 +290,7 @@ export class Cmos {
         if (oldAddressSelect && !this.addressSelect) this.cmosAddr = portApins & 0x3f;
         if (oldDataSelect && !this.dataSelect && !this.addressSelect && !this.isRead) {
             if (this.cmosAddr > 0xb) {
+                this.refuseReplays();
                 this.store[this.cmosAddr] = portApins;
                 this.save();
             } else {

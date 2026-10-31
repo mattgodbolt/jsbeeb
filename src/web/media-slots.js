@@ -167,6 +167,7 @@ export class MediaSlots extends EventTarget {
     install(slot, media, ref, inUrl, recent = true) {
         slot.busy = null;
         slot.failed = null;
+        this.processor.inputLog?.refuse(slot.isDeck ? "a tape change" : `a disc change in drive ${slot.index}`);
         if (slot.isDeck) this.processor.tapeInterface.setTape(media);
         else if (media) this.drives.putDiscIn(slot.index, media);
         else this.drives.eject(slot.index);

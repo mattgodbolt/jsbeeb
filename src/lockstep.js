@@ -74,7 +74,11 @@ export function stateHash(cpu) {
     return (hash >>> 0).toString(16);
 }
 
-function applyInput(cpu, input) {
+/**
+ * Applies an input between executes. A session sends only keys and BREAK; the rest are what a replay of this
+ * machine's own past (src/replay.js) puts back, as its input log recorded them.
+ */
+export function applyInput(cpu, input) {
     switch (input.kind) {
         case "key":
             cpu.sysvia.setMapped(input.mapping, input.down ? 1 : 0);
@@ -82,8 +86,23 @@ function applyInput(cpu, input) {
         case "break":
             cpu.setReset(input.down);
             break;
+        case "keyboard":
+            cpu.keyboardInterface.restoreKeyboard(input.state);
+            break;
+        case "gamepadFire":
+            cpu.sysvia.setGamepadFire(input.button1, input.button2);
+            break;
+        case "joystickButton":
+            cpu.sysvia.setJoystickButton(input.button, input.pressed);
+            break;
+        case "reset":
+            cpu.reset(false);
+            break;
+        case "write":
+            cpu.writemem(input.address, input.value);
+            break;
         default:
-            throw new Error(`Unknown session input "${input.kind}"`);
+            throw new Error(`Unknown input "${input.kind}"`);
     }
 }
 

@@ -2,6 +2,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { RewindUI } from "../../src/web/rewind-ui.js";
+import { ReplayHistory } from "../../src/replay.js";
+import { fake6502 } from "../../src/fake6502.js";
 import { domFromIndexHtml, sentEvents, teardownDom } from "./helpers.js";
 
 const FakeContext = {
@@ -15,6 +17,7 @@ describe("RewindUI", () => {
     let processor;
     let resume;
     let loop;
+    let history;
 
     beforeEach(() => {
         domFromIndexHtml("rewind-open", "rewind-panel");
@@ -42,11 +45,12 @@ describe("RewindUI", () => {
         };
         resume = vi.fn();
         loop = Object.assign(new EventTarget(), { hold: vi.fn(() => resume), replacingState: vi.fn() });
+        history = new ReplayHistory(fake6502());
     });
 
     afterEach(teardownDom);
 
-    const make = () => new RewindUI({ processor, video, loop });
+    const make = () => new RewindUI({ processor, video, loop, history });
     const panel = () => document.getElementById("rewind-panel");
     const thumbs = () => [...document.querySelectorAll(".rewind-thumb")];
     const selectedIndex = () => Number(document.querySelector(".rewind-thumb.selected").dataset.index);
@@ -271,6 +275,35 @@ describe("RewindUI", () => {
             loop.dispatchEvent(new Event("replacing-state"));
             expect(ui.frames.length).toBe(0);
             expect(ui.rewindBuffer.length).toBe(2);
+        });
+
+        it.each([
+            ["the machine's state is replaced", () => loop.dispatchEvent(new Event("replacing-state"))],
+            ["it is reset", (ui) => ui.reset()],
+            [
+                "the panel closes, its previews having run the machine",
+                (ui) => {
+                    ui.open();
+                    key("Escape");
+                },
+            ],
+        ])("gives step back every snapshot in either ring, until %s", (_, forget) => {
+            const ui = make();
+            captured(31);
+            const held = new Set([...ui.frames.getAll(), ...ui.rewindBuffer.getAll()]);
+            expect(new Set(history.snapshots())).toEqual(held);
+            forget(ui);
+            expect(history.snapshots()).toEqual([]);
+        });
+
+        it("forgets from both rings the snapshots a step back left in the future", () => {
+            const ui = make();
+            captured(5);
+            const [rewinds, frames] = [ui.rewindBuffer.getAll(), ui.frames.getAll()];
+            const forgotten = new Set([...rewinds.slice(3), frames.at(-1)]);
+            history.dispatchEvent(new CustomEvent("landed", { detail: { forgotten } }));
+            expect(ui.rewindBuffer.getAll()).toEqual(rewinds.slice(0, 3));
+            expect(ui.frames.getAll()).toEqual(frames.slice(0, 2));
         });
     });
 });

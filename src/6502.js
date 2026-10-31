@@ -773,6 +773,8 @@ export class Cpu6502 extends Base6502 {
         this.oldPcIndex = 0;
         this.resetLine = true;
         this.resetsAndLoads = 0;
+        /** @type {import("./replay.js").InputLog | null} */
+        this.inputLog = null;
         this.cpuMultiplier = this.config.cpuMultiplier;
         this.videoCyclesBatch = this.config.videoCyclesBatch | 0;
         this.peripheralCyclesPerSecond = model.cyclesPerSecond;
@@ -1491,7 +1493,9 @@ export class Cpu6502 extends Base6502 {
     }
 
     setReset(resetOn) {
+        if (this.resetLine === !resetOn) return;
         this.resetLine = !resetOn;
+        this.inputLog?.record({ kind: "break", down: resetOn });
     }
 
     /**
@@ -1880,8 +1884,14 @@ export class Cpu6502 extends Base6502 {
 
     /** Runs `run` with every debug hook detached, so nothing it executes is seen by a hook or halts at one. */
     withoutDebugHooks(run) {
+        return this.withOnlyInstructionHook(null, run);
+    }
+
+    /** As withoutDebugHooks, but with `onInstruction(pc, opcode)` called before each instruction, or null for none. */
+    withOnlyInstructionHook(onInstruction, run) {
         const attached = [this._debugInstruction, this._debugRead, this._debugWrite, this._debugInterrupt];
-        this._debugInstruction = this._debugRead = this._debugWrite = this._debugInterrupt = null;
+        this._debugInstruction = onInstruction;
+        this._debugRead = this._debugWrite = this._debugInterrupt = null;
         this.refreshLook();
         try {
             return run();
