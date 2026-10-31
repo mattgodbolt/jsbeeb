@@ -223,6 +223,36 @@ Present only on the Atom.
 
 Older snapshots also carry `latchb`, which was always 0 since port B is input only; it is ignored on restore.
 
+### Atom MMC (`state.atommc`)
+
+Present only on the Atom: the AtoMMC2 interface's registers and the state of its file system. The card's files are media and are not saved; the card is whatever the page was given with `?mmc=`. Atom snapshots written before it was saved lack it, and absent means the interface keeps its current state, so it needed no format version bump.
+
+| Field            | Type   | Description                                                               |
+| ---------------- | ------ | ------------------------------------------------------------------------- |
+| `MMCtoAtom`      | number | The byte the interface has ready for the Atom's next read                 |
+| `heartbeat`      | number | The next heartbeat reply, `0x55` or `0xAA`                                |
+| `MCUStatus`      | number | Status register (busy, read and wrote flags)                              |
+| `configByte`     | number | Configuration byte                                                        |
+| `lastaddr`       | number | Last register written, which every read but the status register's acts on |
+| `byteValueLatch` | number | Latch register (transfer length or command argument)                      |
+| `TRISB`          | number | User port direction register                                              |
+| `files`          | object | File system state (see below)                                             |
+
+#### Atom MMC file system (`state.atommc.files`)
+
+| Field         | Type       | Description                                                                 |
+| ------------- | ---------- | --------------------------------------------------------------------------- |
+| `globalData`  | Uint8Array | Transfer buffer: bytes the Atom has sent, or bytes waiting for it to read   |
+| `globalIndex` | number     | Position in `globalData` of the next byte sent or read                      |
+| `fildata`     | object[]   | The four file handles, each `null` when closed or `{ file, pos }` when open |
+| `openeddir`   | string     | Directory being listed                                                      |
+| `foldersSeen` | string[]   | Subdirectories the listing has already returned                             |
+| `dfn`         | number     | Index into the card's files of the listing's next entry                     |
+| `CWD`         | string     | Current directory                                                           |
+| `wildcard`    | string     | The listing's wildcard as the Atom gave it, with `*` and `?`                |
+
+An open handle's `file` is the file's index on the card and `pos` its position in it. A handle whose index the card does not have restores closed.
+
 ### Video (`state.video`)
 
 Contains ~40 scalar fields for display timing and rendering state, plus nested objects:
@@ -316,21 +346,26 @@ A machine built with `FakeVideo` (TestMachine, or the page's `fakeVideo` option;
 
 ### Sound chip (`state.soundChip`)
 
-| Field             | Type         | Description                                          |
-| ----------------- | ------------ | ---------------------------------------------------- |
-| `registers`       | Uint16Array  | 4 channel tone/noise period registers                |
-| `counter`         | Float32Array | 4 channel counters                                   |
-| `outputBit`       | boolean[]    | 4 channel output states                              |
-| `volume`          | Float32Array | 4 channel volume levels                              |
-| `lfsr`            | number       | Noise generator linear feedback shift register       |
-| `latchedRegister` | number       | Last latched register address                        |
-| `residual`        | number       | Sub-sample residual (float)                          |
-| `sineOn`          | boolean      | Sine tone generator active                           |
-| `sineStep`        | number       | Sine generator step size                             |
-| `sineTime`        | number       | Sine generator phase                                 |
-| `dcPrevIn`        | number       | DC blocker previous input (0 if absent)              |
-| `dcPrevOut`       | number       | DC blocker previous output (0 if absent)             |
-| `speakerBit`      | number       | Atom only: the speaker's level, 0 or 1 (0 if absent) |
+| Field              | Type         | Description                                           |
+| ------------------ | ------------ | ----------------------------------------------------- |
+| `registers`        | Uint16Array  | 4 channel tone/noise period registers                 |
+| `counter`          | Float32Array | 4 channel counters                                    |
+| `outputBit`        | boolean[]    | 4 channel output states                               |
+| `volume`           | Float32Array | 4 channel volume levels                               |
+| `lfsr`             | number       | Noise generator linear feedback shift register        |
+| `latchedRegister`  | number       | Last latched register address                         |
+| `residual`         | number       | Sub-sample residual (float)                           |
+| `sineOn`           | boolean      | Sine tone generator active                            |
+| `sineStep`         | number       | Sine generator step size                              |
+| `sineTime`         | number       | Sine generator phase                                  |
+| `dcPrevIn`         | number       | DC blocker previous input (0 if absent)               |
+| `dcPrevOut`        | number       | DC blocker previous output (0 if absent)              |
+| `speakerBit`       | number       | Atom only: the speaker's level, 0 or 1 (0 if absent)  |
+| `slowDataBus`      | number       | The slow data bus value the chip takes on a write     |
+| `active`           | boolean      | Write enable (WE) low                                 |
+| `activeTaskOffset` | number\|null | Offset at which the chip takes the bus (null if none) |
+
+`slowDataBus`, `active` and `activeTaskOffset` are absent from snapshots written before they were saved; then the bus is what the System VIA's restore drives onto it, and a write enabled there is taken as if WE had just gone low.
 
 ### ACIA (`state.acia`)
 

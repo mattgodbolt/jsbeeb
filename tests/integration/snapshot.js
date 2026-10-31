@@ -15,7 +15,8 @@ import {
     restoreInto,
     runCpuCycles,
 } from "../helpers/atom-video.js";
-import { mode7Text } from "./helpers.js";
+import { WFNFile } from "../../src/mmc.js";
+import { bootedTestMachine, mode7Text } from "./helpers.js";
 
 const FbWidth = 1024;
 const FbHeight = 768;
@@ -26,6 +27,10 @@ const AtomCyclesAfterRestore = 5000;
 const MidPictureLine = 94;
 const LinesPerRow = 3;
 const SnowAddr = 0x8123;
+const MmcLoadAddress = 0x3000;
+const MmcFileBytes = 2000;
+const AtmNameBytes = 16;
+const AtmHeaderBytes = AtmNameBytes + 6;
 
 const withVideo = (model, options) =>
     new TestMachine(model, { video: new Video(false, FbWidth * FbHeight, () => {}, options) });
@@ -39,6 +44,18 @@ function* ownedArrays(value) {
     } else if (value && typeof value === "object") {
         for (const [key, inner] of Object.entries(value)) if (!SharedByReference.has(key)) yield* ownedArrays(inner);
     }
+}
+
+// An AtoMMC file: the ATM header (name, load address, execution address, length), then the body.
+function atmFile(name, loadAddress, body) {
+    const file = new Uint8Array(AtmHeaderBytes + body.length);
+    file.set(new TextEncoder().encode(name));
+    const view = new DataView(file.buffer);
+    view.setUint16(AtmNameBytes, loadAddress, true);
+    view.setUint16(AtmNameBytes + 2, loadAddress, true);
+    view.setUint16(AtmNameBytes + 4, body.length, true);
+    file.set(body, AtmHeaderBytes);
+    return file;
 }
 
 const stateOf = (machine) => JSON.parse(snapshotToJSON(createSnapshot(machine.processor, machine.model).state));
@@ -98,14 +115,41 @@ describe("save state round trip", () => {
         const fb = original.processor.video.fb32;
         expect(restored.processor.video.fb32.filter((pixel, i) => pixel !== fb[i]).length).toBe(0);
     });
+
+    it("finishes an Atom's MMC load in a fresh machine restored part way through it", async () => {
+        const body = Uint8Array.from({ length: MmcFileBytes }, (_, i) => (i * 7 + 3) & 0xff);
+        const atomWithCard = async () => {
+            const machine = await bootedTestMachine("Atom");
+            machine.processor.atommc.SetMMCData([new WFNFile("/DATA", atmFile("DATA", MmcLoadAddress, body))]);
+            return machine;
+        };
+        const loaded = (machine) => Uint8Array.from(body, (_, i) => machine.readbyte(MmcLoadAddress + i));
+        const original = await atomWithCard();
+        let reachedHalfway = false;
+        const halfway = original.addBreakpoint("write", MmcLoadAddress + MmcFileBytes / 2, {}, () => {
+            reachedHalfway = true;
+        });
+        await original.type('*LOAD "DATA"');
+        await original.runFor(OneEmulatedSecond);
+        halfway.remove();
+        expect(reachedHalfway).toBe(true);
+        expect(loaded(original)).not.toEqual(body);
+        const snapshot = snapshotFromJSON(snapshotToJSON(createSnapshot(original.processor, original.model)));
+
+        const restored = await atomWithCard();
+        restoreSnapshot(restored.processor, restored.model, snapshot);
+        await restored.runUntilInput();
+
+        expect(loaded(restored)).toEqual(body);
+    });
 });
 
-// An Atom restored from a snapshot does not run on as it did: its system VIA's port A pins come back changed.
 describe.each([
-    ["a B with a disc", "B-DFS1.2", {}, "discs/bcdtest.ssd", true],
-    ["a Master with a co-processor", "Master", { tube: true }, null, true],
-    ["an Atom", "Atom", {}, null, false],
-])("snapshots taken into earlier ones' storage, for %s", (_, model, options, disc, replaysFromRestore) => {
+    ["a B with a disc", "B-DFS1.2", {}, "discs/bcdtest.ssd"],
+    ["a Master", "Master", {}, null],
+    ["a Master with a co-processor", "Master", { tube: true }, null],
+    ["an Atom", "Atom", {}, null],
+])("snapshots taken into earlier ones' storage, for %s", (_, model, options, disc) => {
     const running = async () => {
         const video = new Video(false, FbWidth * FbHeight, () => {}, { isAtom: model === "Atom" });
         const soundChip = model === "Atom" ? new AtomSoundChip(() => {}) : new SoundChip(() => {});
@@ -131,7 +175,7 @@ describe.each([
         expect(snapshotToJSON(kept)).toBe(fresh);
     });
 
-    it.runIf(replaysFromRestore)("leave the machine running exactly as it does untaken", async () => {
+    it("leave the machine running exactly as it does untaken", async () => {
         const machine = await running();
         const cpu = machine.processor;
         const start = cpu.snapshotState();
