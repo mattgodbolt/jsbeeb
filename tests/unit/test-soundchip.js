@@ -12,6 +12,10 @@ import { goertzelAmplitude } from "./helpers.js";
 
 const WhiteNoiseFastestRate = 0xe4;
 const PeriodicNoiseFastestRate = 0xe0;
+const Tone0Latch = 0x80;
+const Tone0LowBitsSaved = 0x0f;
+const Tone0LowBitsDriven = 0x03;
+const CyclesIntoWriteAtSnapshot = 5;
 
 function makeSoundChip(onBuffer = () => {}) {
     const scheduler = new Scheduler();
@@ -202,6 +206,32 @@ describe("SoundChip snapshotState / restoreState", () => {
 
         expect(chip.dcPrevIn).toBe(0);
         expect(chip.dcPrevOut).toBe(0);
+    });
+
+    it.each([
+        ["its own pending write", () => {}, Tone0LowBitsSaved],
+        [
+            "what the System VIA drove, for a snapshot without the bus",
+            (snapshot) => {
+                delete snapshot.slowDataBus;
+                delete snapshot.active;
+                delete snapshot.activeTaskOffset;
+            },
+            Tone0LowBitsDriven,
+        ],
+    ])("takes the bus with WE low as %s after a restore", (_, age, expectedRegister) => {
+        const { chip, scheduler } = makeSoundChip();
+        chip.updateSlowDataBus(Tone0Latch | Tone0LowBitsSaved, true);
+        scheduler.polltime(CyclesIntoWriteAtSnapshot);
+        const snapshot = chip.snapshotState();
+        age(snapshot);
+
+        const { chip: restored, scheduler: restoredScheduler } = makeSoundChip();
+        restored.updateSlowDataBus(Tone0Latch | Tone0LowBitsDriven, true);
+        restored.restoreState(snapshot);
+        restoredScheduler.polltime(restored.minCyclesWELow);
+
+        expect(restored.registers[0]).toBe(expectedRegister);
     });
 
     it("should reset output buffer on restore", () => {
