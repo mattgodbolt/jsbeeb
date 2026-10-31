@@ -17,7 +17,7 @@ const defaultCmos = Object.freeze([
 // A store saved before it held the whole chip: its first 48 bytes, longer if a program wrote past them.
 const OldestStoreBytes = 48;
 
-/** A copy of `bytes` as a whole store, the defaults filling what an older page's lacks; throws if it is neither. */
+/** A copy of `bytes` as a whole store, the defaults filling what an older page's lacks; throws on any other shape. */
 function fullStore(bytes) {
     if (!Array.isArray(bytes) || bytes.length < OldestStoreBytes || bytes.length > defaultCmos.length)
         throw new Error(`the settings are not ${OldestStoreBytes} to ${defaultCmos.length} bytes`);
