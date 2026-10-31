@@ -1470,6 +1470,8 @@ export class Cpu6502 extends Base6502 {
     }
 
     snapshotState({ includeRoms = false } = {}) {
+        // A restore starts the sound chip at the scheduler's epoch, so its counters must have run up to it.
+        this.soundChip.catchUp();
         return {
             ...this.snapshotRegisters(),
             halted: this.halted,

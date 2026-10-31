@@ -4,6 +4,7 @@ import { createSnapshot, restoreSnapshot, snapshotFromJSON, snapshotToJSON } fro
 import { TestMachine } from "../../src/test-machine.js";
 import { gzipCodec } from "../../src/archive.js";
 import { Video } from "../../src/video.js";
+import { AtomSoundChip, SoundChip } from "../../src/soundchip.js";
 import {
     CpuCyclesPerField,
     CpuCyclesPerLine,
@@ -24,6 +25,8 @@ const AtomCyclesAfterRestore = 5000;
 const MidPictureLine = 94;
 const LinesPerRow = 3;
 const SnowAddr = 0x8123;
+const OneEmulatedSecond = 2 * 1000 * 1000;
+const ReplayFrames = 50;
 
 const withVideo = (model, options) =>
     new TestMachine(model, { video: new Video(false, FbWidth * FbHeight, () => {}, options) });
@@ -83,6 +86,30 @@ describe("save state round trip", () => {
         );
         const fb = original.processor.video.fb32;
         expect(restored.processor.video.fb32.filter((pixel, i) => pixel !== fb[i]).length).toBe(0);
+    });
+});
+
+describe.each([
+    ["a B", "B-DFS1.2"],
+    ["a Master", "Master"],
+    ["an Atom", "Atom"],
+])("restoring its own snapshot, %s", (_, model) => {
+    it("runs on exactly as it did from there", async () => {
+        const isAtom = model === "Atom";
+        const video = new Video(false, FbWidth * FbHeight, () => {}, { isAtom });
+        const soundChip = isAtom ? new AtomSoundChip(() => {}) : new SoundChip(() => {});
+        const machine = new TestMachine(model, { video, soundChip });
+        await machine.initialise();
+        await machine.runFor(OneEmulatedSecond);
+        const cpu = machine.processor;
+        const start = cpu.snapshotState();
+        const runFrames = async () => {
+            await machine.runFor((machine.model.cyclesPerSecond / 50) * ReplayFrames);
+            return { state: snapshotToJSON(cpu.snapshotState()), picture: cpu.video.fb32.slice() };
+        };
+        const firstTime = await runFrames();
+        cpu.restoreState(start);
+        expect(await runFrames()).toEqual(firstTime);
     });
 });
 

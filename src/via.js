@@ -685,6 +685,8 @@ export class SysVia extends WithKeyMatrix(Via) {
     reset() {
         super.reset();
         this.keyScanTask.cancel();
+        // The keyboard and CMOS drive port A whatever the VIA does, as restoreState() recomputes it.
+        this.drivePortA();
     }
 
     write(addr, val) {

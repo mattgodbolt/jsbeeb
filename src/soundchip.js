@@ -373,6 +373,9 @@ export class SoundChip {
             sineTime: this.sineTime,
             dcPrevIn: this.dcPrevIn,
             dcPrevOut: this.dcPrevOut,
+            slowDataBus: this.slowDataBus,
+            active: this.active,
+            activeTaskOffset: this.activeTask?.offset() ?? null,
         };
     }
 
@@ -401,6 +404,12 @@ export class SoundChip {
         // Older snapshots predate the DC blocker
         this.dcPrevIn = state.dcPrevIn ?? 0;
         this.dcPrevOut = state.dcPrevOut ?? 0;
+        // Older snapshots keep what the System VIA's restore drove onto the bus before this one ran.
+        if (state.slowDataBus !== undefined) {
+            this.slowDataBus = state.slowDataBus;
+            this.active = state.active;
+            this.activeTask?.restoreOffset(state.activeTaskOffset);
+        }
         this.progressTask?.ensureScheduled(true, EventProgressCycles);
         this._emit("state", this.snapshotState());
     }
