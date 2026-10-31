@@ -175,6 +175,40 @@ class WFN {
          * @type {WFNFile[]}
          */
         this.allfiles = [];
+        this.loadedFiles = [];
+        this.loadedIndexByData = new Map();
+        this.cardSnapshot = null;
+    }
+
+    load(files) {
+        this.allfiles = files;
+        this.loadedFiles = files.map(({ path, data }) => ({ path, data }));
+        this.loadedIndexByData = new Map(files.map(({ data }, index) => [data, index]));
+        this.cardChanged();
+    }
+
+    cardChanged() {
+        this.cardSnapshot = null;
+    }
+
+    // A file's bytes are replaced on a write, never written into, so snapshots share them; one the card was
+    // given with is saved as its index in the card as loaded.
+    snapshotCard() {
+        return this.allfiles.map(({ path, data }) => {
+            const loaded = this.loadedIndexByData.get(data);
+            if (loaded === undefined) return { path, data };
+            return path === this.loadedFiles[loaded].path ? { loaded } : { path, loaded };
+        });
+    }
+
+    // A card without the files the snapshot's card was loaded with keeps its own.
+    restoreCard(card) {
+        if (card.some(({ loaded }) => loaded >= this.loadedFiles.length)) return;
+        this.allfiles = card.map(({ path, data, loaded }) => {
+            const asLoaded = this.loadedFiles[loaded];
+            return new WFNFile(path ?? asLoaded.path, data ?? asLoaded.data);
+        });
+        this.cardSnapshot = card;
     }
 
     WFN_WorkerTest() {}
@@ -479,13 +513,14 @@ class WFN {
             this.allfiles
                 .filter((file) => file.path.startsWith(dirPrefix))
                 .forEach((file) => (file.path = "§" + file.path));
-
+            this.cardChanged();
             return FR_OK;
         }
 
         if (this.file_exists(newpath.path) == FR_OK) {
             // remove the file from the list
             this.allfiles.filter((file) => file.path == newpath.path).forEach((file) => (file.path = "§" + file.path));
+            this.cardChanged();
 
             return FR_OK;
         }
@@ -545,6 +580,7 @@ class WFN {
         newData.set(this.globalData.slice(0, end - handle.pos), handle.pos);
         handle.file.data = newData;
         handle.pos = end;
+        this.cardChanged();
         this.mmc.WriteDataPort(STATUS_COMPLETE);
     }
 
@@ -597,9 +633,11 @@ class WFN {
         this.globalAmount = length;
     }
 
-    // The card's files are media: an open handle saves which of them it is by its place on the card.
+    // An open handle saves which file it has by the file's place on the card.
     snapshotState() {
+        this.cardSnapshot ??= this.snapshotCard();
         return {
+            card: this.cardSnapshot,
             globalData: this.globalData.slice(),
             globalIndex: this.globalIndex,
             fildata: this.fildata.map(
@@ -614,6 +652,7 @@ class WFN {
     }
 
     restoreState(state) {
+        if (state.card) this.restoreCard(state.card);
         this.globalData = state.globalData.slice();
         this.globalIndex = state.globalIndex;
         this.fildata = state.fildata.map((handle) => {
@@ -733,6 +772,7 @@ class WFN {
             if (fileIndex === -1 && mode & O_CREAT) {
                 // Create new file
                 this.allfiles.push(new WFNFile(path, new Uint8Array()));
+                this.cardChanged();
                 fileIndex = this.allfiles.length - 1;
             } else if (fileIndex !== -1) {
                 //cannot find file and not creating it.
@@ -783,16 +823,6 @@ class WFN {
     }
 }
 
-const CardChangingCommands = new Set([
-    CMD_DIR_MKDIR,
-    CMD_DIR_RMDIR,
-    CMD_RENAME,
-    CMD_FILE_OPEN_WRITE,
-    CMD_FILE_OPEN_RAF,
-    CMD_FILE_DELETE,
-    CMD_WRITE_BYTES,
-]);
-
 /**
  * AtomMMC2 emulates the AtoMMC2 device for the Acorn Atom.
  * Handles SD/MMC file operations and communication with the Atom.
@@ -823,7 +853,7 @@ export class AtomMMC2 {
      * @param {Object} data
      */
     SetMMCData(data) {
-        this.WFN.allfiles = data;
+        this.WFN.load(data);
     }
 
     /**
@@ -941,9 +971,6 @@ export class AtomMMC2 {
                     }
                     this.WriteDataPort(STATUS_BUSY);
                     this.MCUStatus |= MMC_MCU_BUSY;
-                    // The card's files are not in a snapshot (#1761), so a replay from before this would find them
-                    // as it leaves them.
-                    if (CardChangingCommands.has(received)) this.cpu.inputLog?.refuse("a write to the MMC card");
                     if (received === CMD_DIR_OPEN) {
                         worker = () => this.WFN.WFN_DirectoryOpen();
                     } else if (received === CMD_DIR_READ) {

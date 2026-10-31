@@ -1,13 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ReplayHistory, snapshotCycle } from "../../src/replay.js";
-import { snapshotToJSON } from "../../src/snapshot.js";
+import { createSnapshot, restoreSnapshot, snapshotFromJSON, snapshotToJSON } from "../../src/snapshot.js";
 import { Video } from "../../src/video.js";
 import { AtomSoundChip, SoundChip } from "../../src/soundchip.js";
 import { keyCodes } from "../../src/keymap.js";
 import { bootedTestMachine, mode7Text } from "./helpers.js";
 import { singleStep } from "../helpers/single-step.js";
 import { executeUntilFrame } from "../../src/web/rewind-thumbnail.js";
+import { WFNFile } from "../../src/mmc.js";
 
 const FbWidth = 1024;
 const FbHeight = 768;
@@ -36,6 +37,7 @@ const AtomTextScreen = 0x8000;
 const AtomTextScreenBytes = 512;
 const AtomLetterOffset = 0x40;
 const AdcFullScale = 0xffff;
+const AtomPauseThenSaveToTheCard = ["10 F.I=1TO50;WAIT;N.", '20 *SAVE "NEW" 2900 2A00'];
 
 async function booted(model, options) {
     const isAtom = model === "Atom";
@@ -284,5 +286,54 @@ describe("Replaying a Master's writes to its CMOS", () => {
             settings,
             { timeOffset, heldDate, heldTime },
         ]);
+    });
+});
+
+describe("Replaying an Atom's writes to its MMC card", () => {
+    const cardOf = (cpu) => cpu.atommc.GetMMCData().map(({ path, data }) => ({ path, data: [...data] }));
+
+    it.each([
+        ["stepping back", "after", ({ history }) => expect(history.stepBack(false)).toBeNull()],
+        [
+            "previewing a rewind",
+            "after",
+            ({ cpu, start }) => {
+                const live = cpu.snapshotState();
+                cpu.restoreState(start);
+                executeUntilFrame(cpu, cpu.video);
+                cpu.restoreState(live);
+            },
+        ],
+        ["rewinding to before it", "before", ({ cpu, start }) => cpu.restoreState(start)],
+        [
+            "restoring a state saved before it",
+            "before",
+            ({ cpu, machine, saved }) => restoreSnapshot(cpu, machine.model, snapshotFromJSON(saved)),
+        ],
+        [
+            "restoring a state saved before snapshots held the card",
+            "after",
+            ({ cpu, start }) => {
+                const { card: _, ...files } = start.atommc.files;
+                cpu.restoreState({ ...start, atommc: { ...start.atommc, files } });
+            },
+        ],
+    ])("after %s, leaves the card as the machine had it %s the write", async (_, expected, replay) => {
+        const machine = await booted("Atom");
+        const cpu = machine.processor;
+        cpu.atommc.SetMMCData([new WFNFile("/OLD", Uint8Array.of(1, 2, 3))]);
+        for (const line of [...AtomPauseThenSaveToTheCard, "RUN"]) await machine.type(line);
+        const history = historyFromHere(machine);
+        const start = cpu.snapshotState();
+        const saved = snapshotToJSON(createSnapshot(cpu, machine.model));
+        const before = cardOf(cpu);
+        await machine.runUntilInput();
+        singleStep(cpu);
+        const after = cardOf(cpu);
+        expect([before, after].map((card) => card.map(({ path }) => path))).toEqual([["/OLD"], ["/OLD", "/NEW"]]);
+
+        replay({ cpu, machine, history, start, saved });
+
+        expect(cardOf(cpu)).toEqual({ before, after }[expected]);
     });
 });
