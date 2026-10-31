@@ -14,14 +14,14 @@ const defaultCmos = Object.freeze([
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 ]);
 
-// Pages before the store was the chip's full size kept its first 48 bytes, and grew it by a write past them.
+// A store saved before it held the whole chip: its first 48 bytes, longer if a program wrote past them.
 const OldestStoreBytes = 48;
 
-/** A copy of `bytes` as a whole store, padding one saved by an older page; throws if it is neither. */
+/** A copy of `bytes` as a whole store, the defaults filling what an older page's lacks; throws if it is neither. */
 function fullStore(bytes) {
     if (!Array.isArray(bytes) || bytes.length < OldestStoreBytes || bytes.length > defaultCmos.length)
         throw new Error(`the settings are not ${OldestStoreBytes} to ${defaultCmos.length} bytes`);
-    return [...bytes, ...defaultCmos.slice(bytes.length)];
+    return Array.from(defaultCmos, (byte, address) => bytes[address] ?? byte);
 }
 
 // The RTC holds a two-digit year and MOS 3.20 prints it after a fixed century (LDA #&19 at &9880 in ROM 15);
@@ -177,12 +177,12 @@ export class Cmos {
      * milliseconds.
      */
     joinSession(state, now) {
+        const store = fullStore(state.store);
         if (!this.beforeSession) {
             const { persistence, store, utc, timeOffset, heldDate, heldTime } = this;
             this.beforeSession = { persistence, store, now: this.now, utc, timeOffset, heldDate, heldTime };
         }
         const { timeOffset, heldDate, heldTime } = state;
-        const store = fullStore(state.store);
         this.restoreState(state);
         this.timeOffset = timeOffset;
         this.store = store;

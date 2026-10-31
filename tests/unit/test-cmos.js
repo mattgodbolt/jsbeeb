@@ -262,8 +262,16 @@ describe("CMOS", () => {
             expect(store[CMOS_ADDR.FILING_SYSTEM]).toBe(0x42);
         });
 
-        it("refuses settings from the host that are not the chip's", () => {
-            expect(() => cmos.joinSession(sessionState({ store: [1, 2, 3] }), () => 0)).toThrow("not 48 to 64 bytes");
+        it("refuses settings from the host that are not the chip's, changing nothing", () => {
+            const host = new Cmos(null);
+            host.writeControl(PORT_B_ENABLE | PORT_B_ADDR_SEL, CMOS_ADDR.FILING_SYSTEM, 0);
+            host.writeControl(PORT_B_ENABLE, CMOS_ADDR.FILING_SYSTEM, 0);
+            host.writeControl(PORT_B_ENABLE, 0x42, IC32_DATA_SEL);
+            const before = cmos.sessionState();
+            expect(() => cmos.joinSession({ ...host.sessionState(), store: [1, 2, 3] }, () => 0)).toThrow(
+                "not 48 to 64 bytes",
+            );
+            expect(cmos.sessionState()).toEqual(before);
         });
 
         it("reads the session's clock in UTC, so every time zone shows the host's time", () => {
@@ -357,7 +365,7 @@ describe("CMOS", () => {
             },
         );
 
-        it.each(["[0, 1, tru", '"nonsense"', "[1, 2, 3]", '{"config": 1}', "null"])(
+        it.each(["[0, 1, tru", '"nonsense"', "[1, 2, 3]", '{"config": 1}', "null", JSON.stringify(Array(65).fill(0))])(
             "starts from the defaults when the stored settings are %s",
             (cmosRam) => {
                 const cmos = new Cmos(localStoragePersistence(() => ({ cmosRam }), onSaveFailure));
