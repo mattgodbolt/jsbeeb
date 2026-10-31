@@ -75,6 +75,8 @@ const Registers = Object.freeze({
     mmioData: 0x25,
 });
 
+const NumRegisters = 32;
+
 /**
  * Drive output bitmask.
  *
@@ -184,8 +186,6 @@ export const StatusFlag = Object.freeze({
     nmi: 0x08,
     needData: 0x04,
 });
-
-const NumRegisters = 32;
 
 /**
  * Parameter acceptance state machine.

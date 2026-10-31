@@ -570,8 +570,7 @@ export class Video6847 {
         }
     }
 
-    blitPixels(buf, data, destOffset, css) {
-        // let scanline = this.scanlineCounterT;
+    blitPixels(fb32, data, destOffset, css) {
         // bitpattern from data is either 4 or 8 pixels in raw graphics
         // either white and black
         // or 3 colours and black (in pairs of bits)
@@ -588,7 +587,6 @@ export class Video6847 {
         // can get wide with 16 pixels
 
         destOffset |= 0;
-        let fb32 = buf;
 
         const numPixels = 8 * pixelsPerBit; //per char
         // draw two,four pixels for each bit in the data to fill the width.
