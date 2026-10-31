@@ -119,10 +119,12 @@ describe("Typist", () => {
     });
 
     describe("on an Atom", () => {
-        it("leaves a gap after each release for the polled keyboard", () => {
-            const { typist, fire, tick, toggles } = typistFor("Atom");
+        it("leaves a gap after each release for the polled keyboard, and before the first press", () => {
+            const { typist, tick, toggles } = typistFor("Atom");
             typist.type([ATOM.A, ATOM.B], false);
-            fire();
+            tick(39);
+            expect(toggles()).toEqual([]);
+            tick(1);
             expect(toggles()).toEqual([ATOM.A]);
             tick(80);
             expect(toggles()).toEqual([ATOM.A, ATOM.A]);
@@ -131,17 +133,17 @@ describe("Typist", () => {
         });
 
         it("does not gap after SHIFT, which stays held", () => {
-            const { typist, fire, tick, toggles } = typistFor("Atom");
+            const { typist, tick, toggles } = typistFor("Atom");
             typist.type([ATOM.SHIFT, ATOM.A], false);
-            fire();
+            tick(40);
             tick(80);
             expect(toggles()).toEqual([ATOM.SHIFT, ATOM.A]);
         });
 
         it("treats LOCK as a key like any other", () => {
-            const { typist, fire, tick, toggles } = typistFor("Atom");
+            const { typist, tick, toggles } = typistFor("Atom");
             typist.type([ATOM.LOCK, ATOM.A, ATOM.LOCK], false);
-            fire();
+            tick(40);
             tick(80);
             expect(toggles()).toEqual([ATOM.LOCK, ATOM.LOCK]);
             tick(40);
@@ -149,9 +151,9 @@ describe("Typist", () => {
         });
 
         it("presses a repeated key again after its gap", () => {
-            const { typist, fire, tick, toggles } = typistFor("Atom");
+            const { typist, tick, toggles } = typistFor("Atom");
             typist.type([ATOM.A, ATOM.A], false);
-            fire();
+            tick(40);
             tick(80);
             tick(40);
             expect(toggles()).toEqual([ATOM.A, ATOM.A, ATOM.A]);

@@ -138,7 +138,8 @@ describe("save state round trip", () => {
             reachedHalfway = true;
         });
         await original.type('*LOAD "DATA"');
-        await original.runFor(OneEmulatedSecond);
+        // The load starts with RETURN, so the halfway stop can come in the run that types it.
+        if (!reachedHalfway) await original.runFor(OneEmulatedSecond);
         halfway.remove();
         expect(reachedHalfway).toBe(true);
         expect(loaded(original)).not.toEqual(body);
