@@ -166,11 +166,12 @@ export function sessionInput(sysvia, send, { allowBreak }) {
     };
 }
 
-// Each machine's ADC reads its own browser's gamepad, mouse and microphone, which
-// no other machine has, and the OS converts continuously into RAM; so in a session
-// every channel reads the centre.
-function holdAnalogue(processor, held) {
+// Each machine's ADC and fire buttons read its own browser's gamepad, mouse and
+// microphone, which no other machine has, and the OS converts continuously into RAM;
+// so in a session every channel reads the centre and the fire buttons read released.
+function holdLocalInputs(processor, held) {
     processor.adconverter.setFixedValue(held ? AdcCentreValue : null);
+    processor.sysvia.holdFireButtons(held);
 }
 
 /** A parsed message from a peer, or null for anything that is not a JSON object. */
@@ -252,7 +253,7 @@ export class SessionHost {
         this.sequence();
         loop.setLockstep({ execute: (cycles) => this.execute(cycles) });
         keyboard.setInput(sessionInput(processor.sysvia, (input) => this.input(input), { allowBreak: true }));
-        holdAnalogue(processor, true);
+        holdLocalInputs(processor, true);
         page.onPageHide(() => this.close(), this.closing.signal);
         page.notify(`Hosting "${this.room}". Guests join at ${page.joinLink(this.room)}`);
         this.panel.open();
@@ -825,7 +826,7 @@ export class SessionHost {
             clearTimeout(guest.resyncTimer);
             guest.link.close();
         }
-        holdAnalogue(processor, false);
+        holdLocalInputs(processor, false);
         processor.sysvia.cmos.leaveSession();
         this.log.record("closed");
         noteStage(this.log.details.role, "ended", { reason: SessionFailures.pageClosed, peers: this.guestsJoined });
@@ -930,7 +931,7 @@ export class SessionGuest {
         // page's own would only be thrown away by it.
         keyboard.cancelPaste();
         loop.setLockstep({ execute: () => true });
-        holdAnalogue(processor, true);
+        holdLocalInputs(processor, true);
         page.onPageHide(() => {
             if (this.left) return;
             this.send({ type: "bye" });
@@ -1267,7 +1268,7 @@ export class SessionGuest {
         this.sequencer = null;
         this.stopWatchingPage();
         this.leftReason = reason;
-        holdAnalogue(this.context.processor, false);
+        holdLocalInputs(this.context.processor, false);
         this.context.processor.sysvia.cmos.leaveSession();
         this.context.loop.setLockstep(null);
         this.context.keyboard.setInput(null);

@@ -1,8 +1,3 @@
-function isFirefox() {
-    // With thanks to http://stackoverflow.com/questions/9847580/how-to-detect-safari-chrome-ie-firefox-and-opera-browser
-    return typeof InstallTrigger !== "undefined"; // Firefox 1.0+
-}
-
 export class GamePad {
     /**
      * @param {object} model - the emulated machine, whose keys the controls press
@@ -140,48 +135,26 @@ export class GamePad {
         return null;
     }
 
-    update(keyboard) {
-        // init gamepad
-        // gamepad not necessarily available until a button press
-        // so need to check gamepads[0] continuously
-        if (navigator.getGamepads && !this.gamepad0) {
-            const gamepads = navigator.getGamepads();
-            this.gamepad0 = gamepads[0];
-
-            if (this.gamepad0) {
-                console.log("initing gamepad");
-                // 16 buttons
-                this.gamepadButtons = [
-                    false,
-                    false,
-                    false,
-                    false,
-                    false,
-                    false,
-                    false,
-                    false,
-                    false,
-                    false,
-                    false,
-                    false,
-                    false,
-                    false,
-                    false,
-                    false,
-                ];
-
-                // two joysticks (so 4 axes)
-                this.gamepadAxes = [0, 0, 0, 0];
-            }
+    /**
+     * Reads the pads, once a frame: presses the keys mapped to their controls and latches the FIRE buttons.
+     * @param {object} processor - the emulated machine
+     */
+    update(processor) {
+        const keyboard = processor.keyboardInterface;
+        const pads = processor.config.getGamepads();
+        const pad = pads[0];
+        // FIRE1 on a second pad is the second fire button.
+        processor.sysvia.setGamepadFire(
+            !!pad?.buttons[10]?.pressed,
+            !!pad && (!!pad.buttons[11]?.pressed || !!pads[1]?.buttons[10]?.pressed),
+        );
+        if (pad && !this.gamepad0) {
+            this.gamepadButtons = new Array(16).fill(false);
+            this.gamepadAxes = [0, 0, 0, 0];
         }
+        this.gamepad0 = pad;
 
-        // process gamepad buttons
         if (this.gamepad0) {
-            // these two lines needed in Chrome to update state, not Firefox
-            if (!isFirefox()) {
-                this.gamepad0 = navigator.getGamepads()[0];
-            }
-
             for (let i = 0; i < 4; i++) {
                 const axisRaw = this.gamepad0.axes[i];
 

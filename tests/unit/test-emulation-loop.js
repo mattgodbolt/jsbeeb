@@ -91,7 +91,7 @@ describe("EmulationLoop", () => {
         vi.advanceTimersByTime(TickMs);
         expect(cyclesExecuted()).toEqual([(10 * ClocksPerSecond) / 1000]);
         expect(deps.audioHandler.flushChipEvents).toHaveBeenCalled();
-        expect(deps.gamepad.update).toHaveBeenCalledWith(deps.processor.keyboardInterface);
+        expect(deps.gamepad.update).toHaveBeenCalledWith(deps.processor);
         expect(deps.display.takePaintMs).toHaveBeenCalled();
         expect(deps.display.setSpeedy).toHaveBeenLastCalledWith(false);
     });

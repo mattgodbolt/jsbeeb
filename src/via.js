@@ -36,6 +36,10 @@ const ScanCounterColumns = 16;
 const TicksPerScanColumn = 2;
 const KeyboardColumns = 13;
 
+// The joystick FIRE buttons pull PB4 and PB5 low (AUG p418).
+const JoystickFire1 = 1 << 4;
+const JoystickFire2 = 1 << 5;
+
 class Via {
     constructor(cpu, scheduler, irq) {
         this.cpu = cpu;
@@ -659,21 +663,20 @@ class Via {
 }
 
 export class SysVia extends WithKeyMatrix(Via) {
-    constructor(cpu, scheduler, { video, soundChip, cmos, isMaster, initialLayout, getGamepads } = {}) {
+    constructor(cpu, scheduler, { video, soundChip, cmos, isMaster, initialLayout } = {}) {
         super(cpu, scheduler, 0x01);
 
         this.IC32 = 0;
         this._initKeyMatrix(BBC.SHIFT, KeyboardColumns);
-        // Mouse joystick button state
-        this.mouseButton1 = false;
-        this.mouseButton2 = false;
+        this.gamepadFire = 0;
+        this.mouseFire = 0;
+        this.fireHeld = false;
         this.keyChanges = 0;
         this.setKeyLayout(initialLayout);
         this.video = video;
         this.soundChip = soundChip;
         this.cmos = cmos;
         this.isMaster = isMaster;
-        this.getGamepadsFunc = getGamepads;
         this.keyScanTask = this.scheduler.newTask(() => this.scanPassesHeldKey());
 
         this.reset();
@@ -852,14 +855,8 @@ export class SysVia extends WithKeyMatrix(Via) {
     }
 
     rawPortB() {
-        let result = 0xff;
-        // AUG p418
-        // ### PB4 and PB5 inputs
-        // These are the inputs from the joystick FIRE buttons. They are active low.
-        const buttons = this.getJoysticks();
-        if (buttons.button1) result &= ~(1 << 4); // Clear PB4 if button1 pressed
-        if (buttons.button2) result &= ~(1 << 5); // Clear PB5 if button2 pressed
-        return result;
+        if (this.fireHeld) return 0xff;
+        return ~(this.gamepadFire | this.mouseFire) & 0xff;
     }
 
     portBUpdated() {
@@ -894,9 +891,13 @@ export class SysVia extends WithKeyMatrix(Via) {
         // Note that if speech were fitted, it drives bit 7 low.
     }
 
-    getGamepads() {
-        if (this.getGamepadsFunc) return this.getGamepadsFunc();
-        return null;
+    /**
+     * Latches the gamepads' FIRE buttons, which the page reads once a frame.
+     * @param {boolean} button1
+     * @param {boolean} button2
+     */
+    setGamepadFire(button1, button2) {
+        this.gamepadFire = (button1 ? JoystickFire1 : 0) | (button2 ? JoystickFire2 : 0);
     }
 
     /**
@@ -905,33 +906,14 @@ export class SysVia extends WithKeyMatrix(Via) {
      * @param {boolean} pressed - Whether the button is pressed
      */
     setJoystickButton(buttonNumber, pressed) {
-        if (buttonNumber === 0) {
-            this.mouseButton1 = pressed;
-        } else if (buttonNumber === 1) {
-            this.mouseButton2 = pressed;
-        }
-        // Trigger port B recalculation to update button state
+        const bit = buttonNumber === 0 ? JoystickFire1 : JoystickFire2;
+        this.mouseFire = pressed ? this.mouseFire | bit : this.mouseFire & ~bit;
         this.recalculatePortBPins();
     }
 
-    getJoysticks() {
-        let button1 = this.mouseButton1; // Start with mouse button state
-        let button2 = this.mouseButton2;
-
-        const pads = this.getGamepads();
-        if (pads && pads[0]) {
-            const pad = pads[0];
-            const pad2 = pads[1];
-
-            // Combine gamepad and mouse button states (OR logic)
-            button1 = button1 || !!pad.buttons[10]?.pressed;
-            // FIRE2 on first gamepad always maps to button2
-            button2 = button2 || !!pad.buttons[11]?.pressed;
-            // If two gamepads, FIRE1 on second gamepad also maps to button2
-            if (pad2) button2 = button2 || !!pad2.buttons[10]?.pressed;
-        }
-
-        return { button1: button1, button2: button2 };
+    /** @param {boolean} held whether the FIRE buttons read released whatever is pressed */
+    holdFireButtons(held) {
+        this.fireHeld = held;
     }
 }
 
