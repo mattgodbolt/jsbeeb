@@ -2197,6 +2197,7 @@ export class AtomCpu6502 extends Cpu6502 {
             BranquartOffset + NumBranquartBanks * BranquartBankSize,
         );
         state.atomppia = this.atomppia.snapshotState();
+        state.atommc = this.atommc.snapshotState();
         return state;
     }
 
@@ -2216,5 +2217,6 @@ export class AtomCpu6502 extends Cpu6502 {
         this.branquartLatch = state.branquartLatch || 0;
         this.selectBranquartBank(this.branquartLatch & 0x0f);
         if (state.atomppia) this.atomppia.restoreState(state.atomppia);
+        if (state.atommc) this.atommc.restoreState(state.atommc);
     }
 }

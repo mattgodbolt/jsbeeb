@@ -223,6 +223,36 @@ Present only on the Atom.
 
 Older snapshots also carry `latchb`, which was always 0 since port B is input only; it is ignored on restore.
 
+### Atom MMC (`state.atommc`)
+
+Present only on the Atom: the AtoMMC2 interface's registers and the state of its file system. The card's files are media and are not saved; the card is whatever the page was given with `?mmc=`. Atom snapshots written before it was saved lack it, and absent means the interface keeps its current state, so it needed no format version bump.
+
+| Field            | Type   | Description                                                               |
+| ---------------- | ------ | ------------------------------------------------------------------------- |
+| `MMCtoAtom`      | number | The byte the interface has ready for the Atom's next read                 |
+| `heartbeat`      | number | The next heartbeat reply, `0x55` or `0xAA`                                |
+| `MCUStatus`      | number | Status register (busy, read and wrote flags)                              |
+| `configByte`     | number | Configuration byte                                                        |
+| `lastaddr`       | number | Last register written, which every read but the status register's acts on |
+| `byteValueLatch` | number | Latch register (transfer length or command argument)                      |
+| `TRISB`          | number | User port direction register                                              |
+| `files`          | object | File system state (see below)                                             |
+
+#### Atom MMC file system (`state.atommc.files`)
+
+| Field         | Type       | Description                                                                 |
+| ------------- | ---------- | --------------------------------------------------------------------------- |
+| `globalData`  | Uint8Array | Transfer buffer: bytes the Atom has sent, or bytes waiting for it to read   |
+| `globalIndex` | number     | Position in `globalData` of the next byte sent or read                      |
+| `fildata`     | object[]   | The four file handles, each `null` when closed or `{ file, pos }` when open |
+| `openeddir`   | string     | Directory being listed                                                      |
+| `foldersSeen` | string[]   | Subdirectories the listing has already returned                             |
+| `dfn`         | number     | Index into the card's files of the listing's next entry                     |
+| `CWD`         | string     | Current directory                                                           |
+| `wildcard`    | string     | The listing's wildcard as the Atom gave it, with `*` and `?`                |
+
+An open handle's `file` is the file's index on the card and `pos` its position in it. A handle whose index the card does not have restores closed.
+
 ### Video (`state.video`)
 
 Contains ~40 scalar fields for display timing and rendering state, plus nested objects:

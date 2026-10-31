@@ -322,4 +322,74 @@ describe("AtomMMC2 file handles", () => {
         expect(command(mmc, fileCommand(CmdFileOpenRead, ScratchHandle))).toBe(StatusComplete | FrNoFile);
         expect(readBytes(mmc, ScratchHandle, 1).status).toBe(StatusComplete | FrInvalidObject);
     });
+
+    it("carries on from each restore of a snapshot as the original did, mid-listing and mid-read", () => {
+        const CmdDirOpen = 0x00;
+        const CmdDirRead = 0x01;
+        const CmdDirCwd = 0x02;
+        const CmdGetPortDdr = 0xa0;
+        const CmdSetPortDdr = 0xa1;
+        const CmdGetCfgByte = 0xf0;
+        const CmdSetCfgByte = 0xf1;
+        const CmdGetHeartbeat = 0xfe;
+        const DirEntryBytes = 8;
+        const StatusReg = 0xb404;
+        const DirEntriesBeforeSnapshot = 2;
+        const DirEntries = 4;
+        const NamesStartingS = "S*";
+        const card = () => [
+            new WFNFile("/DIR/SA", new Uint8Array([1, 2, 3, 4, 5, 6])),
+            new WFNFile("/DIR/SUB/C", new Uint8Array([10])),
+            new WFNFile("/DIR/B", new Uint8Array([7, 8, 9])),
+            new WFNFile("/DIR/SB", new Uint8Array([13])),
+            new WFNFile("/DIR/SUB/D", new Uint8Array([11])),
+            new WFNFile("/DIR/SV/E", new Uint8Array([14])),
+            new WFNFile("/DIR/SZ", new Uint8Array([12])),
+        ];
+        const name = (text) => [...new TextEncoder().encode(text), 0];
+        const latched = (mmc, cmd, value) => {
+            mmc.write(LatchReg, value);
+            return command(mmc, cmd);
+        };
+
+        const original = makeMmc(card());
+        latched(original, CmdSetCfgByte, 0x5a);
+        latched(original, CmdSetPortDdr, 0x0f);
+        command(original, CmdGetHeartbeat);
+        sendBytes(original, name("DIR"));
+        command(original, CmdDirCwd);
+        sendBytes(original, name(NamesStartingS));
+        command(original, CmdDirOpen);
+        for (let entry = 0; entry < DirEntriesBeforeSnapshot; ++entry) {
+            command(original, CmdDirRead);
+            receiveBytes(original, DirEntryBytes);
+        }
+        const a = open(original, "SA");
+        latched(original, dataCommand(CmdReadBytes, a), 4);
+        receiveBytes(original, 2);
+        const snapshot = original.snapshotState();
+
+        const carryOn = (mmc) => [
+            mmc.read(StatusReg),
+            Array.from({ length: 2 }, () => mmc.read(ReadDataReg)),
+            command(mmc, CmdGetPortDdr),
+            command(mmc, CmdSetPortDdr),
+            command(mmc, CmdGetPortDdr),
+            readBytes(mmc, a, 4),
+            command(mmc, CmdGetCfgByte),
+            command(mmc, CmdGetHeartbeat),
+            Array.from({ length: DirEntries }, () => [command(mmc, CmdDirRead), receiveBytes(mmc, DirEntryBytes)]),
+            readBytes(mmc, open(mmc, "B"), 3),
+        ];
+        const expected = carryOn(original);
+        for (let restore = 0; restore < 2; ++restore) {
+            const restored = makeMmc(card());
+            restored.restoreState(snapshot);
+            expect(carryOn(restored)).toEqual(expected);
+        }
+
+        const withoutTheFile = makeMmc([]);
+        withoutTheFile.restoreState(snapshot);
+        expect(readBytes(withoutTheFile, a, 1).status).toBe(StatusComplete | FrInvalidObject);
+    });
 });

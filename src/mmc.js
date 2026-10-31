@@ -158,7 +158,6 @@ class WFN {
 
         this.globalData = new Uint8Array(256);
         this.globalIndex = 0;
-        this.globalDataPresent = 0;
         this.globalAmount = 0;
 
         this.fildata = new Array(4).fill(null);
@@ -170,7 +169,7 @@ class WFN {
         this.CWD = "";
 
         this.filenum = -1;
-        this.WildPattern = ".*"; // Default wildcard pattern (for regex not ATOM)
+        this.wildcard = "*";
 
         /**
          * @type {WFNFile[]}
@@ -226,13 +225,13 @@ class WFN {
             const lastSlashIndex = path.lastIndexOf("/");
             if (lastSlashIndex !== -1) {
                 this.globalData = new TextEncoder().encode(path.slice(0, lastSlashIndex + 1) + "\0");
-                this.WildPattern = WFN.wildcardToRegex(path.slice(lastSlashIndex + 1));
+                this.wildcard = path.slice(lastSlashIndex + 1);
             } else {
-                this.WildPattern = WFN.wildcardToRegex(path);
+                this.wildcard = path;
                 this.globalData = new TextEncoder().encode("\0");
             }
         } else {
-            this.WildPattern = ".*";
+            this.wildcard = "*";
         }
     }
 
@@ -390,8 +389,7 @@ class WFN {
             const fname = result.fno.fname;
 
             // Check to see if filename matches current wildcard
-            // const Match = wildcmp(WildPattern, longname);
-            const Match = fname.match(new RegExp(this.WildPattern));
+            const Match = fname.match(new RegExp(WFN.wildcardToRegex(this.wildcard)));
 
             if (Match) {
                 // if is a directory, str will be <fname>
@@ -580,20 +578,15 @@ class WFN {
     clearData() {
         this.globalData = new Uint8Array(256);
         this.globalIndex = 0;
-        this.globalDataPresent = 0;
     }
 
     addData(data) {
         this.globalData[this.globalIndex] = data;
         ++this.globalIndex;
-        this.globalDataPresent = 1;
     }
 
     getData(restart = false) {
-        if (restart) {
-            this.globalIndex = 0;
-            this.globalDataPresent = 0;
-        }
+        if (restart) this.globalIndex = 0;
         let val = 0;
         if (this.globalIndex < this.globalData.length) val = this.globalData[this.globalIndex] | 0;
         this.globalIndex++;
@@ -602,6 +595,36 @@ class WFN {
 
     setTransferLength(length) {
         this.globalAmount = length;
+    }
+
+    // The card's files are media: an open handle saves which of them it is by its place on the card.
+    snapshotState() {
+        return {
+            globalData: this.globalData.slice(),
+            globalIndex: this.globalIndex,
+            fildata: this.fildata.map(
+                (handle) => handle && { file: this.allfiles.indexOf(handle.file), pos: handle.pos },
+            ),
+            openeddir: this.openeddir,
+            foldersSeen: [...this.foldersSeen],
+            dfn: this.dfn,
+            CWD: this.CWD,
+            wildcard: this.wildcard,
+        };
+    }
+
+    restoreState(state) {
+        this.globalData = state.globalData.slice();
+        this.globalIndex = state.globalIndex;
+        this.fildata = state.fildata.map((handle) => {
+            const file = handle && this.allfiles[handle.file];
+            return file ? { file, pos: handle.pos } : null;
+        });
+        this.openeddir = state.openeddir;
+        this.foldersSeen = [...state.foldersSeen];
+        this.dfn = state.dfn;
+        this.CWD = state.CWD;
+        this.wildcard = state.wildcard;
     }
 
     fileOpen(mode) {
@@ -813,15 +836,35 @@ export class AtomMMC2 {
         this.configByte = 0;
         this.lastaddr = CMD_REG; // address latch for reads
         this.byteValueLatch = 0;
-        this.worker = null;
-        this.WildPattern = ".*";
-        this.foldersSeen = [];
-        this.dfn = 0;
         this.TRISB = 0;
         this.LATB = 0;
 
         this.WFN = new WFN(this, cpu);
         this.reset(true);
+    }
+
+    snapshotState() {
+        return {
+            MMCtoAtom: this.MMCtoAtom,
+            heartbeat: this.heartbeat,
+            MCUStatus: this.MCUStatus,
+            configByte: this.configByte,
+            lastaddr: this.lastaddr,
+            byteValueLatch: this.byteValueLatch,
+            TRISB: this.TRISB,
+            files: this.WFN.snapshotState(),
+        };
+    }
+
+    restoreState(state) {
+        this.MMCtoAtom = state.MMCtoAtom;
+        this.heartbeat = state.heartbeat;
+        this.MCUStatus = state.MCUStatus;
+        this.configByte = state.configByte;
+        this.lastaddr = state.lastaddr;
+        this.byteValueLatch = state.byteValueLatch;
+        this.TRISB = state.TRISB;
+        this.WFN.restoreState(state.files);
     }
 
     // MMCtoAtom and MCUStatus are used to transfer data
@@ -862,9 +905,8 @@ export class AtomMMC2 {
      */
     at_process(addr, val, write) {
         const LatchedAddress = addr & 0x0f;
-        this.latchedAddress = LatchedAddress;
         const ADDRESS_MASK = 0x07;
-        this.worker = null;
+        let worker = null;
         this.MCUStatus |= MMC_MCU_READ;
         if (write === false) {
             this.MCUStatus &= ~MMC_MCU_READ;
@@ -890,34 +932,34 @@ export class AtomMMC2 {
                     this.WriteDataPort(STATUS_BUSY);
                     this.MCUStatus |= MMC_MCU_BUSY;
                     if (received === CMD_DIR_OPEN) {
-                        this.worker = () => this.WFN.WFN_DirectoryOpen();
+                        worker = () => this.WFN.WFN_DirectoryOpen();
                     } else if (received === CMD_DIR_READ) {
-                        this.worker = () => this.WFN.WFN_DirectoryRead();
+                        worker = () => this.WFN.WFN_DirectoryRead();
                     } else if (received === CMD_DIR_CWD) {
-                        this.worker = () => this.WFN.WFN_SetCWDirectory();
+                        worker = () => this.WFN.WFN_SetCWDirectory();
                     } else if (received == CMD_DIR_MKDIR) {
                         // create directory
-                        this.worker = () => this.WFN.WFN_DirectoryCreate();
+                        worker = () => this.WFN.WFN_DirectoryCreate();
                     } else if (received == CMD_DIR_RMDIR) {
                         // delete directory
-                        this.worker = () => this.WFN.WFN_DirectoryDelete();
+                        worker = () => this.WFN.WFN_DirectoryDelete();
                     } else if (received == CMD_RENAME) {
                         // rename
-                        this.worker = () => this.WFN.WFN_Rename();
+                        worker = () => this.WFN.WFN_Rename();
                     } else if (received === CMD_FILE_CLOSE) {
-                        this.worker = () => this.WFN.WFN_FileClose();
+                        worker = () => this.WFN.WFN_FileClose();
                     } else if (received === CMD_FILE_OPEN_READ) {
-                        this.worker = () => this.WFN.WFN_FileOpenRead();
+                        worker = () => this.WFN.WFN_FileOpenRead();
                     } else if (received === CMD_FILE_OPEN_WRITE) {
-                        this.worker = () => this.WFN.WFN_FileOpenWrite();
+                        worker = () => this.WFN.WFN_FileOpenWrite();
                     } else if (received === CMD_FILE_OPEN_RAF) {
-                        this.worker = () => this.WFN.WFN_FileOpenRAF();
+                        worker = () => this.WFN.WFN_FileOpenRAF();
                     } else if (received === CMD_FILE_DELETE) {
-                        this.worker = () => this.WFN.WFN_FileDelete();
+                        worker = () => this.WFN.WFN_FileDelete();
                     } else if (received === CMD_FILE_GETINFO) {
-                        this.worker = () => this.WFN.WFN_FileGetInfo();
+                        worker = () => this.WFN.WFN_FileGetInfo();
                     } else if (received === CMD_FILE_SEEK) {
-                        this.worker = () => this.WFN.WFN_FileSeek();
+                        worker = () => this.WFN.WFN_FileSeek();
                     } else if (received === CMD_INIT_READ) {
                         let data = this.WFN.getData(true);
                         this.WriteDataPort(data);
@@ -926,12 +968,12 @@ export class AtomMMC2 {
                         this.WFN.clearData();
                     } else if (received === CMD_READ_BYTES) {
                         this.WFN.setTransferLength(this.byteValueLatch);
-                        this.worker = () => this.WFN.WFN_FileRead();
+                        worker = () => this.WFN.WFN_FileRead();
                     } else if (received === CMD_WRITE_BYTES) {
                         this.WFN.setTransferLength(this.byteValueLatch);
-                        this.worker = () => this.WFN.WFN_FileWrite();
+                        worker = () => this.WFN.WFN_FileWrite();
                     } else if (received === CMD_EXEC_PACKET) {
-                        this.worker = () => this.WFN.WFN_ExecuteArbitrary();
+                        worker = () => this.WFN.WFN_ExecuteArbitrary();
                     } else if (received === CMD_GET_FW_VER) {
                         this.WriteDataPort((VSN_MAJ << 4) | VSN_MIN);
                     } else if (received === CMD_GET_BL_VER) {
@@ -942,7 +984,7 @@ export class AtomMMC2 {
                         this.configByte = this.byteValueLatch;
                         this.WriteDataPort(STATUS_OK);
                     } else if (received === CMD_READ_AUX) {
-                        this.WriteDataPort(this.latchedAddress);
+                        this.WriteDataPort(LatchedAddress);
                     } else if (received === CMD_GET_HEARTBEAT) {
                         this.WriteDataPort(this.heartbeat);
                         this.heartbeat ^= 0xff;
@@ -986,9 +1028,7 @@ export class AtomMMC2 {
                     break;
                 }
             }
-            if (this.worker) {
-                this.worker();
-            }
+            if (worker) worker();
         }
     }
 }
