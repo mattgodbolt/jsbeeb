@@ -249,15 +249,18 @@ describe("CMOS", () => {
         it.each([
             ["settings and clock", (state) => state, [0x42, 0xa5]],
             ["bus alone, from an older page", busOf, [0x17, 0x30]],
-        ])("restores the %s, storing what the machine then holds", (_, saved, expected) => {
+        ])("restores the %s, keeping only what the machine writes after", (_, saved, expected) => {
             writeRegister(CMOS_ADDR.FILING_SYSTEM, 0x42);
             writeRegister(CMOS_ADDR.MINUTES, 0xa5);
             const state = saved(cmos.snapshotState());
             writeRegister(CMOS_ADDR.FILING_SYSTEM, 0x17);
             writeRegister(CMOS_ADDR.MINUTES, 0x30);
+            const kept = [...mockPersistence.save.mock.lastCall[0]];
             cmos.restoreState(state);
             expect([readRegister(CMOS_ADDR.FILING_SYSTEM), readRegister(CMOS_ADDR.MINUTES)]).toEqual(expected);
-            expect(mockPersistence.save.mock.lastCall[0]).toEqual(cmos.store);
+            writeRegister(CMOS_ADDR.CONFIG_1, 0x55);
+            kept[CMOS_ADDR.CONFIG_1] = 0x55;
+            expect(mockPersistence.save.mock.lastCall[0]).toEqual(kept);
         });
 
         it("refuses a store that is not the chip's, changing nothing", () => {

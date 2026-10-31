@@ -111,8 +111,6 @@ Ranked by how much they would bite.
 3. **Snapshots are not complete enough for a joiner.** The native snapshot leaves out:
    - the keyboard matrix and the SHIFT override state (`SysVia.snapshotState`), so a joiner arriving while a
      key is held sees it up;
-   - the Master's CMOS RAM, which comes from each person's `localStorage` (persisted by `localStoragePersistence`;
-     snapshots have held it since, and a joiner stores none of the host's);
    - a paste in progress (the typist's queue), which in a session is typed through it instead, and the mouse
      buttons;
    - later, with the peripherals that need them: tape position (a known limitation in

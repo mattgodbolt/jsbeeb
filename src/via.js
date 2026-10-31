@@ -676,6 +676,7 @@ export class SysVia extends WithKeyMatrix(Via) {
         this.video = video;
         this.soundChip = soundChip;
         this.cmos = cmos;
+        cmos.replaying = () => cpu.replaying;
         this.isMaster = isMaster;
         this.keyScanTask = this.scheduler.newTask(() => this.scanPassesHeldKey());
 

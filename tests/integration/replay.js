@@ -18,12 +18,13 @@ const ClockAtRecording = Date.UTC(2026, 9, 31, 12, 0, 0);
 const ClockAtReplay = ClockAtRecording + 10 * 1000;
 const WaitThenCatalogue = ["10 A=GET", "20 *CAT"];
 const WaitThenClockAndCatalogue = ["10 A=GET", "20 T$=TIME$", "30 *CAT"];
+const FirstSettingsCmosAddress = 14;
 const LastCmosAddress = 63;
 const CmosWrites = 1000;
-// OSBYTE &A2 writes CMOS RAM, its X counting from the first settings byte, CMOS address 14.
+// OSBYTE &A2 writes CMOS RAM, its X counting from the first settings byte.
 const WriteCmosRepeatedly = [
     `10 FOR I%=1 TO ${CmosWrites}`,
-    `20 A%=&A2:X%=${LastCmosAddress - 14}:Y%=I%:CALL &FFF4`,
+    `20 A%=&A2:X%=${LastCmosAddress - FirstSettingsCmosAddress}:Y%=I%:CALL &FFF4`,
     "30 NEXT",
     "40 A=GET",
 ];

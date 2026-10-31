@@ -113,6 +113,8 @@ export class Cmos {
         this.dataSelect = false;
         this.cmosAddr = 0;
         this.now = () => Date.now();
+        // A replay repeats writes the machine made, or makes some it never will (a rewind preview), so it keeps none.
+        this.replaying = () => false;
         this.utc = false;
         this.timeOffset = 0;
         // The 146818 keeps the day, month and year in separate registers and checks none of them, so bytes that
@@ -137,13 +139,19 @@ export class Cmos {
                 this.store[0xf] = 254;
             }
         }
+        // What the machine has written, which a restore leaves alone: the settings a page loads next.
+        this.kept = [...this.store];
         this.save();
     }
 
     save() {
-        if (this.persistence) {
-            this.persistence.save(this.store);
-        }
+        this.persistence?.save(this.kept);
+    }
+
+    keep(address, value) {
+        if (!this.persistence || this.replaying()) return;
+        this.kept[address] = value;
+        this.save();
     }
 
     /** The settings, the offset a program set the clock to, any clock registers held as written, and the bus. */
@@ -162,10 +170,7 @@ export class Cmos {
         };
     }
 
-    /**
-     * Saves the settings restored, so that what is stored is what the machine holds. A state saved
-     * with only the bus leaves the settings and clock as they are.
-     */
+    /** Keeps nothing restored; a state saved with only the bus leaves the settings and clock as they are. */
     restoreState(state) {
         const { enabled, isRead, addressSelect, dataSelect, cmosAddr } = state;
         if (state.store) {
@@ -177,7 +182,6 @@ export class Cmos {
                 heldDate: heldDate && { ...heldDate },
                 heldTime: { ...heldTime },
             });
-            this.save();
         }
         Object.assign(this, { enabled, isRead, addressSelect, dataSelect, cmosAddr });
     }
@@ -309,7 +313,7 @@ export class Cmos {
         if (oldDataSelect && !this.dataSelect && !this.addressSelect && !this.isRead) {
             if (this.cmosAddr > 0xb) {
                 this.store[this.cmosAddr] = portApins;
-                this.save();
+                this.keep(this.cmosAddr, portApins);
             } else {
                 switch (this.cmosAddr) {
                     case 0:
