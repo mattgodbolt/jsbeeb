@@ -603,7 +603,6 @@ class WFN {
         return {
             globalData: this.globalData.slice(),
             globalIndex: this.globalIndex,
-            globalAmount: this.globalAmount,
             fildata: this.fildata.map(
                 (handle) => handle && { file: this.allfiles.indexOf(handle.file), pos: handle.pos },
             ),
@@ -611,7 +610,6 @@ class WFN {
             foldersSeen: [...this.foldersSeen],
             dfn: this.dfn,
             CWD: this.CWD,
-            filenum: this.filenum,
             WildPattern: this.WildPattern,
         };
     }
@@ -619,7 +617,6 @@ class WFN {
     restoreState(state) {
         this.globalData = state.globalData.slice();
         this.globalIndex = state.globalIndex;
-        this.globalAmount = state.globalAmount;
         this.fildata = state.fildata.map((handle) => {
             const file = handle && this.allfiles[handle.file];
             return file ? { file, pos: handle.pos } : null;
@@ -628,7 +625,6 @@ class WFN {
         this.foldersSeen = [...state.foldersSeen];
         this.dfn = state.dfn;
         this.CWD = state.CWD;
-        this.filenum = state.filenum;
         this.WildPattern = state.WildPattern;
     }
 

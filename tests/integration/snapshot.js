@@ -30,6 +30,7 @@ const SnowAddr = 0x8123;
 const MmcLoadAddress = 0x3000;
 const MmcFileBytes = 2000;
 const AtmNameBytes = 16;
+const AtmHeaderBytes = AtmNameBytes + 6;
 
 const withVideo = (model, options) =>
     new TestMachine(model, { video: new Video(false, FbWidth * FbHeight, () => {}, options) });
@@ -47,13 +48,13 @@ function* ownedArrays(value) {
 
 // An AtoMMC file: the ATM header (name, load address, execution address, length), then the body.
 function atmFile(name, loadAddress, body) {
-    const file = new Uint8Array(AtmNameBytes + 6 + body.length);
+    const file = new Uint8Array(AtmHeaderBytes + body.length);
     file.set(new TextEncoder().encode(name));
     const view = new DataView(file.buffer);
     view.setUint16(AtmNameBytes, loadAddress, true);
     view.setUint16(AtmNameBytes + 2, loadAddress, true);
     view.setUint16(AtmNameBytes + 4, body.length, true);
-    file.set(body, AtmNameBytes + 6);
+    file.set(body, AtmHeaderBytes);
     return file;
 }
 
