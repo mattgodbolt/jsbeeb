@@ -25,6 +25,7 @@ const CmosWrites = 1000;
 const WriteCmosRepeatedly = [
     `10 FOR I%=1 TO ${CmosWrites}`,
     `20 A%=&A2:X%=${LastCmosAddress - FirstSettingsCmosAddress}:Y%=I%:CALL &FFF4`,
+    `25 IF I%=${CmosWrites / 2} THEN TIME$="Fri,01 Mar 2024.12:34:56"`,
     "30 NEXT",
     "40 A=GET",
 ];
@@ -256,7 +257,7 @@ describe("Replaying a Master's writes to its CMOS", () => {
                 cpu.restoreState(live);
             },
         ],
-    ])("leaves the settings and the stored copy as the machine had them after %s", async (_, replay) => {
+    ])("leaves the settings, the clock and the stored copy as the machine had them after %s", async (_, replay) => {
         const stored = [];
         const machine = await booted("Master", {
             cmosPersistence: { load: () => null, save: (store) => stored.push([...store]) },
@@ -267,12 +268,21 @@ describe("Replaying a Master's writes to its CMOS", () => {
         const start = cpu.snapshotState();
         await machine.runUntilInput();
         singleStep(cpu);
-        const settings = [...cpu.sysvia.cmos.store];
+        const { store: settings, timeOffset, heldDate, heldTime } = cpu.sysvia.cmos.snapshotState();
+        const clock = () => {
+            const { timeOffset, heldDate, heldTime } = cpu.sysvia.cmos;
+            return { timeOffset, heldDate, heldTime };
+        };
         expect(settings[LastCmosAddress]).toBe(CmosWrites & 0xff);
+        expect(timeOffset).not.toBe(0);
         expect(stored.at(-1)).toEqual(settings);
 
         replay({ cpu, history, start });
 
-        expect([cpu.sysvia.cmos.store, stored.at(-1)]).toEqual([settings, settings]);
+        expect([cpu.sysvia.cmos.store, stored.at(-1), clock()]).toEqual([
+            settings,
+            settings,
+            { timeOffset, heldDate, heldTime },
+        ]);
     });
 });
