@@ -111,7 +111,8 @@ export class Typist {
 
         this._keys = keys;
         this._lastKey = undefined;
-        this._timer.start(0);
+        // The first press gets the release gap too, as the key before it may have gone up just now.
+        this._timer.start(this.processor.model.pasteReleaseGapMs);
     }
 
     cancel() {
