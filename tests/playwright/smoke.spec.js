@@ -1025,7 +1025,7 @@ test.describe("on a phone", () => {
         await expect(layer("pad")).toBeVisible();
     });
 
-    test("the d-pad presses two keys at a corner, follows a sliding thumb, and lets go of them when the phone turns", async ({
+    test("the d-pad presses two keys at a corner, follows a sliding thumb, and lets go of them when the phone turns or the layer changes", async ({
         beeb,
         page,
     }) => {
@@ -1039,34 +1039,66 @@ test.describe("on a phone", () => {
                     return window.processor.sysvia.keys[column][row];
                 }),
             );
-        const dpad = await page.locator("#touch-keyboard .tk-dpad").boundingBox();
-        const at = (across, down) => [{ x: dpad.x + dpad.width * across, y: dpad.y + dpad.height * down, id: 1 }];
         const cdp = await page.context().newCDPSession(page);
         const touch = (type, touchPoints) => cdp.send("Input.dispatchTouchEvent", { type, touchPoints });
-        await touch("touchStart", at(0.1, 0.1));
+        const onDpad = async () => {
+            const dpad = await page.locator("#touch-keyboard .tk-dpad").boundingBox();
+            return (across, down) => ({ x: dpad.x + dpad.width * across, y: dpad.y + dpad.height * down, id: 1 });
+        };
+        let at = await onDpad();
+        await touch("touchStart", [at(0.1, 0.1)]);
         await expect.poll(held).toEqual(["Z", "COLON_STAR"]);
-        await touch("touchMove", at(0.1, 0.5));
+        await touch("touchMove", [at(0.1, 0.5)]);
         await expect.poll(held).toEqual(["Z"]);
-        await touch("touchMove", at(0.9, 0.9));
+        await touch("touchMove", [at(0.9, 0.9)]);
         await expect.poll(held).toEqual(["X", "SLASH"]);
         await page.setViewportSize({ width: 390, height: 844 });
         await expect.poll(held).toEqual([]);
         await touch("touchEnd", []);
+
+        await page.locator("#touch-keyboard .tk-key", { hasText: /^more$/ }).tap();
+        await page.locator("#touch-keyboard .tk-key:visible", { hasText: /^pad$/ }).tap();
+        at = await onDpad();
+        await touch("touchStart", [at(0.1, 0.5)]);
+        await expect.poll(held).toEqual(["Z"]);
+        const abc = await page.locator("#touch-keyboard .tk-key:visible", { hasText: /^ABC$/ }).boundingBox();
+        const abcTouch = { x: abc.x + abc.width / 2, y: abc.y + abc.height / 2, id: 2 };
+        await touch("touchStart", [at(0.1, 0.5), abcTouch]);
+        await touch("touchEnd", [at(0.1, 0.5)]);
+        await touch("touchMove", [at(0.1, 0.1)]);
+        await expect.poll(held).toEqual([]);
+        await touch("touchEnd", []);
     });
 
-    test("the pad's preset is remembered, and the classic one presses what the URL's gamepad mapping says", async ({
+    test("the pad's preset is remembered, the classic one presses what the URL's gamepad mapping says, and only keys on the function row stay off the upright pad", async ({
         beeb,
         page,
     }) => {
         await page.setViewportSize({ width: 844, height: 390 });
-        await beeb.open("?GP.LEFT=CAPSLOCK");
+        await beeb.open("?GP.LEFT=CAPSLOCK&GP.FIRE=F0");
         const preset = page.locator("#touch-keyboard .tk-preset");
+        const key = (selector) => page.locator(`#touch-keyboard ${selector}`);
         await expect(preset).toHaveText("⇄ classic");
-        await expect(page.locator("#touch-keyboard .tk-dpad .left")).toContainText("CAPS");
+        await expect(key(".tk-dpad .left")).toContainText("CAPS");
+        await page.locator("#touch-keyboard .tk-key.landscape").tap();
+        await expect(page.locator(".toast", { hasText: "Turn the phone upright to type." })).toBeVisible();
+
+        await page.setViewportSize({ width: 390, height: 844 });
+        await key(".tk-key")
+            .filter({ hasText: /^more$/ })
+            .tap();
+        await key(".tk-key:visible").filter({ hasText: /^pad$/ }).tap();
+        await expect(key(".tk-pad-fire .fire")).toBeVisible();
         await preset.tap();
-        await expect(page.locator("#touch-keyboard .tk-dpad .up")).toContainText("K");
+        await expect(key(".tk-dpad .up")).toContainText("K");
+        await preset.tap();
+        await expect(preset).toHaveText("⇄ Exile");
+        const weapon = key(".tk-pad-strip .tk-key").filter({ hasText: "pistol" });
+        await expect(weapon).toBeHidden();
+        await page.setViewportSize({ width: 844, height: 390 });
+        await expect(weapon).toBeVisible();
         await page.reload();
-        await expect(preset).toHaveText("⇄ ZXMKL");
+        await expect(preset).toHaveText("⇄ Exile");
     });
 
     test("a touch in the gap between keys presses the nearer one", async ({ beeb, page }) => {

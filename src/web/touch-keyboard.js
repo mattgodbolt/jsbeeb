@@ -7,7 +7,8 @@ const LayerStorageKey = "touchKeyboardLayer";
 const PresetStorageKey = "touchPadPreset";
 const NarrowScreenQuery = "(max-width: 700px)";
 const TouchQuery = "(pointer: coarse)";
-const LandscapePhoneQuery = "(orientation: landscape) and (max-height: 500px)";
+const PhoneShortSidePx = 500;
+const LandscapePhoneQuery = `(orientation: landscape) and (max-height: ${PhoneShortSidePx}px)`;
 // In the machine's own time, which falls behind the wall clock when the page is busy. The OS scans the keyboard every
 // 10 ms and misses a press shorter than two scans, and reads SHIFT and CTRL some 20 ms after BREAK comes up.
 const MinHoldMs = 40;
@@ -188,6 +189,7 @@ const Leds = [
     ["shift lock", (processor) => processor.sysvia.shiftLockLight],
 ];
 
+const FunctionRowKeys = new Set(FunctionRow.map((def) => def.key));
 const LayerNames = [...Object.keys(Layers), "pad"];
 const UprightHint = "Turn the phone upright to type.";
 
@@ -308,6 +310,7 @@ export class TouchKeyboard {
         this.landscapePhone = window.matchMedia(LandscapePhoneQuery);
         this.landscapePhone.addEventListener("change", () => {
             this.releaseAll();
+            this.navbarWanted = false;
             this.show();
         });
         new ResizeObserver(() => this.show()).observe(this.root);
@@ -378,7 +381,9 @@ export class TouchKeyboard {
             ...["ESCAPE", "Y", "N"].map((key) => this.buildKey(padKey(key, null, ""), false)),
             this.buildKey(k("ABC", null, { cls: "layer portrait", layer: "main" }), false),
             this.buildKey(k("⌨", null, { cls: "layer landscape", hint: UprightHint }), false),
-            ...actions.filter((action) => action.use === "often").map((action) => keyOf(action, "")),
+            ...actions
+                .filter((action) => action.use === "often")
+                .map((action) => keyOf(action, FunctionRowKeys.has(action.key) ? "on-function-row" : "")),
         );
         this.dpadKeys = Object.fromEntries(moves.map((action) => [action.role, action.key]));
         this.dpad = div(
@@ -441,7 +446,8 @@ export class TouchKeyboard {
         const hint = document.createElement("span");
         hint.className = "tk-rotate-hint";
         hint.textContent = "rotate for gamepad";
-        hint.hidden = !window.matchMedia(TouchQuery).matches;
+        hint.hidden =
+            !window.matchMedia(TouchQuery).matches || Math.min(screen.width, screen.height) > PhoneShortSidePx;
         leds.append(hint);
         return leds;
     }
@@ -526,6 +532,7 @@ export class TouchKeyboard {
     }
 
     chooseLayer(name) {
+        this.releaseAll();
         this.portraitLayer = name;
         window.localStorage[LayerStorageKey] = name;
         this.show();

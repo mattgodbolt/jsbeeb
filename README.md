@@ -393,7 +393,7 @@ sudo rpm -i out/dist/jsbeeb-<version>.x86_64.rpm
 - `embed` - Remove the margins around the screen, hide most navigation entries and make the page background
   transparent (intended for use when running within an iframe in a third-party site).
 - `touchkeys` - offers the on-screen BBC keyboard, which otherwise appears only on a touch screen or in a window up to
-  700px wide (and never on a landscape phone, embedded, or on the Atom).
+  700px wide (and never embedded or on the Atom; a landscape phone gets its game pad instead).
 - `cpuMultiplier=X` speeds up the CPU by a factor of `X` relative to the peripherals: video, sound and the VIAs keep
   running at their real-world rates. May be fractional or below one to slow the CPU down. NB disc loads become
   unreliable with a too-slow CPU, and running too fast might cause the browser to hang.

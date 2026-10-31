@@ -217,7 +217,7 @@ body.touch-keyboard-beside-picture #header-bar {
 #touch-keyboard.landscape .tk-rotate-hint,
 #touch-keyboard.landscape .layer.portrait,
 #touch-keyboard:not(.landscape) .layer.landscape,
-#touch-keyboard:not(.landscape) .tk-pad .fkey {
+#touch-keyboard:not(.landscape) .tk-pad .on-function-row {
   display: none;
 }
 
