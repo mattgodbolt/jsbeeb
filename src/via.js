@@ -707,6 +707,7 @@ export class SysVia extends WithKeyMatrix(Via) {
             ...super.snapshotState(),
             IC32: this.IC32,
             keyScanTaskOffset: this.keyScanTask.offset(),
+            cmos: this.isMaster ? this.cmos.snapshotState() : undefined,
         };
     }
 
@@ -714,11 +715,11 @@ export class SysVia extends WithKeyMatrix(Via) {
         super.restoreState(state);
         this.keyScanTask.restoreOffset(state.keyScanTaskOffset);
         this.IC32 = state.IC32;
-        // Re-apply IC32 side effects (sound chip data bus, CMOS, port A)
-        // Must call portBUpdated directly (not recalculatePortBPins which
-        // overwrites IC32 based on portbpins) and then re-set IC32.
-        this.portBUpdated();
-        this.IC32 = state.IC32;
+        if (this.isMaster) {
+            if (state.cmos) this.cmos.restoreState(state.cmos);
+            else this.cmos.followLines(this.portbpins, this.IC32);
+        }
+        this.video.setScreenHwScroll((this.IC32 >> 4) & 3);
         this.recalculatePortAPins();
     }
 

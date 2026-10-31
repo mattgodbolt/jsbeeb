@@ -138,22 +138,28 @@ export class Cmos {
         }
     }
 
+    /** How far through an access the bus is. */
+    snapshotState() {
+        const { enabled, isRead, addressSelect, dataSelect, cmosAddr } = this;
+        return { enabled, isRead, addressSelect, dataSelect, cmosAddr };
+    }
+
+    restoreState({ enabled, isRead, addressSelect, dataSelect, cmosAddr }) {
+        Object.assign(this, { enabled, isRead, addressSelect, dataSelect, cmosAddr });
+    }
+
     /**
      * The chip as a machine joining a shared session needs it: the settings, the offset a program set
-     * the clock to, any clock registers held as written, and how far through an access the bus is.
+     * the clock to, any clock registers held as written, and the bus.
      */
     sessionState() {
-        const { store, timeOffset, heldDate, heldTime, enabled, isRead, addressSelect, dataSelect, cmosAddr } = this;
+        const { store, timeOffset, heldDate, heldTime } = this;
         return {
             store: [...store],
             timeOffset,
             heldDate: heldDate && { ...heldDate },
             heldTime: { ...heldTime },
-            enabled,
-            isRead,
-            addressSelect,
-            dataSelect,
-            cmosAddr,
+            ...this.snapshotState(),
         };
     }
 
@@ -167,8 +173,9 @@ export class Cmos {
             const { persistence, store, utc, timeOffset, heldDate, heldTime } = this;
             this.beforeSession = { persistence, store, now: this.now, utc, timeOffset, heldDate, heldTime };
         }
-        const { store, timeOffset, heldDate, heldTime, enabled, isRead, addressSelect, dataSelect, cmosAddr } = state;
-        Object.assign(this, { timeOffset, enabled, isRead, addressSelect, dataSelect, cmosAddr });
+        const { store, timeOffset, heldDate, heldTime } = state;
+        this.restoreState(state);
+        this.timeOffset = timeOffset;
         this.store = [...store];
         this.heldDate = heldDate && { ...heldDate };
         this.heldTime = { ...heldTime };
@@ -279,14 +286,19 @@ export class Cmos {
         return 0xff;
     }
 
-    writeControl(portBpins, portApins, IC32) {
+    /** Takes up the select and read lines as port B and IC32 drive them, making no access. */
+    followLines(portBpins, IC32) {
         this.enabled = !!(portBpins & 0x40);
         if (!this.enabled) return;
-        const oldDataSelect = this.dataSelect;
-        const oldAddressSelect = this.addressSelect;
         this.isRead = !!(IC32 & 2);
         this.dataSelect = !!(IC32 & 4);
         this.addressSelect = !!(portBpins & 0x80);
+    }
+
+    writeControl(portBpins, portApins, IC32) {
+        const { dataSelect: oldDataSelect, addressSelect: oldAddressSelect } = this;
+        this.followLines(portBpins, IC32);
+        if (!this.enabled) return;
         if (oldAddressSelect && !this.addressSelect) this.cmosAddr = portApins & 0x3f;
         if (oldDataSelect && !this.dataSelect && !this.addressSelect && !this.isRead) {
             if (this.cmosAddr > 0xb) {

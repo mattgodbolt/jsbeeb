@@ -58,6 +58,13 @@ function atmFile(name, loadAddress, body) {
     return file;
 }
 
+// Minutes and seconds differ from every other clock register, so reading the wrong one shows.
+const ClockReadingEveryRegisterApart = Date.UTC(2026, 9, 31, 12, 34, 56);
+const ReadClockForever = "10 REPEAT:T$=TIME$:UNTIL0";
+const InstructionsIntoAnAccess = 3;
+const AccessesSnapshotted = 30;
+const RunOnCycles = 30011;
+
 const stateOf = (machine) => JSON.parse(snapshotToJSON(createSnapshot(machine.processor, machine.model).state));
 
 describe("save state round trip", () => {
@@ -141,6 +148,33 @@ describe("save state round trip", () => {
         await restored.runUntilInput();
 
         expect(loaded(restored)).toEqual(body);
+    });
+
+    it("carries a Master on from part way through a CMOS access, making none as it restores", async () => {
+        const machine = await bootedTestMachine("Master");
+        const cpu = machine.processor;
+        const { cmos } = cpu.sysvia;
+        cmos.now = () => ClockReadingEveryRegisterApart;
+        await machine.type(ReadClockForever);
+        await machine.type("RUN");
+        const ranOn = () => ({ state: stateOf(machine), cmos: cmos.sessionState() });
+        for (let access = 0; access < AccessesSnapshotted; ++access) {
+            let instructions = 0;
+            const intoAnAccess = cpu.debugInstruction.add(
+                () => cmos.enabled && ++instructions === InstructionsIntoAnAccess,
+            );
+            await machine.runFor(OneEmulatedSecond);
+            intoAnAccess.remove();
+            const snapshot = cpu.snapshotState();
+            const bus = cmos.snapshotState();
+            await machine.runFor(RunOnCycles);
+            const original = ranOn();
+
+            cpu.restoreState(snapshot);
+            expect(cmos.sessionState()).toEqual({ ...original.cmos, ...bus });
+            await machine.runFor(RunOnCycles);
+            expect(ranOn()).toEqual(original);
+        }
     });
 });
 

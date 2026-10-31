@@ -135,9 +135,7 @@ export function isValidCommit(commit) {
  * Makes `cpu` the machine a session snapshot describes. A drive restores tracks only into
  * a disc it already holds, which may be this person's own and write back to where it came
  * from, so each drive first gets a fresh disc of its own, or none if the host's is empty.
- * The CMOS joins the session before the machine is restored, so the bus accesses the
- * restore makes reach the session's CMOS and never this person's stored settings. The
- * reset line, which snapshots leave out like the held keys, travels beside it too.
+ * The reset line, which snapshots leave out like the held keys, travels beside it too.
  */
 export function restoreSessionSnapshot(cpu, snapshot) {
     const { state, keyboard, resetting, at, cmos, rtcBaseMs } = snapshot;
