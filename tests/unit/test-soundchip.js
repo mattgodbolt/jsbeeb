@@ -16,6 +16,7 @@ const Tone0Latch = 0x80;
 const Tone0LowBitsSaved = 0x0f;
 const Tone0LowBitsDriven = 0x03;
 const CyclesIntoWriteAtSnapshot = 5;
+const MinCyclesWELow = new SoundChip(() => {}).minCyclesWELow;
 
 function makeSoundChip(onBuffer = () => {}) {
     const scheduler = new Scheduler();
@@ -208,28 +209,40 @@ describe("SoundChip snapshotState / restoreState", () => {
         expect(chip.dcPrevOut).toBe(0);
     });
 
+    const fresh = () => {};
+    const predatingTheBus = (snapshot) => {
+        delete snapshot.slowDataBus;
+        delete snapshot.active;
+        delete snapshot.activeTaskOffset;
+    };
+    const WriteLeftAtSnapshot = MinCyclesWELow - CyclesIntoWriteAtSnapshot;
     it.each([
-        ["its own pending write", () => {}, Tone0LowBitsSaved],
+        [
+            "its own pending write, when it was due",
+            CyclesIntoWriteAtSnapshot,
+            fresh,
+            WriteLeftAtSnapshot,
+            Tone0LowBitsSaved,
+        ],
+        ["nothing once its write was taken", MinCyclesWELow, fresh, MinCyclesWELow, Tone0LowBitsSaved],
         [
             "what the System VIA drove, for a snapshot without the bus",
-            (snapshot) => {
-                delete snapshot.slowDataBus;
-                delete snapshot.active;
-                delete snapshot.activeTaskOffset;
-            },
+            CyclesIntoWriteAtSnapshot,
+            predatingTheBus,
+            MinCyclesWELow,
             Tone0LowBitsDriven,
         ],
-    ])("takes the bus with WE low as %s after a restore", (_, age, expectedRegister) => {
+    ])("takes the bus with WE low as %s after a restore", (_, cyclesBefore, age, cyclesAfter, expectedRegister) => {
         const { chip, scheduler } = makeSoundChip();
         chip.updateSlowDataBus(Tone0Latch | Tone0LowBitsSaved, true);
-        scheduler.polltime(CyclesIntoWriteAtSnapshot);
+        scheduler.polltime(cyclesBefore);
         const snapshot = chip.snapshotState();
         age(snapshot);
 
         const { chip: restored, scheduler: restoredScheduler } = makeSoundChip();
         restored.updateSlowDataBus(Tone0Latch | Tone0LowBitsDriven, true);
         restored.restoreState(snapshot);
-        restoredScheduler.polltime(restored.minCyclesWELow);
+        restoredScheduler.polltime(cyclesAfter);
 
         expect(restored.registers[0]).toBe(expectedRegister);
     });
