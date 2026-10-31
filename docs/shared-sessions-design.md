@@ -106,9 +106,8 @@ Ranked by how much they would bite.
    (`Adc.onComplete`), so the gamepad, mouse-as-joystick and microphone sources are read mid-emulation, and the
    OS converts continuously into RAM whether a program reads them or not. The system VIA's fire buttons are
    latched from the page's once-a-frame gamepad poll (`GamePad.update`) and from the mouse-as-joystick's
-   button events. These must
-   change so the machine only ever sees values that came through the session. That refactor is after v0, which
-   holds every ADC channel at its centre and the fire buttons released in a session.
+   button events. These must change so the machine only ever sees values that came through the session. That
+   refactor is after v0, which holds every ADC channel at its centre and the fire buttons released in a session.
 3. **Snapshots are not complete enough for a joiner.** The native snapshot leaves out:
    - the keyboard matrix and the SHIFT override state (`SysVia.snapshotState`), so a joiner arriving while a
      key is held sees it up;
