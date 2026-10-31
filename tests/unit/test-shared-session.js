@@ -291,11 +291,13 @@ describe("SessionHost", () => {
         expect(signal.aborted).toBe(true);
     });
 
-    it("holds the analogue inputs at the centre for the session, and gives back an ordinary page when it closes", async () => {
+    it("holds the analogue inputs at the centre and the fire buttons released for the session, and gives back an ordinary page when it closes", async () => {
         const { host, processor, context } = await hosting();
         expect(processor.adconverter.setFixedValue).toHaveBeenLastCalledWith(AdcCentreValue);
+        expect(processor.sysvia.holdFireButtons).toHaveBeenLastCalledWith(true);
         host.close();
         expect(processor.adconverter.setFixedValue).toHaveBeenLastCalledWith(null);
+        expect(processor.sysvia.holdFireButtons).toHaveBeenLastCalledWith(false);
         expect(context.loop.setLockstep).toHaveBeenLastCalledWith(null);
         expect(context.keyboard.setInput).toHaveBeenLastCalledWith(null);
         expect(processor.sysvia.cmos.bbcDateTime()).toBeInstanceOf(Date);
@@ -1529,11 +1531,13 @@ describe("SessionGuest", () => {
         expect(context.keyboard.setInput).toHaveBeenLastCalledWith(null);
     });
 
-    it("holds the analogue inputs at the centre while it is in the session", async () => {
+    it("holds the analogue inputs at the centre and the fire buttons released while it is in the session", async () => {
         const { context, channel } = await joining();
         expect(context.processor.adconverter.setFixedValue).toHaveBeenLastCalledWith(AdcCentreValue);
+        expect(context.processor.sysvia.holdFireButtons).toHaveBeenLastCalledWith(true);
         channel.emit("close");
         expect(context.processor.adconverter.setFixedValue).toHaveBeenLastCalledWith(null);
+        expect(context.processor.sysvia.holdFireButtons).toHaveBeenLastCalledWith(false);
     });
 
     it("puts a snapshot back together from its chunks", async () => {

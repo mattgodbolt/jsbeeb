@@ -104,10 +104,10 @@ Ranked by how much they would bite.
    stamps each with a cycle, and gamepad keys are not polled while a session runs.
 2. **Some inputs are pulled, not pushed.** The ADC asks its source for a value when a conversion finishes
    (`Adc.onComplete`), so the gamepad, mouse-as-joystick and microphone sources are read mid-emulation, and the
-   OS converts continuously into RAM whether a program reads them or not. The system VIA reads gamepad fire
-   buttons live (`SysVia.getJoysticks`). These must change so the machine only ever sees values that came
-   through the session. That refactor is after v0, which holds every ADC channel at its centre in a session and
-   does not yet block the fire buttons (see the gaps).
+   OS converts continuously into RAM whether a program reads them or not. The system VIA's fire buttons are
+   latched from the page's once-a-frame gamepad poll (`GamePad.update`) and from the mouse-as-joystick's
+   button events. These must change so the machine only ever sees values that came through the session. That
+   refactor is after v0, which holds every ADC channel at its centre and the fire buttons released in a session.
 3. **Snapshots are not complete enough for a joiner.** The native snapshot leaves out:
    - the keyboard matrix and the SHIFT override state (`SysVia.snapshotState`), so a joiner arriving while a
      key is held sees it up;
@@ -281,9 +281,8 @@ for two to six, so lag barely matters and a shared keyboard is how it is meant t
   it. On a guest it is undone the same way.
 - Anything that pauses the host pauses the session: a dialog, the rewind panel, saving or loading a state, the
   pause button. Guests wait, and catch up afterwards.
-- Inputs the machine reads for itself rather than being sent (the gamepad fire buttons the system VIA reads,
-  the accessibility switches on the user port) are not blocked either, and desync a session the same way if
-  used.
+- Inputs the machine reads for itself rather than being sent (the accessibility switches on the user port) are
+  not blocked either, and desync a session the same way if used.
 - A guest's BREAK is ignored, and when a guest leaves, its keys are let go even if someone else is holding the
   same key.
 - A guest's front panel and media window still name its own discs, though its drives hold the host's.
@@ -308,7 +307,7 @@ for two to six, so lag barely matters and a shared keyboard is how it is meant t
 
 After v0, in no fixed order: record and replay (a snapshot plus input log, which is spectating from a file);
 snapshot links; the pulled inputs (ADC sources, gamepads, the mouse, the switches) through the session, with
-`src/adc.js`, the sources and `getJoysticks` reading only what came through it; the other configuration options
+`src/adc.js`, the sources and the fire buttons reading only what came through it; the other configuration options
 one at a time; TURN; voice (below); and the steps in the next section.
 
 ### After v0: keys on time, taking control, rollback

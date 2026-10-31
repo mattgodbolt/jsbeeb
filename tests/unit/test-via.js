@@ -42,14 +42,13 @@ function makeFakeUserPortPeripheral() {
     return { read: () => 0xff, write: () => {} };
 }
 
-function makeSysVia(cpu, scheduler, { getGamepads } = {}) {
+function makeSysVia(cpu, scheduler) {
     return new SysVia(cpu, scheduler, {
         video: makeFakeVideo(),
         soundChip: makeFakeSoundChip(),
         cmos: makeFakeCmos(),
         isMaster: false,
         initialLayout: "physical",
-        getGamepads,
     });
 }
 
@@ -437,38 +436,22 @@ describe("Via CA2 write handshake", () => {
     });
 });
 
-function makeMockButton(pressed) {
-    return { pressed };
-}
-
-function makeMockPad(buttonsState) {
-    const buttons = [];
-    for (let i = 0; i < 16; i++) {
-        buttons[i] = makeMockButton(buttonsState[i] || false);
-    }
-    return { buttons };
-}
-
-describe("SysVia getJoysticks", () => {
-    let scheduler, cpu;
-
-    beforeEach(() => {
-        scheduler = new Scheduler();
-        cpu = makeFakeCpu();
-    });
+describe("SysVia fire buttons", () => {
+    const FireButtonPins = 0x30;
 
     it.each([
-        ["no gamepads", null, false, [false, false]],
-        ["FIRE1 on the only gamepad", [{ 10: true }], false, [true, false]],
-        ["FIRE2 on the only gamepad", [{ 11: true }], false, [false, true]],
-        ["FIRE1 on the second gamepad", [{}, { 10: true }], false, [false, true]],
-        ["FIRE2 on the first of two gamepads", [{ 11: true }, {}], false, [false, true]],
-        ["the mouse's button with an idle gamepad", [{}], true, [true, false]],
-    ])("reads the fire buttons with %s", (_, pads, mouseButton, expected) => {
-        const via = makeSysVia(cpu, scheduler, { getGamepads: () => pads?.map(makeMockPad) ?? null });
+        ["nothing pressed", [false, false], false, [], 0x30],
+        ["the gamepad's FIRE1", [true, false], false, [], 0x20],
+        ["the gamepad's FIRE2", [false, true], false, [], 0x10],
+        ["the mouse's button", [false, false], true, [], 0x20],
+        ["everything, held by a session", [true, true], true, [true], 0x30],
+        ["everything, after a session lets go", [true, true], true, [true, false], 0x00],
+    ])("reads %s from the latched state", (_, [button1, button2], mouseButton, holds, expected) => {
+        const via = makeSysVia(makeFakeCpu(), new Scheduler());
+        via.setGamepadFire(button1, button2);
         if (mouseButton) via.setJoystickButton(0, true);
-        const { button1, button2 } = via.getJoysticks();
-        expect([button1, button2]).toEqual(expected);
+        for (const held of holds) via.holdFireButtons(held);
+        expect(via.read(ORB) & FireButtonPins).toBe(expected);
     });
 });
 

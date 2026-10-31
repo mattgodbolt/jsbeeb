@@ -70,6 +70,7 @@ export function fakeProcessor({ cycles = 1000 } = {}) {
             setMapped: vi.fn(),
             keyboardState: () => ({ keys: [] }),
             restoreKeyboard: vi.fn(),
+            holdFireButtons: vi.fn(),
             cmos: new Cmos(null),
         },
     };

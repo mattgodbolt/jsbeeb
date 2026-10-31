@@ -784,7 +784,6 @@ export class Cpu6502 extends Base6502 {
             cmos: this.cmos,
             isMaster: this.model.isMaster,
             initialLayout: this.keyLayout,
-            getGamepads: this.config.getGamepads,
         });
         this.uservia = new via.UserVia(this, this.scheduler, this.config.userPort);
         this.acia = new Acia(this, this.soundChip.toneGenerator, this.scheduler, this.relayNoise);
