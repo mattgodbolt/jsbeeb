@@ -679,7 +679,7 @@ export class ShiftOverride {
     constructor([shiftCol, shiftRow]) {
         this.shiftCol = shiftCol;
         this.shiftRow = shiftRow;
-        this.held = new Set();
+        this.held = new Map();
         this.clear();
     }
 
@@ -691,9 +691,11 @@ export class ShiftOverride {
 
     setMapped(keys, mapping, val) {
         const [col, row, shiftOverride] = mapping;
-        if (val) this.held.add(mapping);
-        else this.held.delete(mapping);
-        const held = [...this.held];
+        // By value, since a shared session's peers hand mappings over as copies.
+        const id = `${col},${row},${shiftOverride}`;
+        this.held.delete(id);
+        if (val) this.held.set(id, mapping);
+        const held = [...this.held.values()];
         keys[col][row] = val || held.some(([c, r]) => c === col && r === row) ? 1 : 0;
         const isShiftKey = shiftOverride === undefined && col === this.shiftCol && row === this.shiftRow;
         if (isShiftKey) this.physicalShiftDown = !!val;
@@ -718,6 +720,7 @@ export class ShiftOverride {
     restore({ physicalShiftDown, shiftOverrideActive, shiftOverrideDesiredShift }) {
         this.physicalShiftDown = physicalShiftDown;
         this.forcedShift = shiftOverrideActive ? shiftOverrideDesiredShift : null;
+        this.held.clear();
     }
 }
 
