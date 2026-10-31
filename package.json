@@ -140,7 +140,7 @@
   },
   "lint-staged": {
     "*.js": [
-      "vitest related --run --project unit --no-file-parallelism",
+      "vitest related --run --project unit",
       "eslint --cache --fix",
       "prettier --write"
     ],
