@@ -220,6 +220,14 @@ export class TouchKeyboard {
         for (const type of ["contextmenu", "selectstart", "mousedown"]) {
             root.addEventListener(type, (evt) => evt.preventDefault());
         }
+        // iOS ignores a cancelled pointerdown and runs its long-press text selection on the page around the keys.
+        root.addEventListener(
+            "touchstart",
+            (evt) => {
+                if (!evt.target.closest("button")) evt.preventDefault();
+            },
+            { passive: false },
+        );
         return root;
     }
 
