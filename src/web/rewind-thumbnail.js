@@ -44,8 +44,8 @@ function captureThumbnail(fb32) {
 }
 
 /**
- * Execute cycles until a complete top-to-bottom frame is in fb32, with the debug hooks detached so that no
- * breakpoint or watch cuts the preview short.
+ * Execute cycles until a complete top-to-bottom frame is in fb32, as a replay, so that no breakpoint or watch cuts
+ * the preview short and nothing it prints or speaks reaches the host.
  *
  * Snapshots may be mid-frame, so we run through two vsyncs:
  * 1. First vsync completes the partial frame and clears fb32 normally.
@@ -53,7 +53,7 @@ function captureThumbnail(fb32) {
  *    so fb32 retains the completed frame for capture.
  */
 function executeUntilFrame(processor, video) {
-    processor.withoutDebugHooks(() => {
+    processor.asReplay(null, () => {
         const startFrame = video.frameCount;
 
         // Phase 1: run to first vsync (completes partial frame, clears fb32)

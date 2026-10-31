@@ -228,10 +228,9 @@ export class InputLog {
     }
 
     /**
-     * Puts the machine back to `snapshot` and runs it to `to`, with every debug hook detached but `onInstruction`
-     * (as `withOnlyInstructionHook` takes), putting each input back at its cycle, those at `to` too if
-     * `inputsAtTo`. Returns the hash of the machine as the snapshot put it, or null if the replay did not reach
-     * an input's cycle or `to` exactly.
+     * Puts the machine back to `snapshot` and runs it to `to` as a replay (as `asReplay` runs one, watched by
+     * `onInstruction`), putting each input back at its cycle, those at `to` too if `inputsAtTo`. Returns the hash
+     * of the machine as the snapshot put it, or null if the replay did not reach an input's cycle or `to` exactly.
      */
     replay(snapshot, to, inputsAtTo, onInstruction) {
         const { cpu } = this;
@@ -243,7 +242,7 @@ export class InputLog {
             cpu.restoreState(snapshot);
             cpu.debugInstruction.forgetStop();
             const startHash = stateHash(cpu);
-            const reached = cpu.withOnlyInstructionHook(onInstruction, () => {
+            const reached = cpu.asReplay(onInstruction, () => {
                 for (const { at, input } of this.inputs) {
                     if (at < from || !input) continue;
                     if (at > to || (at === to && !inputsAtTo)) break;
