@@ -764,6 +764,16 @@ class WFN {
  * AtomMMC2 emulates the AtoMMC2 device for the Acorn Atom.
  * Handles SD/MMC file operations and communication with the Atom.
  */
+const CardChangingCommands = new Set([
+    CMD_DIR_MKDIR,
+    CMD_DIR_RMDIR,
+    CMD_RENAME,
+    CMD_FILE_OPEN_WRITE,
+    CMD_FILE_OPEN_RAF,
+    CMD_FILE_DELETE,
+    CMD_WRITE_BYTES,
+]);
+
 export class AtomMMC2 {
     /**
      * Attach a gamepad object for joystick support.
@@ -889,6 +899,9 @@ export class AtomMMC2 {
                     }
                     this.WriteDataPort(STATUS_BUSY);
                     this.MCUStatus |= MMC_MCU_BUSY;
+                    // The card's files are not in a snapshot (#1761), so a replay from before this would find them
+                    // as it leaves them.
+                    if (CardChangingCommands.has(received)) this.cpu.inputLog?.refuse("a write to the MMC card");
                     if (received === CMD_DIR_OPEN) {
                         this.worker = () => this.WFN.WFN_DirectoryOpen();
                     } else if (received === CMD_DIR_READ) {
@@ -961,7 +974,9 @@ export class AtomMMC2 {
                         if (buttons[13]) joystick ^= 4;
                         if (buttons[12]) joystick ^= 8;
                         if (buttons[0]) joystick ^= 0x10;
-                        this.WriteDataPort(joystick);
+                        this.WriteDataPort(
+                            this.cpu.inputLog ? this.cpu.inputLog.sample("mmcJoystick", joystick) : joystick,
+                        );
                     } else if (received === CMD_WRITE_PORT) {
                         this.LATB = this.byteValueLatch;
                         this.WriteDataPort(STATUS_OK);
