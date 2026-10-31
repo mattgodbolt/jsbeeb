@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.17.1](https://github.com/mattgodbolt/jsbeeb/compare/v2.17.0...v2.17.1) (2026-10-31)
+
+
+### Bug Fixes
+
+* Master snapshots hold the CMOS settings and clock, so a replay cannot change them ([#1777](https://github.com/mattgodbolt/jsbeeb/issues/1777)) ([84efe9f](https://github.com/mattgodbolt/jsbeeb/commit/84efe9f06d6a0345b6a66803922c7b66037dd7de))
+* the Master's CMOS store holds the chip's full 64 bytes ([#1776](https://github.com/mattgodbolt/jsbeeb/issues/1776)) ([be0d65c](https://github.com/mattgodbolt/jsbeeb/commit/be0d65c91c321151d105bc2bc1c97d902b3d9226))
+
 ## [2.17.0](https://github.com/mattgodbolt/jsbeeb/compare/v2.16.1...v2.17.0) (2026-10-31)
 
 
