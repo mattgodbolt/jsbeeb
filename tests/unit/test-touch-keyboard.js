@@ -1,7 +1,16 @@
+// @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
 
 import { BBC } from "../../src/keymap.js";
-import { FunctionRow, KeyPresses, Layers, wantsTouchKeyboard } from "../../src/web/touch-keyboard.js";
+import {
+    dpadKeysAt,
+    followingGamepad,
+    FunctionRow,
+    KeyPresses,
+    Layers,
+    PadPresets,
+    wantsTouchKeyboard,
+} from "../../src/web/touch-keyboard.js";
 
 const allKeys = [FunctionRow, ...Object.values(Layers).flat()].flat().filter((def) => def.key);
 const keysOf = (layer) => Layers[layer].flat().map((def) => def.key);
@@ -55,6 +64,59 @@ describe("touch keyboard", () => {
         expect(wantsTouchKeyboard(true, never)).toBe(true);
     });
 
+    describe("pad presets", () => {
+        const presets = Object.values(PadPresets);
+
+        it("press only keys the BBC matrix has, and each key once", () => {
+            for (const { title, actions } of presets) {
+                const keys = actions.map((action) => action.key);
+                for (const key of keys) expect(BBC[key], `${title} ${key}`).toBeDefined();
+                expect(new Set(keys).size, title).toBe(keys.length);
+            }
+        });
+
+        it("each have a d-pad of four directions and a fire button", () => {
+            for (const { title, actions } of presets) {
+                const roles = (group) =>
+                    actions.filter((action) => action.group === group).map((action) => action.role);
+                expect(roles("move"), title).toEqual(["left", "right", "up", "down"]);
+                expect(
+                    actions.filter((action) => action.role === "fire"),
+                    title,
+                ).toHaveLength(1);
+            }
+        });
+
+        it("take the keys the URL gives a gamepad's directions, FIRE and START, and only those", () => {
+            const keysOf = (preset) => Object.fromEntries(preset.actions.map((action) => [action.role, action.key]));
+            const classic = keysOf(PadPresets.classic);
+            expect(keysOf(followingGamepad(PadPresets.classic, {}))).toEqual(classic);
+            const zalaga = { LEFT: "CAPSLOCK", RIGHT: "CTRL", FIRE: "SHIFT", START: "K1", A: "COPY" };
+            expect(keysOf(followingGamepad(PadPresets.classic, zalaga))).toEqual({
+                ...classic,
+                left: "CAPSLOCK",
+                right: "CTRL",
+                fire: "SHIFT",
+                second: "K1",
+            });
+        });
+    });
+
+    describe("the d-pad", () => {
+        const box = { left: 100, top: 200, width: 90, height: 90 };
+        const keyFor = { left: "Z", right: "X", up: "COLON_STAR", down: "SLASH" };
+        it.each([
+            ["the middle", 145, 245, []],
+            ["the left arm", 110, 245, ["Z"]],
+            ["the top right corner", 180, 210, ["X", "COLON_STAR"]],
+            ["the bottom left corner", 110, 280, ["Z", "SLASH"]],
+            ["past the right edge", 400, 245, ["X"]],
+            ["past the top left corner", 0, 0, ["Z", "COLON_STAR"]],
+        ])("presses for a touch at %s", (_, x, y, keys) => {
+            expect(dpadKeysAt(box, x, y, keyFor)).toEqual(keys);
+        });
+    });
+
     describe("KeyPresses", () => {
         const recording = () => {
             const sent = [];
@@ -64,7 +126,7 @@ describe("touch keyboard", () => {
 
         it("presses at once and lets go only after 40 ms of machine time", () => {
             const { sent, presses } = recording();
-            presses.press(1, "A", 1000);
+            presses.hold(1, ["A"], 1000);
             expect(sent).toEqual(["A down"]);
             presses.release(1);
             presses.sendDueReleases(1039);
@@ -75,16 +137,16 @@ describe("touch keyboard", () => {
 
         it("keeps a key down that another finger has pressed again before its release was sent", () => {
             const { sent, presses } = recording();
-            presses.press(1, "A", 1000);
+            presses.hold(1, ["A"], 1000);
             presses.release(1);
-            presses.press(2, "A", 1010);
+            presses.hold(2, ["A"], 1010);
             presses.sendDueReleases(1100);
             expect(sent).toEqual(["A down", "A down"]);
         });
 
         it("lets go at once when machine time goes backwards, as a power-on reset makes it", () => {
             const { sent, presses } = recording();
-            presses.press(1, "A", 1000);
+            presses.hold(1, ["A"], 1000);
             presses.release(1);
             presses.sendDueReleases(5);
             expect(sent).toEqual(["A down", "A up"]);
@@ -93,8 +155,8 @@ describe("touch keyboard", () => {
         for (const modifier of ["SHIFT", "CTRL"]) {
             it(`keeps ${modifier} lifted before BREAK down until 100 ms after BREAK goes up`, () => {
                 const { sent, presses } = recording();
-                presses.press(1, modifier, 1000);
-                presses.press(2, "BREAK", 1010);
+                presses.hold(1, [modifier], 1000);
+                presses.hold(2, ["BREAK"], 1010);
                 presses.release(1);
                 presses.sendDueReleases(1060);
                 presses.release(2);
@@ -108,8 +170,8 @@ describe("touch keyboard", () => {
 
             it(`keeps ${modifier} lifted just after BREAK down until 100 ms after BREAK went up`, () => {
                 const { sent, presses } = recording();
-                presses.press(1, modifier, 1000);
-                presses.press(2, "BREAK", 1010);
+                presses.hold(1, [modifier], 1000);
+                presses.hold(2, ["BREAK"], 1010);
                 presses.release(2);
                 presses.sendDueReleases(1060);
                 presses.release(1);
@@ -120,9 +182,31 @@ describe("touch keyboard", () => {
             });
         }
 
+        it("moves one pointer's keys as it slides, keeping those it stays on and letting go of the rest after 40 ms", () => {
+            const { sent, presses } = recording();
+            expect(presses.hold(1, ["Z"], 1000)).toBe(true);
+            expect(presses.hold(1, ["Z", "COLON_STAR"], 1010)).toBe(true);
+            expect(presses.hold(1, ["COLON_STAR"], 1050)).toBe(false);
+            presses.sendDueReleases(1060);
+            expect(sent).toEqual(["Z down", "COLON_STAR down", "Z up"]);
+            presses.hold(1, [], 1060);
+            presses.sendDueReleases(1060);
+            expect(sent.at(-1)).toBe("COLON_STAR up");
+        });
+
+        it("lets go of every key of every pointer at once, as turning the phone does", () => {
+            const { sent, presses } = recording();
+            presses.hold(1, ["Z", "COLON_STAR"], 1000);
+            presses.hold(2, ["RETURN"], 1000);
+            presses.releaseAll();
+            presses.sendDueReleases(1040);
+            expect(sent.slice(3).sort()).toEqual(["COLON_STAR up", "RETURN up", "Z up"]);
+            expect(presses.held.size).toBe(0);
+        });
+
         it("holds BREAK for 40 ms of machine time however quick the tap", () => {
             const { sent, presses } = recording();
-            presses.press(1, "BREAK", 1000);
+            presses.hold(1, ["BREAK"], 1000);
             presses.release(1);
             presses.sendDueReleases(1020);
             expect(sent).toEqual(["BREAK down"]);

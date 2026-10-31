@@ -258,7 +258,8 @@ The gamepad control names are:
 
 The key names are the same as for the keyboard, the Atom's own on the Atom. As with `KEY.`, the whole parameter is
 case-insensitive, so `gp.fire=copy` works too. Digits may be written either way round: `GP.A=1` and `GP.A=K1` both
-press `1`. The D-pad's default mapping can't currently be changed.
+press `1`. The D-pad's default mapping can't currently be changed. The on-screen game pad's classic layout follows
+`LEFT`, `RIGHT`, `UP`, `DOWN`, `FIRE` and `START`, so `?GP.LEFT=CAPSLOCK&GP.RIGHT=CTRL` steers both.
 
 The older `LEFT=`, `RIGHT=`, `UP=`, `DOWN=` and `FIRE=` parameters (no `GP.` prefix, and in capitals) still work and
 mean the same thing.

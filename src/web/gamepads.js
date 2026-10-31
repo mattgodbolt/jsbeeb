@@ -9,6 +9,8 @@ export class GamePad {
 
         // Gamepad joysticks
         this.gamepadAxisMapping = [[], [], [], []];
+        /** @type {Object<string, string>} the key names the URL gave each control, by the control's name */
+        this.remapped = {};
     }
 
     /**
@@ -132,6 +134,7 @@ export class GamePad {
                 return `unknown gamepad control "${gamepadKey}".`;
         }
 
+        this.remapped[gamepadKey] = machineKey;
         return null;
     }
 

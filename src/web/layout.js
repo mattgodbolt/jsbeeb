@@ -125,12 +125,15 @@ export class Layout {
 
     /** What the LED panel, or the on-screen keyboard in its place, needs below the monitor. */
     bottomRoom() {
-        if (this.touchKeyboardRoom !== null) return this.touchKeyboardRoom;
+        if (this.touchKeyboardRoom !== null) return this.touchKeyboardRoom.below;
         const panel = document.getElementById("leds");
         return Math.max(this.bottomReservedSize, (panel?.offsetHeight ?? 0) + LedPanelGap);
     }
 
-    /** The on-screen keyboard hides the LED panel and needs `room` below the monitor instead, or null when closed. */
+    /**
+     * The on-screen keyboard hides the LED panel and needs `room.below` the monitor instead and `room.beside` it on
+     * each side, or null when closed.
+     */
     reserveForTouchKeyboard(room) {
         this.touchKeyboardRoom = room;
         this.resize();
@@ -155,7 +158,10 @@ export class Layout {
                 innerWidth: window.innerWidth,
                 innerHeight: window.innerHeight,
                 navbarHeight: navbarHeightOf(document.getElementById("header-bar")),
-                borderReservedSize: window.innerWidth <= NarrowWindow ? 0 : this.borderReservedSize,
+                borderReservedSize: Math.max(
+                    window.innerWidth <= NarrowWindow ? 0 : this.borderReservedSize,
+                    this.touchKeyboardRoom?.beside ?? 0,
+                ),
                 bottomReservedSize: this.bottomReservedSize && this.bottomRoom(),
                 devicePixelRatio: window.devicePixelRatio || 1,
             },
