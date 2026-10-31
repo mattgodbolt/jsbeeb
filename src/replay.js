@@ -121,7 +121,7 @@ export class InputLog {
     constructor(cpu) {
         this.cpu = cpu;
         this.latestSamples = new Map();
-        this.replaying = null;
+        this.sampleReplay = null;
         this.recording = true;
         const { keyboardInterface, sysvia, adconverter, touchScreen, acia, fdc } = cpu;
         for (const device of [
@@ -163,7 +163,7 @@ export class InputLog {
 
     /** What the machine reads for `key` from the host, which said `value`. */
     sample(key, value) {
-        if (this.replaying) return this.replaying.read(key, cycleCount(this.cpu), value);
+        if (this.sampleReplay) return this.sampleReplay.read(key, cycleCount(this.cpu), value);
         if (this.recording && this.latestSamples.get(key) !== value) {
             this.latestSamples.set(key, value);
             this.samples.push({ at: cycleCount(this.cpu), key, value });
@@ -236,7 +236,7 @@ export class InputLog {
         const { cpu } = this;
         const from = snapshotCycle(cpu, snapshot);
         this.recording = false;
-        this.replaying = new SampleReplay(this.samples, from, this.samplesAt(from));
+        this.sampleReplay = new SampleReplay(this.samples, from, this.samplesAt(from));
         try {
             restoreHostInputs(cpu, this.hostAt(from));
             cpu.restoreState(snapshot);
@@ -253,7 +253,7 @@ export class InputLog {
             });
             return reached ? startHash : null;
         } finally {
-            this.replaying = null;
+            this.sampleReplay = null;
             this.recording = true;
         }
     }

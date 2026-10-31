@@ -1892,14 +1892,13 @@ export class Cpu6502 extends Base6502 {
         const attached = [this._debugInstruction, this._debugRead, this._debugWrite, this._debugInterrupt];
         this._debugInstruction = onInstruction;
         this._debugRead = this._debugWrite = this._debugInterrupt = null;
-        const wasReplaying = this.replaying;
         this.replaying = true;
         this.refreshLook();
         try {
             return run();
         } finally {
             [this._debugInstruction, this._debugRead, this._debugWrite, this._debugInterrupt] = attached;
-            this.replaying = wasReplaying;
+            this.replaying = false;
             this.refreshLook();
         }
     }

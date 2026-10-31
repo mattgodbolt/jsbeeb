@@ -7,7 +7,7 @@ import { findModel } from "../../src/models.js";
 import { Printer } from "../../src/printer.js";
 import { ReplayHistory } from "../../src/replay.js";
 import { executeUntilFrame } from "../../src/web/rewind-thumbnail.js";
-import { ViaRegister, domFromIndexHtml, teardownDom } from "./helpers.js";
+import { ViaRegister, domFromIndexHtml, loadBytes, teardownDom } from "./helpers.js";
 import { singleStep } from "../helpers/single-step.js";
 
 const settings = (overrides = {}) => ({
@@ -213,11 +213,14 @@ describe("Machine", () => {
         const SerialUlaRs423 = 0x40;
         const PcrCa2High = 0x0e;
         const PcrCa2Low = 0x0c;
+        const IntCa1 = 0x02;
         const word = (address) => [address & 0xff, address >>> 8];
         const sta = (address) => [0x8d, ...word(address)];
         const lda = (value) => [0xa9, value];
+        const jmp = (address) => [0x4c, ...word(address)];
         const Printed = "P";
-        const Spoken = "S".charCodeAt(0);
+        // A digit, which the touchscreen on the same RS-423 takes as its mode.
+        const Spoken = "1".charCodeAt(0);
         const PrintAndSpeak = [
             ...lda(Printed.charCodeAt(0)),
             ...sta(UserVia + ViaRegister.ORAnh),
@@ -241,27 +244,38 @@ describe("Machine", () => {
                     executeUntilFrame(cpu, cpu.video);
                 },
             ],
-        ])("sends the host nothing it printed or spoke again when %s", (_, replay) => {
-            deps.model = findModel("B-DFS1.2");
-            deps.printer = new Printer();
-            deps.build = (model, { config }) => new model.Cpu(model, { ...nullIo({ model }), config });
-            const machine = make();
-            const cpu = machine.processor;
-            cpu.reset(true);
-            machine.setupRs423Handler();
-            [...PrintAndSpeak, 0x4c, ...word(SpinAt)].forEach((byte, i) => cpu.writemem(ProgramAt + i, byte));
-            cpu.pc = ProgramAt;
-            const history = new ReplayHistory(cpu);
-            const start = cpu.snapshotState();
-            history.taken(start, null);
-            while (cpu.pc !== SpinAt) singleStep(cpu);
-            singleStep(cpu);
-            const sent = () => [deps.printer.text, deps.speechOutput.onTransmit.mock.calls];
-            expect(sent()).toEqual([Printed, [[Spoken]]]);
+        ])(
+            "sends the host nothing it printed or spoke again when %s, and the machine still has it all",
+            (_, replay) => {
+                deps.model = findModel("B-DFS1.2");
+                deps.printer = new Printer();
+                deps.build = (model, { config }) => new model.Cpu(model, { ...nullIo({ model }), config });
+                const machine = make();
+                const cpu = machine.processor;
+                cpu.reset(true);
+                machine.setupRs423Handler();
+                loadBytes(cpu, ProgramAt, [...PrintAndSpeak, ...jmp(SpinAt)]);
+                cpu.pc = ProgramAt;
+                const history = new ReplayHistory(cpu);
+                const start = cpu.snapshotState();
+                history.taken(start, null);
+                const runProgram = () => {
+                    while (cpu.pc !== SpinAt) singleStep(cpu);
+                    singleStep(cpu);
+                };
+                runProgram();
+                const sent = () => [deps.printer.text, deps.speechOutput.onTransmit.mock.calls];
+                expect(sent()).toEqual([Printed, [[Spoken]]]);
 
-            replay({ cpu, history, start });
+                replay({ cpu, history, start });
 
-            expect(sent()).toEqual([Printed, [[Spoken]]]);
-        });
+                expect(sent()).toEqual([Printed, [[Spoken]]]);
+                expect(cpu.uservia.ifr & IntCa1).toBe(IntCa1);
+                expect(cpu.touchScreen.mode).toBe(1);
+                cpu.restoreState(start);
+                runProgram();
+                expect(sent()).toEqual([Printed + Printed, [[Spoken], [Spoken]]]);
+            },
+        );
     });
 });
