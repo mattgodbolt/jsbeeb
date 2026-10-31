@@ -169,7 +169,7 @@ class WFN {
         this.CWD = "";
 
         this.filenum = -1;
-        this.WildPattern = ".*"; // Default wildcard pattern (for regex not ATOM)
+        this.wildcard = "*";
 
         /**
          * @type {WFNFile[]}
@@ -225,13 +225,13 @@ class WFN {
             const lastSlashIndex = path.lastIndexOf("/");
             if (lastSlashIndex !== -1) {
                 this.globalData = new TextEncoder().encode(path.slice(0, lastSlashIndex + 1) + "\0");
-                this.WildPattern = WFN.wildcardToRegex(path.slice(lastSlashIndex + 1));
+                this.wildcard = path.slice(lastSlashIndex + 1);
             } else {
-                this.WildPattern = WFN.wildcardToRegex(path);
+                this.wildcard = path;
                 this.globalData = new TextEncoder().encode("\0");
             }
         } else {
-            this.WildPattern = ".*";
+            this.wildcard = "*";
         }
     }
 
@@ -389,8 +389,7 @@ class WFN {
             const fname = result.fno.fname;
 
             // Check to see if filename matches current wildcard
-            // const Match = wildcmp(WildPattern, longname);
-            const Match = fname.match(new RegExp(this.WildPattern));
+            const Match = fname.match(new RegExp(WFN.wildcardToRegex(this.wildcard)));
 
             if (Match) {
                 // if is a directory, str will be <fname>
@@ -610,7 +609,7 @@ class WFN {
             foldersSeen: [...this.foldersSeen],
             dfn: this.dfn,
             CWD: this.CWD,
-            WildPattern: this.WildPattern,
+            wildcard: this.wildcard,
         };
     }
 
@@ -625,7 +624,7 @@ class WFN {
         this.foldersSeen = [...state.foldersSeen];
         this.dfn = state.dfn;
         this.CWD = state.CWD;
-        this.WildPattern = state.WildPattern;
+        this.wildcard = state.wildcard;
     }
 
     fileOpen(mode) {

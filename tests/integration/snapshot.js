@@ -125,9 +125,15 @@ describe("save state round trip", () => {
         };
         const loaded = (machine) => Uint8Array.from(body, (_, i) => machine.readbyte(MmcLoadAddress + i));
         const original = await atomWithCard();
-        const halfway = original.addBreakpoint("write", MmcLoadAddress + MmcFileBytes / 2, {}, () => {});
+        let reachedHalfway = false;
+        const halfway = original.addBreakpoint("write", MmcLoadAddress + MmcFileBytes / 2, {}, () => {
+            reachedHalfway = true;
+        });
         await original.type('*LOAD "DATA"');
+        await original.runFor(OneEmulatedSecond);
         halfway.remove();
+        expect(reachedHalfway).toBe(true);
+        expect(loaded(original)).not.toEqual(body);
         const snapshot = snapshotFromJSON(snapshotToJSON(createSnapshot(original.processor, original.model)));
 
         const restored = await atomWithCard();

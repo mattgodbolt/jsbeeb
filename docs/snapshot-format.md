@@ -250,7 +250,7 @@ Present only on the Atom: the AtoMMC2 interface's registers and the state of its
 | `foldersSeen` | string[]   | Subdirectories the listing has already returned                             |
 | `dfn`         | number     | Index into the card's files of the listing's next entry                     |
 | `CWD`         | string     | Current directory                                                           |
-| `WildPattern` | string     | The listing's wildcard, as a regular expression                             |
+| `wildcard`    | string     | The listing's wildcard as the Atom gave it, with `*` and `?`                |
 
 An open handle's `file` is the file's index on the card and `pos` its position in it. A handle whose index the card does not have restores closed.
 
