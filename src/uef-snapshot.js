@@ -334,7 +334,7 @@ export function parseUefSnapshot(buffer) {
             for (let i = 0; i < 16; i++) ulaPalette[i] = d[19 + i];
         }
     }
-    const video = buildVideoState(ulaControl, ulaPalette, crtcRegs);
+    const video = buildVideoState(ulaControl, ulaPalette, crtcRegs, sysvia.IC32);
 
     // ── Sound (chunk 0x046B) ─────────────────────────────────────────────
     const soundData = chunks.has(ChunkId.Sound) ? chunks.get(ChunkId.Sound)[0] : null;

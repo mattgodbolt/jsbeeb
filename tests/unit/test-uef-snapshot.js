@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { isUefSnapshot, parseUefSnapshot } from "../../src/uef-snapshot.js";
 import { RomBankBytes } from "../../src/6502.js";
+import { HwScrollSubtract } from "../../src/video.js";
 
 const UefStateVersion = 15;
 
@@ -288,6 +289,11 @@ describe("parseUefSnapshot", () => {
         ],
     ])("%s", (_, opts, pick, expected) => {
         expect(pick(parseUefSnapshot(makeUefSnapshot(opts)))).toEqual(expected);
+    });
+
+    it.each([...HwScrollSubtract.entries()])("wraps the screen by IC32's screen size %i", (size, screenSubtract) => {
+        const { state } = parseUefSnapshot(makeUefSnapshot({ ic32: (size << 4) | 0x8f }));
+        expect(state.video.screenSubtract).toBe(screenSubtract);
     });
 
     it("ignores a final chunk that runs past the end of the file", () => {
