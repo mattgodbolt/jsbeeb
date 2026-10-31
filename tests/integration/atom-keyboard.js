@@ -46,6 +46,42 @@ describe("Atom keyboard", () => {
         expect(output).toContain('"a@[\\]^`{|}~>');
     });
 
+    it("moves the cursor with the host's arrows, keeping them out of the line", async () => {
+        await bootAtom();
+        const tap = async (code) => {
+            machine.keyDown(code);
+            await machine.runFor(100000);
+            machine.keyUp(code);
+            await machine.runFor(200000);
+        };
+        const cursor = () => ({
+            column: machine.readbyte(0xe0),
+            line: machine.readbyte(0xde) | (machine.readbyte(0xdf) << 8),
+        });
+        for (const code of [keyCodes.P, keyCodes.PERIOD, keyCodes.K1, keyCodes.K2]) await tap(code);
+
+        const moves = [];
+        for (const arrow of ["LEFT", "RIGHT", "UP", "DOWN"]) {
+            const before = cursor();
+            await tap(keyCodes[arrow]);
+            const after = cursor();
+            moves.push([arrow, after.column - before.column, after.line - before.line]);
+        }
+        expect(moves).toEqual([
+            ["LEFT", -1, 0],
+            ["RIGHT", 1, 0],
+            ["UP", 0, -32],
+            ["DOWN", 0, 32],
+        ]);
+
+        await tap(keyCodes.K3);
+        await tap(keyCodes.ENTER);
+        await machine.runUntilInput(10);
+        const output = machine.drainText();
+        expect(output).toContain("123");
+        expect(output).not.toContain("ERROR");
+    });
+
     describe("in the natural layout", () => {
         // What `Keyboard` passes the PPIA for a printable key: the character, and the host's shift.
         async function press(char, hostShift) {
