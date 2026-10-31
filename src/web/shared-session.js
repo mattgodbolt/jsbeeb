@@ -166,9 +166,9 @@ export function sessionInput(sysvia, send, { allowBreak }) {
     };
 }
 
-// Each machine's ADC and fire buttons read its own browser's gamepad, mouse and
-// microphone, which no other machine has, and the OS converts continuously into RAM;
-// so in a session every channel reads the centre and the fire buttons read released.
+// Each machine's ADC reads its own browser's gamepad, mouse and microphone, which
+// no other machine has, and the OS converts continuously into RAM; so in a session
+// every channel reads the centre. The fire buttons are local the same way.
 function holdLocalInputs(processor, held) {
     processor.adconverter.setFixedValue(held ? AdcCentreValue : null);
     processor.sysvia.holdFireButtons(held);

@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 
 import { GamePad } from "../../src/web/gamepads.js";
 import { BBC } from "../../src/keymap.js";
@@ -54,6 +54,26 @@ describe("GamePad", function () {
             const gamepad = bbcGamepad();
 
             expect(gamepad.remap("WIBBLE", "COPY")).toMatch(/unknown gamepad control/);
+        });
+    });
+
+    describe("fire buttons", () => {
+        const pad = (pressed) => ({
+            buttons: Array.from({ length: 16 }, (_, i) => ({ pressed: !!pressed[i] })),
+            axes: [0, 0, 0, 0],
+        });
+
+        it.each([
+            ["no gamepads", [null, null], [false, false]],
+            ["FIRE1 on the only gamepad", [{ 10: true }], [true, false]],
+            ["FIRE2 on the only gamepad", [{ 11: true }], [false, true]],
+            ["FIRE1 on the second gamepad", [{}, { 10: true }], [false, true]],
+            ["FIRE2 on the first of two gamepads", [{ 11: true }, {}], [false, true]],
+        ])("latches %s into the System VIA", (_, pads, expected) => {
+            const sysvia = { setGamepadFire: vi.fn() };
+            const polled = pads.map((pressed) => pressed && pad(pressed));
+            bbcGamepad().update({ keyboardInterface: {}, sysvia, config: { getGamepads: () => polled } });
+            expect(sysvia.setGamepadFire).toHaveBeenCalledWith(...expected);
         });
     });
 });

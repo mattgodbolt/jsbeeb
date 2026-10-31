@@ -105,7 +105,8 @@ Ranked by how much they would bite.
 2. **Some inputs are pulled, not pushed.** The ADC asks its source for a value when a conversion finishes
    (`Adc.onComplete`), so the gamepad, mouse-as-joystick and microphone sources are read mid-emulation, and the
    OS converts continuously into RAM whether a program reads them or not. The system VIA's fire buttons are
-   latched once a frame from the page's gamepad poll (`GamePad.update`) and by the mouse-as-joystick. These must
+   latched from the page's once-a-frame gamepad poll (`GamePad.update`) and from the mouse-as-joystick's
+   button events. These must
    change so the machine only ever sees values that came through the session. That refactor is after v0, which
    holds every ADC channel at its centre and the fire buttons released in a session.
 3. **Snapshots are not complete enough for a joiner.** The native snapshot leaves out:

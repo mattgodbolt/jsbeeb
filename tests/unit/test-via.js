@@ -4,8 +4,6 @@ import { Scheduler } from "../../src/scheduler.js";
 import { BBC, keyCodes } from "../../src/keymap.js";
 import { expectSnapshotRoundTrips } from "../helpers/snapshot-round-trip.js";
 import { ViaRegister } from "./helpers.js";
-import { GamePad } from "../../src/web/gamepads.js";
-import { findModel } from "../../src/models.js";
 
 const { ORB, ORA, DDRB, DDRA, T1CL, T1CH, T2CL, T2CH, SR, ACR, PCR, IFR, IER, ORAnh } = ViaRegister;
 const AcrT1Continuous = 0x40;
@@ -438,30 +436,21 @@ describe("Via CA2 write handshake", () => {
     });
 });
 
-function makeMockPad(pressedButtons) {
-    const buttons = Array.from({ length: 16 }, (_, i) => ({ pressed: !!pressedButtons[i] }));
-    return { buttons, axes: [0, 0, 0, 0] };
-}
-
 describe("SysVia fire buttons", () => {
     const FireButtonPins = 0x30;
 
     it.each([
-        ["no gamepads", [null, null], false, false, 0x30],
-        ["FIRE1 on the only gamepad", [{ 10: true }], false, false, 0x20],
-        ["FIRE2 on the only gamepad", [{ 11: true }], false, false, 0x10],
-        ["FIRE1 on the second gamepad", [{}, { 10: true }], false, false, 0x10],
-        ["FIRE2 on the first of two gamepads", [{ 11: true }, {}], false, false, 0x10],
-        ["the mouse's button with an idle gamepad", [{}], true, false, 0x20],
-        ["everything pressed, held by a session", [{ 10: true, 11: true }], true, true, 0x30],
-    ])("reads %s as the last poll left them", (_, pads, mouseButton, held, expected) => {
+        ["nothing pressed", [false, false], false, [], 0x30],
+        ["the gamepad's FIRE1", [true, false], false, [], 0x20],
+        ["the gamepad's FIRE2", [false, true], false, [], 0x10],
+        ["the mouse's button", [false, false], true, [], 0x20],
+        ["everything, held by a session", [true, true], true, [true], 0x30],
+        ["everything, after a session lets go", [true, true], true, [true, false], 0x00],
+    ])("reads %s from the latched state", (_, [button1, button2], mouseButton, holds, expected) => {
         const via = makeSysVia(makeFakeCpu(), new Scheduler());
-        let polled = pads.map((pad) => pad && makeMockPad(pad));
-        const processor = { keyboardInterface: via, sysvia: via, config: { getGamepads: () => polled } };
-        new GamePad(findModel("B-DFS1.2")).update(processor);
-        polled = [];
+        via.setGamepadFire(button1, button2);
         if (mouseButton) via.setJoystickButton(0, true);
-        via.holdFireButtons(held);
+        for (const held of holds) via.holdFireButtons(held);
         expect(via.read(ORB) & FireButtonPins).toBe(expected);
     });
 });
