@@ -17,8 +17,6 @@ const defaultCmos = Object.freeze([
 // the ROM jsbeeb ships has that byte patched to &20 (#362), so every year it shows is 20yy.
 const MosCentury = 2000;
 
-const CmosAddressMask = 0x3f;
-
 function toBcd(value) {
     return parseInt(value.toString(10), 16);
 }
@@ -147,7 +145,7 @@ export class Cmos {
     }
 
     restoreState({ enabled, isRead, addressSelect, dataSelect, cmosAddr }) {
-        Object.assign(this, { enabled, isRead, addressSelect, dataSelect, cmosAddr: cmosAddr & CmosAddressMask });
+        Object.assign(this, { enabled, isRead, addressSelect, dataSelect, cmosAddr });
     }
 
     /**
@@ -301,7 +299,7 @@ export class Cmos {
         const { dataSelect: oldDataSelect, addressSelect: oldAddressSelect } = this;
         this.followLines(portBpins, IC32);
         if (!this.enabled) return;
-        if (oldAddressSelect && !this.addressSelect) this.cmosAddr = portApins & CmosAddressMask;
+        if (oldAddressSelect && !this.addressSelect) this.cmosAddr = portApins & 0x3f;
         if (oldDataSelect && !this.dataSelect && !this.addressSelect && !this.isRead) {
             if (this.cmosAddr > 0xb) {
                 this.refuseReplays();
