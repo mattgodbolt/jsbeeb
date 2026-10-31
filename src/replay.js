@@ -1,7 +1,8 @@
 // Stepping the machine backwards, or searching back through what it did: it is put back to a snapshot from before
 // where it is to go, and run forward to there exactly. Snapshots leave out what the host gives the machine (keys,
-// FIRE buttons, BREAK, a debugger's edits) and what the machine reads from the host as it runs (the analogue channels, the clock, the touchscreen),
-// so an InputLog records both as they happen, and a replay puts each back where it went in or was read.
+// FIRE buttons, BREAK, a debugger's edits) and what the machine reads from the host as it runs (the analogue
+// channels, the clock, the touchscreen), so an InputLog records both as they happen, and a replay puts each back
+// where it went in or was read.
 
 import { applyInput, cycleCount, stateHash } from "./lockstep.js";
 import { tickCycles } from "./emulation-tick.js";
@@ -23,6 +24,7 @@ const TooFarBack = "That is further back than the machine keeps its history.";
 const NotBehind = "That is not before where the machine is now.";
 const IsRom = "That is ROM, which a write leaves as it is.";
 const NotRepeatedHere = "The search could not repeat the machine's run since its newest snapshot exactly.";
+const CannotSearchPast = "The search cannot go back past";
 const MovedOn = "The machine moved on before the search back finished.";
 const Unrepeated = "a stretch of the run it could not repeat exactly";
 const MidInstruction = "an input that came part way through an instruction, as a paste's or an autotype's keys do";
@@ -491,8 +493,10 @@ export class ReplayHistory extends EventTarget {
         return { state: cpu.snapshotState(), host: hostInputs(cpu), picture: cpu.video.fb32.slice(), memStatOffset };
     }
 
-    /** Puts the machine, the host's inputs and the picture back as `_original` kept them. */
-    // A snapshot leaves out the half of the paging tables the last instruction's fetch chose, so it is put back too.
+    /**
+     * Puts the machine, the host's inputs and the picture back as `_original` kept them, with the half of the paging
+     * tables the last instruction's fetch chose, which a snapshot leaves out.
+     */
     _putBack({ state, host, picture, memStatOffset }) {
         const { cpu } = this;
         this.log.withoutRecording(() => {
@@ -572,7 +576,11 @@ export class ReplayHistory extends EventTarget {
                     continue;
                 }
                 const { found, reached, stoppedBy } = value;
-                if (stoppedBy === Unrepeated && reached === now) return { refusal: NotRepeatedHere };
+                if (stoppedBy && reached === now) {
+                    return {
+                        refusal: stoppedBy === Unrepeated ? NotRepeatedHere : `${CannotSearchPast} ${stoppedBy}.`,
+                    };
+                }
                 return { write: found, searched: now - reached, stoppedBy };
             }
         } finally {

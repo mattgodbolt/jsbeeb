@@ -38,6 +38,7 @@ const JmpToItself = [0x4c, ShadowIdleAt & 0xff, ShadowIdleAt >>> 8];
 const TestRefusal = "a refusal the test made";
 const UserViaDdrb = 0xfe62;
 const RomAddress = 0xc000;
+const OtherPagingHalf = 256;
 
 // A tape that plays forever, giving the PPIA nothing.
 const SilentTape = { poll: () => 1000, rewind: () => {} };
@@ -128,9 +129,12 @@ describe("Finding the last write to a byte", () => {
         cpu.a = WrittenValue;
         const history = new ReplayHistory(cpu);
         run(cpu, history);
+        // As an instruction fetched where the Master's ACCCON E bit maps shadow RAM would leave it.
+        cpu.memStatOffset = OtherPagingHalf;
         const before = snapshotToJSON(cpu.snapshotState());
         const { write, searched, stoppedBy } = finished(history.lastWrite(Written));
         expect(snapshotToJSON(cpu.snapshotState())).toEqual(before);
+        expect(cpu.memStatOffset).toBe(OtherPagingHalf);
         expect(stoppedBy).toBe(expected.stoppedBy);
         if (expected.write === null) {
             expect(write).toBeNull();
@@ -172,6 +176,15 @@ describe("Finding the last write to a byte", () => {
 
     it.each([
         ["with no history to search", () => {}, (history) => history.lastWrite(Written), /no history to search/],
+        [
+            "past a refusal in the newest stretch",
+            (history) => {
+                takeAndRun(history);
+                history.log.refuse(TestRefusal);
+            },
+            (history) => history.lastWrite(Written),
+            /The search cannot go back past a refusal the test made/,
+        ],
         ["of ROM", takeAndRun, (history) => history.lastWrite(RomAddress), /That is ROM/],
         [
             "when the run since the newest snapshot cannot be repeated",

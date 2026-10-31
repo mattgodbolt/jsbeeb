@@ -1348,7 +1348,7 @@ export class Debugger {
         try {
             while (!step.done) {
                 // A stretch's replay painted frames from the past.
-                this.debug(this.cpu.pc);
+                this.cpu.video.debugPaint();
                 await new Promise((resolve) => setTimeout(resolve, 0));
                 if (this._searching !== searching) return null;
                 step = searching.next();
@@ -1357,7 +1357,7 @@ export class Debugger {
             if (notice) dismissToast(notice);
         }
         this._searching = null;
-        this.debug(this.cpu.pc);
+        this.cpu.video.debugPaint();
         const found = step.value;
         const { write } = found;
         const action =
@@ -1392,7 +1392,8 @@ export class Debugger {
             pc === null
                 ? "an edit in the memory panel"
                 : `the instruction at $${hexword(pc)}${name ? ` (${name})` : ""}`;
-        return `${where} was last written $${hexbyte(value)} by ${by}, at cycle ${cycle}, ${ago(cycleCount(cpu) - cycle)} ago.`;
+        const when = `at cycle ${cycle}, ${ago(cycleCount(cpu) - cycle)} ago`;
+        return `${where} was last written $${hexbyte(value)} by ${by}, ${when}.`;
     }
 
     stepOver() {

@@ -44,6 +44,7 @@ const PanelElements = [
 ];
 
 const MachineSecond = 2000000;
+const ChecksPastAQuickRun = 100000;
 const WatchRowSelector = "#watch-panel .watch-list tr:not(.watch-formats):not(.watch-breaks)";
 
 /** Runs and stops as the emulation loop does, a tick at a time; it starts in the debugger. */
@@ -1474,6 +1475,26 @@ describe("Debugger", () => {
                     );
                     stepBackButton().click();
                     expect(pc()).toBe("2002");
+                });
+
+                it("leaves the stopped machine's picture on the screen after a search through several stretches", async () => {
+                    const painted = [];
+                    video.debugPaint.mockImplementation(() => painted.push(video.fb32.slice()));
+                    const picture = video.fb32.slice();
+                    await dbgr.whoWrote(0x70);
+                    expect(painted.length).toBeGreaterThan(1);
+                    expect(painted.at(-1)).toEqual(picture);
+                });
+
+                it("ends a search when the machine is run on, leaving the run to its stop", async () => {
+                    let checks = 0;
+                    const searching = dbgr.whoWrote(0x70);
+                    dbgr.runUntil(() => ++checks > ChecksPastAQuickRun);
+                    expect(loop.isRunning()).toBe(true);
+                    expect((await searching).refusal).toMatch(/moved on/);
+                    loop.tick(MachineSecond);
+                    expect(loop.mode).toBe(RunMode.debugging);
+                    expect(checks).toBe(ChecksPastAQuickRun + 1);
                 });
 
                 it("ends a search still going when another starts", async () => {
