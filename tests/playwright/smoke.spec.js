@@ -1002,7 +1002,8 @@ test.describe("on a phone", () => {
         await page.locator("#touch-keyboard .tk-menu").tap();
         await expect(navbar).toBeVisible();
         expect((await keyboard.boundingBox()).y).toBeGreaterThanOrEqual((await navbar.boundingBox()).height);
-        await page.locator("#touch-keyboard .tk-menu").tap();
+        await turn(412, 915);
+        await turn(844, 390);
         await expect(navbar).toBeHidden();
 
         await turn(412, 915);
@@ -1059,12 +1060,23 @@ test.describe("on a phone", () => {
         await page.locator("#touch-keyboard .tk-key", { hasText: /^more$/ }).tap();
         await page.locator("#touch-keyboard .tk-key:visible", { hasText: /^pad$/ }).tap();
         at = await onDpad();
+        const tapWhileHolding = async (selector) => {
+            await touch("touchStart", [at(0.1, 0.5)]);
+            await expect.poll(held).toEqual(["Z"]);
+            const box = await page.locator(`#touch-keyboard ${selector}`).boundingBox();
+            const other = { x: box.x + box.width / 2, y: box.y + box.height / 2, id: 2 };
+            await touch("touchStart", [at(0.1, 0.5), other]);
+            await touch("touchEnd", [at(0.1, 0.5)]);
+        };
         await touch("touchStart", [at(0.1, 0.5)]);
         await expect.poll(held).toEqual(["Z"]);
-        const abc = await page.locator("#touch-keyboard .tk-key:visible", { hasText: /^ABC$/ }).boundingBox();
-        const abcTouch = { x: abc.x + abc.width / 2, y: abc.y + abc.height / 2, id: 2 };
-        await touch("touchStart", [at(0.1, 0.5), abcTouch]);
-        await touch("touchEnd", [at(0.1, 0.5)]);
+        // A second finger's tap is no click to Chrome, so the button is clicked as a mouse would.
+        await page.locator("#touch-keyboard .tk-preset").dispatchEvent("click");
+        await expect(page.locator("#touch-keyboard .tk-preset")).toHaveText("⇄ ZXMKL");
+        await touch("touchMove", [at(0.1, 0.1)]);
+        await expect.poll(held).toEqual([]);
+        await touch("touchEnd", []);
+        await tapWhileHolding(".tk-key.layer.portrait");
         await touch("touchMove", [at(0.1, 0.1)]);
         await expect.poll(held).toEqual([]);
         await touch("touchEnd", []);
@@ -1158,6 +1170,16 @@ test.describe("on a phone", () => {
         await beeb.expectScreenText(">");
         await expect(page.locator("#touch-keyboard, #touch-keyboard-toggle")).toHaveCount(0);
     });
+});
+
+test("a narrow window without a touch screen gets the on-screen keyboard but no hint to turn it for the game pad", async ({
+    beeb,
+    page,
+}) => {
+    await page.setViewportSize({ width: 600, height: 800 });
+    await beeb.open();
+    await expect(page.locator('#touch-keyboard .tk-layer[data-name="main"]')).toBeVisible();
+    await expect(page.locator("#touch-keyboard .tk-rotate-hint")).toBeHidden();
 });
 
 test("each of help's tabs fits a desktop or tablet window whole and a phone's width, and opens on the debugging tab while paused or debugging", async ({

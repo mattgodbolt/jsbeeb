@@ -136,7 +136,7 @@ export const PadPresets = {
             often("RETURN", null, "buttons"),
         ],
     },
-    // Superior's Exile (1988), from the action table in Level 7's disassembly.
+    // Superior's Exile (1988), by how often each is used; the keys are from the action table in Level 7's disassembly.
     exile: {
         title: "Exile",
         actions: [
