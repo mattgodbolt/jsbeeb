@@ -392,4 +392,33 @@ describe("AtomMMC2 file handles", () => {
         withoutTheFile.restoreState(snapshot);
         expect(readBytes(withoutTheFile, a, 1).status).toBe(StatusComplete | FrInvalidObject);
     });
+
+    it("holds in a snapshot only the bytes the Atom wrote, and restores the card as it found it", () => {
+        const CmdFileDelete = 0x14;
+        const card = () => [
+            new WFNFile("/KEPT", Uint8Array.of(1, 1)),
+            new WFNFile("/GONE", Uint8Array.of(2, 2)),
+            new WFNFile("/EDITED", Uint8Array.of(3, 3)),
+        ];
+        const cardOf = (mmc) => mmc.GetMMCData().map(({ path, data }) => ({ path, data: [...data] }));
+        const mmc = makeMmc(card());
+        writeBytes(mmc, open(mmc, "EDITED"), [4]);
+        sendBytes(mmc, [...new TextEncoder().encode("GONE"), 0]);
+        command(mmc, CmdFileDelete);
+        writeBytes(mmc, open(mmc, "NEW", CmdFileOpenWrite), [5]);
+        const snapshot = mmc.snapshotState();
+        const changed = cardOf(mmc);
+
+        expect(snapshot.files.card).toEqual([
+            { loaded: 0 },
+            { path: "§/GONE", loaded: 1 },
+            { path: "/EDITED", data: Uint8Array.of(4, 3) },
+            { path: "/NEW", data: Uint8Array.of(5) },
+        ]);
+        writeBytes(mmc, open(mmc, "KEPT"), [6]);
+        mmc.restoreState(snapshot);
+        const restored = makeMmc(card());
+        restored.restoreState(snapshot);
+        expect([cardOf(mmc), cardOf(restored)]).toEqual([changed, changed]);
+    });
 });

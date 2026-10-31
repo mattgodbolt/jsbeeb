@@ -228,7 +228,7 @@ Older snapshots also carry `latchb`, which was always 0 since port B is input on
 
 ### Atom MMC (`state.atommc`)
 
-Present only on the Atom: the AtoMMC2 interface's registers and the state of its file system. The card's files are media and are not saved; the card is whatever the page was given with `?mmc=`. Atom snapshots written before it was saved lack it, and absent means the interface keeps its current state, so it needed no format version bump.
+Present only on the Atom: the AtoMMC2 interface's registers and the state of its file system, the card's files with it. Atom snapshots written before it was saved lack it, and absent means the interface keeps its current state, so it needed no format version bump.
 
 | Field            | Type   | Description                                                               |
 | ---------------- | ------ | ------------------------------------------------------------------------- |
@@ -245,6 +245,7 @@ Present only on the Atom: the AtoMMC2 interface's registers and the state of its
 
 | Field         | Type       | Description                                                                 |
 | ------------- | ---------- | --------------------------------------------------------------------------- |
+| `card`        | object[]   | The card's files, in order (see below)                                      |
 | `globalData`  | Uint8Array | Transfer buffer: bytes the Atom has sent, or bytes waiting for it to read   |
 | `globalIndex` | number     | Position in `globalData` of the next byte sent or read                      |
 | `fildata`     | object[]   | The four file handles, each `null` when closed or `{ file, pos }` when open |
@@ -254,7 +255,9 @@ Present only on the Atom: the AtoMMC2 interface's registers and the state of its
 | `CWD`         | string     | Current directory                                                           |
 | `wildcard`    | string     | The listing's wildcard as the Atom gave it, with `*` and `?`                |
 
-An open handle's `file` is the file's index on the card and `pos` its position in it. A handle whose index the card does not have restores closed.
+An open handle's `file` is the file's index in `card` and `pos` its position in it. A handle whose index the card does not have restores closed.
+
+Each entry of `card` is a file as the Atom has left it. A file the card was given with (by `?mmc=`) that the Atom has not written is `{ loaded }`, its index among the files the card was loaded with, so a snapshot holds only the bytes the Atom wrote; one it has deleted adds its `path`, which then starts with `§`. Any other file is `{ path, data }`, `data` a Uint8Array. Restoring puts the card back as it was, undoing writes made since, unless the card lacks a file a `loaded` index names, when it keeps its own files. The card is never stored anywhere, so a restore writes nothing; a card is the files the page was given until it is reloaded. Snapshots written before the card was saved lack `card`, and then the card keeps its current files.
 
 ### Video (`state.video`)
 

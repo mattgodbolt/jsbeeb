@@ -35,8 +35,9 @@ const AtmHeaderBytes = AtmNameBytes + 6;
 const withVideo = (model, options) =>
     new TestMachine(model, { video: new Video(false, FbWidth * FbHeight, () => {}, options) });
 const OneEmulatedSecond = 2 * 1000 * 1000;
-// A disc's tracks and original image are shared by reference on purpose, and nothing writes into them.
-const SharedByReference = new Set(["tracks", "_originalImageData"]);
+// A disc's tracks and original image, and an MMC card's files, are shared by reference on purpose, and nothing
+// writes into them.
+const SharedByReference = new Set(["tracks", "_originalImageData", "card"]);
 
 function* ownedArrays(value) {
     if (ArrayBuffer.isView(value)) {
