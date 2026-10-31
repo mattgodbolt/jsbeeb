@@ -1,5 +1,23 @@
 # Changelog
 
+## [2.17.0](https://github.com/mattgodbolt/jsbeeb/compare/v2.16.1...v2.17.0) (2026-10-31)
+
+
+### Features
+
+* step back one instruction, or back over a call, in the debugger ([#1762](https://github.com/mattgodbolt/jsbeeb/issues/1762)) ([f4dc1f4](https://github.com/mattgodbolt/jsbeeb/commit/f4dc1f4aa83f5073ebc40bec2fc131579cfa05e5))
+
+
+### Bug Fixes
+
+* an Atom or Master restored from its own snapshot runs on as it did ([#1758](https://github.com/mattgodbolt/jsbeeb/issues/1758)) ([ad6ff12](https://github.com/mattgodbolt/jsbeeb/commit/ad6ff12730f74301920dccef19974faa37cbf188))
+* hold the WD1770's mark detector in a BitWindow64, not a BigInt ([#1754](https://github.com/mattgodbolt/jsbeeb/issues/1754)) ([aa790a2](https://github.com/mattgodbolt/jsbeeb/commit/aa790a2a975926bf782a6bc816eec4930147f595))
+* imported B-em and UEF snapshots keep the hardware screen wrap ([#1775](https://github.com/mattgodbolt/jsbeeb/issues/1775)) ([5a025ba](https://github.com/mattgodbolt/jsbeeb/commit/5a025ba0369ffd21ada65989c35ca68abb96c6e0))
+* replays send the host nothing the printer or speech already had ([#1767](https://github.com/mattgodbolt/jsbeeb/issues/1767)) ([0dc15ec](https://github.com/mattgodbolt/jsbeeb/commit/0dc15ec6181307e68ed1ad5346aeaf3babb8f85c))
+* save the Atom's MMC interface in snapshots ([#1760](https://github.com/mattgodbolt/jsbeeb/issues/1760)) ([d3c3ac7](https://github.com/mattgodbolt/jsbeeb/commit/d3c3ac7185f781be8ce13da80d78dfbb76b35906))
+* save the Master's CMOS bus in snapshots, and make no write as one restores ([#1770](https://github.com/mattgodbolt/jsbeeb/issues/1770)) ([d33cc24](https://github.com/mattgodbolt/jsbeeb/commit/d33cc245d05ba66a124001ef0ac3c1ab14ff39fe))
+* stop iOS selecting the page when an on-screen key is held ([#1751](https://github.com/mattgodbolt/jsbeeb/issues/1751)) ([32f6235](https://github.com/mattgodbolt/jsbeeb/commit/32f623567b89790886d8692e837bb9f8d7dfcd5d))
+
 ## [2.16.1](https://github.com/mattgodbolt/jsbeeb/compare/v2.16.0...v2.16.1) (2026-10-31)
 
 
