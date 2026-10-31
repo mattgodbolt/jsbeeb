@@ -228,6 +228,34 @@ describe("The Atom's key map", function () {
         expect(keyMap[false][keyCodes.CAPSLOCK]).toEqual(ATOM.CTRL);
     });
 
+    it("names no key, and binds nothing, where the Atom's matrix has no key", function () {
+        const NoKey = new Set(["0,0", "1,0", "7,1", "8,1", "9,1"]);
+        const lands = ([col, row]) => NoKey.has(`${col},${row}`);
+        expect(Object.entries(ATOM).filter(([, key]) => lands(key))).toEqual([]);
+        for (const layout of ["physical", "gaming", "natural"]) {
+            for (const shiftDown of [false, true]) {
+                const keyMap = getKeyMapAtom(layout)[shiftDown];
+                expect(
+                    Object.keys(keyMap).filter((code) => lands(keyMap[code])),
+                    layout,
+                ).toEqual([]);
+            }
+        }
+    });
+
+    it.each([
+        ["LEFT", [...ATOM.LEFT_RIGHT, true]],
+        ["RIGHT", [...ATOM.LEFT_RIGHT, false]],
+        ["UP", [...ATOM.UP_DOWN, false]],
+        ["DOWN", [...ATOM.UP_DOWN, true]],
+    ])("puts the host's %s on a cursor key, with SHIFT for the direction, in every layout", function (name, key) {
+        for (const layout of ["physical", "gaming", "natural"]) {
+            for (const shiftDown of [false, true]) {
+                expect(getKeyMapAtom(layout)[shiftDown][keyCodes[name]]).toEqual(key);
+            }
+        }
+    });
+
     it.each([
         ["physical", [keyCodes.BACKSPACE, keyCodes.DELETE]],
         ["natural", [keyCodes.BACKSPACE, keyCodes.DELETE]],
