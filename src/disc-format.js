@@ -2,53 +2,18 @@
 // https://github.com/scarybeasts/beebjit
 
 export class IbmDiscFormat {
-    static get bytesPerTrack() {
-        return 3125;
-    }
-
-    static get tracksPerDisc() {
-        return 84;
-    }
-
-    static get markClockPattern() {
-        return 0xc7;
-    }
-
-    static get idMarkDataPattern() {
-        return 0xfe;
-    }
-
-    static get dataMarkDataPattern() {
-        return 0xfb;
-    }
-
-    static get deletedDataMarkDataPattern() {
-        return 0xf8;
-    }
-
-    static get mfmA1Sync() {
-        return 0x4489;
-    }
-
-    static get mfmC2Sync() {
-        return 0x5224;
-    }
-
-    static get stdSync00s() {
-        return 6;
-    }
-
-    static get stdGap1FFs() {
-        return 16;
-    }
-
-    static get stdGap2FFs() {
-        return 11;
-    }
-
-    static get std10SectorGap3FFs() {
-        return 21;
-    }
+    static bytesPerTrack = 3125;
+    static tracksPerDisc = 84;
+    static markClockPattern = 0xc7;
+    static idMarkDataPattern = 0xfe;
+    static dataMarkDataPattern = 0xfb;
+    static deletedDataMarkDataPattern = 0xf8;
+    static mfmA1Sync = 0x4489;
+    static mfmC2Sync = 0x5224;
+    static stdSync00s = 6;
+    static stdGap1FFs = 16;
+    static stdGap2FFs = 11;
+    static std10SectorGap3FFs = 21;
 
     /**
      * @param {boolean} isMfm
