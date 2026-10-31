@@ -13,6 +13,8 @@ export class TouchScreen {
         this.pollCycles = cyclesPerSecond / PollHz;
         this.outBuffer = new Fifo(16);
         this.pollTask = this.scheduler.newTask(() => this.poll());
+        /** @type {import("./replay.js").InputLog | null} */
+        this.inputLog = null;
         this.reset();
     }
 
@@ -48,12 +50,13 @@ export class TouchScreen {
             marginX = 0.13;
         const scaleY = 100,
             marginY = 0.03;
-        const scaledX = doScale(this.mouse.x, scaleX, marginX);
-        const scaledY = doScale(1 - this.mouse.y, scaleY, marginY);
+        const mouse = this.inputLog ? this.inputLog.sample("touch", this.mouse) : this.mouse;
+        const scaledX = doScale(mouse.x, scaleX, marginX);
+        const scaledY = doScale(1 - mouse.y, scaleY, marginY);
         const toSend = [0x4f, 0x4f, 0x4f, 0x4f];
         const x = Math.min(255, Math.max(0, scaledX)) | 0;
         const y = Math.min(255, Math.max(0, scaledY)) | 0;
-        if (this.mouse.button) {
+        if (mouse.button) {
             toSend[0] = 0x40 | ((x & 0xf0) >>> 4);
             toSend[1] = 0x40 | (x & 0x0f);
             toSend[2] = 0x40 | ((y & 0xf0) >>> 4);

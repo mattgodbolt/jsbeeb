@@ -17,17 +17,23 @@ export class RewindUI {
      * @param {object} options.processor - Cpu6502 instance
      * @param {object} options.video - Video instance
      * @param {object} options.loop - the emulation loop: says when to capture, and is held while the panel is open
+     * @param {import("../replay.js").ReplayHistory} options.history - what the debugger steps back through, told of
+     * every snapshot kept and when they are all forgotten
      */
-    constructor({ processor, video, loop }) {
+    constructor({ processor, video, loop, history }) {
         this.rewindBuffer = new RewindBuffer(RewindBufferSnapshots);
         // The last few frames, newest last; the rewind history is copied from them.
         this.frames = new RewindBuffer(FrameSnapshots);
+        this.history = history;
         this.processor = processor;
         this.video = video;
         this.loop = loop;
         loop.addEventListener("frame-capture", () => this.captureFrame());
         loop.addEventListener("rewind-capture", () => this.capture());
-        loop.addEventListener("replacing-state", () => this.frames.clear());
+        loop.addEventListener("replacing-state", () => {
+            this.frames.clear();
+            this.history.restart();
+        });
 
         this.panel = document.getElementById("rewind-panel");
         this.filmstrip = document.getElementById("rewind-filmstrip");
@@ -49,11 +55,18 @@ export class RewindUI {
     }
 
     captureFrame() {
-        this.frames.push(this.processor.snapshotState({ into: this.frames.nextToReplace() }));
+        const replacing = this.frames.nextToReplace();
+        const snapshot = this.processor.snapshotState({ into: replacing });
+        this.frames.push(snapshot);
+        this.history.taken(snapshot, replacing);
     }
 
     capture() {
-        this.rewindBuffer.push(copySnapshot(this.frames.peek(), this.rewindBuffer.nextToReplace()));
+        const replacing = this.rewindBuffer.nextToReplace();
+        const snapshot = copySnapshot(this.frames.peek(), replacing);
+        this.rewindBuffer.push(snapshot);
+        this.history.taken(snapshot, replacing);
+        this.history.trim();
         this.updateButtonState();
     }
 
@@ -62,6 +75,7 @@ export class RewindUI {
         this.close();
         this.rewindBuffer.clear();
         this.frames.clear();
+        this.history.restart();
         this.updateButtonState();
     }
 

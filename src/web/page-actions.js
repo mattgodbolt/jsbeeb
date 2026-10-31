@@ -67,6 +67,7 @@ export class PageActions {
     }
 
     softReset() {
+        this.processor.inputLog?.record({ kind: "reset" });
         this.processor.reset(false);
     }
 

@@ -2,6 +2,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { RewindUI } from "../../src/web/rewind-ui.js";
+import { ReplayHistory } from "../../src/replay.js";
+import { fake6502 } from "../../src/fake6502.js";
 import { domFromIndexHtml, sentEvents, teardownDom } from "./helpers.js";
 
 const FakeContext = {
@@ -15,6 +17,7 @@ describe("RewindUI", () => {
     let processor;
     let resume;
     let loop;
+    let history;
 
     beforeEach(() => {
         domFromIndexHtml("rewind-open", "rewind-panel");
@@ -42,11 +45,12 @@ describe("RewindUI", () => {
         };
         resume = vi.fn();
         loop = Object.assign(new EventTarget(), { hold: vi.fn(() => resume), replacingState: vi.fn() });
+        history = new ReplayHistory(fake6502());
     });
 
     afterEach(teardownDom);
 
-    const make = () => new RewindUI({ processor, video, loop });
+    const make = () => new RewindUI({ processor, video, loop, history });
     const panel = () => document.getElementById("rewind-panel");
     const thumbs = () => [...document.querySelectorAll(".rewind-thumb")];
     const selectedIndex = () => Number(document.querySelector(".rewind-thumb.selected").dataset.index);
@@ -271,6 +275,15 @@ describe("RewindUI", () => {
             loop.dispatchEvent(new Event("replacing-state"));
             expect(ui.frames.length).toBe(0);
             expect(ui.rewindBuffer.length).toBe(2);
+        });
+
+        it("gives step back every snapshot in either ring, until the machine's state is replaced", () => {
+            const ui = make();
+            captured(31);
+            const held = new Set([...ui.frames.getAll(), ...ui.rewindBuffer.getAll()]);
+            expect(new Set(history.snapshots())).toEqual(held);
+            loop.dispatchEvent(new Event("replacing-state"));
+            expect(history.snapshots()).toEqual([]);
         });
     });
 });

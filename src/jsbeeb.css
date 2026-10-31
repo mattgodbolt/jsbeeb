@@ -91,6 +91,10 @@ body {
   padding: 0 5px;
 }
 
+#toolbar-panel .btn[aria-disabled="true"] {
+  opacity: var(--bs-btn-disabled-opacity);
+}
+
 /* Fitted to the toolbar's width instead of setting it. */
 #toolbar-panel .tight-loop {
   width: 0;

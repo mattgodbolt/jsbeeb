@@ -31,6 +31,8 @@ const TimeRegisters = Object.freeze({
     4: { limit: 24, get: (time) => time.getHours(), set: (time, value) => time.setHours(value) },
 });
 
+const WritableClockRegisters = new Set([0, 2, 4, 7, 8, 9]);
+
 function isBcdBelow(value, limit) {
     return value >> 4 < 10 && (value & 0x0f) < 10 && fromBcd(value) < limit;
 }
@@ -113,6 +115,8 @@ export class Cmos {
         // Likewise a seconds, minutes or hours byte that is not a time, keyed by register, while the clock runs on.
         this.heldTime = {};
         this.beforeSession = null;
+        /** @type {import("./replay.js").InputLog | null} */
+        this.inputLog = null;
 
         if (!this.store) {
             this.store = [...defaultCmos];
@@ -182,8 +186,14 @@ export class Cmos {
         this.beforeSession = null;
     }
 
+    // Whole seconds, all the clock keeps, so that a replay is handed the second each read saw.
+    clockMs() {
+        const ms = Math.floor(this.now() / 1000) * 1000;
+        return this.inputLog ? this.inputLog.sample("rtc", ms) : ms;
+    }
+
     bbcDateTime() {
-        const result = new Date(this.now() + this.timeOffset);
+        const result = new Date(this.clockMs() + this.timeOffset);
         result.setMilliseconds(0);
         return this.utc ? utcView(result) : result;
     }
@@ -199,8 +209,7 @@ export class Cmos {
     }
 
     setTimeFrom(bbcTime) {
-        const secondsNow = Math.floor(this.now() / 1000) * 1000;
-        this.timeOffset = bbcTime.getTime() - secondsNow;
+        this.timeOffset = bbcTime.getTime() - this.clockMs();
     }
 
     writeTime(register, value) {
@@ -275,6 +284,9 @@ export class Cmos {
         this.addressSelect = !!(portBpins & 0x80);
         if (oldAddressSelect && !this.addressSelect) this.cmosAddr = portApins & 0x3f;
         if (oldDataSelect && !this.dataSelect && !this.addressSelect && !this.isRead) {
+            // Snapshots leave the CMOS out, so a replay from before this write would read what it wrote.
+            if (this.cmosAddr > 0xb || WritableClockRegisters.has(this.cmosAddr))
+                this.inputLog?.refuse("a write to the CMOS");
             if (this.cmosAddr > 0xb) {
                 this.store[this.cmosAddr] = portApins;
                 this.save();
