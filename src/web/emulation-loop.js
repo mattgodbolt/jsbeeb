@@ -307,7 +307,7 @@ export class EmulationLoop extends EventTarget {
                 cycles = (sinceLast * this.clocksPerSecond) / 1000;
                 cycles = Math.min(cycles, this.maxCyclesPerTick);
             } else {
-                cycles = this.clocksPerSecond / 50;
+                cycles = this.frameCycles;
             }
             cycles |= 0;
             try {
