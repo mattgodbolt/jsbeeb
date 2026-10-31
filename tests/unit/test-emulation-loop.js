@@ -409,9 +409,13 @@ describe("EmulationLoop", () => {
         expect(deps.audioHandler.unmute).toHaveBeenCalledTimes(1);
     });
 
-    it("tells the debugger when the machine's state is replaced", () => {
-        make().replacingState();
+    it("tells the debugger and its listeners when the machine's state is replaced", () => {
+        const loop = make();
+        const replacing = vi.fn();
+        loop.addEventListener("replacing-state", replacing);
+        loop.replacingState();
         expect(deps.dbgr.replacingState).toHaveBeenCalled();
+        expect(replacing).toHaveBeenCalled();
     });
 
     describe("being held", () => {

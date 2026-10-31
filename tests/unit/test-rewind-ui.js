@@ -264,5 +264,13 @@ describe("RewindUI", () => {
             expect(newest.ram).toBe(firstKept.ram);
             expect(newest.ram).not.toBe(ui.frames.peek().ram);
         });
+
+        it("forgets the frames, but not the rewind history, when the machine's state is replaced", () => {
+            const ui = make();
+            captured(2);
+            loop.dispatchEvent(new Event("replacing-state"));
+            expect(ui.frames.length).toBe(0);
+            expect(ui.rewindBuffer.length).toBe(2);
+        });
     });
 });

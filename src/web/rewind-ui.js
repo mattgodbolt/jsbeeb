@@ -27,6 +27,7 @@ export class RewindUI {
         this.loop = loop;
         loop.addEventListener("frame-capture", () => this.captureFrame());
         loop.addEventListener("rewind-capture", () => this.capture());
+        loop.addEventListener("replacing-state", () => this.frames.clear());
 
         this.panel = document.getElementById("rewind-panel");
         this.filmstrip = document.getElementById("rewind-filmstrip");
