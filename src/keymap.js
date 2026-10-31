@@ -691,8 +691,7 @@ export class ShiftOverride {
 
     setMapped(keys, mapping, val) {
         const [col, row, shiftOverride] = mapping;
-        // By value, since a shared session's peers hand mappings over as copies.
-        const id = `${col},${row},${shiftOverride}`;
+        const id = ShiftOverride.#heldId(mapping);
         this.held.delete(id);
         if (val) this.held.set(id, mapping);
         const held = [...this.held.values()];
@@ -714,13 +713,20 @@ export class ShiftOverride {
             physicalShiftDown: this.physicalShiftDown,
             shiftOverrideActive: this.forcedShift !== null,
             shiftOverrideDesiredShift: !!this.forcedShift,
+            heldMappings: [...this.held.values()].map((mapping) => [...mapping]),
         };
     }
 
-    restore({ physicalShiftDown, shiftOverrideActive, shiftOverrideDesiredShift }) {
+    restore({ physicalShiftDown, shiftOverrideActive, shiftOverrideDesiredShift, heldMappings }) {
         this.physicalShiftDown = physicalShiftDown;
         this.forcedShift = shiftOverrideActive ? shiftOverrideDesiredShift : null;
         this.held.clear();
+        for (const mapping of heldMappings ?? []) this.held.set(ShiftOverride.#heldId(mapping), mapping);
+    }
+
+    // By value, since a shared session's peers hand mappings over as copies.
+    static #heldId([col, row, shiftOverride]) {
+        return `${col},${row},${shiftOverride}`;
     }
 }
 
