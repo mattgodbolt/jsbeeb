@@ -292,7 +292,7 @@ describe("parseUefSnapshot", () => {
     });
 
     it.each([...HwScrollSubtract.entries()])("wraps the screen by IC32's screen size %i", (size, screenSubtract) => {
-        const { state } = parseUefSnapshot(makeUefSnapshot({ ic32: (size << 4) | 0x8f }));
+        const { state } = parseUefSnapshot(makeUefSnapshot({ ic32: (size << 4) | 0xcf }));
         expect(state.video.screenSubtract).toBe(screenSubtract);
     });
 

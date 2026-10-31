@@ -74,7 +74,7 @@ describe("parseBemSnapshot", () => {
     it.each([...HwScrollSubtract.entries()])(
         "wraps the screen by IC32's screen size %i",
         async (size, screenSubtract) => {
-            const { state } = await parseBemSnapshot(makeMinimalBemSnapshot({ ic32: (size << 4) | 0x8f }));
+            const { state } = await parseBemSnapshot(makeMinimalBemSnapshot({ ic32: (size << 4) | 0xcf }));
             expect(state.video.screenSubtract).toBe(screenSubtract);
         },
     );
@@ -192,6 +192,7 @@ describe("b-em v3 model import", () => {
         expect(state.roms.length).toBe(256 * 1024);
         expect(state.video.regs[0]).toBe(127);
         expect(state.video.ulactrl).not.toBe(0);
+        expect(state.video.screenSubtract).toBe(HwScrollSubtract[2]);
     });
 });
 
