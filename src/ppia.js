@@ -29,8 +29,8 @@ import { WithKeyMatrix } from "./keymap.js";
 // Keyboard matrix (active low, active when key pressed):
 //   Port A row →    9   8   7   6   5   4   3   2   1   0
 //   Port B col ↓
-//        ~b0 :     SPC  [   \   ]   ^  LCK <-> ^-v Lft Rgt
-//        ~b1 :     Dwn Up  CLR ENT CPY DEL  0   1   2   3
+//        ~b0 :     SPC  [   \   ]   ^  LCK <-> ^-v
+//        ~b1 :                 ENT CPY DEL  0   1   2   3
 //        ~b2 :      4   5   6   7   8   9   :   ;   <   =
 //        ~b3 :      >   ?   @   A   B   C   D   E   F   G
 //        ~b4 :      H   I   J   K   L   M   N   O   P   Q

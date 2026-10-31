@@ -671,25 +671,36 @@ export function getKeyMap(keyLayout) {
  * Who holds SHIFT on a key matrix driven by mappings from a key map. A mapping of
  * `[col, row, shiftOverride]` forces SHIFT to its override while that key is down; otherwise
  * SHIFT follows the mapped shift key. Keys set on the matrix directly bypass it, and a SHIFT
- * set that way survives plain mapped keys but not the shift key or a forcing key.
+ * set that way survives plain mapped keys but not the shift key or a forcing key. Two mappings
+ * can share a matrix key (the Atom's arrows share its cursor keys), so a key stays down while
+ * any mapping holds it, and the latest forcing mapping still held decides SHIFT.
  */
 export class ShiftOverride {
     constructor([shiftCol, shiftRow]) {
         this.shiftCol = shiftCol;
         this.shiftRow = shiftRow;
+        this.held = new Map();
         this.clear();
     }
 
     clear() {
         this.physicalShiftDown = false;
         this.forcedShift = null;
+        this.held.clear();
     }
 
-    setMapped(keys, [col, row, shiftOverride], val) {
-        keys[col][row] = val;
+    setMapped(keys, mapping, val) {
+        const [col, row, shiftOverride] = mapping;
+        const id = ShiftOverride.#heldId(mapping);
+        this.held.delete(id);
+        if (val) this.held.set(id, mapping);
+        const held = [...this.held.values()];
+        keys[col][row] = val || held.some(([c, r]) => c === col && r === row) ? 1 : 0;
         const isShiftKey = shiftOverride === undefined && col === this.shiftCol && row === this.shiftRow;
         if (isShiftKey) this.physicalShiftDown = !!val;
-        if (shiftOverride !== undefined) this.forcedShift = val ? shiftOverride : null;
+        if (shiftOverride !== undefined) {
+            this.forcedShift = held.findLast(([, , override]) => override !== undefined)?.[2] ?? null;
+        }
         if (isShiftKey || shiftOverride !== undefined || this.forcedShift !== null) {
             keys[this.shiftCol][this.shiftRow] = (this.forcedShift ?? this.physicalShiftDown) ? 1 : 0;
         }
@@ -702,12 +713,20 @@ export class ShiftOverride {
             physicalShiftDown: this.physicalShiftDown,
             shiftOverrideActive: this.forcedShift !== null,
             shiftOverrideDesiredShift: !!this.forcedShift,
+            heldMappings: [...this.held.values()].map((mapping) => [...mapping]),
         };
     }
 
-    restore({ physicalShiftDown, shiftOverrideActive, shiftOverrideDesiredShift }) {
+    restore({ physicalShiftDown, shiftOverrideActive, shiftOverrideDesiredShift, heldMappings }) {
         this.physicalShiftDown = physicalShiftDown;
         this.forcedShift = shiftOverrideActive ? shiftOverrideDesiredShift : null;
+        this.held.clear();
+        for (const mapping of heldMappings ?? []) this.held.set(ShiftOverride.#heldId(mapping), mapping);
+    }
+
+    // By value, since a shared session's peers hand mappings over as copies.
+    static #heldId([col, row, shiftOverride]) {
+        return `${col},${row},${shiftOverride}`;
     }
 }
 

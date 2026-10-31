@@ -139,6 +139,9 @@ describe("Via snapshotState / restoreState", () => {
             via2.restoreKeyboard(via.keyboardState());
             via2.setMapped(BBC.B, 1);
             expect(via2.keys[BBC.SHIFT[0]][BBC.SHIFT[1]]).toBe(1);
+            via2.setMapped([BBC.C[0], BBC.C[1], false], 1);
+            via2.setMapped([BBC.C[0], BBC.C[1], false], 0);
+            expect(via2.keys[BBC.SHIFT[0]][BBC.SHIFT[1]]).toBe(1);
         });
 
         function makeScanningVia(pcr) {

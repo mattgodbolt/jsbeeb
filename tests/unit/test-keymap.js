@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { ATOM, atomKeyForCharacter, getKeyMapAtom } from "../../src/keymap-atom.js";
+import { ATOM, AtomGamepadKeys, atomKeyForCharacter, getKeyMapAtom } from "../../src/keymap-atom.js";
 import {
     BBC,
     bbcKeyForCharacter,
@@ -228,6 +228,35 @@ describe("The Atom's key map", function () {
         expect(keyMap[false][keyCodes.CAPSLOCK]).toEqual(ATOM.CTRL);
     });
 
+    it("names no key, and binds nothing, a gamepad included, where the Atom's matrix has no key", function () {
+        const NoKey = new Set(["0,0", "1,0", "7,1", "8,1", "9,1"]);
+        const lands = ([col, row]) => NoKey.has(`${col},${row}`);
+        expect(Object.entries(ATOM).filter(([, key]) => lands(key))).toEqual([]);
+        expect(Object.entries(AtomGamepadKeys).filter(([, key]) => lands(key))).toEqual([]);
+        for (const layout of ["physical", "gaming", "natural"]) {
+            for (const shiftDown of [false, true]) {
+                const keyMap = getKeyMapAtom(layout)[shiftDown];
+                expect(
+                    Object.keys(keyMap).filter((code) => lands(keyMap[code])),
+                    layout,
+                ).toEqual([]);
+            }
+        }
+    });
+
+    it.each([
+        ["LEFT", [...ATOM.LEFT_RIGHT, true]],
+        ["RIGHT", [...ATOM.LEFT_RIGHT, false]],
+        ["UP", [...ATOM.UP_DOWN, false]],
+        ["DOWN", [...ATOM.UP_DOWN, true]],
+    ])("puts the host's %s on a cursor key, with SHIFT for the direction, in every layout", function (name, key) {
+        for (const layout of ["physical", "gaming", "natural"]) {
+            for (const shiftDown of [false, true]) {
+                expect(getKeyMapAtom(layout)[shiftDown][keyCodes[name]]).toEqual(key);
+            }
+        }
+    });
+
     it.each([
         ["physical", [keyCodes.BACKSPACE, keyCodes.DELETE]],
         ["natural", [keyCodes.BACKSPACE, keyCodes.DELETE]],
@@ -240,10 +269,18 @@ describe("The Atom's key map", function () {
 
 describe("ShiftOverride", function () {
     const Shift = [0, 0];
-    const Mappings = { S: Shift, P: [1, 0], N: [2, 0, false], Y: [3, 0, true] };
+    const Shared = [4, 0];
+    const Mappings = {
+        S: Shift,
+        P: [1, 0],
+        N: [2, 0, false],
+        Y: [3, 0, true],
+        U: [...Shared, false],
+        D: [...Shared, true],
+    };
 
     function makeMatrix() {
-        return Object.values(Mappings).map(() => new Uint8Array(1));
+        return Array.from({ length: Shared[0] + 1 }, () => new Uint8Array(1));
     }
 
     function shiftAfter(shift, keys, step) {
@@ -251,19 +288,24 @@ describe("ShiftOverride", function () {
         return keys[Shift[0]][Shift[1]];
     }
 
-    // Each step is a key (S the shift key, P plain, N and Y forcing SHIFT off and on), + or - for
-    // down or up, and the SHIFT the matrix then holds.
+    // Each step is a key (S the shift key, P plain, N and Y forcing SHIFT off and on, U and D forcing it off and on
+    // through one shared key), + or - for down or up, the SHIFT the matrix then holds, and for U and D the shared key.
     it.each([
         ["follows the shift key", "S+1 P+1 P-1 S-0"],
         ["forces SHIFT off while a key is down, then gives the shift key back", "S+1 N+0 N-1"],
         ["keeps SHIFT forced when the shift key goes first", "S+1 N+0 S-0 N-0"],
         ["holds a forced SHIFT through a plain key", "Y+1 P+1 P-1 Y-0"],
-        ["lets the later of two forcing keys win, and its release end the force", "S+1 Y+1 N+0 N-1"],
-        ["ends the force on the release of the earlier of two forcing keys too", "S+1 Y+1 N+0 Y-1"],
+        ["lets the later of two forcing keys win, and hands the force back on its release", "Y+1 N+0 N-1"],
+        ["keeps the later force when the earlier forcing key goes up", "S+1 Y+1 N+0 Y-0"],
+        ["keeps a shared key down, and its force, while either mapping holds it", "D+11 U+01 U-11 D-00"],
+        ["keeps a shared key down when the earlier mapping goes up", "U+01 D+11 U-11 D-00"],
     ])("%s", function (_, steps) {
         const keys = makeMatrix();
         const shift = new ShiftOverride(Shift);
-        for (const step of steps.split(" ")) expect(shiftAfter(shift, keys, step), step).toBe(Number(step[2]));
+        for (const step of steps.split(" ")) {
+            expect(shiftAfter(shift, keys, step), step).toBe(Number(step[2]));
+            if (step[3]) expect(keys[Shared[0]][Shared[1]], step).toBe(Number(step[3]));
+        }
     });
 
     it("leaves a SHIFT set on the matrix directly to plain keys", function () {

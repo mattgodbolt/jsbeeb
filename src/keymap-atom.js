@@ -13,8 +13,8 @@ import {
     Acorn Atom
 
                   &B001 - keyboard matrix column:
-                       ~b0 : SPC  [   \   ]   ^  LCK <-> ^-v Lft Rgt
-                       ~b1 : Dwn Up  CLR ENT CPY DEL  0   1   2   3
+                       ~b0 : SPC  [   \   ]   ^  LCK <-> ^-v
+                       ~b1 :             ENT CPY DEL  0   1   2   3
                        ~b2 :  4   5   6   7   8   9   :   ;   <   =
                        ~b3 :  >   ?   @   A   B   C   D   E   F   G
                        ~b4 :  H   I   J   K   L   M   N   O   P   Q
@@ -29,8 +29,6 @@ import {
      */
 
 export const ATOM = {
-    RIGHT: [0, 0],
-    LEFT: [1, 0],
     UP_DOWN: [2, 0],
     LEFT_RIGHT: [3, 0],
     LOCK: [4, 0], //CAPSLOCK
@@ -48,9 +46,6 @@ export const ATOM = {
     DELETE: [4, 1],
     COPY: [5, 1],
     RETURN: [6, 1],
-    CLEAR: [7, 1],
-    UP: [8, 1],
-    DOWN: [9, 1],
 
     MINUS_EQUALS: [0, 2],
     COMMA_LESSTHAN: [1, 2],
@@ -184,11 +179,11 @@ export function getKeyMapAtom(keyLayout) {
     map(keyCodes.ENTER, ATOM.RETURN);
 
     // other keys to map to these in "game" layout too
-    map(keyCodes.F9, ATOM.CLEAR); // not actually on an ATOM keyboard
-    map(keyCodes.LEFT, ATOM.LEFT); // arrow left
-    map(keyCodes.RIGHT, ATOM.LEFT_RIGHT); // arrow right
-    map(keyCodes.DOWN, ATOM.DOWN); // arrow down
-    map(keyCodes.UP, ATOM.UP_DOWN); // arrow up
+    // The Atom has two cursor keys, and SHIFT turns them round to left and down.
+    map(keyCodes.LEFT, [...ATOM.LEFT_RIGHT, true]);
+    map(keyCodes.RIGHT, [...ATOM.LEFT_RIGHT, false]);
+    map(keyCodes.UP, [...ATOM.UP_DOWN, false]);
+    map(keyCodes.DOWN, [...ATOM.UP_DOWN, true]);
 
     map(keyCodes.ESCAPE, ATOM.ESCAPE);
     map(keyCodes.TAB, ATOM.COPY);
@@ -235,16 +230,12 @@ export function getKeyMapAtom(keyLayout) {
         map(keyCodes.MINUS, ATOM.MINUS_EQUALS);
         map(keyCodes.EQUALS, ATOM.UP_ARROW);
         map(keyCodes.BACKSPACE, ATOM.BACKSLASH);
-        map(keyCodes.INSERT, ATOM.LEFT);
-        map(keyCodes.HOME, ATOM.RIGHT);
 
         // 3rd row
         map(keyCodes.LEFT_SQUARE_BRACKET, ATOM.AT);
         map(keyCodes.RIGHT_SQUARE_BRACKET, ATOM.LEFT_SQUARE_BRACKET);
         // no key for ATOM.UNDERSCORE_POUND in UK
         // see 4th row for US mapping keyCodes.BACKSLASH
-        map(keyCodes.DELETE, ATOM.UP);
-        map(keyCodes.END, ATOM.DOWN);
 
         // 4th row
         // no key for ATOM.CAPSLOCK (mapped to CTRL_LEFT below)
@@ -312,11 +303,11 @@ export function getKeyMapAtom(keyLayout) {
 }
 
 /**
- * The Atom's counterpart of `BbcGamepadKeys`: the keys in the matrix's column 0 (Q, =, 3 and G for the
- * D-pad, the right arrow for A), with SPACE on Start.
+ * The Atom's counterpart of `BbcGamepadKeys`: Q, =, 3 and G for the D-pad, the keys in the matrix's
+ * column 0, the cursor key that moves right unshifted for A, and SPACE on Start.
  */
 export const AtomGamepadKeys = {
-    0: ATOM.RIGHT,
+    0: ATOM.LEFT_RIGHT,
     9: ATOM.SPACE,
     12: ATOM.Q,
     13: ATOM.MINUS_EQUALS,
