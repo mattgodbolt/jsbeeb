@@ -5,6 +5,7 @@ import { Cpu6502, NmiSource } from "./6502.js";
 // eslint-disable-next-line no-unused-vars
 import { attachDriveNoise, DiscDrive } from "./disc-drive.js";
 import { IbmDiscFormat } from "./disc-format.js";
+import { BitWindow64 } from "./disc.js";
 // eslint-disable-next-line no-unused-vars
 import { Scheduler } from "./scheduler.js";
 import { DiscController } from "./fdc.js";
@@ -205,7 +206,7 @@ export class WdFdc extends DiscController {
         this._timerState = TimerState.none;
         this._stateCount = 0;
         this._indexPulseCount = 0;
-        this._markDetector = 0n;
+        this._markDetector = new BitWindow64();
         this._dataShifter = 0;
         this._dataShiftCount = 0;
         this._deliverData = 0;
@@ -645,7 +646,7 @@ export class WdFdc extends DiscController {
             this._isDrq = false;
             this._updateNmi();
 
-            this._markDetector = 0n;
+            this._markDetector = new BitWindow64();
             this._dataShifter = 0;
             this._dataShiftCount = 0;
             this._isIndexPulse = false;
@@ -991,28 +992,28 @@ export class WdFdc extends DiscController {
         if (this._isDoubleDensity(this._controlRegister)) {
             // EMU NOTE: unsure as to exactly when MFM sync bytes are spotted. Here we look for MFM 0x00 then an MFM
             // sync, 0xa1 or 0xc2. The documented sequences are 12 0x00, 3x 0xa1 (sync) and 12 0x00, 3x 0xc2 (index).
-            const lastWord = this._markDetector & 0xffffffffn;
-            if (lastWord === 0xaaaa4489n) {
+            const lastWord = this._markDetector.lo;
+            if (lastWord === 0xaaaa4489) {
                 this._deliverData = 0xa1;
                 return true;
             }
             // Ordinary data can encode this pattern too (01 fe 29 is one such run), so it only resyncs
             // where the spec says it may, in read track.
-            if (lastWord === 0xaaaa5224n && this._state === State.inReadTrack) {
+            if (lastWord === 0xaaaa5224 && this._state === State.inReadTrack) {
                 this._deliverData = 0xc2;
                 return true;
             }
             // Tag the byte after 3 sync bytes as a marker. The byte after 3 index syncs is the index mark, which
             // opens no field, so it stays untagged.
-            if ((this._markDetector & 0xffffffffffff0000n) === 0x4489448944890000n) {
+            if (this._markDetector.hi === 0x44894489 && this._markDetector.lo >>> 16 === 0x4489) {
                 this._deliverIsMarker = true;
             }
             return false;
         }
         // The FM mark detector appears to need 4 data bits' worth of zeros, with clock bits set to 1, to be able to trigger.
         // Tried on @scarybeasts's real 1772-based machine.
-        if ((this._markDetector & 0x0000ffff00000000n) !== 0x0000888800000000n) return false;
-        const { clocks, data, iffyPulses } = IbmDiscFormat._2usPulsesToFm(Number(this._markDetector & 0xffffffffn));
+        if ((this._markDetector.hi & 0xffff) !== 0x8888) return false;
+        const { clocks, data, iffyPulses } = IbmDiscFormat._2usPulsesToFm(this._markDetector.lo);
         // A mark reads back with the clock that write track gives it.
         const markClocks = this._fmMarkerClocksFor(data);
         if (iffyPulses || markClocks === undefined || clocks !== markClocks) return false;
@@ -1027,7 +1028,7 @@ export class WdFdc extends DiscController {
     _bitReceived(bit) {
         // Always run the mark detector. For a command like "read track", the 1770
         // will re-sync in the middle of the command as appropriate.
-        this._markDetector = ((this._markDetector << 1n) & 0xffffffffffffffffn) | (bit ? 1n : 0n);
+        this._markDetector.shiftIn(bit ? 1 : 0);
         if (this._markDetectorTriggered()) {
             this._dataShifter = 0;
             this._dataShiftCount = 0;
@@ -1374,8 +1375,7 @@ export class WdFdc extends DiscController {
             timerState: this._timerState,
             stateCount: this._stateCount,
             indexPulseCount: this._indexPulseCount,
-            // BigInt must be converted to string for JSON serialization
-            markDetector: this._markDetector.toString(),
+            markDetector: this._markDetector.snapshotState(),
             dataShifter: this._dataShifter,
             dataShiftCount: this._dataShiftCount,
             deliverData: this._deliverData,
@@ -1415,7 +1415,7 @@ export class WdFdc extends DiscController {
         this._timerState = state.timerState;
         this._stateCount = state.stateCount;
         this._indexPulseCount = state.indexPulseCount;
-        this._markDetector = BigInt(state.markDetector);
+        this._markDetector.restoreState(state.markDetector);
         this._dataShifter = state.dataShifter;
         this._dataShiftCount = state.dataShiftCount;
         this._deliverData = state.deliverData;

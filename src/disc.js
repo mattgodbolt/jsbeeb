@@ -214,9 +214,7 @@ class MfmReader {
         this._rawReader = rawReader;
     }
 
-    static get pulsesPerByte() {
-        return 16;
-    }
+    static pulsesPerByte = 16;
 
     read(numBytes) {
         const data = new Uint8Array(numBytes);
@@ -249,9 +247,7 @@ class FmReader {
         this._rawReader = rawReader;
     }
 
-    static get pulsesPerByte() {
-        return 32;
-    }
+    static pulsesPerByte = 32;
 
     read(numBytes) {
         const data = new Uint8Array(numBytes);
@@ -425,6 +421,18 @@ export class BitWindow64 {
         // Only a low half that matched all the way up can have a run continuing into the high half.
         if (count === nibblesPerHalf) for (let bits = this.hi; (bits & 0xf) === nibble; bits >>>= 4) count++;
         return count;
+    }
+
+    /** @returns {string} the 64 bits as an unsigned decimal, the form snapshots store */
+    snapshotState() {
+        return ((BigInt(this.hi) << 32n) | BigInt(this.lo)).toString();
+    }
+
+    /** @param {string} decimal from snapshotState */
+    restoreState(decimal) {
+        const value = BigInt(decimal);
+        this.hi = Number(value >> 32n);
+        this.lo = Number(value & 0xffffffffn);
     }
 }
 
