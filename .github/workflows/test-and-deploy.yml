@@ -29,9 +29,6 @@ jobs:
   unit:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
     runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-      pull-requests: write
     steps:
       - uses: actions/checkout@v7
       - name: Use Node.js
@@ -44,31 +41,7 @@ jobs:
       - name: Unit tests
         env:
           VITEST_JOB_SUMMARY_TITLE: Unit tests
-        run: npm run test:unit -- --coverage
-      - name: Coverage report
-        # The PR comment needs a write token, which fork pull_request events do not get.
-        if: always() && github.event_name != 'pull_request' && hashFiles('coverage/coverage-summary.json') != ''
-        uses: davelosert/vitest-coverage-report-action@v2
-        with:
-          json-summary-path: coverage/coverage-summary.json
-          json-final-path: coverage/coverage-final.json
-      # shields.io renders badge.json from the deployed report. The label says "unit"
-      # because coverage instruments only the unit suite; the CPU-bound integration
-      # tests blow their timeouts under v8 instrumentation (#1002).
-      - name: Publish coverage report and badge
-        if: github.ref == 'refs/heads/main'
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          AWS_REGION: us-east-1
-        run: |
-          PCT=$(node -p "require('./coverage/coverage-summary.json').total.lines.pct.toFixed(1)")
-          COLOR=$(node -p "const p=$PCT; p>=90?'brightgreen':p>=75?'green':p>=60?'yellowgreen':p>=45?'yellow':'orange'")
-          printf '{"schemaVersion":1,"label":"unit coverage","message":"%s%%","color":"%s"}' "$PCT" "$COLOR" > coverage/badge.json
-          aws s3 sync coverage s3://bbc.xania.org/coverage \
-            --no-progress --delete \
-            --exclude "coverage-final.json" --exclude "lcov.info" --exclude "lcov-report/*" --exclude ".tmp/*" \
-            --cache-control max-age=30 --metadata-directive REPLACE
+        run: npm run test:unit
 
   integration:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
