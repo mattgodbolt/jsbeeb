@@ -1,9 +1,11 @@
 import { renderThumbnails, executeUntilFrame } from "./rewind-thumbnail.js";
 import { RewindBuffer } from "../rewind.js";
+import { copySnapshot } from "../6502.js";
 import { RewindCaptureInterval } from "./emulation-loop.js";
 import { noteFeature } from "./analytics.js";
 
 const RewindBufferSnapshots = 30;
+const FrameSnapshots = 3;
 
 /**
  * Rewind scrubber UI — a filmstrip overlay showing thumbnails of recent
@@ -18,10 +20,14 @@ export class RewindUI {
      */
     constructor({ processor, video, loop }) {
         this.rewindBuffer = new RewindBuffer(RewindBufferSnapshots);
+        // The last few frames, newest last; the rewind history is copied from them.
+        this.frames = new RewindBuffer(FrameSnapshots);
         this.processor = processor;
         this.video = video;
         this.loop = loop;
+        loop.addEventListener("frame-capture", () => this.captureFrame());
         loop.addEventListener("rewind-capture", () => this.capture());
+        loop.addEventListener("replacing-state", () => this.frames.clear());
 
         this.panel = document.getElementById("rewind-panel");
         this.filmstrip = document.getElementById("rewind-filmstrip");
@@ -42,15 +48,20 @@ export class RewindUI {
         });
     }
 
+    captureFrame() {
+        this.frames.push(this.processor.snapshotState({ into: this.frames.nextToReplace() }));
+    }
+
     capture() {
-        this.rewindBuffer.push(this.processor.snapshotState());
+        this.rewindBuffer.push(copySnapshot(this.frames.peek(), this.rewindBuffer.nextToReplace()));
         this.updateButtonState();
     }
 
-    /** Forget everything captured, as on a hard reset. */
+    /** Forget everything captured, as on a hard reset or as a guest takes the host's machine. */
     reset() {
         this.close();
         this.rewindBuffer.clear();
+        this.frames.clear();
         this.updateButtonState();
     }
 

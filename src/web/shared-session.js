@@ -191,6 +191,7 @@ function parsed(data) {
  * @property {object} model
  * @property {object} takenFromHost - the page's takenFromHostValues, as its start gave them
  * @property {import("./emulation-loop.js").EmulationLoop} loop
+ * @property {{reset: function(): void}} rewind - the machine's history, forgotten as a guest takes the host's machine
  * @property {import("./keyboard.js").Keyboard} keyboard
  * @property {string} version
  * @property {ReturnType<typeof import("./session-transport.js").webRtcTransport>} transport
@@ -1215,6 +1216,7 @@ export class SessionGuest {
         const restored = snapshotFromJSON(await this.context.codec.decompress(snapshot.bytes));
         if (this.left) return;
         loop.replacingState();
+        this.context.rewind.reset();
         restoreSessionSnapshot(processor, restored);
         this.rtcBaseMs = restored.rtcBaseMs;
         ++this.snapshotsRestored;
