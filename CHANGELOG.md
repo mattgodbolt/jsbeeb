@@ -1,5 +1,27 @@
 # Changelog
 
+## [2.16.0](https://github.com/mattgodbolt/jsbeeb/compare/v2.15.0...v2.16.0) (2026-10-31)
+
+
+### Features
+
+* a disc report in the surface panel, load notes in the drive bay, and disc chatter cut to failures ([#1694](https://github.com/mattgodbolt/jsbeeb/issues/1694)) ([6bf25e7](https://github.com/mattgodbolt/jsbeeb/commit/6bf25e79cd0328917c5b28b02e23c23592fdc493))
+
+
+### Bug Fixes
+
+* derive the caps and shift lock lights from IC32 ([#1742](https://github.com/mattgodbolt/jsbeeb/issues/1742)) ([e2e30ad](https://github.com/mattgodbolt/jsbeeb/commit/e2e30ad96c32e3c99c2ce81275c4014c9a0e5344))
+* draw the on-screen keyboard's slashed zero at the size of Gorton's other digits ([#1693](https://github.com/mattgodbolt/jsbeeb/issues/1693)) ([67ef9d2](https://github.com/mattgodbolt/jsbeeb/commit/67ef9d207737ebd2077a80af356e998419070072))
+* give the Atom's gaming layout a DELETE key and bind Backspace and Delete once per layout ([#1740](https://github.com/mattgodbolt/jsbeeb/issues/1740)) ([2f1fa80](https://github.com/mattgodbolt/jsbeeb/commit/2f1fa80e00b93a2b7b31ce47dfcdd295747df0ec))
+* move the disassembly cursor to the new PC when a reset or a state change moves the stopped machine ([#1701](https://github.com/mattgodbolt/jsbeeb/issues/1701)) ([f96e600](https://github.com/mattgodbolt/jsbeeb/commit/f96e6000a8b3e6430115a5956c070a111c93d9ea))
+* offer discs, drive bays and drive lights only on machines with disc drives ([#1719](https://github.com/mattgodbolt/jsbeeb/issues/1719)) ([2c8f76a](https://github.com/mattgodbolt/jsbeeb/commit/2c8f76a7c91f6a8adffc06f912f30963dfb39d3f))
+* print JMP (abs,X) with an uppercase X on the 65C02 and 65C12 ([#1710](https://github.com/mattgodbolt/jsbeeb/issues/1710)) ([d0d6620](https://github.com/mattgodbolt/jsbeeb/commit/d0d6620a9abb15d858d26611fe2859e15dc2b39c))
+* read console memory dumps and the processor's string readers without side effects ([#1700](https://github.com/mattgodbolt/jsbeeb/issues/1700)) ([921b93c](https://github.com/mattgodbolt/jsbeeb/commit/921b93c820bb3d3886a9daf3aa7313af826fd143))
+* redraw the panels that follow the machine after a soft reset while it is stopped ([#1702](https://github.com/mattgodbolt/jsbeeb/issues/1702)) ([2a65aac](https://github.com/mattgodbolt/jsbeeb/commit/2a65aacd65c08d80284da9ffc3cee660b0a2768e))
+* redraw the System VIA panel when a key is released while the machine is stopped ([#1705](https://github.com/mattgodbolt/jsbeeb/issues/1705)) ([6a942ce](https://github.com/mattgodbolt/jsbeeb/commit/6a942ce5a365d038f6882839a4efca31fd39a0e3))
+* say on an Atom that Enter loads a disc, and do not reset it ([#1743](https://github.com/mattgodbolt/jsbeeb/issues/1743)) ([bcd763b](https://github.com/mattgodbolt/jsbeeb/commit/bcd763b8bf0b39ec8c347dc3135a9994c6d09210))
+* start an Atom with no default disc in drive 0 ([#1739](https://github.com/mattgodbolt/jsbeeb/issues/1739)) ([7362305](https://github.com/mattgodbolt/jsbeeb/commit/7362305b7934276ea7567df691b4d153574a5ba3))
+
 ## [2.15.0](https://github.com/mattgodbolt/jsbeeb/compare/v2.14.0...v2.15.0) (2026-10-30)
 
 
