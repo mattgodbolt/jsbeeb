@@ -59,7 +59,8 @@ describe("Via snapshotState / restoreState", () => {
     const IerSetTimers = 0xe0;
     const LatchSetBit6 = 0x0e,
         LatchSetBit3 = 0x0b,
-        LatchClearBit3 = 0x03;
+        LatchClearBit3 = 0x03,
+        LatchSetBit7 = 0x0f;
 
     let scheduler, cpu;
 
@@ -280,6 +281,47 @@ describe("Via snapshotState / restoreState", () => {
             expect(ca2Flag(via2)).toBe(0);
             scheduler.polltime(ScanPassTicks);
             expect(ca2Flag(via2)).toBe(Ca2Int);
+        });
+
+        describe("lock lights follow IC32 bits 6 (caps) and 7 (shift), lit when clear", () => {
+            function latchWritten(...writes) {
+                const via = makeSystemVia();
+                via.write(DDRB, 0x0f);
+                for (const value of writes) via.write(ORB, value);
+                return via;
+            }
+            function restoredFrom(state) {
+                const via = makeSystemVia();
+                via.restoreState(state);
+                return via;
+            }
+            it.each([
+                ["at power on, with IC32 clear", () => makeSystemVia(), [true, true]],
+                ["after setting bit 6", () => latchWritten(LatchSetBit6), [false, true]],
+                ["after setting bit 7", () => latchWritten(LatchSetBit7), [true, false]],
+                [
+                    "after a reset, which leaves IC32 alone",
+                    () => {
+                        const via = latchWritten(LatchSetBit6, LatchSetBit7);
+                        via.reset();
+                        return via;
+                    },
+                    [false, false],
+                ],
+                [
+                    "after restoring an older snapshot whose saved lights disagree",
+                    () =>
+                        restoredFrom({
+                            ...latchWritten(LatchSetBit6).snapshotState(),
+                            capsLockLight: true,
+                            shiftLockLight: false,
+                        }),
+                    [false, true],
+                ],
+            ])("%s", (_name, makeVia, lights) => {
+                const via = makeVia();
+                expect([via.capsLockLight, via.shiftLockLight]).toEqual(lights);
+            });
         });
 
         it("leaves the held keys alone when restoring a snapshot", () => {

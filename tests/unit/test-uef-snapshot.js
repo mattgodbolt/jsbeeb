@@ -194,8 +194,6 @@ describe("parseUefSnapshot", () => {
             [],
         ],
         ["reads IC32 into the system VIA", { ic32: 0x3f }, (s) => s.state.sysvia.IC32, 0x3f],
-        ["lights caps lock when IC32 bit 6 is clear", { ic32: 0xbf }, (s) => s.state.sysvia.capsLockLight, true],
-        ["darkens caps lock when IC32 bit 6 is set", { ic32: 0xff }, (s) => s.state.sysvia.capsLockLight, false],
         [
             "doubles the VIA timers, which BeebEm stores in 1MHz ticks",
             { sysvia: { t1c: 0x1234, t1l: 0x5678 } },
