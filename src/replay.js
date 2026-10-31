@@ -1,6 +1,6 @@
 // Stepping the machine backwards, or searching back through what it did: it is put back to a snapshot from before
-// where it is to go, and run forward to there exactly. Snapshots leave out what the host gives the machine (keys, FIRE buttons, BREAK, a debugger's
-// edits) and what the machine reads from the host as it runs (the analogue channels, the clock, the touchscreen),
+// where it is to go, and run forward to there exactly. Snapshots leave out what the host gives the machine (keys,
+// FIRE buttons, BREAK, a debugger's edits) and what the machine reads from the host as it runs (the analogue channels, the clock, the touchscreen),
 // so an InputLog records both as they happen, and a replay puts each back where it went in or was read.
 
 import { applyInput, cycleCount, stateHash } from "./lockstep.js";
@@ -21,6 +21,8 @@ const NotRepeated = "Step back could not repeat the machine's run exactly, so th
 const NoCallFound = `Step back over found no call this returned from in the last ${LongestCallSearchSeconds} seconds.`;
 const TooFarBack = "That is further back than the machine keeps its history.";
 const NotBehind = "That is not before where the machine is now.";
+const IsRom = "That is ROM, which a write leaves as it is.";
+const NotRepeatedHere = "The search could not repeat the machine's run since its newest snapshot exactly.";
 const MovedOn = "The machine moved on before the search back finished.";
 const Unrepeated = "a stretch of the run it could not repeat exactly";
 const MidInstruction = "an input that came part way through an instruction, as a paste's or an autotype's keys do";
@@ -354,8 +356,7 @@ class Arrival {
 
 /**
  * The last write in a window to the byte a write to `address` reaches as the machine is paged now: the same byte
- * of RAM, however the CPU paged it there at the time, or else a device register at the same address. A write to
- * ROM changes nothing, so is not one.
+ * of RAM, however the CPU paged it there at the time, or else a device register at the same address.
  */
 class LastWrite {
     constructor(cpu, log, address) {
@@ -372,7 +373,7 @@ class LastWrite {
             if (written !== address) return;
             const writtenPage = cpu.memStatOffset + (address >>> 8);
             const writtenStat = cpu.memStat[writtenPage];
-            if (writtenStat === RomStat || writtenStat !== stat) return;
+            if (writtenStat !== stat) return;
             if (stat === RamStat && cpu.memLook[writtenPage] !== look) return;
             const byte = value & 0xff;
             this.found = log.applyingInput
@@ -486,17 +487,20 @@ export class ReplayHistory extends EventTarget {
 
     _original() {
         const { cpu } = this;
-        return { state: cpu.snapshotState(), host: hostInputs(cpu), picture: cpu.video.fb32.slice() };
+        const { memStatOffset } = cpu;
+        return { state: cpu.snapshotState(), host: hostInputs(cpu), picture: cpu.video.fb32.slice(), memStatOffset };
     }
 
     /** Puts the machine, the host's inputs and the picture back as `_original` kept them. */
-    _putBack({ state, host, picture }) {
+    // A snapshot leaves out the half of the paging tables the last instruction's fetch chose, so it is put back too.
+    _putBack({ state, host, picture, memStatOffset }) {
         const { cpu } = this;
         this.log.withoutRecording(() => {
             restoreHostInputs(cpu, host);
             cpu.restoreState(state);
         });
         cpu.video.fb32.set(picture);
+        cpu.memStatOffset = memStatOffset;
     }
 
     // Steps back to the cycle `seeker` finds, or returns why it could not, `notFound` if no stretch held one.
@@ -540,16 +544,17 @@ export class ReplayHistory extends EventTarget {
      * Searches for the last write to `address`, as the machine pages it now (see LastWrite), by replaying its
      * history back from now a stretch at a time, as a step back does. Yields between stretches, with the machine as
      * it was, so that a long search can let the page go on; if the machine has moved on when it resumes, it stops.
-     * Returns `{ refusal }` when it cannot search, or else `{ write, searched, stoppedBy }`: `write` is
-     * `{ pc, cycle, value }`, `cycle` where the instruction at `pc` started, or with `pc` null where an input such
-     * as a memory panel edit wrote it, or null if nothing wrote it in the `searched` cycles back from now;
-     * `stoppedBy` is why the search went back no further (as `_searchBack` gives it), or null where the history
-     * ends. Leaves the machine as it was.
+     * Returns `{ refusal }` when it cannot search (ROM, which no write changes, among the reasons), or else
+     * `{ write, searched, stoppedBy }`: `write` is `{ pc, cycle, value }`, `cycle` where the instruction at `pc`
+     * started, or with `pc` null where an input such as a memory panel edit wrote it, or null if nothing wrote it in
+     * the `searched` cycles back from now; `stoppedBy` is why the search went back no further (as `_searchBack`
+     * gives it), or null where the history ends. Leaves the machine as it was.
      */
     *lastWrite(address) {
         const refusal = this._unavailable("Searching back", NothingToSearch);
         if (refusal) return { refusal };
         const { cpu, log } = this;
+        if (cpu.memStat[cpu.memStatOffset + (address >>> 8)] === RomStat) return { refusal: IsRom };
         const now = cycleCount(cpu);
         const nowHash = stateHash(cpu);
         const original = this._original();
@@ -561,9 +566,14 @@ export class ReplayHistory extends EventTarget {
                 const { done, value } = search.next();
                 this._putBack(original);
                 away = false;
-                if (done) return { write: value.found, searched: now - value.reached, stoppedBy: value.stoppedBy };
-                yield;
-                if (cycleCount(cpu) !== now || stateHash(cpu) !== nowHash) return { refusal: MovedOn };
+                if (!done) {
+                    yield;
+                    if (cycleCount(cpu) !== now || stateHash(cpu) !== nowHash) return { refusal: MovedOn };
+                    continue;
+                }
+                const { found, reached, stoppedBy } = value;
+                if (stoppedBy === Unrepeated && reached === now) return { refusal: NotRepeatedHere };
+                return { write: found, searched: now - reached, stoppedBy };
             }
         } finally {
             if (away) this._putBack(original);

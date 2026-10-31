@@ -1,6 +1,8 @@
 import { hd } from "../hex.js";
 import { debounce } from "../debounce.js";
 
+const LastAddress = 0xffff;
+
 /**
  * The debugging surface the wiki documents, put on `target` (window in the
  * app). The bench/profile calls are debounced so that they can be safely run
@@ -13,7 +15,11 @@ export function exposeConsoleSurface(target, { loop, processor, video, audioHand
     target.profileVideo = debounce((arg) => loop.profileVideo(arg), 1);
     target.go = () => loop.go();
     target.stop = (debug) => loop.stop(debug);
-    target.whoWrote = (address) => dbgr.whoWrote(address);
+    target.whoWrote = (address) => {
+        if (!Number.isInteger(address) || address < 0 || address > LastAddress)
+            throw new Error(`whoWrote takes an address from 0 to 0xffff, not ${address}`);
+        return dbgr.whoWrote(address);
+    };
     target.soundChip = audioHandler.soundChip;
     target.processor = processor;
     target.video = video;

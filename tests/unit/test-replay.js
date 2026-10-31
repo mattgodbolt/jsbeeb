@@ -36,6 +36,8 @@ const MainThenShadowThenIdle = [
 const ShadowIdleAt = MainWriteAt + MainThenShadowThenIdle.length;
 const JmpToItself = [0x4c, ShadowIdleAt & 0xff, ShadowIdleAt >>> 8];
 const TestRefusal = "a refusal the test made";
+const UserViaDdrb = 0xfe62;
+const RomAddress = 0xc000;
 
 // A tape that plays forever, giving the PPIA nothing.
 const SilentTape = { poll: () => 1000, rewind: () => {} };
@@ -60,6 +62,10 @@ function runFor(cpu, cycles) {
 }
 
 const take = (history) => history.taken(history.cpu.snapshotState(), null);
+const takeAndRun = (history) => {
+    take(history);
+    runFor(history.cpu, SomeCycles);
+};
 const writeAndIdle = (cpu) => runTo(cpu, IdleAt);
 const instructionWrite = { pc: WriterAt, value: WrittenValue };
 
@@ -140,18 +146,64 @@ describe("Finding the last write to a byte", () => {
         expect(cpu.peekmem(Written)).toBe(WrittenValue);
     });
 
-    it("on a Master, is of the RAM paged at the address now, not the shadow RAM a write there reached", async () => {
-        const cpu = await machineAt(MainWriteAt, { model: findModel("Master") });
-        loadBytes(cpu, MainWriteAt, [...MainThenShadowThenIdle, ...JmpToItself]);
+    it.each([
+        [
+            "on a Master, the main RAM's, not the shadow RAM's a later write at the address reached",
+            "Master",
+            [...MainThenShadowThenIdle, ...JmpToItself],
+            Written,
+            { pc: MainWriteAt + 2, value: 0x11 },
+        ],
+        [
+            "a device register's, as written to its address",
+            "B-DFS1.2",
+            [0xa9, 0x5a, 0x8d, UserViaDdrb & 0xff, UserViaDdrb >>> 8, ...JmpToItself],
+            UserViaDdrb,
+            { pc: MainWriteAt + 2, value: 0x5a },
+        ],
+    ])("is of the byte as the CPU pages it now: %s", async (_, model, code, address, expected) => {
+        const cpu = await machineAt(MainWriteAt, { model: findModel(model) });
+        loadBytes(cpu, MainWriteAt, code);
         const history = new ReplayHistory(cpu);
         take(history);
-        runTo(cpu, ShadowIdleAt);
-        expect(finished(history.lastWrite(Written)).write).toMatchObject({ pc: MainWriteAt + 2, value: 0x11 });
+        runTo(cpu, MainWriteAt + code.length - JmpToItself.length);
+        expect(finished(history.lastWrite(address)).write).toMatchObject(expected);
     });
 
-    it("refuses with no history to search", async () => {
+    it.each([
+        ["with no history to search", () => {}, (history) => history.lastWrite(Written), /no history to search/],
+        ["of ROM", takeAndRun, (history) => history.lastWrite(RomAddress), /That is ROM/],
+        [
+            "when the run since the newest snapshot cannot be repeated",
+            (history) => {
+                takeAndRun(history);
+                history.cpu.writemem(Written, EditedValue);
+            },
+            (history) => history.lastWrite(Written),
+            /could not repeat/,
+        ],
+    ])("refuses a search %s, leaving the machine be", async (_, set, search, why) => {
+        const cpu = await machineAt(WriterAt, { model: findModel("B-DFS1.2") });
+        loadBytes(cpu, WriterAt, WriteThenIdle);
+        const history = new ReplayHistory(cpu);
+        set(history);
+        const before = snapshotToJSON(cpu.snapshotState());
+        expect(finished(search(history)).refusal).toMatch(why);
+        expect(snapshotToJSON(cpu.snapshotState())).toEqual(before);
+    });
+
+    it.each([
+        ["now or later", (cpu) => cycleCount(cpu), /not before where the machine is now/],
+        ["before the oldest snapshot", (cpu, before) => before, /further back than the machine keeps/],
+    ])("refuses a step back to a cycle %s", async (_, cycle, why) => {
         const cpu = await machineAt(WriterAt, {});
-        expect(finished(new ReplayHistory(cpu).lastWrite(Written)).refusal).toMatch(/no history to search/);
+        loadBytes(cpu, WriterAt, WriteThenIdle);
+        const before = cycleCount(cpu);
+        runFor(cpu, SomeCycles);
+        const history = new ReplayHistory(cpu);
+        take(history);
+        runFor(cpu, SomeCycles);
+        expect(history.stepBackTo(cycle(cpu, before))).toMatch(why);
     });
 
     it("stops, as it was left between stretches, once the machine has moved on", async () => {
@@ -163,8 +215,10 @@ describe("Finding the last write to a byte", () => {
         runFor(cpu, SomeCycles);
         take(history);
         runFor(cpu, SomeCycles);
+        const before = snapshotToJSON(cpu.snapshotState());
         const search = history.lastWrite(Written);
         expect(search.next().done).toBe(false);
+        expect(snapshotToJSON(cpu.snapshotState())).toEqual(before);
         runFor(cpu, SomeCycles);
         expect(search.next().value.refusal).toMatch(/moved on/);
     });

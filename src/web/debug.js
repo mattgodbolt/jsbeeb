@@ -9,7 +9,7 @@ import { RunMode } from "./emulation-loop.js";
 import { DebugGroup, FloatingPanel, MenuGroup } from "./floating-panel.js";
 import { EndEdge, Gap, StartEdge } from "./panel-layout.js";
 import { keyLine } from "./panel-keys.js";
-import { cpuMoment, cycleCount } from "../lockstep.js";
+import { cpuMoment, cycleCount, stateHash } from "../lockstep.js";
 import { notDeeper } from "../replay.js";
 import { NumRomBanks } from "../6502.js";
 import { describeHit } from "../breakpoints.js";
@@ -51,7 +51,17 @@ const HexByte = /^[0-9a-f]{1,2}$/i;
 const NoHistory = "There is nothing to step back to here.";
 const NoStepBackInSession = "Step back is not available in a shared session.";
 const NoSearchInSession = "Searching back is not available in a shared session.";
+const NoHistoryToSearch = "There is no history to search back through here.";
+const MovedSinceSearch = "The machine has moved on since that search; search again to step back to a write.";
+const MicrosecondsPerSecond = 1e6;
+const MillisecondsPerSecond = 1e3;
 const StepBackRuns = ["stepBack", "stepBackOver"];
+
+function durationText(seconds) {
+    if (seconds * MillisecondsPerSecond < 1) return `${(seconds * MicrosecondsPerSecond).toFixed(1)} \u00b5s`;
+    if (seconds < 1) return `${(seconds * MillisecondsPerSecond).toFixed(1)} ms`;
+    return `${seconds.toFixed(1)} s`;
+}
 
 function sourceNode(source) {
     return isHttps(source) ? externalLink(source, "source") : document.createTextNode(source);
@@ -1318,15 +1328,16 @@ export class Debugger {
 
     /**
      * Finds what last wrote the byte at `address`, as the CPU pages it now, by searching back through the history
-     * step back keeps (see ReplayHistory's lastWrite), and says so, offering to step back to the instruction. It
-     * stops the machine in the debugger first. The search lets the page go on between stretches of the history; a
-     * later search ends one still going. Resolves to what lastWrite returns, or null if a later search ended it.
+     * step back keeps (see ReplayHistory's lastWrite), and says so, offering to step back to the instruction while
+     * the machine is where the search left it. It stops the machine in the debugger first. The search lets the page
+     * go on between stretches of the history; a later search ends one still going. Resolves to what lastWrite
+     * returns, or null if a later search ended it.
      */
     async whoWrote(address) {
         if (this._loop.mode !== RunMode.debugging) this._loop.stop(true);
         const where = `$${hexword(address)}`;
         const title = `Who wrote ${where}`;
-        const unavailable = this._loop.lockstep ? NoSearchInSession : this._history ? null : NoHistory;
+        const unavailable = this._loop.lockstep ? NoSearchInSession : this._history ? null : NoHistoryToSearch;
         if (unavailable) {
             toast(unavailable, { title });
             return { refusal: unavailable };
@@ -1336,6 +1347,8 @@ export class Debugger {
         const notice = step.done ? null : toast(`Searching back for the last write to ${where}.`, { title });
         try {
             while (!step.done) {
+                // A stretch's replay painted frames from the past.
+                this.debug(this.cpu.pc);
                 await new Promise((resolve) => setTimeout(resolve, 0));
                 if (this._searching !== searching) return null;
                 step = searching.next();
@@ -1344,27 +1357,29 @@ export class Debugger {
             if (notice) dismissToast(notice);
         }
         this._searching = null;
+        this.debug(this.cpu.pc);
         const found = step.value;
         const { write } = found;
         const action =
-            write && write.pc !== null ? { label: "Step back to it", run: () => this.stepBackTo(write.cycle) } : null;
+            write && write.pc !== null ? { label: "Step back to it", run: this._stepBackToWrite(write) } : null;
         toast(this._lastWriteText(where, found), { title, action });
         return found;
+    }
+
+    // A cycle found is only that write's while the machine is where the search found it from.
+    _stepBackToWrite({ cycle }) {
+        const [searchedAt, searchedHash] = [cycleCount(this.cpu), stateHash(this.cpu)];
+        return () => {
+            const moved = cycleCount(this.cpu) !== searchedAt || stateHash(this.cpu) !== searchedHash;
+            if (moved) toast(MovedSinceSearch, { title: "Step back" });
+            else this._fromDebugger(() => this.stepBackTo(cycle));
+        };
     }
 
     _lastWriteText(where, { refusal, write, searched, stoppedBy }) {
         if (refusal) return refusal;
         const cpu = this.cpu;
-        const ago = (cycles) => {
-            const seconds = cycles / cpu.model.cyclesPerSecond;
-            const time =
-                seconds < 1e-3
-                    ? `${(seconds * 1e6).toFixed(1)} µs`
-                    : seconds < 1
-                      ? `${(seconds * 1e3).toFixed(1)} ms`
-                      : `${seconds.toFixed(1)} s`;
-            return `${cycles} cycles (${time})`;
-        };
+        const ago = (cycles) => `${cycles} cycles (${durationText(cycles / cpu.model.cyclesPerSecond)})`;
         if (!write) {
             const why = stoppedBy
                 ? `; the search cannot go back past ${stoppedBy}`

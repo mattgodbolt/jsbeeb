@@ -61,6 +61,10 @@ describe("exposeConsoleSurface", () => {
         expect(loop.stop).toHaveBeenCalledWith(true);
         target.whoWrote(0x70);
         expect(dbgr.whoWrote).toHaveBeenCalledWith(0x70);
+        for (const notAnAddress of ["&70", 0x10000, -1]) {
+            expect(() => target.whoWrote(notAnAddress)).toThrow(/an address from 0 to 0xffff/);
+        }
+        expect(dbgr.whoWrote).toHaveBeenCalledTimes(1);
     });
 
     it("exposes the machine's parts", () => {
