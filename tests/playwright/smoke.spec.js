@@ -1010,6 +1010,16 @@ test.describe("on a phone", () => {
         await beeb.expectScreenText(">Q");
     });
 
+    test("a touch on the on-screen keys leaves the browser no gesture of its own", async ({ beeb, page }) => {
+        await beeb.open();
+        await page.evaluate(() => {
+            window.touchDefaultPrevented = [];
+            window.addEventListener("touchstart", (evt) => window.touchDefaultPrevented.push(evt.defaultPrevented));
+        });
+        await page.locator("#touch-keyboard .tk-key:visible", { hasText: /^A$/ }).tap();
+        expect(await page.evaluate(() => window.touchDefaultPrevented)).toEqual([true]);
+    });
+
     test("the on-screen keyboard presses nothing while the machine is stopped", async ({ beeb, page }) => {
         await beeb.open();
         await beeb.expectScreenText(">");
