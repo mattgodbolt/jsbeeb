@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ATOM, atomKeyForCharacter, getKeyMapAtom } from "../../src/keymap-atom.js";
 import {
@@ -128,6 +128,21 @@ describe.each([
     });
 });
 
+describe("Building a key map", function () {
+    afterEach(function () {
+        vi.restoreAllMocks();
+    });
+
+    it.each([
+        ["BBC", getKeyMap],
+        ["Atom", getKeyMapAtom],
+    ])("binds no host key to two machine keys in any layout of the %s", function (_machine, build) {
+        const log = vi.spyOn(console, "log").mockImplementation(() => {});
+        for (const layout of ["physical", "gaming", "natural"]) build(layout);
+        expect(log).not.toHaveBeenCalled();
+    });
+});
+
 describe("How the BBC alone types a character", function () {
     it("asks for the caps lock the other way round for lower case", function () {
         expect(bbcKeyForCharacter("A")).toEqual({ key: BBC.A, shift: false, upperCase: true });
@@ -211,6 +226,15 @@ describe("The Atom's key map", function () {
         const keyMap = getKeyMapAtom("gaming");
         expect(keyMap[false][keyCodes.K0]).toEqual(ATOM.K0);
         expect(keyMap[false][keyCodes.CAPSLOCK]).toEqual(ATOM.CTRL);
+    });
+
+    it.each([
+        ["physical", [keyCodes.BACKSPACE, keyCodes.DELETE]],
+        ["natural", [keyCodes.BACKSPACE, keyCodes.DELETE]],
+        ["gaming", [keyCodes.MENU]],
+    ])("reaches DELETE in the %s layout", function (layout, codes) {
+        const keyMap = getKeyMapAtom(layout);
+        for (const code of codes) expect(keyMap[false][code]).toEqual(ATOM.DELETE);
     });
 });
 
