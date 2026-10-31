@@ -426,6 +426,18 @@ export class BitWindow64 {
         if (count === nibblesPerHalf) for (let bits = this.hi; (bits & 0xf) === nibble; bits >>>= 4) count++;
         return count;
     }
+
+    /** @returns {string} the 64 bits as an unsigned decimal, the form snapshots store */
+    snapshotState() {
+        return ((BigInt(this.hi) << 32n) | BigInt(this.lo)).toString();
+    }
+
+    /** @param {string} decimal from snapshotState */
+    restoreState(decimal) {
+        const value = BigInt(decimal);
+        this.hi = Number(value >> 32n);
+        this.lo = Number(value & 0xffffffffn);
+    }
 }
 
 const BitWindowBits = 64;
