@@ -7,6 +7,7 @@ import { AtomSoundChip, SoundChip } from "../../src/soundchip.js";
 import { keyCodes } from "../../src/keymap.js";
 import { bootedTestMachine, mode7Text } from "./helpers.js";
 import { singleStep } from "../helpers/single-step.js";
+import { executeUntilFrame } from "../../src/web/rewind-thumbnail.js";
 
 const FbWidth = 1024;
 const FbHeight = 768;
@@ -17,7 +18,17 @@ const ClockAtRecording = Date.UTC(2026, 9, 31, 12, 0, 0);
 const ClockAtReplay = ClockAtRecording + 10 * 1000;
 const WaitThenCatalogue = ["10 A=GET", "20 *CAT"];
 const WaitThenClockAndCatalogue = ["10 A=GET", "20 T$=TIME$", "30 *CAT"];
-const WaitThenConfigure = ["10 A=GET", "20 *CONFIGURE BAUD 3"];
+const FirstSettingsCmosAddress = 14;
+const LastCmosAddress = 63;
+const CmosWrites = 1000;
+// OSBYTE &A2 writes CMOS RAM, its X counting from the first settings byte.
+const WriteCmosRepeatedly = [
+    `10 FOR I%=1 TO ${CmosWrites}`,
+    `20 A%=&A2:X%=${LastCmosAddress - FirstSettingsCmosAddress}:Y%=I%:CALL &FFF4`,
+    `25 IF I%=${CmosWrites / 2} THEN TIME$="Fri,01 Mar 2024.12:34:56"`,
+    "30 NEXT",
+    "40 A=GET",
+];
 // Waits in the OS's OSRDCH for a key, then prints.
 const AtomWaitThenPrint = ["10 LINK #FFE3", '20 P."DONE"'];
 const ScratchAddress = 0x3000;
@@ -26,13 +37,14 @@ const AtomTextScreenBytes = 512;
 const AtomLetterOffset = 0x40;
 const AdcFullScale = 0xffff;
 
-async function booted(model) {
+async function booted(model, options) {
     const isAtom = model === "Atom";
     // The sound chip as the page builds it, its sound rendered elsewhere from its events.
     const onEvent = () => {};
     const machine = await bootedTestMachine(model, {
         video: new Video(false, FbWidth * FbHeight, () => {}, { isAtom }),
         soundChip: isAtom ? new AtomSoundChip(null, { onEvent }) : new SoundChip(null, { onEvent }),
+        ...options,
     });
     if (!isAtom) await machine.loadDisc("discs/bcdtest.ssd");
     return machine;
@@ -233,13 +245,44 @@ describe.each([
     });
 });
 
-describe("Stepping back on a Master", () => {
-    it("refuses to go back past a write to the CMOS", async () => {
-        const machine = await waitingIn("Master", WaitThenConfigure);
+describe("Replaying a Master's writes to its CMOS", () => {
+    it.each([
+        ["stepping back", ({ history }) => expect(history.stepBack(false)).toBeNull()],
+        [
+            "previewing a rewind",
+            ({ cpu, start }) => {
+                const live = cpu.snapshotState();
+                cpu.restoreState(start);
+                executeUntilFrame(cpu, cpu.video);
+                cpu.restoreState(live);
+            },
+        ],
+    ])("leaves the settings, the clock and the stored copy as the machine had them after %s", async (_, replay) => {
+        const stored = [];
+        const machine = await booted("Master", {
+            cmosPersistence: { load: () => null, save: (store) => stored.push([...store]) },
+        });
+        const cpu = machine.processor;
+        for (const line of [...WriteCmosRepeatedly, "RUN"]) await machine.type(line);
         const history = historyFromHere(machine);
-        await pressA(machine);
-        await seconds(machine, AroundAnInputSeconds);
-        singleStep(machine.processor);
-        expect(history.stepBack(false)).toMatch(/write to the CMOS/);
+        const start = cpu.snapshotState();
+        await machine.runUntilInput();
+        singleStep(cpu);
+        const { store: settings, timeOffset, heldDate, heldTime } = cpu.sysvia.cmos.snapshotState();
+        const clock = () => {
+            const { timeOffset, heldDate, heldTime } = cpu.sysvia.cmos;
+            return { timeOffset, heldDate, heldTime };
+        };
+        expect(settings[LastCmosAddress]).toBe(CmosWrites & 0xff);
+        expect(timeOffset).not.toBe(0);
+        expect(stored.at(-1)).toEqual(settings);
+
+        replay({ cpu, history, start });
+
+        expect([cpu.sysvia.cmos.store, stored.at(-1), clock()]).toEqual([
+            settings,
+            settings,
+            { timeOffset, heldDate, heldTime },
+        ]);
     });
 });

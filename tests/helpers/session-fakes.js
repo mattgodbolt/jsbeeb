@@ -60,9 +60,10 @@ export function fakeProcessor({ cycles = 1000 } = {}) {
             this.currentCycles = Math.max(this.currentCycles, this.targetCycles);
             return true;
         },
-        snapshotState: () => ({ cycles: processor.currentCycles }),
+        snapshotState: () => ({ cycles: processor.currentCycles, cmos: processor.sysvia.cmos.snapshotState() }),
         restoreState: vi.fn((state) => {
             processor.currentCycles = processor.targetCycles = state.cycles;
+            processor.sysvia.cmos.restoreState(state.cmos);
         }),
         sysvia: {
             keys: [],

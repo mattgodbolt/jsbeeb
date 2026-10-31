@@ -30,6 +30,7 @@ export function fake6502(model, opts = {}) {
             soundChip: opts.soundChip ?? soundChip,
             econet,
             model,
+            cmosPersistence: opts.cmosPersistence,
         }),
         config: machineSpec({
             tube: opts.tube ? tubeModelFor(model) : null,

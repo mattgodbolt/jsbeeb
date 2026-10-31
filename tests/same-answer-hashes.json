@@ -31,7 +31,7 @@
       "memory": "03a0958ac76e8d68",
       "cycles": "f62dffab17ab1472",
       "sound": "920c817e9a2bb78f",
-      "peripherals": "765f2f0d9a78b45e"
+      "peripherals": "f25fd574d7457235"
     },
     "master-disc-cat": {
       "framebuffer": "b96b7b7448c4e07d",
@@ -39,7 +39,7 @@
       "memory": "822922765d3cfce4",
       "cycles": "946a74abb174f0e3",
       "sound": "19aeb0e173e0c368",
-      "peripherals": "06b55b2f7d9bb8f4"
+      "peripherals": "ce5a7ba13c42dad0"
     }
   }
 }
