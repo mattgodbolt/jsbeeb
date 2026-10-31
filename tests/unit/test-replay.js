@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { ReplayHistory } from "../../src/replay.js";
 import { fake6502 } from "../../src/fake6502.js";
+import { findModel } from "../../src/models.js";
 import { singleStep } from "../helpers/single-step.js";
 
 const CallAt = 0x2000;
@@ -12,8 +13,11 @@ const LongSubroutine = [0xa9, 0x11, 0x85, 0x70, 0xa0, 0x00, 0xa2, 0x00, 0xca, 0x
 const LongSubroutineEnd = [0x70, 0xd0, 0xf2, 0x60];
 const ReturnAt = SubroutineAt + LongSubroutine.length + LongSubroutineEnd.length - 1;
 
+// A tape that plays forever, giving the PPIA nothing.
+const SilentTape = { poll: () => 1000, rewind: () => {} };
+
 async function machineAt(pc, options) {
-    const cpu = fake6502(null, options);
+    const cpu = fake6502(options.model ?? null, options);
     await cpu.initialise();
     cpu.pc = pc;
     return cpu;
@@ -32,6 +36,15 @@ describe("ReplayHistory", () => {
     it.each([
         ["with Econet fitted", { econet: true }, () => {}, /Econet/],
         ["while the cassette motor runs", {}, (cpu) => cpu.acia.setMotor(true), /cassette motor runs/],
+        [
+            "while an Atom's tape plays",
+            { model: findModel("Atom") },
+            (cpu) => {
+                cpu.atomppia.setTape(SilentTape);
+                cpu.atomppia.pressPlay();
+            },
+            /cassette motor runs/,
+        ],
     ])("refuses to step back %s", async (_, options, set, why) => {
         const cpu = await machineAt(CallAt, options);
         load(cpu, CallAt, Call);
