@@ -707,7 +707,7 @@ export class SysVia extends WithKeyMatrix(Via) {
             ...super.snapshotState(),
             IC32: this.IC32,
             keyScanTaskOffset: this.keyScanTask.offset(),
-            cmos: this.isMaster ? this.cmos.snapshotState() : undefined,
+            ...(this.isMaster && { cmos: this.cmos.snapshotState() }),
         };
     }
 
@@ -719,7 +719,6 @@ export class SysVia extends WithKeyMatrix(Via) {
             if (state.cmos) this.cmos.restoreState(state.cmos);
             else this.cmos.followLines(this.portbpins, this.IC32);
         }
-        this.video.setScreenHwScroll((this.IC32 >> 4) & 3);
         this.recalculatePortAPins();
     }
 

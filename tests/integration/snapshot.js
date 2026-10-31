@@ -63,6 +63,7 @@ const ClockReadingEveryRegisterApart = Date.UTC(2026, 9, 31, 12, 34, 56);
 const ReadClockForever = "10 REPEAT:T$=TIME$:UNTIL0";
 const InstructionsIntoAnAccess = 3;
 const AccessesSnapshotted = 30;
+// 2MHz cycles, odd so that the points snapshotted fall at different places in the loop.
 const RunOnCycles = 30011;
 
 const stateOf = (machine) => JSON.parse(snapshotToJSON(createSnapshot(machine.processor, machine.model).state));
@@ -167,6 +168,7 @@ describe("save state round trip", () => {
             intoAnAccess.remove();
             const snapshot = cpu.snapshotState();
             const bus = cmos.snapshotState();
+            expect(bus.enabled).toBe(true);
             await machine.runFor(RunOnCycles);
             const original = ranOn();
 
