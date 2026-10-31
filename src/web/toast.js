@@ -98,5 +98,11 @@ export function toast(message, { title = "", quietKey = "", action = null } = {}
 
 /** Closes a notice `toast` showed, if it is still showing. */
 export function dismissToast(element) {
-    bootstrap.Toast.getInstance(element)?.hide();
+    const instance = bootstrap.Toast.getInstance(element);
+    // Hidden part way through showing, Bootstrap's end of the show would touch the instance disposed on hiding.
+    if (element.classList.contains("showing")) {
+        element.addEventListener("shown.bs.toast", () => instance?.hide(), { once: true });
+    } else {
+        instance?.hide();
+    }
 }
