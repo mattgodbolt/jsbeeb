@@ -10,13 +10,16 @@ import { mode7Text } from "./helpers.js";
 
 const FbWidth = 1024;
 const FbHeight = 768;
-const RunningSeconds = 0.5;
 const KeyHoldSeconds = 0.05;
 const CatalogueSeconds = 2;
+const AroundAnInputSeconds = 0.1;
 const ClockAtRecording = Date.UTC(2026, 9, 31, 12, 0, 0);
 const ClockAtReplay = ClockAtRecording + 10 * 1000;
 const WaitThenCatalogue = "10 A=GET\n20 *CAT";
 const WaitThenClockAndCatalogue = "10 A=GET\n20 T$=TIME$\n30 *CAT";
+const WaitThenConfigure = "10 A=GET\n20 *CONFIGURE BAUD 3";
+const ScratchAddress = 0x3000;
+const AdcFullScale = 0xffff;
 
 async function booted(model) {
     const machine = new TestMachine(model, {
@@ -30,6 +33,15 @@ async function booted(model) {
     return machine;
 }
 
+/** A booted machine running `program`, waiting at its GET. */
+async function waitingIn(model, program) {
+    const machine = await booted(model);
+    await machine.loadBasic(program);
+    await machine.type("RUN");
+    await machine.runUntilInput();
+    return machine;
+}
+
 // As the debugger's single step does.
 function step(cpu) {
     cpu.targetCycles = cpu.currentCycles;
@@ -38,11 +50,43 @@ function step(cpu) {
 
 const seconds = (machine, count) => machine.runFor(count * machine.model.cyclesPerSecond);
 
+async function pressA(machine) {
+    machine.keyDown(keyCodes.A);
+    await seconds(machine, KeyHoldSeconds);
+    machine.keyUp(keyCodes.A);
+}
+
+function historyFromHere(machine) {
+    const history = new ReplayHistory(machine.processor);
+    history.taken(machine.processor.snapshotState(), null);
+    return history;
+}
+
 const machineNow = (machine) => ({
     state: snapshotToJSON(machine.processor.snapshotState()),
     keyboard: machine.processor.keyboardInterface.keyboardState(),
     picture: machine.processor.video.fb32.slice(),
 });
+
+/** Steps back and forward again, expecting to end exactly where it started. */
+async function expectBackAndForthLandsWhereItWas(machine, history) {
+    const cpu = machine.processor;
+    step(cpu);
+    const before = machineNow(machine);
+    expect(history.stepBack(false)).toBeNull();
+    expect(machineNow(machine)).not.toEqual(before);
+    step(cpu);
+    expect(machineNow(machine)).toEqual(before);
+}
+
+// An analogue source that reads differently every time.
+function driftingSource() {
+    let value = 0;
+    return {
+        getValue: () => (value = (value + 0x1234) & AdcFullScale),
+        dispose: () => {},
+    };
+}
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -51,49 +95,128 @@ describe.each([
     ["a B", "B-DFS1.2", WaitThenCatalogue],
     ["a Master", "Master", WaitThenClockAndCatalogue],
 ])("Stepping back on %s", (_, model, program) => {
-    it.each([
-        ["running alone", false],
-        ["a key press, a disc access and a read of the clock", true],
-    ])("then forward again ends where it began, replaying %s", async (_, withInputs) => {
+    it("then forward again ends where it began, replaying a key press, a disc access and a read of the clock", async () => {
         vi.spyOn(Date, "now").mockReturnValue(ClockAtRecording);
-        const machine = await booted(model);
-        const cpu = machine.processor;
-        if (withInputs) {
-            await machine.loadBasic(program);
-            await machine.type("RUN");
-            await machine.runUntilInput();
-        }
-        const history = new ReplayHistory(cpu);
-        history.taken(cpu.snapshotState(), null);
-        if (withInputs) {
-            machine.keyDown(keyCodes.A);
-            await seconds(machine, KeyHoldSeconds);
-            machine.keyUp(keyCodes.A);
-            await seconds(machine, CatalogueSeconds);
-            expect(mode7Text(machine)).toContain("Drive 0");
-        } else {
-            await seconds(machine, RunningSeconds);
-        }
-        step(cpu);
-        const before = machineNow(machine);
+        const machine = await waitingIn(model, program);
+        const history = historyFromHere(machine);
+        await pressA(machine);
+        await seconds(machine, CatalogueSeconds);
+        expect(mode7Text(machine)).toContain("Drive 0");
         Date.now.mockReturnValue(ClockAtReplay);
-
-        expect(history.stepBack(false)).toBeNull();
-        expect(machineNow(machine)).not.toEqual(before);
-        step(cpu);
-        expect(machineNow(machine)).toEqual(before);
+        await expectBackAndForthLandsWhereItWas(machine, history);
     });
 
-    it("refuses to step back across keys typed in part way through an instruction, leaving the machine alone", async () => {
+    it.each([
+        ["BREAK", (cpu) => cpu.setReset(true), (cpu) => cpu.setReset(false)],
+        [
+            "a soft reset",
+            (cpu) => {
+                cpu.inputLog.record({ kind: "reset" });
+                cpu.reset(false);
+            },
+            () => {},
+        ],
+        ["the gamepad's FIRE", (cpu) => cpu.sysvia.setGamepadFire(true, false), () => {}],
+        ["the mouse's FIRE", (cpu) => cpu.sysvia.setJoystickButton(0, true), () => {}],
+        [
+            "a byte edited in the memory panel",
+            (cpu) => {
+                cpu.inputLog.record({ kind: "write", address: ScratchAddress, value: 0x42 });
+                cpu.writemem(ScratchAddress, 0x42);
+            },
+            () => {},
+        ],
+        ["the analogue port's reads", (cpu) => cpu.adconverter.setChannelSource(0, driftingSource()), () => {}],
+    ])("replays %s exactly", async (_, press, release) => {
         const machine = await booted(model);
         const cpu = machine.processor;
-        const history = new ReplayHistory(cpu);
-        history.taken(cpu.snapshotState(), null);
-        await machine.type("REM");
-        step(cpu);
-        const before = machineNow(machine);
+        const history = historyFromHere(machine);
+        await seconds(machine, AroundAnInputSeconds);
+        press(cpu);
+        await seconds(machine, AroundAnInputSeconds);
+        release(cpu);
+        await seconds(machine, AroundAnInputSeconds);
+        await expectBackAndForthLandsWhereItWas(machine, history);
+    });
 
-        expect(history.stepBack(false)).toMatch(/part way through an instruction/);
+    it("starts from the keys held at a snapshot taken after they went down, once older inputs are folded away", async () => {
+        const machine = await booted(model);
+        const cpu = machine.processor;
+        const history = historyFromHere(machine);
+        const [oldest] = history.snapshots();
+        machine.keyDown(keyCodes.SHIFT_LEFT);
+        await seconds(machine, AroundAnInputSeconds);
+        history.taken(cpu.snapshotState(), oldest);
+        history.trim();
+        await seconds(machine, AroundAnInputSeconds);
+        machine.keyUp(keyCodes.SHIFT_LEFT);
+        await seconds(machine, AroundAnInputSeconds);
+        await expectBackAndForthLandsWhereItWas(machine, history);
+    });
+
+    it("forgets the future it stepped back from, so a different one replays exactly", async () => {
+        const machine = await waitingIn(model, program);
+        const history = historyFromHere(machine);
+        await seconds(machine, AroundAnInputSeconds);
+        await pressA(machine);
+        await seconds(machine, AroundAnInputSeconds);
+        expect(history.stepBack(false)).toBeNull();
+        await seconds(machine, AroundAnInputSeconds);
+        await expectBackAndForthLandsWhereItWas(machine, history);
+    });
+
+    it("lets go where it lands of a key let go of while stopped", async () => {
+        const machine = await booted(model);
+        const history = historyFromHere(machine);
+        machine.keyDown(keyCodes.A);
+        await seconds(machine, AroundAnInputSeconds);
+        step(machine.processor);
+        machine.keyUp(keyCodes.A);
+        const letGo = machine.processor.keyboardInterface.keyboardState();
+        expect(history.stepBack(false)).toBeNull();
+        expect(machine.processor.keyboardInterface.keyboardState()).toEqual(letGo);
+    });
+
+    it.each([
+        [
+            "keys typed in part way through an instruction",
+            async (machine) => machine.type("REM"),
+            /part way through an instruction/,
+        ],
+        [
+            "a hard reset",
+            async (machine) => {
+                machine.reset(true);
+                await seconds(machine, AroundAnInputSeconds);
+            },
+            /nothing to step back to/,
+        ],
+        [
+            "a change the log never saw",
+            async (machine) => {
+                await seconds(machine, AroundAnInputSeconds);
+                machine.writebyte(ScratchAddress, 0x42);
+            },
+            /could not repeat/,
+        ],
+    ])("refuses to step back across %s, leaving the machine and its picture alone", async (_, change, why) => {
+        const machine = await booted(model);
+        const history = historyFromHere(machine);
+        await change(machine);
+        step(machine.processor);
+        const before = machineNow(machine);
+        expect(history.stepBack(false)).toMatch(why);
         expect(machineNow(machine)).toEqual(before);
+    });
+});
+
+describe("Stepping back on a Master", () => {
+    it("refuses to go back past a write to the CMOS", async () => {
+        const machine = await waitingIn("Master", WaitThenConfigure);
+        const history = historyFromHere(machine);
+        await pressA(machine);
+        await seconds(machine, AroundAnInputSeconds);
+        step(machine.processor);
+        expect(history.stepBack(false)).toMatch(/write to the CMOS/);
     });
 });

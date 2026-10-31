@@ -4,16 +4,18 @@
 // so an InputLog records both as they happen, and a replay puts each back where it went in or was read.
 
 import { applyInput, cycleCount, stateHash } from "./lockstep.js";
+import { tickCycles } from "./emulation-tick.js";
 
-// A replay runs in pieces no longer than the emulation loop's longest tick, so that the CPU splits its cycle count
-// between whole seconds and cycles as it does running in the loop.
-const ReplayRunsPerSecond = 10;
+// How far back step back over looks for the call it is to land on, past which the wait is not worth it.
+const LongestCallSearchSeconds = 2;
 
 const NothingToStepBackTo =
     "There is nothing to step back to: the machine keeps its history once it has run a frame since it started, " +
     "was reset or had its state replaced.";
 const NotRepeated = "Step back could not repeat the machine's run exactly, so the machine is left where it was.";
-const NoCallFound = "Step back over found no call this returned from in the history.";
+const NoCallFound = `Step back over found no call this returned from in the last ${LongestCallSearchSeconds} seconds.`;
+const NoStepBackWithEconet = "Step back is not available with Econet, whose network a replay cannot repeat.";
+const NoStepBackWithTapeRunning = "Step back is not available while the cassette motor runs.";
 const MidInstruction = "an input that came part way through an instruction, as a paste's or an autotype's keys do";
 
 // S counts down and wraps, so "not deeper" is a difference of under half the page, either way round $00.
@@ -21,7 +23,8 @@ export function notDeeper(s, startS) {
     return ((s - startS) & 0xff) < 0x80;
 }
 
-const snapshotCycle = (cpu, snapshot) => snapshot.cycleSeconds * cpu.model.cyclesPerSecond + snapshot.currentCycles;
+export const snapshotCycle = (cpu, snapshot) =>
+    snapshot.cycleSeconds * cpu.model.cyclesPerSecond + snapshot.currentCycles;
 
 // Between executes the CPU has reached its cycle target or been stopped short of it; inside one, as a scheduled
 // task or a debug hook runs, it has done neither.
@@ -51,6 +54,22 @@ function withInput(host, input) {
     }
 }
 
+/** The inputs that take the host from holding `from` to holding `to`. */
+function hostChanges(from, to) {
+    const changes = [];
+    if (JSON.stringify(from.keyboard) !== JSON.stringify(to.keyboard)) {
+        changes.push({ kind: "keyboard", state: to.keyboard });
+    }
+    if (from.gamepad.some((pressed, button) => pressed !== to.gamepad[button])) {
+        changes.push({ kind: "gamepadFire", button1: to.gamepad[0], button2: to.gamepad[1] });
+    }
+    to.mouse.forEach((pressed, button) => {
+        if (pressed !== from.mouse[button]) changes.push({ kind: "joystickButton", button, pressed });
+    });
+    if (from.resetting !== to.resetting) changes.push({ kind: "break", down: to.resetting });
+    return changes;
+}
+
 // Before the machine's own restore, as restoreSessionSnapshot puts the keys back, so that its VIA scans these.
 function restoreHostInputs(cpu, { keyboard, gamepad, mouse, resetting }) {
     cpu.keyboardInterface.restoreKeyboard(keyboard);
@@ -59,9 +78,10 @@ function restoreHostInputs(cpu, { keyboard, gamepad, mouse, resetting }) {
     cpu.setReset(resetting);
 }
 
-// As far as `cycle`, an instruction boundary; false if something stopped the machine short of it.
+// As far as `cycle`, an instruction boundary, in the page's ticks as everything else that runs execute does; false
+// if something stopped the machine short of it.
 function runTo(cpu, cycle) {
-    const longest = cpu.model.cyclesPerSecond / ReplayRunsPerSecond;
+    const longest = tickCycles(cpu.model.cyclesPerSecond);
     while (cycleCount(cpu) < cycle) {
         const end = Math.min(cycle, cycleCount(cpu) + longest);
         cpu.targetCycles = end - cpu.cycleSeconds * cpu.model.cyclesPerSecond;
@@ -98,13 +118,29 @@ class SampleReplay {
  * as `inputLog`, and while it replays it gives them the samples instead of the host and records nothing.
  */
 export class InputLog {
-    constructor(cpu) {
+    /**
+     * @param {object} cpu
+     * @param {function(): void} onTimeJump told when the machine's cycle count has gone back, which only a replaced
+     * state (a hard reset, say) makes it do, before anything is recorded on the new count
+     */
+    constructor(cpu, onTimeJump) {
         this.cpu = cpu;
+        this.onTimeJump = onTimeJump;
         this.latestSamples = new Map();
         this.replaying = null;
         this.recording = true;
-        const devices = [cpu, cpu.keyboardInterface, cpu.sysvia, cpu.adconverter, cpu.touchScreen, cpu.sysvia.cmos];
-        for (const device of devices) device.inputLog = this;
+        const { keyboardInterface, sysvia, adconverter, touchScreen, acia, fdc } = cpu;
+        for (const device of [
+            cpu,
+            keyboardInterface,
+            sysvia,
+            adconverter,
+            touchScreen,
+            sysvia.cmos,
+            acia,
+            ...fdc.drives,
+        ])
+            device.inputLog = this;
         this.restart();
     }
 
@@ -114,6 +150,14 @@ export class InputLog {
         this.samples = [];
         this.base = hostInputs(this.cpu);
         this.baseSamples = new Map(this.latestSamples);
+        this.latestAt = cycleCount(this.cpu);
+    }
+
+    _at() {
+        const at = cycleCount(this.cpu);
+        if (at < this.latestAt) this.onTimeJump();
+        this.latestAt = at;
+        return at;
     }
 
     get isEmpty() {
@@ -123,21 +167,20 @@ export class InputLog {
     record(input) {
         if (!this.recording) return;
         if (insideExecute(this.cpu)) this.refuse(MidInstruction);
-        else this.inputs.push({ at: cycleCount(this.cpu), input });
+        else this.inputs.push({ at: this._at(), input });
     }
 
     /** Notes that something went in here that no replay can put back, `reason` naming it for the refusal. */
     refuse(reason) {
-        if (this.recording) this.inputs.push({ at: cycleCount(this.cpu), refusal: reason });
+        if (this.recording) this.inputs.push({ at: this._at(), refusal: reason });
     }
 
     /** What the machine reads for `key` from the host, which said `value`. */
     sample(key, value) {
-        const at = cycleCount(this.cpu);
-        if (this.replaying) return this.replaying.read(key, at, value);
+        if (this.replaying) return this.replaying.read(key, cycleCount(this.cpu), value);
         if (this.recording && this.latestSamples.get(key) !== value) {
             this.latestSamples.set(key, value);
-            this.samples.push({ at, key, value });
+            this.samples.push({ at: this._at(), key, value });
         }
         return value;
     }
@@ -186,6 +229,7 @@ export class InputLog {
         this.inputs = this.inputs.filter(({ at }) => at <= cycle);
         this.samples = this.samples.filter(({ at }) => at <= cycle);
         this.latestSamples = this.samplesAt(cycle);
+        this.latestAt = cycle;
     }
 
     /** Runs `run` recording nothing, as when the machine is put back as it was. */
@@ -276,18 +320,22 @@ class Landing {
 
 /**
  * What the debugger can step back through: the snapshots kept of the machine since its state was last replaced,
- * and the input log back to the oldest of them.
+ * and the input log back to the oldest of them. Dispatches "landed", with the cycle in `detail`, once a step back
+ * has forgotten everything after it, for whoever else keeps those snapshots.
  */
-export class ReplayHistory {
+export class ReplayHistory extends EventTarget {
     constructor(cpu) {
+        super();
         this.cpu = cpu;
-        this.log = new InputLog(cpu);
+        this.log = new InputLog(cpu, () => this.restart());
         this.kept = new Set();
     }
 
     /** Takes `snapshot` as one a replay can start from, in place of `replacing`, if any, whose storage it took. */
     taken(snapshot, replacing) {
         this.kept.delete(replacing);
+        const cycle = snapshotCycle(this.cpu, snapshot);
+        if (this.snapshots().some((kept) => snapshotCycle(this.cpu, kept) > cycle)) this.restart();
         this.kept.add(snapshot);
     }
 
@@ -316,10 +364,13 @@ export class ReplayHistory {
 
     /** Why the machine cannot step back from where it is, or null if it can. */
     refusal() {
-        const now = cycleCount(this.cpu);
+        const { cpu } = this;
+        if (cpu.econet) return NoStepBackWithEconet;
+        if (cpu.acia.motorOn) return NoStepBackWithTapeRunning;
+        const now = cycleCount(cpu);
         const from = this._earlier(now).at(-1);
         if (!from) return NothingToStepBackTo;
-        return this._crossing(snapshotCycle(this.cpu, from), now);
+        return this._crossing(snapshotCycle(cpu, from), now);
     }
 
     _crossing(from, to) {
@@ -331,20 +382,23 @@ export class ReplayHistory {
      * Steps the machine back one instruction, or with `over` back over the call the instruction before returned
      * from, by replaying from the newest snapshot before it (older ones too, for a call further back). Each
      * stretch replayed must end on the machine it is replayed towards, the state now or the next snapshot, or
-     * nothing is trusted. Returns why it could not, having left the machine as it was, or null.
+     * nothing is trusted. What the host holds now (keys, FIRE buttons, BREAK) it holds where the machine lands.
+     * Returns why it could not, having left the machine and its picture as they were, or null.
      */
     stepBack(over) {
         const { cpu, log } = this;
         const refused = this.refusal();
         if (refused) return refused;
         const now = cycleCount(cpu);
-        const original = { state: cpu.snapshotState(), host: hostInputs(cpu) };
+        const original = { state: cpu.snapshotState(), host: hostInputs(cpu), picture: cpu.video.fb32.slice() };
+        const searchFrom = now - LongestCallSearchSeconds * cpu.model.cyclesPerSecond;
         const landing = new Landing(cpu, over);
         let [to, hash, inputsAtTo] = [now, stateHash(cpu), true];
         let landed = false;
         try {
             for (const snapshot of this._earlier(now).reverse()) {
                 const from = snapshotCycle(cpu, snapshot);
+                if (landing.seekingCall && from < searchFrom) break;
                 const crossing = this._crossing(from, to);
                 if (crossing) return crossing;
                 landing.startWindow();
@@ -354,7 +408,7 @@ export class ReplayHistory {
                 if (target !== null) {
                     if (log.replay(snapshot, target, true, null) === null) return NotRepeated;
                     landed = true;
-                    this._landedAt(target);
+                    this._landedAt(target, original.host);
                     return null;
                 }
                 [to, hash, inputsAtTo] = [from, fromHash, false];
@@ -366,13 +420,19 @@ export class ReplayHistory {
                     restoreHostInputs(cpu, original.host);
                     cpu.restoreState(original.state);
                 });
+                cpu.video.fb32.set(original.picture);
             }
         }
     }
 
     // What came after `cycle` was a future the machine has left, and runs from here make their own.
-    _landedAt(cycle) {
+    _landedAt(cycle, holding) {
         this.log.forgetAfter(cycle);
         for (const snapshot of this.kept) if (snapshotCycle(this.cpu, snapshot) > cycle) this.kept.delete(snapshot);
+        for (const input of hostChanges(hostInputs(this.cpu), holding)) {
+            this.log.record(input);
+            applyInput(this.cpu, input);
+        }
+        this.dispatchEvent(new CustomEvent("landed", { detail: { cycle } }));
     }
 }

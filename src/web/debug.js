@@ -1292,7 +1292,10 @@ export class Debugger {
 
     _steppedBack(over) {
         this.updatePrevMem();
-        return this._history.stepBack(over);
+        const refusal = this._history.stepBack(over);
+        // Gone back past where the stopwatch was started, it has nothing to time from.
+        if (this._stopwatchFrom > this.cpu.scheduler.epoch) this._stopwatchFrom = null;
+        return refusal;
     }
 
     stepOver() {

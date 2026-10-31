@@ -1412,6 +1412,7 @@ export class FakeVideo {
             hasVideoNula: false,
         };
         this.regs = new Uint8Array(32);
+        this.fb32 = new Uint32Array(0);
         this.fieldCycles = BbcFieldCycles;
         this.syncCycles = BbcVSyncCycles;
         this.lineCycles = BbcLineCycles;

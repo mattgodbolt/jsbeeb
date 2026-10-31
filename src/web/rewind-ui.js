@@ -3,6 +3,7 @@ import { RewindBuffer } from "../rewind.js";
 import { copySnapshot } from "../6502.js";
 import { RewindCaptureInterval } from "./emulation-loop.js";
 import { noteFeature } from "./analytics.js";
+import { snapshotCycle } from "../replay.js";
 
 const RewindBufferSnapshots = 30;
 const FrameSnapshots = 3;
@@ -18,7 +19,8 @@ export class RewindUI {
      * @param {object} options.video - Video instance
      * @param {object} options.loop - the emulation loop: says when to capture, and is held while the panel is open
      * @param {import("../replay.js").ReplayHistory} options.history - what the debugger steps back through, told of
-     * every snapshot kept and when they are all forgotten
+     * every snapshot kept and when they are all forgotten, and telling of a step back that leaves the newer ones
+     * a future the machine no longer has
      */
     constructor({ processor, video, loop, history }) {
         this.rewindBuffer = new RewindBuffer(RewindBufferSnapshots);
@@ -34,6 +36,7 @@ export class RewindUI {
             this.frames.clear();
             this.history.restart();
         });
+        history.addEventListener("landed", ({ detail }) => this.forgetAfter(detail.cycle));
 
         this.panel = document.getElementById("rewind-panel");
         this.filmstrip = document.getElementById("rewind-filmstrip");
@@ -67,6 +70,14 @@ export class RewindUI {
         this.rewindBuffer.push(snapshot);
         this.history.taken(snapshot, replacing);
         this.history.trim();
+        this.updateButtonState();
+    }
+
+    /** Forgets the snapshots from after `cycle`, newest first, as the machine has stepped back before them. */
+    forgetAfter(cycle) {
+        for (const ring of [this.frames, this.rewindBuffer]) {
+            while (ring.length > 0 && snapshotCycle(this.processor, ring.peek()) > cycle) ring.pop();
+        }
         this.updateButtonState();
     }
 
@@ -172,6 +183,8 @@ export class RewindUI {
         this.filmstrip.innerHTML = "";
         this.snapshots = [];
         this.savedState = null;
+        // What the previews read and ran into is not the machine's own past.
+        this.history.restart();
         document.removeEventListener("keydown", this._onKeyDown, true);
         this.resumeLoop?.();
         this.resumeLoop = null;

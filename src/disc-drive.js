@@ -75,6 +75,8 @@ export class DiscDrive extends EventTarget {
     constructor(id, scheduler, cyclesPerSecond) {
         super();
         this._scheduler = scheduler;
+        /** @type {import("./replay.js").InputLog | null} */
+        this.inputLog = null;
         const cyclesPerMs = cyclesPerSecond / 1000;
         this._ticksPerRevolution = RevolutionMs * cyclesPerMs;
         this._spinUpTicks = SpinUpMs * cyclesPerMs;
@@ -347,6 +349,8 @@ export class DiscDrive extends EventTarget {
     _checkTrackNeedsWrite() {
         if (!this.disc) return;
         const written = this.disc.flushWrites();
+        // It may have gone where the disc came from, which a replay from before it cannot take back.
+        if (written) this.inputLog?.refuse("a write to a disc");
         // A 48 tpi head writes across most of its band but not as far as the neighbouring 96 tpi
         // track, which is left in the guard band with nothing readable on it.
         if (written && this._tracksPerStep === 2) this.disc.eraseTrack(written.isSideUpper, written.trackNum ^ 1);

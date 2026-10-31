@@ -1303,6 +1303,7 @@ describe("Debugger", () => {
                 history.taken(cpu.snapshotState(), null);
                 dbgr.attachStepBack(history);
                 dbgr.debug(cpu.pc);
+                return history;
             };
 
             beforeEach(() => {
@@ -1322,6 +1323,27 @@ describe("Debugger", () => {
                 keyPress("P");
                 expect([pc(), x()]).toEqual(["2000", xAtCall]);
                 expect(addrOf(currentRow())).toBe("2000");
+            });
+
+            it.each([
+                ["back one after an instruction that is not a return", { 0x2000: [0xa9, 0x41, 0xea] }, 2, 0, "2002"],
+                [
+                    "to where the stack stood as the RTI leaves it, from a handler's RTI",
+                    { 0x2000: interrupted, 0x3000: [0xea, 0x40] },
+                    8,
+                    0,
+                    "2002",
+                ],
+                ["to the call, from an older snapshot than the return's", { 0x3000: [0xa2, 0x05, 0x60] }, 3, 2, "2000"],
+            ])("goes back on P %s", (_, code, steps, snapshotAfter, landsAt) => {
+                for (const [address, bytes] of Object.entries(code)) load(Number(address), bytes);
+                const history = stepBackHere();
+                for (let i = 0; i < steps; i++) {
+                    if (i === snapshotAfter && i > 0) history.taken(cpu.snapshotState(), null);
+                    keyPress("n");
+                }
+                keyPress("P");
+                expect(pc()).toBe(landsAt);
             });
 
             it.each([

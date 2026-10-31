@@ -10,6 +10,8 @@ export class Acia extends EventTarget {
         this.toneGen = toneGen;
         this.rs423Handler = null;
         this.relayNoise = relayNoise;
+        /** @type {import("./replay.js").InputLog | null} */
+        this.inputLog = null;
 
         this.sr = 0x00;
         this.cr = 0x00;
@@ -69,6 +71,8 @@ export class Acia extends EventTarget {
     }
 
     setMotor(on) {
+        // The tape is not in a snapshot, and a replay would read on from where it is now.
+        if (on !== this.motorOn) this.inputLog?.refuse("the cassette motor starting or stopping");
         if (on && !this.motorOn) {
             this.runTape();
             this.relayNoise.motorOn();
