@@ -60,6 +60,17 @@ describe("BitWindow64", function () {
     ])("counts the run of 8 nibbles ending at bit 0 of %s as %i", (value, expected) => {
         expect(shiftIn(new BitWindow64(), value).countTrailingNibbles(0x8)).toBe(expected);
     });
+
+    it.each([0n, 0x4489n, 0xffffffffffffffffn, 0x8000000000000001n])(
+        "snapshots %s as its unsigned decimal and restores it",
+        (value) => {
+            const saved = shiftIn(new BitWindow64(), value).snapshotState();
+            expect(saved).toBe(value.toString());
+            const restored = new BitWindow64();
+            restored.restoreState(saved);
+            expect(restored).toEqual(shiftIn(new BitWindow64(), value));
+        },
+    );
 });
 
 describe("Disc builder tests", () => {

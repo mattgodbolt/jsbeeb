@@ -77,6 +77,24 @@
         ],
         "advancing": { "address": 1048, "length": 4, "what": "the program's loop counter F%" }
       }
+    },
+    {
+      "name": "master-disc-cat",
+      "model": "Master",
+      "fittings": {
+        "coProcessor": false,
+        "hasMusic5000": false,
+        "hasTeletextAdaptor": false,
+        "hasEconet": false,
+        "hasVideoNula": false
+      },
+      "description": "A Master BASIC loop cataloguing a disc, so its WD1770 reads the catalogue over and over.",
+      "source": "a BASIC program in tools/make-benchmark-workloads.js, run with public/discs/elite.ssd in drive 0",
+      "snapshot": "master-disc-cat.json.gz",
+      "checks": {
+        "bytes": [{ "address": 853, "value": 7, "what": "the OS screen mode, MODE 7" }],
+        "advancing": { "address": 1048, "length": 4, "what": "the program's loop counter F%" }
+      }
     }
   ]
 }

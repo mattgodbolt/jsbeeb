@@ -174,6 +174,20 @@ const Workloads = [
             advancing: basicLoopCounter,
         },
     },
+    {
+        name: "master-disc-cat",
+        model: "Master",
+        fittings: StockFittings,
+        description: "A Master BASIC loop cataloguing a disc, so its WD1770 reads the catalogue over and over.",
+        source: "a BASIC program in tools/make-benchmark-workloads.js, run with public/discs/elite.ssd in drive 0",
+        program: ["10 F%=0", "20 REPEAT", "30 F%=F%+1", "40 *CAT", "50 UNTIL FALSE"],
+        async build(machine) {
+            const media = await insertBuiltInDisc(machine, "elite.ssd");
+            await runBasic(machine, this.program.join("\n"));
+            return media;
+        },
+        checks: { bytes: [osModeIs(7)], advancing: basicLoopCounter },
+    },
 ];
 
 async function buildWorkload(workload) {

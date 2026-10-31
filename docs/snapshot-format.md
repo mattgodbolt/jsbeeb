@@ -456,7 +456,7 @@ The FDC type depends on the model: Intel 8271 for BBC B models, WD1770 for Maste
 | `timerState`                | number       | Timer state machine                            |
 | `stateCount`                | number       | State counter                                  |
 | `indexPulseCount`           | number       | Index pulse counter                            |
-| `markDetector`              | string       | Mark detector BigInt (serialized as string)    |
+| `markDetector`              | string       | Mark detector's last 64 bits, unsigned decimal |
 | `dataShifter`               | number       | Data shift register                            |
 | `dataShiftCount`            | number       | Shift count                                    |
 | `deliverData`               | number       | Data byte to deliver                           |
@@ -470,7 +470,7 @@ The FDC type depends on the model: Intel 8271 for BBC B models, WD1770 for Maste
 | `timerTaskOffset`           | number\|null | Timer task offset from scheduler epoch         |
 | `drives`                    | object[]     | Array of 2 drive states (see Disc drive below) |
 
-`_currentDrive` is derived from `controlRegister` drive select bits on restore. `markDetector` is a BigInt stored as a decimal string.
+`_currentDrive` is derived from `controlRegister` drive select bits on restore.
 
 ### Disc drive (`state.fdc.drives[n]`)
 
