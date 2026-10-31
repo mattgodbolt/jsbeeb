@@ -57,7 +57,7 @@ export class RewindUI {
         this.updateButtonState();
     }
 
-    /** Forget everything captured, as on a hard reset or joining a shared session. */
+    /** Forget everything captured, as on a hard reset or as a guest takes the host's machine. */
     reset() {
         this.close();
         this.rewindBuffer.clear();

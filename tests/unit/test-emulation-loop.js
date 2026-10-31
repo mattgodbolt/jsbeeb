@@ -403,6 +403,27 @@ describe("EmulationLoop", () => {
         expect(captures.filter((capture) => capture === "rewind")).toHaveLength(2);
     });
 
+    it("keeps rewind captures a second of cycles apart, and frames from piling up, when ticks run long", () => {
+        const loop = started();
+        const captures = [];
+        loop.addEventListener("frame-capture", () => captures.push("frame"));
+        loop.addEventListener("rewind-capture", () => captures.push("rewind"));
+        // A machine too slow for real time: every tick catches up a tenth of a second, five frames.
+        const now = vi.spyOn(performance, "now");
+        const start = performance.now();
+        for (let tick = 1; tick <= 10; tick++) {
+            now.mockReturnValue(start + 100 * tick);
+            loop.tick();
+        }
+        expect(captures).toEqual([...Array(10).fill("frame"), "rewind"]);
+        captures.length = 0;
+        for (let tick = 1; tick <= 4; tick++) {
+            now.mockReturnValue(start + 1000 + TickMs * tick);
+            loop.tick();
+        }
+        expect(captures).toEqual(["frame", "frame"]);
+    });
+
     it("starts once however often it is asked to go", () => {
         const loop = started();
         loop.go();

@@ -69,9 +69,10 @@ class VirtualSpeedUpdater {
  * cycles, starting and stopping, the audio lead, fast-forward and the speed
  * readout. Owns `running`, and dispatches a "running" event whenever it
  * changes hands, "tick" on every timer tick and on every vsync that runs the
- * machine (the first tick only takes the time), "frame-capture" after each
- * emulated frame's worth of cycles, and "rewind-capture" straight after every
- * RewindCaptureInterval-th of those, for whoever keeps the machine's history.
+ * machine (the first tick only takes the time), "frame-capture" after a tick
+ * that ends an emulated frame's worth of cycles (at most one a tick), and
+ * "rewind-capture" straight after one that ends RewindCaptureInterval frames'
+ * worth, for whoever keeps the machine's history.
  *
  * `mode` is a RunMode. Anything that needs the machine held still while it
  * works (a dialog, a snapshot, the rewind panel, a hidden tab) takes a `hold()`,
@@ -99,6 +100,7 @@ export class EmulationLoop extends EventTarget {
         this.clocksPerSecond = clocksPerSecond;
         this.maxCyclesPerTick = clocksPerSecond / 10;
         this.frameCycles = clocksPerSecond / FramesPerSecond;
+        this.rewindCaptureCycles = RewindCaptureInterval * this.frameCycles;
         this.fastTape = fastTape;
         this.audioStatsNode = audioStatsNode;
 
@@ -112,7 +114,7 @@ export class EmulationLoop extends EventTarget {
         this.vsyncToken = null;
         this.emulationLeadMs = 0;
         this.frameCycleCounter = 0;
-        this.framesSinceRewindCapture = 0;
+        this.rewindCycleCounter = 0;
         this.holds = new Set();
         this.resumeOnVisible = null;
         this.lockstep = null;
@@ -318,11 +320,14 @@ export class EmulationLoop extends EventTarget {
                 const paintMs = display.takePaintMs();
                 let snapshotMs = 0;
                 this.frameCycleCounter += cycles;
-                if (this.frameCycleCounter >= this.frameCycles) {
-                    this.frameCycleCounter -= this.frameCycles;
+                this.rewindCycleCounter += cycles;
+                const rewindDue = this.rewindCycleCounter >= this.rewindCaptureCycles;
+                if (rewindDue || this.frameCycleCounter >= this.frameCycles) {
+                    // A tick of several frames captures once, and leaves no backlog of frames behind it.
+                    this.frameCycleCounter %= this.frameCycles;
                     this.dispatchEvent(new Event("frame-capture"));
-                    if (++this.framesSinceRewindCapture === RewindCaptureInterval) {
-                        this.framesSinceRewindCapture = 0;
+                    if (rewindDue) {
+                        this.rewindCycleCounter -= this.rewindCaptureCycles;
                         this.dispatchEvent(new Event("rewind-capture"));
                     }
                     snapshotMs = performance.now() - end;
