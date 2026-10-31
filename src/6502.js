@@ -1501,6 +1501,8 @@ export class Cpu6502 extends Base6502 {
      * its RAM, sideways RAM and parasite memory are refilled for this one, so it is spent
      */
     snapshotState({ includeRoms = false, into } = {}) {
+        // A restore starts the sound chip at the scheduler's epoch, so its counters must have run up to it.
+        this.soundChip.catchUp();
         return {
             ...this.snapshotRegisters(),
             halted: this.halted,

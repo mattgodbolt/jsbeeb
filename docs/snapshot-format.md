@@ -316,21 +316,26 @@ A machine built with `FakeVideo` (TestMachine, or the page's `fakeVideo` option;
 
 ### Sound chip (`state.soundChip`)
 
-| Field             | Type         | Description                                          |
-| ----------------- | ------------ | ---------------------------------------------------- |
-| `registers`       | Uint16Array  | 4 channel tone/noise period registers                |
-| `counter`         | Float32Array | 4 channel counters                                   |
-| `outputBit`       | boolean[]    | 4 channel output states                              |
-| `volume`          | Float32Array | 4 channel volume levels                              |
-| `lfsr`            | number       | Noise generator linear feedback shift register       |
-| `latchedRegister` | number       | Last latched register address                        |
-| `residual`        | number       | Sub-sample residual (float)                          |
-| `sineOn`          | boolean      | Sine tone generator active                           |
-| `sineStep`        | number       | Sine generator step size                             |
-| `sineTime`        | number       | Sine generator phase                                 |
-| `dcPrevIn`        | number       | DC blocker previous input (0 if absent)              |
-| `dcPrevOut`       | number       | DC blocker previous output (0 if absent)             |
-| `speakerBit`      | number       | Atom only: the speaker's level, 0 or 1 (0 if absent) |
+| Field              | Type         | Description                                           |
+| ------------------ | ------------ | ----------------------------------------------------- |
+| `registers`        | Uint16Array  | 4 channel tone/noise period registers                 |
+| `counter`          | Float32Array | 4 channel counters                                    |
+| `outputBit`        | boolean[]    | 4 channel output states                               |
+| `volume`           | Float32Array | 4 channel volume levels                               |
+| `lfsr`             | number       | Noise generator linear feedback shift register        |
+| `latchedRegister`  | number       | Last latched register address                         |
+| `residual`         | number       | Sub-sample residual (float)                           |
+| `sineOn`           | boolean      | Sine tone generator active                            |
+| `sineStep`         | number       | Sine generator step size                              |
+| `sineTime`         | number       | Sine generator phase                                  |
+| `dcPrevIn`         | number       | DC blocker previous input (0 if absent)               |
+| `dcPrevOut`        | number       | DC blocker previous output (0 if absent)              |
+| `speakerBit`       | number       | Atom only: the speaker's level, 0 or 1 (0 if absent)  |
+| `slowDataBus`      | number       | The slow data bus value the chip takes on a write     |
+| `active`           | boolean      | Write enable (WE) low                                 |
+| `activeTaskOffset` | number\|null | Offset at which the chip takes the bus (null if none) |
+
+`slowDataBus`, `active` and `activeTaskOffset` are absent from snapshots written before they were saved; then the bus is what the System VIA's restore drives onto it, and a write enabled there is taken as if WE had just gone low.
 
 ### ACIA (`state.acia`)
 
