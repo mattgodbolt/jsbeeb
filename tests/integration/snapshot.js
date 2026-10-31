@@ -150,7 +150,7 @@ describe("save state round trip", () => {
         expect(loaded(restored)).toEqual(body);
     });
 
-    it("carries a Master on from part way through a CMOS access, making none as it restores", async () => {
+    it("carries a Master on from part way through a CMOS access, making none as it restores, from an older snapshot too", async () => {
         const machine = await bootedTestMachine("Master");
         const cpu = machine.processor;
         const { cmos } = cpu.sysvia;
@@ -169,6 +169,10 @@ describe("save state round trip", () => {
             const bus = cmos.snapshotState();
             await machine.runFor(RunOnCycles);
             const original = ranOn();
+
+            const { cmos: _, ...sysviaBeforeTheBusWasSaved } = snapshot.sysvia;
+            cpu.restoreState({ ...snapshot, sysvia: sysviaBeforeTheBusWasSaved });
+            expect(cmos.sessionState()).toEqual({ ...original.cmos, ...bus, cmosAddr: original.cmos.cmosAddr });
 
             cpu.restoreState(snapshot);
             expect(cmos.sessionState()).toEqual({ ...original.cmos, ...bus });
