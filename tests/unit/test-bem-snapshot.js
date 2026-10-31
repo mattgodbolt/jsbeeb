@@ -1,9 +1,11 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "fs";
 import { isBemSnapshot, parseBemSnapshot } from "../../src/bem-snapshot.js";
+import { HwScrollSubtract } from "../../src/video.js";
 
 const BemSnapshotSize = 327885;
 const BemModelB = 3;
+const BemSysViaIc32Offset = 24 + 65536 + 262144 + 33;
 
 function makeMinimalBemSnapshot(overrides = {}) {
     const buffer = new ArrayBuffer(BemSnapshotSize);
@@ -22,6 +24,7 @@ function makeMinimalBemSnapshot(overrides = {}) {
     view.setUint8(17, overrides.interrupt ?? 0);
     view.setUint32(18, overrides.cycles ?? 12345, true);
     view.setUint8(22, overrides.fe30 ?? 0x0f);
+    view.setUint8(BemSysViaIc32Offset, overrides.ic32 ?? 0);
     if (overrides.ramByte !== undefined) {
         bytes[24 + (overrides.ramAddr ?? 0)] = overrides.ramByte;
     }
@@ -67,6 +70,14 @@ describe("parseBemSnapshot", () => {
     ])("%s", async (_, overrides, pick, expected) => {
         expect(pick(await parseBemSnapshot(makeMinimalBemSnapshot(overrides)))).toEqual(expected);
     });
+
+    it.each([...HwScrollSubtract.entries()])(
+        "wraps the screen by IC32's screen size %i",
+        async (size, screenSubtract) => {
+            const { state } = await parseBemSnapshot(makeMinimalBemSnapshot({ ic32: (size << 4) | 0xcf }));
+            expect(state.video.screenSubtract).toBe(screenSubtract);
+        },
+    );
 
     it("gives every device a state", async () => {
         const { state } = await parseBemSnapshot(makeMinimalBemSnapshot());
@@ -181,6 +192,7 @@ describe("b-em v3 model import", () => {
         expect(state.roms.length).toBe(256 * 1024);
         expect(state.video.regs[0]).toBe(127);
         expect(state.video.ulactrl).not.toBe(0);
+        expect(state.video.screenSubtract).toBe(HwScrollSubtract[2]);
     });
 });
 

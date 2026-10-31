@@ -207,7 +207,7 @@ function parseBemV1(buffer) {
         roms,
         importedViaState(sysVia, sysViaIC32),
         importedViaState(userVia, undefined),
-        buildVideoState(ulaControl, ulaPalette, crtcRegs),
+        buildVideoState(ulaControl, ulaPalette, crtcRegs, sysViaIC32),
         readBemSound(bytes, soundOff),
     );
 }
@@ -518,7 +518,7 @@ function parseBemV3(buffer) {
         roms,
         sysvia,
         uservia,
-        buildVideoState(ulaControl, ulaPalette, crtcRegs, nulaCollook, crtcCounters),
+        buildVideoState(ulaControl, ulaPalette, crtcRegs, sysvia.IC32, nulaCollook, crtcCounters),
         soundChip,
         tube,
     );

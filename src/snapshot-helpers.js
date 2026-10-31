@@ -96,10 +96,11 @@ export function importedSoundState({ registers, counter, outputBit, volume }, lf
  * @param {number} ulaControl - VideoULA control register
  * @param {Uint8Array} ulaPalette - 16-entry raw ULA palette register values (lower nibble of &FE21 writes)
  * @param {Uint8Array} crtcRegs - CRTC registers (at least 18 bytes)
+ * @param {number} ic32 - the system VIA's addressable latch, whose screen size bits set the hardware wrap
  * @param {Int32Array|null} [nulaCollook] - NULA colour lookup (16 ABGR entries), or null for default BBC palette
  * @param {object|null} [crtcCounters] - CRTC counter state {hc, vc, sc, ma, maback}, or null for defaults
  */
-export function buildVideoState(ulaControl, ulaPalette, crtcRegs, nulaCollook, crtcCounters) {
+export function buildVideoState(ulaControl, ulaPalette, crtcRegs, ic32, nulaCollook, crtcCounters) {
     const video = new Video(false, 0, () => {}, { hasVideoNula: true, drainKind: "js" });
     for (let reg = 0; reg < CrtcImportedRegisters; reg++) {
         video.crtc.write(CrtcAddress, reg);
@@ -109,6 +110,7 @@ export function buildVideoState(ulaControl, ulaPalette, crtcRegs, nulaCollook, c
     if (nulaCollook) video.ula.collook.set(nulaCollook);
     video.ula.write(UlaControl, ulaControl);
     for (let i = 0; i < 16; i++) video.ula.write(UlaPalette, (i << 4) | (ulaPalette[i] & 0x0f));
+    video.setScreenHwScroll((ic32 >> 4) & 3);
 
     const startAddr = (video.regs[13] | (video.regs[12] << 8)) & 0x3fff;
     video.horizCounter = crtcCounters ? crtcCounters.hc : 0;
