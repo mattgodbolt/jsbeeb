@@ -35,6 +35,7 @@ const AtomWaitThenPrint = ["10 LINK #FFE3", '20 P."DONE"'];
 const ScratchAddress = 0x3000;
 const AtomTextScreen = 0x8000;
 const AtomTextScreenBytes = 512;
+const AtomTextColumns = 32;
 const AtomLetterOffset = 0x40;
 const AdcFullScale = 0xffff;
 const AtomPauseThenSaveToTheCard = ["10 F.I=1TO50;WAIT;N.", '20 *SAVE "NEW" 2900 2A00'];
@@ -102,28 +103,31 @@ function driftingSource() {
 
 afterEach(() => vi.restoreAllMocks());
 
-// The Atom's screen holds its letters as the 6847 draws them, A as 1.
-const atomScreenHas = (machine, text) => {
-    const screen = Array.from({ length: AtomTextScreenBytes }, (_, i) => machine.readbyte(AtomTextScreen + i));
+// The Atom's screen holds its letters as the 6847 draws them, A as 1. Only a line printed starts a row: the
+// program's listing has the text too, after its line number.
+const atomPrinted = (machine, text) => {
     const codes = [...text].map((char) => char.charCodeAt(0) - AtomLetterOffset);
-    return screen.some((_, at) => codes.every((code, i) => screen[at + i] === code));
+    return Array.from({ length: AtomTextScreenBytes / AtomTextColumns }, (_, row) => row * AtomTextColumns).some(
+        (start) => codes.every((code, i) => machine.readbyte(AtomTextScreen + start + i) === code),
+    );
 };
-const catalogued = (machine) => expect(mode7Text(machine)).toContain("Drive 0");
+const catalogued = (machine) => mode7Text(machine).includes("Drive 0");
 
 // What each runs once a key is pressed: on the B a disc access, on the Master its clock read too, and on the Atom a
 // line printed. Only the BBCs read the FIRE buttons and the analogue port.
 describe.each([
     ["a B", "B-DFS1.2", WaitThenCatalogue, catalogued, true],
     ["a Master", "Master", WaitThenClockAndCatalogue, catalogued, true],
-    ["an Atom", "Atom", AtomWaitThenPrint, (machine) => expect(atomScreenHas(machine, "DONE")).toBe(true), false],
+    ["an Atom", "Atom", AtomWaitThenPrint, (machine) => atomPrinted(machine, "DONE"), false],
 ])("Stepping back on %s", (_, model, program, ran, readsBbcInputs) => {
     it("then forward again ends where it began, replaying a key press and what it set running", async () => {
         vi.spyOn(Date, "now").mockReturnValue(ClockAtRecording);
         const machine = await waitingIn(model, program);
         const history = historyFromHere(machine);
+        expect(ran(machine)).toBe(false);
         await pressA(machine);
         await seconds(machine, CatalogueSeconds);
-        ran(machine);
+        expect(ran(machine)).toBe(true);
         Date.now.mockReturnValue(ClockAtReplay);
         await expectBackAndForthLandsWhereItWas(machine, history);
     });
