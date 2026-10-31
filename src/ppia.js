@@ -323,18 +323,25 @@ export class AtomPPIA extends WithKeyMatrix(PPIA) {
 
     playTape() {
         if (this.tape) {
+            this.refuseReplaysIfMotorChanges(true);
             this.motorOn = true;
             this.runTape();
         }
     }
 
     stopTape() {
+        this.refuseReplaysIfMotorChanges(false);
         this.motorOn = false;
         if (this.tape) {
             const toneGen = this.cpu.soundChip.toneGenerator;
             toneGen.mute();
             this.runTapeTask.cancel();
         }
+    }
+
+    // The tape is not in a snapshot, and a replay would read on from where it is now.
+    refuseReplaysIfMotorChanges(on) {
+        if (on !== this.motorOn) this.inputLog?.refuse("the cassette motor starting or stopping");
     }
 
     /** Polls the tape and books the next poll; the Atom's PLAY is its motor, so a tape that runs out stops. */

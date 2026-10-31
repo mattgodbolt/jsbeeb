@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { ReplayHistory, snapshotCycle } from "../../src/replay.js";
 import { snapshotToJSON } from "../../src/snapshot.js";
 import { Video } from "../../src/video.js";
-import { SoundChip } from "../../src/soundchip.js";
+import { AtomSoundChip, SoundChip } from "../../src/soundchip.js";
 import { keyCodes } from "../../src/keymap.js";
 import { bootedTestMachine, mode7Text } from "./helpers.js";
 import { singleStep } from "../helpers/single-step.js";
@@ -15,27 +15,30 @@ const CatalogueSeconds = 2;
 const AroundAnInputSeconds = 0.1;
 const ClockAtRecording = Date.UTC(2026, 9, 31, 12, 0, 0);
 const ClockAtReplay = ClockAtRecording + 10 * 1000;
-const WaitThenCatalogue = "10 A=GET\n20 *CAT";
-const WaitThenClockAndCatalogue = "10 A=GET\n20 T$=TIME$\n30 *CAT";
-const WaitThenConfigure = "10 A=GET\n20 *CONFIGURE BAUD 3";
+const WaitThenCatalogue = ["10 A=GET", "20 *CAT"];
+const WaitThenClockAndCatalogue = ["10 A=GET", "20 T$=TIME$", "30 *CAT"];
+const WaitThenConfigure = ["10 A=GET", "20 *CONFIGURE BAUD 3"];
+// Waits in the OS's OSRDCH for a key, then prints.
+const AtomWaitThenPrint = ["10 LINK #FFE3", '20 P."DONE"'];
 const ScratchAddress = 0x3000;
 const AdcFullScale = 0xffff;
 
 async function booted(model) {
+    const isAtom = model === "Atom";
+    // The sound chip as the page builds it, its sound rendered elsewhere from its events.
+    const onEvent = () => {};
     const machine = await bootedTestMachine(model, {
-        video: new Video(false, FbWidth * FbHeight, () => {}),
-        // As the page builds it, its sound rendered elsewhere from its events.
-        soundChip: new SoundChip(null, { onEvent: () => {} }),
+        video: new Video(false, FbWidth * FbHeight, () => {}, { isAtom }),
+        soundChip: isAtom ? new AtomSoundChip(null, { onEvent }) : new SoundChip(null, { onEvent }),
     });
-    await machine.loadDisc("discs/bcdtest.ssd");
+    if (!isAtom) await machine.loadDisc("discs/bcdtest.ssd");
     return machine;
 }
 
-/** A booted machine running `program`, waiting at its GET. */
-async function waitingIn(model, program) {
+/** A booted machine running BASIC's `lines`, waiting for a key. */
+async function waitingIn(model, lines) {
     const machine = await booted(model);
-    await machine.loadBasic(program);
-    await machine.type("RUN");
+    for (const line of [...lines, "RUN"]) await machine.type(line);
     await machine.runUntilInput();
     return machine;
 }
@@ -82,18 +85,19 @@ function driftingSource() {
 
 afterEach(() => vi.restoreAllMocks());
 
-// The Atom joins once a restored Atom runs on as it did (#1757).
+// What each runs once a key is pressed: on the B a disc access, on the Master its clock read too.
 describe.each([
-    ["a B", "B-DFS1.2", WaitThenCatalogue],
-    ["a Master", "Master", WaitThenClockAndCatalogue],
-])("Stepping back on %s", (_, model, program) => {
-    it("then forward again ends where it began, replaying a key press, a disc access and a read of the clock", async () => {
+    ["a B", "B-DFS1.2", WaitThenCatalogue, (machine) => expect(mode7Text(machine)).toContain("Drive 0")],
+    ["a Master", "Master", WaitThenClockAndCatalogue, (machine) => expect(mode7Text(machine)).toContain("Drive 0")],
+    ["an Atom", "Atom", AtomWaitThenPrint, () => {}],
+])("Stepping back on %s", (_, model, program, ran) => {
+    it("then forward again ends where it began, replaying a key press and what it set running", async () => {
         vi.spyOn(Date, "now").mockReturnValue(ClockAtRecording);
         const machine = await waitingIn(model, program);
         const history = historyFromHere(machine);
         await pressA(machine);
         await seconds(machine, CatalogueSeconds);
-        expect(mode7Text(machine)).toContain("Drive 0");
+        ran(machine);
         Date.now.mockReturnValue(ClockAtReplay);
         await expectBackAndForthLandsWhereItWas(machine, history);
     });

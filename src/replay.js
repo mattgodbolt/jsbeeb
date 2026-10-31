@@ -351,7 +351,7 @@ export class ReplayHistory extends EventTarget {
     refusal() {
         const { cpu } = this;
         if (cpu.econet) return NoStepBackWithEconet;
-        if (cpu.acia.motorOn) return NoStepBackWithTapeRunning;
+        if (cpu.tapeInterface.motorOn) return NoStepBackWithTapeRunning;
         const now = cycleCount(cpu);
         const from = this._earlier(now).at(-1);
         if (!from) return NothingToStepBackTo;
