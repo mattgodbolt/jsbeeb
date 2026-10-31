@@ -277,13 +277,32 @@ describe("RewindUI", () => {
             expect(ui.rewindBuffer.length).toBe(2);
         });
 
-        it("gives step back every snapshot in either ring, until the machine's state is replaced", () => {
+        it.each([
+            ["the machine's state is replaced", () => loop.dispatchEvent(new Event("replacing-state"))],
+            [
+                "the panel closes, its previews having run the machine",
+                (ui) => {
+                    ui.open();
+                    key("Escape");
+                },
+            ],
+        ])("gives step back every snapshot in either ring, until %s", (_, forget) => {
             const ui = make();
             captured(31);
             const held = new Set([...ui.frames.getAll(), ...ui.rewindBuffer.getAll()]);
             expect(new Set(history.snapshots())).toEqual(held);
-            loop.dispatchEvent(new Event("replacing-state"));
+            forget(ui);
             expect(history.snapshots()).toEqual([]);
+        });
+
+        it("forgets from both rings the snapshots a step back left in the future", () => {
+            const ui = make();
+            captured(5);
+            const [rewinds, frames] = [ui.rewindBuffer.getAll(), ui.frames.getAll()];
+            const forgotten = new Set([...rewinds.slice(3), frames.at(-1)]);
+            history.dispatchEvent(new CustomEvent("landed", { detail: { forgotten } }));
+            expect(ui.rewindBuffer.getAll()).toEqual(rewinds.slice(0, 3));
+            expect(ui.frames.getAll()).toEqual(frames.slice(0, 2));
         });
     });
 });

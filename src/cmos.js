@@ -31,8 +31,6 @@ const TimeRegisters = Object.freeze({
     4: { limit: 24, get: (time) => time.getHours(), set: (time, value) => time.setHours(value) },
 });
 
-const WritableClockRegisters = new Set([0, 2, 4, 7, 8, 9]);
-
 function isBcdBelow(value, limit) {
     return value >> 4 < 10 && (value & 0x0f) < 10 && fromBcd(value) < limit;
 }
@@ -212,7 +210,13 @@ export class Cmos {
         this.timeOffset = bbcTime.getTime() - this.clockMs();
     }
 
+    // Snapshots leave the CMOS out, so a replay from before a write would read what it wrote.
+    refuseReplays() {
+        this.inputLog?.refuse("a write to the CMOS");
+    }
+
     writeTime(register, value) {
+        this.refuseReplays();
         const { limit, set } = TimeRegisters[register];
         if (!isBcdBelow(value, limit)) {
             this.heldTime[register] = value;
@@ -225,6 +229,7 @@ export class Cmos {
     }
 
     writeCalendar(field, value) {
+        this.refuseReplays();
         const bbcTime = this.bbcDateTime();
         const registers = { ...this.calendarRegisters(bbcTime), [field]: value };
         const { day, month, year } = registers;
@@ -284,10 +289,8 @@ export class Cmos {
         this.addressSelect = !!(portBpins & 0x80);
         if (oldAddressSelect && !this.addressSelect) this.cmosAddr = portApins & 0x3f;
         if (oldDataSelect && !this.dataSelect && !this.addressSelect && !this.isRead) {
-            // Snapshots leave the CMOS out, so a replay from before this write would read what it wrote.
-            if (this.cmosAddr > 0xb || WritableClockRegisters.has(this.cmosAddr))
-                this.inputLog?.refuse("a write to the CMOS");
             if (this.cmosAddr > 0xb) {
+                this.refuseReplays();
                 this.store[this.cmosAddr] = portApins;
                 this.save();
             } else {

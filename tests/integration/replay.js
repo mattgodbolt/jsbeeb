@@ -1,12 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { ReplayHistory } from "../../src/replay.js";
+import { ReplayHistory, snapshotCycle } from "../../src/replay.js";
 import { snapshotToJSON } from "../../src/snapshot.js";
-import { TestMachine } from "../../src/test-machine.js";
 import { Video } from "../../src/video.js";
 import { SoundChip } from "../../src/soundchip.js";
 import { keyCodes } from "../../src/keymap.js";
-import { mode7Text } from "./helpers.js";
+import { bootedTestMachine, mode7Text } from "./helpers.js";
 
 const FbWidth = 1024;
 const FbHeight = 768;
@@ -22,14 +21,12 @@ const ScratchAddress = 0x3000;
 const AdcFullScale = 0xffff;
 
 async function booted(model) {
-    const machine = new TestMachine(model, {
+    const machine = await bootedTestMachine(model, {
         video: new Video(false, FbWidth * FbHeight, () => {}),
         // As the page builds it, its sound rendered elsewhere from its events.
         soundChip: new SoundChip(null, { onEvent: () => {} }),
     });
-    await machine.initialise();
     await machine.loadDisc("discs/bcdtest.ssd");
-    await machine.runUntilInput();
     return machine;
 }
 
@@ -177,19 +174,26 @@ describe.each([
         expect(machine.processor.keyboardInterface.keyboardState()).toEqual(letGo);
     });
 
+    it("starts afresh from a hard reset, never replaying from a snapshot taken before it", async () => {
+        const machine = await booted(model);
+        const cpu = machine.processor;
+        const history = historyFromHere(machine);
+        const [beforeReset] = history.snapshots();
+        machine.reset(true);
+        await seconds(machine, AroundAnInputSeconds);
+        history.taken(cpu.snapshotState(), null);
+        const resetAt = machine.elapsedCycles;
+        await machine.runFor(
+            snapshotCycle(cpu, beforeReset) - resetAt + machine.model.cyclesPerSecond * AroundAnInputSeconds,
+        );
+        await expectBackAndForthLandsWhereItWas(machine, history);
+    });
+
     it.each([
         [
             "keys typed in part way through an instruction",
             async (machine) => machine.type("REM"),
             /part way through an instruction/,
-        ],
-        [
-            "a hard reset",
-            async (machine) => {
-                machine.reset(true);
-                await seconds(machine, AroundAnInputSeconds);
-            },
-            /nothing to step back to/,
         ],
         [
             "a change the log never saw",

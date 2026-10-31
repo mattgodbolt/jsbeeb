@@ -1325,6 +1325,27 @@ describe("Debugger", () => {
                 expect(addrOf(currentRow())).toBe("2000");
             });
 
+            it("takes in what is done while stopped after a run, as after m, and a byte edited there is undone", () => {
+                cpu.writemem(0x1234, 0x48);
+                stepBackHere();
+                keyPress("m");
+                expect(pc()).toBe("2003");
+                goTo("goto-mem-addr-form", "$1234");
+                memByte(0x1234).click();
+                type("a9", "Enter", false);
+                keyPress("p");
+                expect(toasts()).toEqual([]);
+                expect([pc(), hexbyte(cpu.peekmem(0x1234))]).toEqual(["3002", "48"]);
+            });
+
+            it("forgets where the stopwatch started once stepped back past it", () => {
+                stepBackHere();
+                keyPress("n");
+                document.getElementById("debug-stopwatch-reset").click();
+                keyPress("p");
+                expect(document.getElementById("debug-stopwatch").textContent).toBe("");
+            });
+
             it.each([
                 ["back one after an instruction that is not a return", { 0x2000: [0xa9, 0x41, 0xea] }, 2, 0, "2002"],
                 [

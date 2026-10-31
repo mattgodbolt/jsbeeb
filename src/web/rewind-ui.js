@@ -3,7 +3,6 @@ import { RewindBuffer } from "../rewind.js";
 import { copySnapshot } from "../6502.js";
 import { RewindCaptureInterval } from "./emulation-loop.js";
 import { noteFeature } from "./analytics.js";
-import { snapshotCycle } from "../replay.js";
 
 const RewindBufferSnapshots = 30;
 const FrameSnapshots = 3;
@@ -36,7 +35,7 @@ export class RewindUI {
             this.frames.clear();
             this.history.restart();
         });
-        history.addEventListener("landed", ({ detail }) => this.forgetAfter(detail.cycle));
+        history.addEventListener("landed", ({ detail }) => this.forget(detail.forgotten));
 
         this.panel = document.getElementById("rewind-panel");
         this.filmstrip = document.getElementById("rewind-filmstrip");
@@ -73,10 +72,10 @@ export class RewindUI {
         this.updateButtonState();
     }
 
-    /** Forgets the snapshots from after `cycle`, newest first, as the machine has stepped back before them. */
-    forgetAfter(cycle) {
+    /** Forgets `forgotten`, the newest snapshots, as the machine has stepped back before them. */
+    forget(forgotten) {
         for (const ring of [this.frames, this.rewindBuffer]) {
-            while (ring.length > 0 && snapshotCycle(this.processor, ring.peek()) > cycle) ring.pop();
+            while (ring.length > 0 && forgotten.has(ring.peek())) ring.pop();
         }
         this.updateButtonState();
     }

@@ -118,14 +118,8 @@ class SampleReplay {
  * as `inputLog`, and while it replays it gives them the samples instead of the host and records nothing.
  */
 export class InputLog {
-    /**
-     * @param {object} cpu
-     * @param {function(): void} onTimeJump told when the machine's cycle count has gone back, which only a replaced
-     * state (a hard reset, say) makes it do, before anything is recorded on the new count
-     */
-    constructor(cpu, onTimeJump) {
+    constructor(cpu) {
         this.cpu = cpu;
-        this.onTimeJump = onTimeJump;
         this.latestSamples = new Map();
         this.replaying = null;
         this.recording = true;
@@ -150,14 +144,6 @@ export class InputLog {
         this.samples = [];
         this.base = hostInputs(this.cpu);
         this.baseSamples = new Map(this.latestSamples);
-        this.latestAt = cycleCount(this.cpu);
-    }
-
-    _at() {
-        const at = cycleCount(this.cpu);
-        if (at < this.latestAt) this.onTimeJump();
-        this.latestAt = at;
-        return at;
     }
 
     get isEmpty() {
@@ -167,12 +153,12 @@ export class InputLog {
     record(input) {
         if (!this.recording) return;
         if (insideExecute(this.cpu)) this.refuse(MidInstruction);
-        else this.inputs.push({ at: this._at(), input });
+        else this.inputs.push({ at: cycleCount(this.cpu), input });
     }
 
     /** Notes that something went in here that no replay can put back, `reason` naming it for the refusal. */
     refuse(reason) {
-        if (this.recording) this.inputs.push({ at: this._at(), refusal: reason });
+        if (this.recording) this.inputs.push({ at: cycleCount(this.cpu), refusal: reason });
     }
 
     /** What the machine reads for `key` from the host, which said `value`. */
@@ -180,7 +166,7 @@ export class InputLog {
         if (this.replaying) return this.replaying.read(key, cycleCount(this.cpu), value);
         if (this.recording && this.latestSamples.get(key) !== value) {
             this.latestSamples.set(key, value);
-            this.samples.push({ at: this._at(), key, value });
+            this.samples.push({ at: cycleCount(this.cpu), key, value });
         }
         return value;
     }
@@ -229,7 +215,6 @@ export class InputLog {
         this.inputs = this.inputs.filter(({ at }) => at <= cycle);
         this.samples = this.samples.filter(({ at }) => at <= cycle);
         this.latestSamples = this.samplesAt(cycle);
-        this.latestAt = cycle;
     }
 
     /** Runs `run` recording nothing, as when the machine is put back as it was. */
@@ -320,14 +305,14 @@ class Landing {
 
 /**
  * What the debugger can step back through: the snapshots kept of the machine since its state was last replaced,
- * and the input log back to the oldest of them. Dispatches "landed", with the cycle in `detail`, once a step back
- * has forgotten everything after it, for whoever else keeps those snapshots.
+ * and the input log back to the oldest of them. Dispatches "landed", with the snapshots it forgot as `detail.forgotten`,
+ * once a step back has forgotten everything after where it landed, for whoever else keeps those snapshots.
  */
 export class ReplayHistory extends EventTarget {
     constructor(cpu) {
         super();
         this.cpu = cpu;
-        this.log = new InputLog(cpu, () => this.restart());
+        this.log = new InputLog(cpu);
         this.kept = new Set();
     }
 
@@ -428,11 +413,12 @@ export class ReplayHistory extends EventTarget {
     // What came after `cycle` was a future the machine has left, and runs from here make their own.
     _landedAt(cycle, holding) {
         this.log.forgetAfter(cycle);
-        for (const snapshot of this.kept) if (snapshotCycle(this.cpu, snapshot) > cycle) this.kept.delete(snapshot);
+        const forgotten = new Set([...this.kept].filter((snapshot) => snapshotCycle(this.cpu, snapshot) > cycle));
+        for (const snapshot of forgotten) this.kept.delete(snapshot);
         for (const input of hostChanges(hostInputs(this.cpu), holding)) {
             this.log.record(input);
-            applyInput(this.cpu, input);
+            this.log.withoutRecording(() => applyInput(this.cpu, input));
         }
-        this.dispatchEvent(new CustomEvent("landed", { detail: { cycle } }));
+        this.dispatchEvent(new CustomEvent("landed", { detail: { forgotten } }));
     }
 }

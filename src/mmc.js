@@ -760,10 +760,6 @@ class WFN {
     }
 }
 
-/**
- * AtomMMC2 emulates the AtoMMC2 device for the Acorn Atom.
- * Handles SD/MMC file operations and communication with the Atom.
- */
 const CardChangingCommands = new Set([
     CMD_DIR_MKDIR,
     CMD_DIR_RMDIR,
@@ -774,6 +770,10 @@ const CardChangingCommands = new Set([
     CMD_WRITE_BYTES,
 ]);
 
+/**
+ * AtomMMC2 emulates the AtoMMC2 device for the Acorn Atom.
+ * Handles SD/MMC file operations and communication with the Atom.
+ */
 export class AtomMMC2 {
     /**
      * Attach a gamepad object for joystick support.
