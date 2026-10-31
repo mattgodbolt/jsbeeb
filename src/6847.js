@@ -376,16 +376,6 @@ export class Video6847 {
         this.cpuAddr = state.cpuAddr;
     }
 
-    // this is usually called from 'video' so 'this'
-    // is a reference to 'video'
-    polltimeFacade(clocks) {
-        if (this.video6847 != undefined) {
-            this.video6847.polltime(clocks);
-            return;
-        }
-        throw new Error("Video6847 not attached — polltimeFacade called before video.video6847 was initialised");
-    }
-
     // ATOM uses 6847 chip
     polltime(clocks) {
         const mode = this.ppia.portapins & 0xf0;
@@ -438,11 +428,9 @@ export class Video6847 {
                 this.inHSync = false;
             }
 
-            // right border - record addr for next FULL line
-            if (this.horizCounter === HBNK + leftborder + displayH) this.nextLineStartAddr = this.addr;
-
-            // Stop drawing outside the right border
+            // right border - record addr for next FULL line, and stop drawing
             if (this.horizCounter === HBNK + leftborder + displayH) {
+                this.nextLineStartAddr = this.addr;
                 this.dispEnableClear(HDISPENABLE);
             }
 
@@ -618,21 +606,16 @@ export class Video6847 {
                 const cval = (bitdef >>> j) & 0x1;
                 // CSS=0: green foreground, CSS=1: buff foreground
                 colour = cval !== 0 ? this.collook[css ? 5 : 1] : this.collook[0];
-
-                // two bitmap lines per 1 pixel
-                fb32[destOffset + n + 1024] = fb32[destOffset + n] = colour;
             } // CG modes
             else {
-                //let cval = (bitdef>>>(j&0xe))&0x3;
                 const cval = (bitdef >>> (j & 0xe)) & 0x3;
 
                 // 2 or 4 - green/yellow/blue/red
-                let colindex = 1 + (cval | (css << 1));
-                colour = this.collook[colindex];
-
-                // two bitmap lines per 1 pixel
-                fb32[destOffset + n + 1024] = fb32[destOffset + n] = colour;
+                colour = this.collook[1 + (cval | (css << 1))];
             }
+
+            // two bitmap lines per 1 pixel
+            fb32[destOffset + n + 1024] = fb32[destOffset + n] = colour;
         }
     }
 

@@ -8,6 +8,9 @@ import { IbmDiscFormat } from "./disc-format.js";
 
 const SpinDebounceMs = 2;
 const RevolutionMs = 200;
+// scarybeast's Chinon drive holds the index pulse low for about 4ms.
+const DiscIndexMs = 4;
+
 /**
  * Time constants of the spin-up and spin-down exponentials. The spindle motor of a 5.25" drive
  * reaches speed about half a second after it starts (drive sheets give 400 to 500 ms). A coasting
@@ -62,11 +65,6 @@ class SeekEndEvent extends Event {
 }
 
 export class DiscDrive extends EventTarget {
-    // scarybeast's Chinon drive holds the index pulse low for about 4ms. */
-    static get DiscIndexMs() {
-        return 4;
-    }
-
     /**
      * Create a new DiscDrive.
      *
@@ -274,7 +272,7 @@ export class DiscDrive extends EventTarget {
         // With no disc loaded the drive asserts the index all the time.
         if (!this.disc) return true;
         // The 8271 datasheet says that the index pulse must be held for over 0.5us. Most drives are in the millisecond range.
-        return this._headPosition < (this.trackLength * DiscDrive.DiscIndexMs) / RevolutionMs;
+        return this._headPosition < (this.trackLength * DiscIndexMs) / RevolutionMs;
     }
 
     writePulses(pulses) {

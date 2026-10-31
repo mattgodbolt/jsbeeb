@@ -971,26 +971,6 @@ export class Cpu6502 extends Base6502 {
             case 0xfc10:
                 if (this.hasTeletextAdaptor) return this.teletextAdaptor.read(addr - 0xfc10);
                 break;
-            case 0xfc20:
-            case 0xfc24:
-            case 0xfc28:
-            case 0xfc2c:
-            case 0xfc30:
-            case 0xfc34:
-            case 0xfc38:
-            case 0xfc3c:
-                // SID Chip.
-                break;
-            case 0xfc40:
-            case 0xfc44:
-            case 0xfc48:
-            case 0xfc4c:
-            case 0xfc50:
-            case 0xfc54:
-            case 0xfc58:
-            case 0xfc5c:
-                // IDE
-                break;
             case 0xfcfc:
                 if (addr === 0xfcff && this.hasMusic5000) return this.music5000PageSel;
                 break;
@@ -1298,26 +1278,6 @@ export class Cpu6502 extends Base6502 {
         switch (addr & ~0x0003) {
             case 0xfc10:
                 if (this.hasTeletextAdaptor) return this.teletextAdaptor.write(addr - 0xfc10, b);
-                break;
-            case 0xfc20:
-            case 0xfc24:
-            case 0xfc28:
-            case 0xfc2c:
-            case 0xfc30:
-            case 0xfc34:
-            case 0xfc38:
-            case 0xfc3c:
-                // SID chip
-                break;
-            case 0xfc40:
-            case 0xfc44:
-            case 0xfc48:
-            case 0xfc4c:
-            case 0xfc50:
-            case 0xfc54:
-            case 0xfc58:
-            case 0xfc5c:
-                // IDE
                 break;
             case 0xfcfc:
                 if (addr === 0xfcff && this.hasMusic5000) {

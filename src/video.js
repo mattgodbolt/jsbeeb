@@ -528,7 +528,7 @@ export class Video {
         this.video6847 = null;
         if (isAtom) {
             this.video6847 = new Video6847(this);
-            this.polltime = this.video6847.polltimeFacade;
+            this.polltime = (clocks) => this.video6847.polltime(clocks);
         }
 
         this.reset(null);

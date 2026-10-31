@@ -185,6 +185,8 @@ export const StatusFlag = Object.freeze({
     needData: 0x04,
 });
 
+const NumRegisters = 32;
+
 /**
  * Parameter acceptance state machine.
  *
@@ -300,10 +302,6 @@ const Call = Object.freeze({
 });
 
 export class IntelFdc extends DiscController {
-    static get NumRegisters() {
-        return 32;
-    }
-
     /**
      * @param {Cpu6502} cpu
      * @param {Scheduler} scheduler
@@ -323,7 +321,7 @@ export class IntelFdc extends DiscController {
         this._callContext = Call.uninitialised;
         this._didSeekStep = false;
 
-        this._regs = new Uint8Array(IntelFdc.NumRegisters);
+        this._regs = new Uint8Array(NumRegisters);
         this._isResultReady = false;
         this._status = 0;
         this._mmioData = 0;
@@ -1174,7 +1172,7 @@ export class IntelFdc extends DiscController {
 
     _readRegister(reg) {
         reg &= 0x3f;
-        if (reg < IntelFdc.NumRegisters) {
+        if (reg < NumRegisters) {
             return this._regs[reg];
         }
         reg &= 0x07;
@@ -1197,7 +1195,7 @@ export class IntelFdc extends DiscController {
 
     _writeRegister(reg, val) {
         reg &= 0x3f;
-        if (reg < IntelFdc.NumRegisters) {
+        if (reg < NumRegisters) {
             this._regs[reg] = val;
             return;
         }

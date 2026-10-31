@@ -214,9 +214,7 @@ class MfmReader {
         this._rawReader = rawReader;
     }
 
-    static get pulsesPerByte() {
-        return 16;
-    }
+    static pulsesPerByte = 16;
 
     read(numBytes) {
         const data = new Uint8Array(numBytes);
@@ -249,9 +247,7 @@ class FmReader {
         this._rawReader = rawReader;
     }
 
-    static get pulsesPerByte() {
-        return 32;
-    }
+    static pulsesPerByte = 32;
 
     read(numBytes) {
         const data = new Uint8Array(numBytes);
