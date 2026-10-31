@@ -483,6 +483,7 @@ const startPromise = machine.start({ media, autoBoot, ...plan.media });
             model,
             takenFromHost,
             loop,
+            rewind: rewindUI,
             keyboard,
             version,
             transport: webRtcTransport(createRendezvousClient()),

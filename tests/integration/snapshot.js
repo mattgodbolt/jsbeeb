@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import { createSnapshot, restoreSnapshot, snapshotFromJSON, snapshotToJSON } from "../../src/snapshot.js";
 import { TestMachine } from "../../src/test-machine.js";
+import { copySnapshot } from "../../src/6502.js";
 import { gzipCodec } from "../../src/archive.js";
 import { Video } from "../../src/video.js";
+import { AtomSoundChip, SoundChip } from "../../src/soundchip.js";
 import {
     CpuCyclesPerField,
     CpuCyclesPerLine,
@@ -27,6 +29,18 @@ const SnowAddr = 0x8123;
 
 const withVideo = (model, options) =>
     new TestMachine(model, { video: new Video(false, FbWidth * FbHeight, () => {}, options) });
+const OneEmulatedSecond = 2 * 1000 * 1000;
+// A disc's tracks and original image are shared by reference on purpose, and nothing writes into them.
+const SharedByReference = new Set(["tracks", "_originalImageData"]);
+
+function* ownedArrays(value) {
+    if (ArrayBuffer.isView(value)) {
+        yield value;
+    } else if (value && typeof value === "object") {
+        for (const [key, inner] of Object.entries(value)) if (!SharedByReference.has(key)) yield* ownedArrays(inner);
+    }
+}
+
 const stateOf = (machine) => JSON.parse(snapshotToJSON(createSnapshot(machine.processor, machine.model).state));
 
 describe("save state round trip", () => {
@@ -83,6 +97,69 @@ describe("save state round trip", () => {
         );
         const fb = original.processor.video.fb32;
         expect(restored.processor.video.fb32.filter((pixel, i) => pixel !== fb[i]).length).toBe(0);
+    });
+});
+
+// An Atom restored from a snapshot does not run on as it did: its system VIA's port A pins come back changed.
+describe.each([
+    ["a B with a disc", "B-DFS1.2", {}, "discs/bcdtest.ssd", true],
+    ["a Master with a co-processor", "Master", { tube: true }, null, true],
+    ["an Atom", "Atom", {}, null, false],
+])("snapshots taken into earlier ones' storage, for %s", (_, model, options, disc, replaysFromRestore) => {
+    const running = async () => {
+        const video = new Video(false, FbWidth * FbHeight, () => {}, { isAtom: model === "Atom" });
+        const soundChip = model === "Atom" ? new AtomSoundChip(() => {}) : new SoundChip(() => {});
+        const machine = new TestMachine(model, { ...options, video, soundChip });
+        await machine.initialise();
+        if (disc) await machine.loadDisc(disc);
+        await machine.runFor(OneEmulatedSecond);
+        return machine;
+    };
+
+    it("are what a fresh snapshot is, and so are copies of them", async () => {
+        const machine = await running();
+        const cpu = machine.processor;
+        const slot = cpu.snapshotState();
+        await machine.runFor(OneEmulatedSecond);
+        const fresh = snapshotToJSON(cpu.snapshotState());
+        const taken = cpu.snapshotState({ into: slot });
+        expect(taken.ram).toBe(slot.ram);
+        expect(snapshotToJSON(taken)).toBe(fresh);
+        const kept = copySnapshot(taken, cpu.snapshotState());
+        // What the next snapshot into `taken` refills.
+        for (const array of [taken.ram, taken.swram, taken.tube?.memory]) array?.fill(0x55);
+        expect(snapshotToJSON(kept)).toBe(fresh);
+    });
+
+    it.runIf(replaysFromRestore)("leave the machine running exactly as it does untaken", async () => {
+        const machine = await running();
+        const cpu = machine.processor;
+        const start = cpu.snapshotState();
+        const frameCycles = machine.model.cyclesPerSecond / 50;
+        const runFrames = async (capture) => {
+            for (let frame = 0; frame < 50; frame++) {
+                await machine.runFor(frameCycles);
+                capture(frame);
+            }
+            return { state: snapshotToJSON(cpu.snapshotState()), picture: cpu.video.fb32.slice() };
+        };
+        const slots = [null, null, null];
+        const captured = await runFrames((frame) => {
+            slots[frame % slots.length] = cpu.snapshotState({ into: slots[frame % slots.length] });
+        });
+        cpu.restoreState(start);
+        expect(await runFrames(() => {})).toEqual(captured);
+    });
+
+    it("never move the machine restored from them, as a restore keeps none of a snapshot's arrays", async () => {
+        const machine = await running();
+        const cpu = machine.processor;
+        const slot = cpu.snapshotState();
+        await machine.runFor(OneEmulatedSecond);
+        cpu.restoreState(slot);
+        const restored = snapshotToJSON(cpu.snapshotState());
+        for (const array of ownedArrays(slot)) array.fill(0x55);
+        expect(snapshotToJSON(cpu.snapshotState())).toBe(restored);
     });
 });
 

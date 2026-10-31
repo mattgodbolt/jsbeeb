@@ -4,6 +4,7 @@ import { toast } from "./toast.js";
 import { shortcutLabel } from "./shortcuts.js";
 
 export const RewindCaptureInterval = 50; // emulated frames, ~1 second
+const FramesPerSecond = 50;
 
 /**
  * Why the machine is or is not running: stopped until it is first started, then
@@ -68,8 +69,10 @@ class VirtualSpeedUpdater {
  * cycles, starting and stopping, the audio lead, fast-forward and the speed
  * readout. Owns `running`, and dispatches a "running" event whenever it
  * changes hands, "tick" on every timer tick and on every vsync that runs the
- * machine (the first tick only takes the time), and "rewind-capture" every
- * RewindCaptureInterval frames for whoever keeps the rewind history.
+ * machine (the first tick only takes the time), "frame-capture" after a tick
+ * that ends an emulated frame's worth of cycles (at most one a tick), and
+ * "rewind-capture" straight after one that ends RewindCaptureInterval frames'
+ * worth, for whoever keeps the machine's history.
  *
  * `mode` is a RunMode. Anything that needs the machine held still while it
  * works (a dialog, a snapshot, the rewind panel, a hidden tab) takes a `hold()`,
@@ -96,7 +99,8 @@ export class EmulationLoop extends EventTarget {
         this.gamepad = gamepad;
         this.clocksPerSecond = clocksPerSecond;
         this.maxCyclesPerTick = clocksPerSecond / 10;
-        this.rewindCaptureCycles = (RewindCaptureInterval * clocksPerSecond) / 50;
+        this.frameCycles = clocksPerSecond / FramesPerSecond;
+        this.rewindCaptureCycles = RewindCaptureInterval * this.frameCycles;
         this.fastTape = fastTape;
         this.audioStatsNode = audioStatsNode;
 
@@ -109,6 +113,7 @@ export class EmulationLoop extends EventTarget {
         this.tickToken = null;
         this.vsyncToken = null;
         this.emulationLeadMs = 0;
+        this.frameCycleCounter = 0;
         this.rewindCycleCounter = 0;
         this.holds = new Set();
         this.resumeOnVisible = null;
@@ -124,9 +129,13 @@ export class EmulationLoop extends EventTarget {
         return this.running;
     }
 
-    /** The machine's state is being replaced or previewed, so a debugger run to a stop no longer applies. */
+    /**
+     * The machine's state is being replaced or previewed, so neither a debugger run to a stop nor the frames
+     * captured before ("replacing-state") apply.
+     */
     replacingState() {
         this.dbgr.replacingState();
+        this.dispatchEvent(new Event("replacing-state"));
     }
 
     go() {
@@ -298,7 +307,7 @@ export class EmulationLoop extends EventTarget {
                 cycles = (sinceLast * this.clocksPerSecond) / 1000;
                 cycles = Math.min(cycles, this.maxCyclesPerTick);
             } else {
-                cycles = this.clocksPerSecond / 50;
+                cycles = this.frameCycles;
             }
             cycles |= 0;
             try {
@@ -310,10 +319,17 @@ export class EmulationLoop extends EventTarget {
                 this.virtualSpeedUpdater.update(cycles, end - start, speedy);
                 const paintMs = display.takePaintMs();
                 let snapshotMs = 0;
+                this.frameCycleCounter += cycles;
                 this.rewindCycleCounter += cycles;
-                if (this.rewindCycleCounter >= this.rewindCaptureCycles) {
-                    this.rewindCycleCounter -= this.rewindCaptureCycles;
-                    this.dispatchEvent(new Event("rewind-capture"));
+                const rewindDue = this.rewindCycleCounter >= this.rewindCaptureCycles;
+                if (rewindDue || this.frameCycleCounter >= this.frameCycles) {
+                    // A tick of several frames captures once, and leaves no backlog of frames behind it.
+                    this.frameCycleCounter %= this.frameCycles;
+                    this.dispatchEvent(new Event("frame-capture"));
+                    if (rewindDue) {
+                        this.rewindCycleCounter -= this.rewindCaptureCycles;
+                        this.dispatchEvent(new Event("rewind-capture"));
+                    }
                     snapshotMs = performance.now() - end;
                 }
                 if (this.audioStatsNode)

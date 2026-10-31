@@ -42,14 +42,39 @@ const IrqVector = 0xfffe;
 // The parasite's ROM fills the top half of its 4KB page at &F000.
 const TubeRomBytes = 2048;
 
+function sizedFor(into, length) {
+    return into?.length === length ? into : new Uint8Array(length);
+}
+
+/** A copy of `source`, made in `into` when that is the right size. */
+function copyInto(into, source) {
+    const copy = sizedFor(into, source.length);
+    copy.set(source);
+    return copy;
+}
+
+/**
+ * A copy of `state`, a snapshot without ROMs, made in `into` as `snapshotState({ into })` would. Only what that
+ * refills is copied; the rest is shared, as nothing else changes a snapshot once it is taken.
+ */
+export function copySnapshot(state, into) {
+    return {
+        ...state,
+        ram: copyInto(into?.ram, state.ram),
+        swram: copyInto(into?.swram, state.swram),
+        tube: state.tube && { ...state.tube, memory: copyInto(into?.tube?.memory, state.tube.memory) },
+    };
+}
+
 /**
  * Packs sideways RAM banks into a snapshot's `swram` and `swramBankMask`: the banks back to back in ascending
  * order, and a mask with bit n set when bank n is among them.
  * @param {Map<number, Uint8Array>} banks 16KB of contents for each bank number
+ * @param {Uint8Array|undefined} into an earlier snapshot's `swram` to pack into, if it is the right size
  */
-export function packSidewaysRam(banks) {
+export function packSidewaysRam(banks, into) {
     const bankNumbers = [...banks.keys()].sort((a, b) => a - b);
-    const swram = new Uint8Array(bankNumbers.length * RomBankBytes);
+    const swram = sizedFor(into, bankNumbers.length * RomBankBytes);
     bankNumbers.forEach((bank, index) => swram.set(banks.get(bank), index * RomBankBytes));
     return { swram, swramBankMask: bankNumbers.reduce((mask, bank) => mask | (1 << bank), 0) };
 }
@@ -575,14 +600,14 @@ class Tube6502 extends Base6502 {
         }
     }
 
-    snapshotState({ includeRoms = false } = {}) {
+    snapshotState({ includeRoms = false, into } = {}) {
         return {
             ...this.snapshotRegisters(),
             takeInt: this.takeInt,
             // The parasite has no scheduler of its own, so this is not relative to any epoch.
             cycles: this.cycles,
             romPaged: this.romPaged,
-            memory: this.memory.slice(),
+            memory: copyInto(into?.memory, this.memory),
             rom: includeRoms ? this.rom.slice() : undefined,
             ula: this.tube.snapshotState(),
         };
@@ -1469,7 +1494,13 @@ export class Cpu6502 extends Base6502 {
         this.resetLine = !resetOn;
     }
 
-    snapshotState({ includeRoms = false } = {}) {
+    /**
+     * @param {object} options
+     * @param {boolean} [options.includeRoms] whether to save the ROMs too, which leaves out the packed sideways RAM
+     * @param {object} [options.into] an earlier snapshot of this machine, without ROMs, which only its taker holds:
+     * its RAM, sideways RAM and parasite memory are refilled for this one, so it is spent
+     */
+    snapshotState({ includeRoms = false, into } = {}) {
         return {
             ...this.snapshotRegisters(),
             halted: this.halted,
@@ -1484,9 +1515,9 @@ export class Cpu6502 extends Base6502 {
             peripheralCycles: this.peripheralCycles,
             videoCycles: this.videoCycles,
             music5000PageSel: this.music5000PageSel,
-            ram: this.ramRomOs.slice(0, this.romOffset),
+            ram: copyInto(into?.ram, this.ramRomOs.subarray(0, this.romOffset)),
             roms: includeRoms ? this.ramRomOs.slice(this.romOffset, this.osOffset) : undefined,
-            ...(includeRoms ? {} : this.packedSidewaysRam()),
+            ...(includeRoms ? {} : this.packedSidewaysRam(into?.swram)),
             scheduler: this.scheduler.snapshotState(),
             sysvia: this.sysvia.snapshotState(),
             uservia: this.uservia.snapshotState(),
@@ -1497,7 +1528,7 @@ export class Cpu6502 extends Base6502 {
             touchScreen: this.touchScreen.snapshotState(),
             fdc: this.fdc.snapshotState(),
             teletextAdaptor: this.teletextAdaptor ? this.teletextAdaptor.snapshotState() : undefined,
-            tube: this.hasTube ? this.tube.snapshotState({ includeRoms }) : undefined,
+            tube: this.hasTube ? this.tube.snapshotState({ includeRoms, into: into?.tube }) : undefined,
         };
     }
 
@@ -1506,12 +1537,12 @@ export class Cpu6502 extends Base6502 {
         return this.ramRomOs.subarray(start, start + RomBankBytes);
     }
 
-    packedSidewaysRam() {
+    packedSidewaysRam(into) {
         const banks = new Map();
         this.model.swram.forEach((isRam, bank) => {
             if (isRam) banks.set(bank, this.romBank(bank));
         });
-        return packSidewaysRam(banks);
+        return packSidewaysRam(banks, into);
     }
 
     restoreSidewaysRam(swram, swramBankMask) {

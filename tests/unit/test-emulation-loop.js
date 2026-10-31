@@ -392,15 +392,36 @@ describe("EmulationLoop", () => {
         expect(ticks).toHaveBeenCalledTimes(10);
     });
 
-    it("asks for a rewind capture every interval", () => {
+    it("asks for a frame capture every frame, and a rewind capture straight after every fiftieth", () => {
         const loop = started();
-        const captures = vi.fn();
-        loop.addEventListener("rewind-capture", captures);
-        // The capture interval is one emulated second.
+        const captures = [];
+        loop.addEventListener("frame-capture", () => captures.push("frame"));
+        loop.addEventListener("rewind-capture", () => captures.push("rewind"));
         vi.advanceTimersByTime(1500);
-        expect(captures).toHaveBeenCalledTimes(1);
+        expect(captures.slice(0, 52)).toEqual([...Array(50).fill("frame"), "rewind", "frame"]);
         vi.advanceTimersByTime(1000);
-        expect(captures).toHaveBeenCalledTimes(2);
+        expect(captures.filter((capture) => capture === "rewind")).toHaveLength(2);
+    });
+
+    it("keeps rewind captures a second of cycles apart, and frames from piling up, when ticks run long", () => {
+        const loop = started();
+        const captures = [];
+        loop.addEventListener("frame-capture", () => captures.push("frame"));
+        loop.addEventListener("rewind-capture", () => captures.push("rewind"));
+        // A machine too slow for real time: every tick catches up a tenth of a second, five frames.
+        const now = vi.spyOn(performance, "now");
+        const start = performance.now();
+        for (let tick = 1; tick <= 10; tick++) {
+            now.mockReturnValue(start + 100 * tick);
+            loop.tick();
+        }
+        expect(captures).toEqual([...Array(10).fill("frame"), "rewind"]);
+        captures.length = 0;
+        for (let tick = 1; tick <= 4; tick++) {
+            now.mockReturnValue(start + 1000 + TickMs * tick);
+            loop.tick();
+        }
+        expect(captures).toEqual(["frame", "frame"]);
     });
 
     it("starts once however often it is asked to go", () => {
@@ -409,9 +430,13 @@ describe("EmulationLoop", () => {
         expect(deps.audioHandler.unmute).toHaveBeenCalledTimes(1);
     });
 
-    it("tells the debugger when the machine's state is replaced", () => {
-        make().replacingState();
+    it("tells the debugger and its listeners when the machine's state is replaced", () => {
+        const loop = make();
+        const replacing = vi.fn();
+        loop.addEventListener("replacing-state", replacing);
+        loop.replacingState();
         expect(deps.dbgr.replacingState).toHaveBeenCalled();
+        expect(replacing).toHaveBeenCalled();
     });
 
     describe("being held", () => {
