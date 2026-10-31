@@ -67,7 +67,7 @@ not use the speedy frame skip: `FRAMESKIPENABLE` also gates video memory reads a
 session never runs speedy.
 
 **Late joining.** The host takes a snapshot where its next commit will start, and sends it with what ordinary
-snapshots leave out: the ROMs, the keys held down and the CMOS settings and clock. Commits made
+snapshots leave out: the ROMs and the keys held down. Commits made
 while it is being compressed wait for it. On my desktop, Node emulates a 50Hz frame of a B running Elite in
 about 3ms, so catching up is quick. The host does not pause.
 
@@ -111,7 +111,8 @@ Ranked by how much they would bite.
 3. **Snapshots are not complete enough for a joiner.** The native snapshot leaves out:
    - the keyboard matrix and the SHIFT override state (`SysVia.snapshotState`), so a joiner arriving while a
      key is held sees it up;
-   - the Master's CMOS RAM, which comes from each person's `localStorage` (persisted by `localStoragePersistence`);
+   - the Master's CMOS RAM, which comes from each person's `localStorage` (persisted by `localStoragePersistence`;
+     snapshots have held it since, and a joiner stores none of the host's);
    - a paste in progress (the typist's queue), which in a session is typed through it instead, and the mouse
      buttons;
    - later, with the peripherals that need them: tape position (a known limitation in
@@ -120,7 +121,7 @@ Ranked by how much they would bite.
    It also leaves out the framebuffer, which is only cosmetic: a joiner sees black until the next frame. With
    media by reference and dirty tracks only, a B with Elite running comes to about 25KB gzipped; a full
    in-memory snapshot with every disc track is about 190KB gzipped. v0 sends the in-memory form with the ROMs
-   (`includeRoms`), and the held keys and CMOS settings and clock beside it, and leaves the snapshot format alone, so a rewind
+   (`includeRoms`), and the held keys beside it, and leaves the snapshot format alone, so a rewind
    or a loaded state keeps the keys the person is actually holding.
 
 4. **Wall clock leaks into the Master.** The RTC read `Date.now()` on every access, and kept the offset a
