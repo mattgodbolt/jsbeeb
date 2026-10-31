@@ -5,8 +5,8 @@
 
 import { applyInput, cycleCount, stateHash } from "./lockstep.js";
 
-// A replay runs in pieces no longer than the emulation loop's longest tick, so the CPU keeps its cycle count in the
-// same halves as running in the loop does.
+// A replay runs in pieces no longer than the emulation loop's longest tick, so that the CPU splits its cycle count
+// between whole seconds and cycles as it does running in the loop.
 const ReplayRunsPerSecond = 10;
 
 const NothingToStepBackTo =
@@ -104,7 +104,7 @@ export class InputLog {
         this.replaying = null;
         this.recording = true;
         const devices = [cpu, cpu.keyboardInterface, cpu.sysvia, cpu.adconverter, cpu.touchScreen, cpu.sysvia.cmos];
-        for (const device of devices) if (device) device.inputLog = this;
+        for (const device of devices) device.inputLog = this;
         this.restart();
     }
 
