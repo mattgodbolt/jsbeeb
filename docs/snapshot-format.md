@@ -257,7 +257,7 @@ Present only on the Atom: the AtoMMC2 interface's registers and the state of its
 
 An open handle's `file` is the file's index in `card` and `pos` its position in it. A handle whose index the card does not have restores closed.
 
-Each entry of `card` is a file as the Atom has left it. A file the card was given with (by `?mmc=`) that the Atom has not written is `{ loaded }`, its index among the files the card was loaded with, so a snapshot holds only the bytes the Atom wrote; one it has deleted adds its `path`, which then starts with `§`. Any other file is `{ path, data }`, `data` a Uint8Array. Restoring puts the card back as it was, undoing writes made since, unless the card lacks a file a `loaded` index names, when it keeps its own files. The card is never stored anywhere, so a restore writes nothing; a card is the files the page was given until it is reloaded. Snapshots written before the card was saved lack `card`, and then the card keeps its current files.
+Each entry of `card` is a file as the Atom has left it. A file the card was given with (by `?mmc=`) that the Atom has not written is `{ loaded }`, its index among the files the card was loaded with, so a snapshot holds only the files the Atom wrote; one it has deleted adds its `path`, which then starts with `§`. Any other file is `{ path, data }`, `data` a Uint8Array. Restoring puts the card back as it was, undoing writes made since, unless the card lacks a file a `loaded` index names, when it keeps its own files. Snapshots written before the card was saved lack `card`, and then the card keeps its current files.
 
 ### Video (`state.video`)
 

@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { WFNFile, extractSDFiles, AtomMMC2 } from "../../src/mmc.js";
 import { createZipBlob } from "../../src/archive.js";
+import { snapshotFromJSON, snapshotToJSON } from "../../src/snapshot.js";
 
 describe("WFNFile", () => {
     it("should store path and Uint8Array data", () => {
@@ -393,7 +394,7 @@ describe("AtomMMC2 file handles", () => {
         expect(readBytes(withoutTheFile, a, 1).status).toBe(StatusComplete | FrInvalidObject);
     });
 
-    it("holds in a snapshot only the bytes the Atom wrote, and restores the card as it found it", () => {
+    it("holds in a snapshot only the files the Atom wrote, made afresh only after a write, and restores the card as it found it", () => {
         const CmdFileDelete = 0x14;
         const card = () => [
             new WFNFile("/KEPT", Uint8Array.of(1, 1)),
@@ -415,10 +416,12 @@ describe("AtomMMC2 file handles", () => {
             { path: "/EDITED", data: Uint8Array.of(4, 3) },
             { path: "/NEW", data: Uint8Array.of(5) },
         ]);
+        expect(mmc.snapshotState().files.card).toBe(snapshot.files.card);
         writeBytes(mmc, open(mmc, "KEPT"), [6]);
+        expect(mmc.snapshotState().files.card).not.toBe(snapshot.files.card);
         mmc.restoreState(snapshot);
         const restored = makeMmc(card());
-        restored.restoreState(snapshot);
+        restored.restoreState(snapshotFromJSON(snapshotToJSON(snapshot)));
         expect([cardOf(mmc), cardOf(restored)]).toEqual([changed, changed]);
     });
 });
