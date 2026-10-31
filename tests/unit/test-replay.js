@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { ReplayHistory } from "../../src/replay.js";
 import { fake6502 } from "../../src/fake6502.js";
+import { singleStep } from "../helpers/single-step.js";
 
 const CallAt = 0x2000;
 const SubroutineAt = 0x3000;
@@ -20,11 +21,6 @@ async function machineAt(pc, options) {
 
 const load = (cpu, address, bytes) => bytes.forEach((byte, i) => cpu.writemem(address + i, byte));
 
-function step(cpu) {
-    cpu.targetCycles = cpu.currentCycles;
-    cpu.execute(1);
-}
-
 function runTo(cpu, address) {
     const hook = cpu.debugInstruction.add((pc) => pc === address);
     cpu.targetCycles = cpu.currentCycles;
@@ -42,7 +38,7 @@ describe("ReplayHistory", () => {
         const history = new ReplayHistory(cpu);
         history.taken(cpu.snapshotState(), null);
         set(cpu);
-        step(cpu);
+        singleStep(cpu);
         expect(history.stepBack(false)).toMatch(why);
         expect(cpu.pc).toBe(SubroutineAt);
     });
@@ -55,7 +51,7 @@ describe("ReplayHistory", () => {
         history.taken(cpu.snapshotState(), null);
         runTo(cpu, ReturnAt);
         history.taken(cpu.snapshotState(), null);
-        step(cpu);
+        singleStep(cpu);
         expect(cpu.pc).toBe(CallAt + 3);
         expect(history.stepBack(true)).toMatch(/found no call this returned from in the last 2 seconds/);
         expect(cpu.pc).toBe(CallAt + 3);

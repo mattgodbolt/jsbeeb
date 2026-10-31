@@ -6,6 +6,7 @@ import { Video } from "../../src/video.js";
 import { SoundChip } from "../../src/soundchip.js";
 import { keyCodes } from "../../src/keymap.js";
 import { bootedTestMachine, mode7Text } from "./helpers.js";
+import { singleStep } from "../helpers/single-step.js";
 
 const FbWidth = 1024;
 const FbHeight = 768;
@@ -39,12 +40,6 @@ async function waitingIn(model, program) {
     return machine;
 }
 
-// As the debugger's single step does.
-function step(cpu) {
-    cpu.targetCycles = cpu.currentCycles;
-    cpu.execute(1);
-}
-
 const seconds = (machine, count) => machine.runFor(count * machine.model.cyclesPerSecond);
 
 async function pressA(machine) {
@@ -68,11 +63,11 @@ const machineNow = (machine) => ({
 /** Steps back and forward again, expecting to end exactly where it started. */
 async function expectBackAndForthLandsWhereItWas(machine, history) {
     const cpu = machine.processor;
-    step(cpu);
+    singleStep(cpu);
     const before = machineNow(machine);
     expect(history.stepBack(false)).toBeNull();
     expect(machineNow(machine)).not.toEqual(before);
-    step(cpu);
+    singleStep(cpu);
     expect(machineNow(machine)).toEqual(before);
 }
 
@@ -167,7 +162,7 @@ describe.each([
         const history = historyFromHere(machine);
         machine.keyDown(keyCodes.A);
         await seconds(machine, AroundAnInputSeconds);
-        step(machine.processor);
+        singleStep(machine.processor);
         machine.keyUp(keyCodes.A);
         const letGo = machine.processor.keyboardInterface.keyboardState();
         expect(history.stepBack(false)).toBeNull();
@@ -207,7 +202,7 @@ describe.each([
         const machine = await booted(model);
         const history = historyFromHere(machine);
         await change(machine);
-        step(machine.processor);
+        singleStep(machine.processor);
         const before = machineNow(machine);
         expect(history.stepBack(false)).toMatch(why);
         expect(machineNow(machine)).toEqual(before);
@@ -220,7 +215,7 @@ describe("Stepping back on a Master", () => {
         const history = historyFromHere(machine);
         await pressA(machine);
         await seconds(machine, AroundAnInputSeconds);
-        step(machine.processor);
+        singleStep(machine.processor);
         expect(history.stepBack(false)).toMatch(/write to the CMOS/);
     });
 });

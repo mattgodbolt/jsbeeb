@@ -1338,12 +1338,16 @@ describe("Debugger", () => {
                 expect([pc(), hexbyte(cpu.peekmem(0x1234))]).toEqual(["3002", "48"]);
             });
 
-            it("forgets where the stopwatch started once stepped back past it", () => {
+            it("keeps the stopwatch's start until stepped back past it", () => {
+                const stopwatch = () => document.getElementById("debug-stopwatch").textContent;
                 stepBackHere();
                 keyPress("n");
                 document.getElementById("debug-stopwatch-reset").click();
+                keyPress("n");
                 keyPress("p");
-                expect(document.getElementById("debug-stopwatch").textContent).toBe("");
+                expect(stopwatch()).toBe("0");
+                keyPress("p");
+                expect(stopwatch()).toBe("");
             });
 
             it.each([

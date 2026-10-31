@@ -305,8 +305,8 @@ class Landing {
 
 /**
  * What the debugger can step back through: the snapshots kept of the machine since its state was last replaced,
- * and the input log back to the oldest of them. Dispatches "landed", with the snapshots it forgot as `detail.forgotten`,
- * once a step back has forgotten everything after where it landed, for whoever else keeps those snapshots.
+ * and the input log back to the oldest of them. Dispatches "landed", with the snapshots it forgot as
+ * `detail.forgotten`, once a step back has forgotten everything after where it landed, for whoever else keeps them.
  */
 export class ReplayHistory extends EventTarget {
     constructor(cpu) {
@@ -320,7 +320,7 @@ export class ReplayHistory extends EventTarget {
     taken(snapshot, replacing) {
         this.kept.delete(replacing);
         const cycle = snapshotCycle(this.cpu, snapshot);
-        if (this.snapshots().some((kept) => snapshotCycle(this.cpu, kept) > cycle)) this.restart();
+        if ([...this.kept].some((kept) => snapshotCycle(this.cpu, kept) > cycle)) this.restart();
         this.kept.add(snapshot);
     }
 

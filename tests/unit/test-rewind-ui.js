@@ -279,6 +279,7 @@ describe("RewindUI", () => {
 
         it.each([
             ["the machine's state is replaced", () => loop.dispatchEvent(new Event("replacing-state"))],
+            ["it is reset", (ui) => ui.reset()],
             [
                 "the panel closes, its previews having run the machine",
                 (ui) => {
