@@ -158,7 +158,7 @@ describe("save state round trip", () => {
         cmos.now = () => ClockReadingEveryRegisterApart;
         await machine.type(ReadClockForever);
         await machine.type("RUN");
-        const ranOn = () => ({ state: stateOf(machine), cmos: cmos.sessionState() });
+        const ranOn = () => ({ state: stateOf(machine), cmos: cmos.snapshotState() });
         for (let access = 0; access < AccessesSnapshotted; ++access) {
             let instructions = 0;
             const intoAnAccess = cpu.debugInstruction.add(
@@ -167,17 +167,17 @@ describe("save state round trip", () => {
             await machine.runFor(OneEmulatedSecond);
             intoAnAccess.remove();
             const snapshot = cpu.snapshotState();
-            const bus = cmos.snapshotState();
-            expect(bus.enabled).toBe(true);
+            const chip = cmos.snapshotState();
+            expect(chip.enabled).toBe(true);
             await machine.runFor(RunOnCycles);
             const original = ranOn();
 
             const { cmos: _, ...sysviaBeforeTheBusWasSaved } = snapshot.sysvia;
             cpu.restoreState({ ...snapshot, sysvia: sysviaBeforeTheBusWasSaved });
-            expect(cmos.sessionState()).toEqual({ ...original.cmos, ...bus, cmosAddr: original.cmos.cmosAddr });
+            expect(cmos.snapshotState()).toEqual({ ...original.cmos, ...chip, cmosAddr: original.cmos.cmosAddr });
 
             cpu.restoreState(snapshot);
-            expect(cmos.sessionState()).toEqual({ ...original.cmos, ...bus });
+            expect(cmos.snapshotState()).toEqual({ ...original.cmos, ...chip });
             await machine.runFor(RunOnCycles);
             expect(ranOn()).toEqual(original);
         }

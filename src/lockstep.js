@@ -49,11 +49,11 @@ function runTo(cpu, cycle) {
 const cyclesToMs = (cpu, cycles) => (cycles * 1000) / cpu.model.cyclesPerSecond;
 
 /**
- * Gives the machine the session's CMOS, whose clock reads `baseMs` plus the machine's
+ * Puts the machine's CMOS in the session, its clock reading `baseMs` plus the machine's
  * emulated cycles: the same time on every machine in the session.
  */
-function joinSessionCmos(cpu, cmosState, baseMs) {
-    cpu.sysvia.cmos.joinSession(cmosState, () => baseMs + cyclesToMs(cpu, cycleCount(cpu)));
+function joinSessionCmos(cpu, baseMs) {
+    cpu.sysvia.cmos.joinSession(() => baseMs + cyclesToMs(cpu, cycleCount(cpu)));
 }
 
 function fnv1a(hash, bytes) {
@@ -135,15 +135,15 @@ export function isValidCommit(commit) {
  * Makes `cpu` the machine a session snapshot describes. A drive restores tracks only into
  * a disc it already holds, which may be this person's own and write back to where it came
  * from, so each drive first gets a fresh disc of its own, or none if the host's is empty.
- * The CMOS joins first, as the restore reads it to put port A back. The reset line, which
- * snapshots leave out like the held keys, travels beside it too.
+ * The CMOS joins first, so that the restore stores none of the host's settings over this
+ * person's. The reset line, which snapshots leave out like the held keys, travels beside it too.
  */
 export function restoreSessionSnapshot(cpu, snapshot) {
-    const { state, keyboard, resetting, at, cmos, rtcBaseMs } = snapshot;
+    const { state, keyboard, resetting, at, rtcBaseMs } = snapshot;
     cpu.fdc.drives.forEach((drive, index) => {
         drive.setDisc(state.fdc?.drives?.[index]?.disc ? new Disc(true, new DiscConfig(), "") : undefined);
     });
-    joinSessionCmos(cpu, cmos, rtcBaseMs);
+    joinSessionCmos(cpu, rtcBaseMs);
     // The keys first, so the system VIA's restore scans the host's keyboard, not this person's.
     cpu.sysvia.restoreKeyboard(keyboard);
     cpu.restoreState(state);
@@ -153,7 +153,7 @@ export function restoreSessionSnapshot(cpu, snapshot) {
 
 /**
  * What a joiner needs to become `cpu`, which ordinary snapshots leave part of out: the ROMs, the keys held down,
- * the reset line, the cycle it is at, the session's CMOS and the wall time its clock counts from.
+ * the reset line, the cycle it is at and the wall time the session's clock counts from.
  */
 export function sessionSnapshot(cpu, rtcBaseMs) {
     return {
@@ -161,7 +161,6 @@ export function sessionSnapshot(cpu, rtcBaseMs) {
         keyboard: cpu.sysvia.keyboardState(),
         resetting: !cpu.resetLine,
         at: cycleCount(cpu),
-        cmos: cpu.sysvia.cmos.sessionState(),
         rtcBaseMs,
     };
 }
@@ -196,7 +195,7 @@ export class LockstepHost {
         const { cpu } = this;
         const wallMs = Date.now() - new Date().getTimezoneOffset() * MsPerMinute;
         this.rtcBaseMs = rtcBaseMs ?? wallMs - cyclesToMs(cpu, cycleCount(cpu));
-        joinSessionCmos(cpu, cpu.sysvia.cmos.sessionState(), this.rtcBaseMs);
+        joinSessionCmos(cpu, this.rtcBaseMs);
     }
 
     snapshot() {

@@ -242,9 +242,45 @@ describe("CMOS", () => {
         });
     });
 
+    describe("Snapshots", () => {
+        const BusFields = ["enabled", "isRead", "addressSelect", "dataSelect", "cmosAddr"];
+        const busOf = (state) => Object.fromEntries(BusFields.map((field) => [field, state[field]]));
+
+        it.each([
+            ["settings and clock", (state) => state, [0x42, 0xa5]],
+            ["bus alone, from an older page", busOf, [0x17, 0x30]],
+        ])("restores the %s, storing what the machine then holds", (_, saved, expected) => {
+            writeRegister(CMOS_ADDR.FILING_SYSTEM, 0x42);
+            writeRegister(CMOS_ADDR.MINUTES, 0xa5);
+            const state = saved(cmos.snapshotState());
+            writeRegister(CMOS_ADDR.FILING_SYSTEM, 0x17);
+            writeRegister(CMOS_ADDR.MINUTES, 0x30);
+            cmos.restoreState(state);
+            expect([readRegister(CMOS_ADDR.FILING_SYSTEM), readRegister(CMOS_ADDR.MINUTES)]).toEqual(expected);
+            expect(mockPersistence.save.mock.lastCall[0]).toEqual(cmos.store);
+        });
+
+        it("refuses a store that is not the chip's, changing nothing", () => {
+            const other = new Cmos(null);
+            other.writeControl(PORT_B_ENABLE | PORT_B_ADDR_SEL, CMOS_ADDR.FILING_SYSTEM, 0);
+            other.writeControl(PORT_B_ENABLE, CMOS_ADDR.FILING_SYSTEM, 0);
+            other.writeControl(PORT_B_ENABLE, 0x42, IC32_DATA_SEL);
+            const before = cmos.snapshotState();
+            expect(() => cmos.restoreState({ ...other.snapshotState(), store: [1, 2, 3] })).toThrow(
+                "not 48 to 64 bytes",
+            );
+            expect(cmos.snapshotState()).toEqual(before);
+        });
+    });
+
     describe("Joining a session", () => {
         const HourMs = 60 * 60 * 1000;
-        const sessionState = (overrides = {}) => ({ ...new Cmos(null).sessionState(), ...overrides });
+        const sessionState = (overrides = {}) => ({ ...new Cmos(null).snapshotState(), ...overrides });
+        // As restoreSessionSnapshot joins, the host's chip coming in with the machine's snapshot.
+        const join = (state, now) => {
+            cmos.joinSession(now);
+            cmos.restoreState(state);
+        };
 
         afterEach(() => {
             vi.unstubAllEnvs();
@@ -254,7 +290,7 @@ describe("CMOS", () => {
             const store = [...defaultCmos];
             store[CMOS_ADDR.FILING_SYSTEM] = 0x42;
             mockPersistence.save.mockClear();
-            cmos.joinSession(sessionState({ store }), () => 0);
+            join(sessionState({ store }), () => 0);
             expect(readRegister(CMOS_ADDR.FILING_SYSTEM)).toBe(0x42);
             writeRegister(CMOS_ADDR.FILING_SYSTEM, 0x17);
             expect(readRegister(CMOS_ADDR.FILING_SYSTEM)).toBe(0x17);
@@ -262,27 +298,15 @@ describe("CMOS", () => {
             expect(store[CMOS_ADDR.FILING_SYSTEM]).toBe(0x42);
         });
 
-        it("refuses settings from the host that are not the chip's, changing nothing", () => {
-            const host = new Cmos(null);
-            host.writeControl(PORT_B_ENABLE | PORT_B_ADDR_SEL, CMOS_ADDR.FILING_SYSTEM, 0);
-            host.writeControl(PORT_B_ENABLE, CMOS_ADDR.FILING_SYSTEM, 0);
-            host.writeControl(PORT_B_ENABLE, 0x42, IC32_DATA_SEL);
-            const before = cmos.sessionState();
-            expect(() => cmos.joinSession({ ...host.sessionState(), store: [1, 2, 3] }, () => 0)).toThrow(
-                "not 48 to 64 bytes",
-            );
-            expect(cmos.sessionState()).toEqual(before);
-        });
-
         it("reads the session's clock in UTC, so every time zone shows the host's time", () => {
             vi.stubEnv("TZ", "America/New_York");
-            cmos.joinSession(sessionState(), () => Date.UTC(1999, 11, 31, 23, 59, 58));
+            join(sessionState(), () => Date.UTC(1999, 11, 31, 23, 59, 58));
             expect(readRegister(CMOS_ADDR.HOURS)).toBe(0x23);
             expect(readRegister(CMOS_ADDR.MINUTES)).toBe(0x59);
         });
 
         it("keeps the offset the host's software set its clock to", () => {
-            cmos.joinSession(sessionState({ timeOffset: HourMs }), () => Date.UTC(1999, 11, 31, 10, 0, 0));
+            join(sessionState({ timeOffset: HourMs }), () => Date.UTC(1999, 11, 31, 10, 0, 0));
             expect(readRegister(CMOS_ADDR.HOURS)).toBe(0x11);
         });
 
@@ -291,7 +315,7 @@ describe("CMOS", () => {
             host.store[CMOS_ADDR.FILING_SYSTEM] = 0x42;
             host.writeControl(PORT_B_ENABLE | PORT_B_ADDR_SEL, CMOS_ADDR.FILING_SYSTEM, 0);
             host.writeControl(PORT_B_ENABLE, CMOS_ADDR.FILING_SYSTEM, 0);
-            cmos.joinSession(host.sessionState(), () => 0);
+            join(host.snapshotState(), () => 0);
             cmos.writeControl(PORT_B_ENABLE, 0, IC32_READ | IC32_DATA_SEL);
             expect(cmos.read()).toBe(0x42);
         });
@@ -299,7 +323,7 @@ describe("CMOS", () => {
         it("finishes setting a date the host is part way through", () => {
             const host = new Cmos(null);
             writeRegister(CMOS_ADDR.DAY_OF_MONTH, 0x31, host);
-            cmos.joinSession(host.sessionState(), () => Date.UTC(2023, 3, 15, 12, 0, 0));
+            join(host.snapshotState(), () => Date.UTC(2023, 3, 15, 12, 0, 0));
             writeRegister(CMOS_ADDR.MONTH, 0x05);
             expect([readRegister(CMOS_ADDR.DAY_OF_MONTH), readRegister(CMOS_ADDR.MONTH)]).toEqual([0x31, 0x05]);
         });
@@ -307,7 +331,7 @@ describe("CMOS", () => {
         it("reads a time register the host holds as written", () => {
             const host = new Cmos(null);
             writeRegister(CMOS_ADDR.MINUTES, 0xa5, host);
-            cmos.joinSession(host.sessionState(), () => 0);
+            join(host.snapshotState(), () => 0);
             expect(readRegister(CMOS_ADDR.MINUTES)).toBe(0xa5);
         });
 
@@ -320,8 +344,8 @@ describe("CMOS", () => {
             const ownSetting = readRegister(CMOS_ADDR.FILING_SYSTEM);
             const store = [...defaultCmos];
             store[CMOS_ADDR.FILING_SYSTEM] = ownSetting ^ 0xff;
-            cmos.joinSession(sessionState({ store }), () => 0);
-            cmos.joinSession(sessionState({ store }), () => 0);
+            join(sessionState({ store }), () => 0);
+            join(sessionState({ store }), () => 0);
             cmos.leaveSession();
             expect(readRegister(CMOS_ADDR.FILING_SYSTEM)).toBe(ownSetting);
             expect(readClock()).toEqual(ownClock);

@@ -146,48 +146,52 @@ export class Cmos {
         }
     }
 
-    /** How far through an access the bus is. */
+    /** The settings, the offset a program set the clock to, any clock registers held as written, and the bus. */
     snapshotState() {
-        const { enabled, isRead, addressSelect, dataSelect, cmosAddr } = this;
-        return { enabled, isRead, addressSelect, dataSelect, cmosAddr };
-    }
-
-    restoreState({ enabled, isRead, addressSelect, dataSelect, cmosAddr }) {
-        Object.assign(this, { enabled, isRead, addressSelect, dataSelect, cmosAddr });
-    }
-
-    /**
-     * The chip as a machine joining a shared session needs it: the settings, the offset a program set
-     * the clock to, any clock registers held as written, and the bus.
-     */
-    sessionState() {
-        const { store, timeOffset, heldDate, heldTime } = this;
+        const { store, timeOffset, heldDate, heldTime, enabled, isRead, addressSelect, dataSelect, cmosAddr } = this;
         return {
             store: [...store],
             timeOffset,
             heldDate: heldDate && { ...heldDate },
             heldTime: { ...heldTime },
-            ...this.snapshotState(),
+            enabled,
+            isRead,
+            addressSelect,
+            dataSelect,
+            cmosAddr,
         };
     }
 
     /**
-     * Joins a shared session: the host's `sessionState()` replaces this machine's for the session's
-     * duration and is never stored over it, and the clock reads `now`, the session's wall time in
-     * milliseconds.
+     * Saves the settings restored, so that what is stored is what the machine holds. A state saved
+     * with only the bus leaves the settings and clock as they are.
      */
-    joinSession(state, now) {
-        const store = fullStore(state.store);
+    restoreState(state) {
+        const { enabled, isRead, addressSelect, dataSelect, cmosAddr } = state;
+        if (state.store) {
+            const store = fullStore(state.store);
+            const { timeOffset, heldDate, heldTime } = state;
+            Object.assign(this, {
+                store,
+                timeOffset,
+                heldDate: heldDate && { ...heldDate },
+                heldTime: { ...heldTime },
+            });
+            this.save();
+        }
+        Object.assign(this, { enabled, isRead, addressSelect, dataSelect, cmosAddr });
+    }
+
+    /**
+     * Joins a shared session, whose snapshot then brings in the host's chip: until the session is left
+     * nothing is stored, and the clock reads `now`, the session's wall time in milliseconds.
+     */
+    joinSession(now) {
         if (!this.beforeSession) {
             const { persistence, store, utc, timeOffset, heldDate, heldTime } = this;
             this.beforeSession = { persistence, store, now: this.now, utc, timeOffset, heldDate, heldTime };
         }
-        const { timeOffset, heldDate, heldTime } = state;
-        this.restoreState(state);
-        this.timeOffset = timeOffset;
-        this.store = store;
-        this.heldDate = heldDate && { ...heldDate };
-        this.heldTime = { ...heldTime };
+        this.store = [...this.store];
         this.persistence = null;
         this.now = now;
         this.utc = true;
@@ -226,13 +230,7 @@ export class Cmos {
         this.timeOffset = bbcTime.getTime() - this.clockMs();
     }
 
-    // Snapshots leave the settings and clock out, so a replay from before a write would read what it wrote.
-    refuseReplays() {
-        this.inputLog?.refuse("a write to the CMOS");
-    }
-
     writeTime(register, value) {
-        this.refuseReplays();
         const { limit, set } = TimeRegisters[register];
         if (!isBcdBelow(value, limit)) {
             this.heldTime[register] = value;
@@ -245,7 +243,6 @@ export class Cmos {
     }
 
     writeCalendar(field, value) {
-        this.refuseReplays();
         const bbcTime = this.bbcDateTime();
         const registers = { ...this.calendarRegisters(bbcTime), [field]: value };
         const { day, month, year } = registers;
@@ -311,7 +308,6 @@ export class Cmos {
         if (oldAddressSelect && !this.addressSelect) this.cmosAddr = portApins & 0x3f;
         if (oldDataSelect && !this.dataSelect && !this.addressSelect && !this.isRead) {
             if (this.cmosAddr > 0xb) {
-                this.refuseReplays();
                 this.store[this.cmosAddr] = portApins;
                 this.save();
             } else {
