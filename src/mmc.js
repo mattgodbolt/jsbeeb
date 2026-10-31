@@ -852,7 +852,6 @@ export class AtomMMC2 {
             lastaddr: this.lastaddr,
             byteValueLatch: this.byteValueLatch,
             TRISB: this.TRISB,
-            LATB: this.LATB,
             files: this.WFN.snapshotState(),
         };
     }
@@ -865,7 +864,6 @@ export class AtomMMC2 {
         this.lastaddr = state.lastaddr;
         this.byteValueLatch = state.byteValueLatch;
         this.TRISB = state.TRISB;
-        this.LATB = state.LATB;
         this.WFN.restoreState(state.files);
     }
 

@@ -227,17 +227,16 @@ Older snapshots also carry `latchb`, which was always 0 since port B is input on
 
 Present only on the Atom: the AtoMMC2 interface's registers and the state of its file system. The card's files are media and are not saved; the card is whatever the page was given with `?mmc=`. Atom snapshots written before it was saved lack it, and absent means the interface keeps its current state, so it needed no format version bump.
 
-| Field            | Type   | Description                                               |
-| ---------------- | ------ | --------------------------------------------------------- |
-| `MMCtoAtom`      | number | The byte the interface has ready for the Atom's next read |
-| `heartbeat`      | number | The next heartbeat reply, `0x55` or `0xAA`                |
-| `MCUStatus`      | number | Status register (busy, read and wrote flags)              |
-| `configByte`     | number | Configuration byte                                        |
-| `lastaddr`       | number | Register a read of the data port acts on                  |
-| `byteValueLatch` | number | Latch register (transfer length or command argument)      |
-| `TRISB`          | number | User port direction register                              |
-| `LATB`           | number | User port output latch                                    |
-| `files`          | object | File system state (see below)                             |
+| Field            | Type   | Description                                                               |
+| ---------------- | ------ | ------------------------------------------------------------------------- |
+| `MMCtoAtom`      | number | The byte the interface has ready for the Atom's next read                 |
+| `heartbeat`      | number | The next heartbeat reply, `0x55` or `0xAA`                                |
+| `MCUStatus`      | number | Status register (busy, read and wrote flags)                              |
+| `configByte`     | number | Configuration byte                                                        |
+| `lastaddr`       | number | Last register written, which every read but the status register's acts on |
+| `byteValueLatch` | number | Latch register (transfer length or command argument)                      |
+| `TRISB`          | number | User port direction register                                              |
+| `files`          | object | File system state (see below)                                             |
 
 #### Atom MMC file system (`state.atommc.files`)
 

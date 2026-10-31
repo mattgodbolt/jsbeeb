@@ -334,13 +334,16 @@ describe("AtomMMC2 file handles", () => {
         const CmdGetHeartbeat = 0xfe;
         const DirEntryBytes = 8;
         const StatusReg = 0xb404;
-        const DirEntries = 3;
+        const DirEntriesBeforeSnapshot = 2;
+        const DirEntries = 4;
         const NamesStartingS = "S*";
         const card = () => [
             new WFNFile("/DIR/SA", new Uint8Array([1, 2, 3, 4, 5, 6])),
-            new WFNFile("/DIR/B", new Uint8Array([7, 8, 9])),
             new WFNFile("/DIR/SUB/C", new Uint8Array([10])),
+            new WFNFile("/DIR/B", new Uint8Array([7, 8, 9])),
+            new WFNFile("/DIR/SB", new Uint8Array([13])),
             new WFNFile("/DIR/SUB/D", new Uint8Array([11])),
+            new WFNFile("/DIR/SV/E", new Uint8Array([14])),
             new WFNFile("/DIR/SZ", new Uint8Array([12])),
         ];
         const name = (text) => [...new TextEncoder().encode(text), 0];
@@ -357,8 +360,10 @@ describe("AtomMMC2 file handles", () => {
         command(original, CmdDirCwd);
         sendBytes(original, name(NamesStartingS));
         command(original, CmdDirOpen);
-        command(original, CmdDirRead);
-        receiveBytes(original, DirEntryBytes);
+        for (let entry = 0; entry < DirEntriesBeforeSnapshot; ++entry) {
+            command(original, CmdDirRead);
+            receiveBytes(original, DirEntryBytes);
+        }
         const a = open(original, "SA");
         latched(original, dataCommand(CmdReadBytes, a), 4);
         receiveBytes(original, 2);
