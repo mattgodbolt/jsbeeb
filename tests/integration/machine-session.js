@@ -1109,27 +1109,35 @@ describe("MachineSession history", () => {
         expect([chip.stopCapture(), session.frameCount, session.drainOutput()]).toEqual([[], frames, text]);
     });
 
-    it("times the sound writes either side of a replay by the cycles the machine ran between them", async () => {
-        await loopingWithHistory({ recent: 0, seconds: PageHistory.seconds });
-        const chip = session._soundChip;
-        // The chip takes the byte a few cycles after its write enable goes low.
-        const soundWrite = async () => {
-            session.writeMemory(SysViaOra, [SilenceChannel0]);
-            session.writeMemory(SysViaOrb, [SoundChipEnable]);
-            const enabledAt = session.elapsedCycles;
-            await session.runFor(WriteEnableCycles);
-            session.writeMemory(SysViaOrb, [SoundChipDisable]);
-            return enabledAt;
-        };
-        chip.startCapture();
-        const first = await soundWrite();
-        await session.runFor(CyclesPerInterlacedFrame);
-        session.whoWrote(Counter);
-        const second = await soundWrite();
+    it.each([
+        ["whoWrote", () => session.whoWrote(Counter)],
+        ["stepBack", () => session.stepBack(false)],
+    ])(
+        "times the sound writes either side of %s by the cycles the machine ran forward between them",
+        async (_name, replay) => {
+            await loopingWithHistory({ recent: 0, seconds: PageHistory.seconds });
+            const chip = session._soundChip;
+            // The chip takes the byte a few cycles after its write enable goes low.
+            const soundWrite = async () => {
+                session.writeMemory(SysViaOra, [SilenceChannel0]);
+                session.writeMemory(SysViaOrb, [SoundChipEnable]);
+                const enabledAt = session.elapsedCycles;
+                await session.runFor(WriteEnableCycles);
+                session.writeMemory(SysViaOrb, [SoundChipDisable]);
+                return enabledAt;
+            };
+            chip.startCapture();
+            const first = await soundWrite();
+            await session.runFor(CyclesPerInterlacedFrame);
+            const before = session.elapsedCycles;
+            replay();
+            const steppedBack = before - session.elapsedCycles;
+            const second = await soundWrite();
 
-        const [a, b] = chip.stopCapture();
-        expect(b.cycle - a.cycle).toBe(second - first);
-    });
+            const [a, b] = chip.stopCapture();
+            expect(b.cycle - a.cycle).toBe(second - first + steppedBack);
+        },
+    );
 
     it.each([
         ["a soft reset, which it replays", () => session.reset(false), null],

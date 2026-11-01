@@ -601,12 +601,13 @@ export class InstrumentedSoundChip extends SoundChip {
 
     /** Runs `run`, a replay of the machine's past, leaving out of the capture what it writes and the cycles it takes. */
     withoutCapturing(run) {
-        // Caught up first, as the replay's own snapshot of the machine would catch it up and lose those cycles.
+        // Caught up either side, so that the cycles owed to the chip are only those the machine runs forward.
         this.catchUp();
         const [writes, totalCycles] = [this._capturedWrites.length, this._totalCycles];
         try {
             return run();
         } finally {
+            this.catchUp();
             this._capturedWrites.length = writes;
             this._totalCycles = totalCycles;
         }
