@@ -1,11 +1,12 @@
-import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from "vitest";
+import { describe, it, expect, beforeAll, beforeEach, afterAll, afterEach, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { MachineSession, MaxLoggedHits } from "../../src/machine-session.js";
 import { BBC, keyCodes } from "../../src/keymap.js";
 import { ATOM } from "../../src/keymap-atom.js";
+import { PageHistory } from "../../src/replay.js";
 import { RepoRoot } from "./helpers.js";
-import { BootTimeout, bootedSession } from "../helpers/machine-session.js";
+import { BootTimeout, CyclesPerSecond, bootedSession } from "../helpers/machine-session.js";
 
 const CyclesPerInterlacedFrame = 40000;
 const CyclesPerNonInterlacedFrame = 39936;
@@ -972,4 +973,216 @@ describe("MachineSession VideoNuLA", () => {
         },
         BootTimeout,
     );
+});
+
+describe("MachineSession history", () => {
+    const LoopAt = 0x2000;
+    const CallAt = 0x2003;
+    const AfterCall = 0x2006;
+    const SubroutineAt = 0x2010;
+    const ReturnAt = 0x2013;
+    const Counter = 0x1900;
+    const Edited = 0x1a00;
+    const EditedValue = 0x55;
+    const SysViaOrb = 0xfe40;
+    const SysViaOra = 0xfe4f;
+    // IC32 bit 0 low, then high: the sound chip's write enable, which takes the byte on the slow data bus.
+    const SoundChipEnable = 0x00;
+    const SoundChipDisable = 0x08;
+    const SilenceChannel0 = 0x9f;
+    const WriteEnableCycles = 100;
+    // SEI and LDX #0, then for ever JSR to STX &1900 and RTS, and INX; with interrupts off nothing comes between.
+    const Program = [0x78, 0xa2, 0x00, 0x20, 0x10, 0x20, 0xe8, 0x4c, 0x03, 0x20];
+    const Subroutine = [0x8e, Counter & 0xff, Counter >> 8, 0x60];
+    const CallLoop = `CALL &${LoopAt.toString(16)}`;
+    let session;
+
+    // Each test leaves the machine in the loop, deaf to the keyboard, so each boots its own.
+    beforeEach(async () => {
+        session = await frameAlignedSession();
+    }, BootTimeout);
+
+    afterEach(() => session.destroy());
+
+    // Typed keys go in part way through an instruction, which no replay crosses, so history starts once CALL is in.
+    async function loopingWithHistory(sizes) {
+        session.writeMemory(LoopAt, Program);
+        session.writeMemory(SubroutineAt, Subroutine);
+        const id = session.addBreakpoint("execute", LoopAt);
+        await session.type(CallLoop);
+        if (!session.hitBreakpoint()) await session.runFor(CyclesPerInterlacedFrame);
+        expect(session.hitBreakpoint().id).toBe(id);
+        session.removeBreakpoint(id);
+        session.resetBreakpointHits();
+        while (session.typingPending) await session.runFor(CyclesPerInterlacedFrame);
+        session.keepHistory(sizes);
+        await session.runFrames(5);
+    }
+
+    it("refuses every replay while it keeps no history", () => {
+        expect([
+            session.stepBack(false),
+            session.stepBackTo(0),
+            session.stepBackOut(),
+            session.reverseContinue(),
+            session.whoWrote(Counter).refusal,
+        ]).toEqual(Array(5).fill(expect.stringMatching(/keeps no history/)));
+        expect(session.historyState()).toEqual({ recent: 0, seconds: 0, snapshots: 0, oldestCycle: null });
+    });
+
+    it("steps back one instruction, back over a call and back out of one, through what it kept as it ran", async () => {
+        await loopingWithHistory(PageHistory);
+        await session.runUntilAddress(AfterCall, 1);
+
+        expect(session.stepBack(true)).toBeNull();
+        expect(session.registers().pc).toBe(CallAt);
+        expect(session.stepBack(false)).toBeNull();
+        expect(session.registers().pc).toBe(AfterCall + 1);
+        await session.runUntilAddress(ReturnAt, 1);
+        expect(session.stepBackOut()).toBeNull();
+        expect(session.registers().pc).toBe(CallAt);
+    });
+
+    it("reverse continues to its own breakpoint's previous hit, leaving no hit to report, and runs on from there", async () => {
+        await loopingWithHistory(PageHistory);
+        session.addBreakpoint("execute", AfterCall);
+        await session.runFor(CyclesPerInterlacedFrame);
+        const x = session.registers().x;
+        expect(session.hitBreakpoint()).not.toBeNull();
+
+        expect(session.reverseContinue()).toBeNull();
+        expect([session.registers().pc, session.registers().x]).toEqual([AfterCall, x - 1]);
+        expect(session.hitBreakpoint()).toBeNull();
+        await session.runFor(CyclesPerInterlacedFrame);
+        expect([session.registers().pc, session.registers().x]).toEqual([AfterCall, x]);
+    });
+
+    it("replays its own memory writes, and refuses to go back past one paged in for that write alone", async () => {
+        await loopingWithHistory(PageHistory);
+        session.writeMemory(Edited, [EditedValue]);
+        await session.runFrames(2);
+
+        expect(session.whoWrote(Edited)).toMatchObject({ write: { pc: null, value: EditedValue } });
+        session.writeMemory(Edited, [EditedValue], { bank: 0 });
+        expect(session.stepBack(false)).toBe(
+            "Step back cannot go back past a write to memory paged in for that write alone.",
+        );
+    });
+
+    it("finds who wrote a byte, and steps back to that write", async () => {
+        await loopingWithHistory(PageHistory);
+        await session.runUntilAddress(AfterCall, 1);
+
+        const { write } = session.whoWrote(Counter);
+        expect(write).toMatchObject({ pc: SubroutineAt, value: session.registers().x });
+        expect(session.stepBackTo(write.cycle)).toBeNull();
+        expect([session.registers().pc, session.elapsedCycles]).toEqual([SubroutineAt, write.cycle]);
+    });
+
+    it("refuses to replay while text from type() is still going in", async () => {
+        session.writeMemory(LoopAt, Program);
+        session.writeMemory(SubroutineAt, Subroutine);
+        session.keepHistory(PageHistory);
+        session.addBreakpoint("execute", LoopAt);
+        await session.type(CallLoop);
+        expect(session.typingPending).toBe(true);
+
+        expect([session.stepBack(false), session.whoWrote(Counter).refusal]).toEqual([
+            expect.stringMatching(/still being typed/),
+            expect.stringMatching(/still being typed/),
+        ]);
+    });
+
+    // One-a-second snapshots only, so that the step back replays frames from the one before the reset.
+    it("counts no frames, captures no sound writes and keeps the text as it replays", async () => {
+        await loopingWithHistory({ recent: 0, seconds: PageHistory.seconds });
+        const chip = session._soundChip;
+        chip.startCapture();
+        session.reset(false);
+        await session.runFrames(10);
+        expect(chip.stopCapture()).not.toEqual([]);
+        const [frames, text] = [session.frameCount, session.drainOutput({ clear: false })];
+        chip.startCapture();
+
+        expect(session.whoWrote(Counter).write).not.toBeNull();
+        expect(session.stepBack(false)).toBeNull();
+        expect([chip.stopCapture(), session.frameCount, session.drainOutput()]).toEqual([[], frames, text]);
+    });
+
+    it.each([
+        ["whoWrote", () => session.whoWrote(Counter)],
+        ["stepBack", () => session.stepBack(false)],
+    ])(
+        "times the sound writes either side of %s by the cycles the machine ran forward between them",
+        async (_name, replay) => {
+            await loopingWithHistory({ recent: 0, seconds: PageHistory.seconds });
+            const chip = session._soundChip;
+            // The chip takes the byte a few cycles after its write enable goes low.
+            const soundWrite = async () => {
+                session.writeMemory(SysViaOra, [SilenceChannel0]);
+                session.writeMemory(SysViaOrb, [SoundChipEnable]);
+                const enabledAt = session.elapsedCycles;
+                await session.runFor(WriteEnableCycles);
+                session.writeMemory(SysViaOrb, [SoundChipDisable]);
+                return enabledAt;
+            };
+            chip.startCapture();
+            const first = await soundWrite();
+            await session.runFor(CyclesPerInterlacedFrame);
+            const before = session.elapsedCycles;
+            replay();
+            const steppedBack = before - session.elapsedCycles;
+            const second = await soundWrite();
+
+            const [a, b] = chip.stopCapture();
+            expect(b.cycle - a.cycle).toBe(second - first + steppedBack);
+        },
+    );
+
+    it.each([
+        ["a soft reset, which it replays", () => session.reset(false), null],
+        ["keeping history afresh", () => session.keepHistory(PageHistory), /nothing to step back to/],
+        ["switching history off", () => session.keepHistory({ recent: 0, seconds: 0 }), /keeps no history/],
+        ["a read of RAM, which it needs no log of", () => session.readMemory(Counter, 1), null],
+        ["a read of a device register", () => session.readMemory(SysViaOrb, 1), /past a read of a device register/],
+        ["a tape", () => session.loadTape(path.join(RepoRoot, "public/tapes/Welcome.uef")), /past a tape change/],
+        [
+            "a disc from a file",
+            () => session.loadDisc(path.join(RepoRoot, "public/discs/elite.ssd")),
+            /past a disc change in drive 0/,
+        ],
+        ["a restore", () => session.restore(session.snapshot()), /nothing to step back to/],
+        ["a BASIC program", () => session.loadBasic('PRINT "HI"'), /past a BASIC program going into memory/],
+        ["a disc", () => session.loadDiscImage("elite.ssd", 1), /past a disc change in drive 1/],
+        ["a hard reset", () => session.reset(true), /nothing to step back to/],
+    ])("steps back across %s as the history allows", async (_name, act, refusal) => {
+        await loopingWithHistory(PageHistory);
+        await act();
+
+        expect(session.stepBack(false)).toEqual(refusal === null ? null : expect.stringMatching(refusal));
+    });
+
+    it("takes snapshots again soon after a step back forgets the newer ones", async () => {
+        const Seconds = 3;
+        await loopingWithHistory({ recent: 0, seconds: Seconds });
+        await session.runFor(Seconds * CyclesPerSecond);
+
+        expect(session.stepBackTo(session.historyState().oldestCycle)).toBeNull();
+        expect(session.historyState().snapshots).toBe(1);
+        await session.runFor(CyclesPerSecond + CyclesPerInterlacedFrame);
+        expect(session.historyState().snapshots).toBe(2);
+    });
+
+    it("keeps as many snapshots as it is asked to, the oldest as far back as the one-a-second ones reach", async () => {
+        const Recent = 2;
+        const Seconds = 3;
+        await loopingWithHistory({ recent: Recent, seconds: Seconds });
+        await session.runFor((Seconds + 2) * CyclesPerSecond);
+
+        const { snapshots, oldestCycle, ...sizes } = session.historyState();
+        expect(sizes).toEqual({ recent: Recent, seconds: Seconds });
+        expect(snapshots).toBe(Recent + Seconds);
+        expect(session.elapsedCycles - oldestCycle).toBeGreaterThan((Seconds - 1) * CyclesPerSecond);
+        expect(session.elapsedCycles - oldestCycle).toBeLessThan((Seconds + 1) * CyclesPerSecond);
+    });
 });

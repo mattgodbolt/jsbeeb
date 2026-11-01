@@ -599,6 +599,20 @@ export class InstrumentedSoundChip extends SoundChip {
         super.advance(cycles);
     }
 
+    /** Runs `run`, a replay of the machine's past, leaving out of the capture what it writes and the cycles it takes. */
+    withoutCapturing(run) {
+        // Caught up either side, so that the cycles owed to the chip are only those the machine runs forward.
+        this.catchUp();
+        const [writes, totalCycles] = [this._capturedWrites.length, this._totalCycles];
+        try {
+            return run();
+        } finally {
+            this.catchUp();
+            this._capturedWrites.length = writes;
+            this._totalCycles = totalCycles;
+        }
+    }
+
     /** Read current SN76489 register state in a friendly format. */
     getState() {
         return {
@@ -623,6 +637,10 @@ export class FakeSoundChip {
     unmute() {}
 
     render() {}
+
+    withoutCapturing(run) {
+        return run();
+    }
 
     updateSlowDataBus() {}
 

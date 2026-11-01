@@ -8,6 +8,9 @@ import { applyInput, cycleCount, stateHash } from "./lockstep.js";
 import { tickCycles } from "./emulation-tick.js";
 import { NoReplayHooks } from "./6502.js";
 
+/** How much history the page keeps: snapshots at each of the last `recent` frames, and one a second for `seconds`. */
+export const PageHistory = Object.freeze({ recent: 3, seconds: 30 });
+
 // How far back step back over looks for the call it is to land on, past which the wait is not worth it.
 const LongestCallSearchSeconds = 2;
 const InterruptPushes = 3;
@@ -170,19 +173,19 @@ export class InputLog {
         this.sampleReplay = null;
         this.recording = true;
         this.applyingInput = false;
-        const { keyboardInterface, sysvia, adconverter, touchScreen, acia, fdc } = cpu;
-        for (const device of [
-            cpu,
-            keyboardInterface,
-            sysvia,
-            adconverter,
-            touchScreen,
-            sysvia.cmos,
-            acia,
-            ...fdc.drives,
-        ])
-            device.inputLog = this;
+        for (const device of this._devices()) device.inputLog = this;
         this.restart();
+    }
+
+    _devices() {
+        const { cpu } = this;
+        const { keyboardInterface, sysvia, adconverter, touchScreen, acia, fdc } = cpu;
+        return [cpu, keyboardInterface, sysvia, adconverter, touchScreen, sysvia.cmos, acia, ...fdc.drives];
+    }
+
+    /** Stops every device the host reaches recording into this log, so that nothing keeps it growing. */
+    detach() {
+        for (const device of this._devices()) device.inputLog = null;
     }
 
     /** Forgets everything recorded, the machine's state having been replaced; replays start from here on. */
