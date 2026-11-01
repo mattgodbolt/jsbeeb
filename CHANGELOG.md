@@ -1,5 +1,22 @@
 # Changelog
 
+## [2.18.0](https://github.com/mattgodbolt/jsbeeb/compare/v2.17.1...v2.18.0) (2026-11-01)
+
+
+### Features
+
+* a game pad for the phone keyboard, beside the picture in landscape and a layer upright ([#1790](https://github.com/mattgodbolt/jsbeeb/issues/1790)) ([06a8cad](https://github.com/mattgodbolt/jsbeeb/commit/06a8cad29ba1540e57594b656f7b4f8ffc9b2b1e))
+* find who last wrote a byte, from the debugger's memory menu ([#1787](https://github.com/mattgodbolt/jsbeeb/issues/1787)) ([3469a87](https://github.com/mattgodbolt/jsbeeb/commit/3469a87e9b0623d07a724269e32d541b2ce2db54))
+* reverse continue to the previous breakpoint or watch hit ([#1788](https://github.com/mattgodbolt/jsbeeb/issues/1788)) ([a7c6f24](https://github.com/mattgodbolt/jsbeeb/commit/a7c6f2471787e438cf6d803a5ef350cdf5d69474))
+* step back out, to the call or interrupt that entered the current routine ([#1786](https://github.com/mattgodbolt/jsbeeb/issues/1786)) ([db85858](https://github.com/mattgodbolt/jsbeeb/commit/db85858fc29beaf9e4972cfcbb7a24e2d6661226))
+
+
+### Bug Fixes
+
+* an Atom paste keeps its first key when it follows another, and the step-back test waits for its key ([#1785](https://github.com/mattgodbolt/jsbeeb/issues/1785)) ([73e3e39](https://github.com/mattgodbolt/jsbeeb/commit/73e3e39449d05e139185c9a1f9822c2da3bbf829))
+* Atom snapshots hold the MMC card's files, so a rewind or restore undoes the Atom's writes ([#1781](https://github.com/mattgodbolt/jsbeeb/issues/1781)) ([df4457e](https://github.com/mattgodbolt/jsbeeb/commit/df4457e65c233aef94515ec80c134a07db0c1c60))
+* GP. directions remap the gamepad's D-pad, and GP.FIRE leaves it and Start alone ([#1792](https://github.com/mattgodbolt/jsbeeb/issues/1792)) ([178031e](https://github.com/mattgodbolt/jsbeeb/commit/178031ec9e7420a0965981f7f7877df35886fe0c))
+
 ## [2.17.1](https://github.com/mattgodbolt/jsbeeb/compare/v2.17.0...v2.17.1) (2026-10-31)
 
 
