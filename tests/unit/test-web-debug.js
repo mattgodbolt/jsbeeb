@@ -44,6 +44,7 @@ const PanelElements = [
 ];
 
 const MachineSecond = 2000000;
+const ChecksPastAQuickRun = 100000;
 const WatchRowSelector = "#watch-panel .watch-list tr:not(.watch-formats):not(.watch-breaks)";
 
 /** Runs and stops as the emulation loop does, a tick at a time; it starts in the debugger. */
@@ -1405,6 +1406,103 @@ describe("Debugger", () => {
                 expect(button("stepBack").title).toMatch(/\(p\)$/);
                 expect(button("stepBackOver").title).toMatch(/\(P\)$/);
             });
+
+            describe("who wrote a byte", () => {
+                const stepBackButton = () => document.querySelector(".toast .toast-action:not([hidden])");
+
+                beforeEach(() => {
+                    // LDA #$41; STA $70; NOP; NOP
+                    load(0x2000, [0xa9, 0x41, 0x85, 0x70, 0xea, 0xea]);
+                    const history = stepBackHere();
+                    keyPress("n");
+                    keyPress("n");
+                    history.taken(cpu.snapshotState(), null);
+                    keyPress("n");
+                });
+
+                it.each([
+                    [
+                        "an edit in the memory panel",
+                        () => {
+                            goTo("goto-mem-addr-form", "$70");
+                            memByte(0x70).click();
+                            type("99", "Enter", false);
+                        },
+                        0x70,
+                        /\$0070 was last written \$99 by an edit in the memory panel, at cycle \d+, 0 cycles \(0\.0 µs\) ago/,
+                    ],
+                    [
+                        "nothing",
+                        () => {},
+                        0x71,
+                        /Nothing wrote \$0071 in the last 7 cycles \(3\.5 µs\), as far back as the history step back keeps goes/,
+                    ],
+                    [
+                        "anything, while running, stopping it first",
+                        () => loop.go(),
+                        0x70,
+                        /\$0070 was last written \$41 by the instruction at \$2002/,
+                    ],
+                    [
+                        "anything in a shared session",
+                        () => (loop.lockstep = {}),
+                        0x70,
+                        /not available in a shared session/,
+                    ],
+                ])("says what wrote it: %s", async (_, set, address, says) => {
+                    set();
+                    await dbgr.whoWrote(address);
+                    expect(loop.mode).toBe(RunMode.debugging);
+                    expect(toasts()).toContainEqual(expect.stringMatching(says));
+                });
+
+                it("finds who wrote a byte from its menu while stopped, and steps back to the instruction", async () => {
+                    goTo("goto-mem-addr-form", "$70");
+                    const whoWrote = () => watchMenu().querySelector(".watch-menu-choice:last-child");
+                    loop.go();
+                    rightClick(memByte(0x70));
+                    expect(whoWrote().hidden).toBe(true);
+                    loop.stop(true);
+                    rightClick(memByte(0x70));
+                    expect(whoWrote().hidden).toBe(false);
+                    pickFromMenu("Who wrote this?");
+                    await vi.waitFor(() =>
+                        expect(toasts()).toContainEqual(
+                            expect.stringMatching(
+                                /\$0070 was last written \$41 by the instruction at \$2002, at cycle/,
+                            ),
+                        ),
+                    );
+                    stepBackButton().click();
+                    expect(pc()).toBe("2002");
+                });
+
+                it("ends a search when the machine is run on, leaving the run to its stop", async () => {
+                    let checks = 0;
+                    const searching = dbgr.whoWrote(0x70);
+                    dbgr.runUntil(() => ++checks > ChecksPastAQuickRun);
+                    expect(loop.isRunning()).toBe(true);
+                    expect((await searching).refusal).toMatch(/moved on/);
+                    loop.tick(MachineSecond);
+                    expect(loop.mode).toBe(RunMode.debugging);
+                    expect(checks).toBe(ChecksPastAQuickRun + 1);
+                });
+
+                it("ends a search still going when another starts", async () => {
+                    const first = dbgr.whoWrote(0x70);
+                    const second = dbgr.whoWrote(0x70);
+                    expect(await first).toBeNull();
+                    expect((await second).write).toMatchObject({ pc: 0x2002, value: 0x41 });
+                });
+
+                it("will not step back to a write once the machine has moved on from the search", async () => {
+                    await dbgr.whoWrote(0x70);
+                    keyPress("n");
+                    stepBackButton().click();
+                    expect(pc()).toBe("2006");
+                    expect(toasts()).toContainEqual(expect.stringMatching(/moved on since that search/));
+                });
+            });
         });
 
         describe("past a fiftieth of a second", () => {
@@ -1698,9 +1796,10 @@ describe("Debugger", () => {
             memByte(0x70).dispatchEvent(click);
             expect(click.defaultPrevented).toBe(true);
             expect(watchMenu().hidden).toBe(false);
-            expect([...watchMenu().querySelectorAll("button")].map((choice) => choice.textContent)).toEqual(
-                ["dec", "hex", "dec16", "hex16", "dec32", "hex32"].map((name) => `Watch ${name}`),
-            );
+            expect([...watchMenu().querySelectorAll("button")].map((choice) => choice.textContent)).toEqual([
+                ...["dec", "hex", "dec16", "hex16", "dec32", "hex32"].map((name) => `Watch ${name}`),
+                "Who wrote this?",
+            ]);
             expect(panelOpen()).toBe(false);
             pickFromMenu("Watch hex16");
             expect(watchMenu().hidden).toBe(true);

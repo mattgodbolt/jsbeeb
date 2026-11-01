@@ -77,7 +77,7 @@ export function toast(message, { title = "", quietKey = "", action = null } = {}
     if (action) {
         actionButton.textContent = action.label;
         actionButton.addEventListener("click", () => {
-            bootstrap.Toast.getInstance(element)?.hide();
+            dismissToast(element);
             action.run();
         });
     }
@@ -94,4 +94,16 @@ export function toast(message, { title = "", quietKey = "", action = null } = {}
     });
     bootstrap.Toast.getOrCreateInstance(element, { autohide: !action }).show();
     return element;
+}
+
+/** Closes a notice `toast` showed, if it is still showing. */
+export function dismissToast(element) {
+    const instance = bootstrap.Toast.getInstance(element);
+    // Bootstrap marks a toast "showing" through its show and its hide. Hidden part way through showing, the end of
+    // the show would touch the instance disposed on hiding; one already hiding goes regardless.
+    if (element.classList.contains("showing")) {
+        element.addEventListener("shown.bs.toast", () => instance?.hide(), { once: true });
+    } else {
+        instance?.hide();
+    }
 }

@@ -53,7 +53,7 @@ function captureThumbnail(fb32) {
  *    so fb32 retains the completed frame for capture.
  */
 function executeUntilFrame(processor, video) {
-    processor.asReplay(null, () => {
+    processor.asReplay(null, null, () => {
         const startFrame = video.frameCount;
 
         // Phase 1: run to first vsync (completes partial frame, clears fb32)

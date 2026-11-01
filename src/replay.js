@@ -1,7 +1,8 @@
-// Stepping the machine backwards: it is put back to a snapshot from before where it is to go, and run forward to
-// there exactly. Snapshots leave out what the host gives the machine (keys, FIRE buttons, BREAK, a debugger's
-// edits) and what the machine reads from the host as it runs (the analogue channels, the clock, the touchscreen),
-// so an InputLog records both as they happen, and a replay puts each back where it went in or was read.
+// Stepping the machine backwards, or searching back through what it did: it is put back to a snapshot from before
+// where it is to go, and run forward to there exactly. Snapshots leave out what the host gives the machine (keys,
+// FIRE buttons, BREAK, a debugger's edits) and what the machine reads from the host as it runs (the analogue
+// channels, the clock, the touchscreen), so an InputLog records both as they happen, and a replay puts each back
+// where it went in or was read.
 
 import { applyInput, cycleCount, stateHash } from "./lockstep.js";
 import { tickCycles } from "./emulation-tick.js";
@@ -9,13 +10,23 @@ import { tickCycles } from "./emulation-tick.js";
 // How far back step back over looks for the call it is to land on, past which the wait is not worth it.
 const LongestCallSearchSeconds = 2;
 
-const NothingToStepBackTo =
-    "There is nothing to step back to: the machine keeps its history once it has run a frame since it started, " +
-    "was reset or had its state replaced.";
+// As the CPU's memStat marks a page.
+const RamStat = 1;
+const RomStat = 2;
+
+const KeepsHistory =
+    "the machine keeps its history once it has run a frame since it started, was reset or had its state replaced";
+const NothingToStepBackTo = `There is nothing to step back to: ${KeepsHistory}.`;
+const NothingToSearch = `There is no history to search back through: ${KeepsHistory}.`;
 const NotRepeated = "Step back could not repeat the machine's run exactly, so the machine is left where it was.";
 const NoCallFound = `Step back over found no call this returned from in the last ${LongestCallSearchSeconds} seconds.`;
-const NoStepBackWithEconet = "Step back is not available with Econet, whose network a replay cannot repeat.";
-const NoStepBackWithTapeRunning = "Step back is not available while the cassette motor runs.";
+const TooFarBack = "That is further back than the machine keeps its history.";
+const NotBehind = "That is not before where the machine is now.";
+const IsRom = "That is ROM, which a write leaves as it is.";
+const NotRepeatedHere = "The search could not repeat the machine's run since its newest snapshot exactly.";
+const CannotSearchPast = "The search cannot go back past";
+const MovedOn = "The machine moved on before the search back finished.";
+const Unrepeated = "a stretch of the run it could not repeat exactly";
 const MidInstruction = "an input that came part way through an instruction, as a paste's or an autotype's keys do";
 
 // S counts down and wraps, so "not deeper" is a difference of under half the page, either way round $00.
@@ -25,6 +36,28 @@ export function notDeeper(s, startS) {
 
 export const snapshotCycle = (cpu, snapshot) =>
     snapshot.cycleSeconds * cpu.model.cyclesPerSecond + snapshot.currentCycles;
+
+/** Runs `generator` to its end, returning what it returns. */
+export function finished(generator) {
+    for (;;) {
+        const { done, value } = generator.next();
+        if (done) return value;
+    }
+}
+
+/**
+ * Runs `run` with `video` painting nothing to the screen, as the benchmark page's video-only pass does, so that the
+ * screen keeps showing the machine as it stands while its past is replayed.
+ */
+function withoutPainting(video, run) {
+    const paint = video.paint_ext;
+    video.paint_ext = () => {};
+    try {
+        return run();
+    } finally {
+        video.paint_ext = paint;
+    }
+}
 
 // Between executes the CPU has reached its cycle target or been stopped short of it; inside one, as a scheduled
 // task or a debug hook runs, it has done neither.
@@ -123,6 +156,7 @@ export class InputLog {
         this.latestSamples = new Map();
         this.sampleReplay = null;
         this.recording = true;
+        this.applyingInput = false;
         const { keyboardInterface, sysvia, adconverter, touchScreen, acia, fdc } = cpu;
         for (const device of [
             cpu,
@@ -229,10 +263,11 @@ export class InputLog {
 
     /**
      * Puts the machine back to `snapshot` and runs it to `to` as a replay (as `asReplay` runs one, watched by
-     * `onInstruction`), putting each input back at its cycle, those at `to` too if `inputsAtTo`. Returns the hash
-     * of the machine as the snapshot put it, or null if the replay did not reach an input's cycle or `to` exactly.
+     * `onInstruction` and `onWrite`), putting each input back at its cycle, those at `to` too if `inputsAtTo`, with
+     * `applyingInput` set as each goes in. Returns the hash of the machine as the snapshot put it, or null if the
+     * replay did not reach an input's cycle or `to` exactly.
      */
-    replay(snapshot, to, inputsAtTo, onInstruction) {
+    replay(snapshot, to, inputsAtTo, onInstruction, onWrite) {
         const { cpu } = this;
         const from = snapshotCycle(cpu, snapshot);
         this.recording = false;
@@ -242,12 +277,17 @@ export class InputLog {
             cpu.restoreState(snapshot);
             cpu.debugInstruction.forgetStop();
             const startHash = stateHash(cpu);
-            const reached = cpu.asReplay(onInstruction, () => {
+            const reached = cpu.asReplay(onInstruction, onWrite, () => {
                 for (const { at, input } of this.inputs) {
                     if (at < from || !input) continue;
                     if (at > to || (at === to && !inputsAtTo)) break;
                     if (!runTo(cpu, at) || cycleCount(cpu) !== at) return false;
-                    applyInput(cpu, input);
+                    this.applyingInput = true;
+                    try {
+                        applyInput(cpu, input);
+                    } finally {
+                        this.applyingInput = false;
+                    }
                 }
                 return runTo(cpu, to) && cycleCount(cpu) === to;
             });
@@ -263,7 +303,8 @@ export class InputLog {
  * Where a step back lands, worked out from the instructions replays pass the start of, a window at a time from
  * the newest. Back one, it is the last instruction of the first window. Back over, it is the same unless that
  * instruction returned to here (a return with the stack shallower after it); then it is the last instruction
- * before it at a stack no deeper than here, the call that return came back from, in whichever window has one.
+ * before it at a stack no deeper than here, the call that return came back from, in whichever window has one, as
+ * far back as is worth the wait.
  */
 class Landing {
     constructor(cpu, over) {
@@ -271,7 +312,13 @@ class Landing {
         this.over = over;
         this.s = cpu.s;
         this.seekingCall = false;
+        this.searchFrom = cycleCount(cpu) - LongestCallSearchSeconds * cpu.model.cyclesPerSecond;
         this.onInstruction = (_pc, opcode) => this.passing(opcode);
+        this.onWrite = null;
+    }
+
+    searches(from) {
+        return !this.seekingCall || from >= this.searchFrom;
     }
 
     startWindow() {
@@ -299,6 +346,68 @@ class Landing {
         if (!this.over || !returnedHere) return this.last;
         this.seekingCall = true;
         return this.notDeeperBeforeLast;
+    }
+}
+
+/** A step back to `cycle`, an instruction boundary, landed on from the window that holds it. */
+class Arrival {
+    constructor(cycle) {
+        this.cycle = cycle;
+        this.from = 0;
+        this.onInstruction = this.onWrite = null;
+    }
+
+    searches() {
+        return true;
+    }
+
+    startWindow(from) {
+        this.from = from;
+    }
+
+    inWindow() {
+        return this.from <= this.cycle ? this.cycle : null;
+    }
+}
+
+/**
+ * The last write in a window to the byte a write to `address` reaches as the machine is paged now: the same byte
+ * of RAM, however the CPU paged it there at the time, or else a device register at the same address.
+ */
+class LastWrite {
+    constructor(cpu, log, address) {
+        const page = cpu.memStatOffset + (address >>> 8);
+        const [stat, look] = [cpu.memStat[page], cpu.memLook[page]];
+        let pc = 0;
+        let started = 0;
+        this.found = null;
+        this.onInstruction = (at) => {
+            pc = at;
+            started = cycleCount(cpu);
+        };
+        this.onWrite = (written, value) => {
+            if (written !== address) return;
+            const writtenPage = cpu.memStatOffset + (address >>> 8);
+            const writtenStat = cpu.memStat[writtenPage];
+            if (writtenStat !== stat) return;
+            if (stat === RamStat && cpu.memLook[writtenPage] !== look) return;
+            const byte = value & 0xff;
+            this.found = log.applyingInput
+                ? { pc: null, cycle: cycleCount(cpu), value: byte }
+                : { pc, cycle: started, value: byte };
+        };
+    }
+
+    searches() {
+        return true;
+    }
+
+    startWindow() {
+        this.found = null;
+    }
+
+    inWindow() {
+        return this.found;
     }
 }
 
@@ -346,20 +455,92 @@ export class ReplayHistory extends EventTarget {
         return this.snapshots().filter((snapshot) => snapshotCycle(this.cpu, snapshot) < now);
     }
 
+    /** Why `what`, a replay of the machine's history, cannot be done from where it is; `nothing` if it has none. */
+    _unavailable(what, nothing) {
+        const { cpu } = this;
+        if (cpu.econet) return `${what} is not available with Econet, whose network a replay cannot repeat.`;
+        if (cpu.tapeInterface.motorOn) return `${what} is not available while the cassette motor runs.`;
+        return this._earlier(cycleCount(cpu)).length ? null : nothing;
+    }
+
     /** Why the machine cannot step back from where it is, or null if it can. */
     refusal() {
         const { cpu } = this;
-        if (cpu.econet) return NoStepBackWithEconet;
-        if (cpu.tapeInterface.motorOn) return NoStepBackWithTapeRunning;
+        const unavailable = this._unavailable("Step back", NothingToStepBackTo);
+        if (unavailable) return unavailable;
         const now = cycleCount(cpu);
-        const from = this._earlier(now).at(-1);
-        if (!from) return NothingToStepBackTo;
-        return this._crossing(snapshotCycle(cpu, from), now);
+        const crossing = this.log.refusalBetween(snapshotCycle(cpu, this._earlier(now).at(-1)), now);
+        return crossing && `Step back cannot go back past ${crossing}.`;
     }
 
-    _crossing(from, to) {
-        const refusal = this.log.refusalBetween(from, to);
-        return refusal && `Step back cannot go back past ${refusal}.`;
+    /**
+     * Replays the stretches between the snapshots before now, newest first, each checked to end on the machine it
+     * is replayed towards (the state now or the next snapshot's), until `seeker` finds in one what it looks for,
+     * yielding after each stretch that does not have it. Returns `{ found, snapshot, reached, stoppedBy }`: what it
+     * found, or null, and the snapshot of the stretch it was found in; the cycle the search reached back to; and
+     * why it went no further, null if it ran out of stretches or `seeker` wanted none older: something no replay
+     * crosses, or Unrepeated. Leaves the machine at the end of whichever stretch it replayed last.
+     */
+    *_searchBack(seeker) {
+        const { cpu, log } = this;
+        let [to, hash, inputsAtTo] = [cycleCount(cpu), stateHash(cpu), true];
+        for (const snapshot of this._earlier(to).reverse()) {
+            const from = snapshotCycle(cpu, snapshot);
+            if (!seeker.searches(from)) break;
+            const crossing = log.refusalBetween(from, to);
+            if (crossing) return { found: null, snapshot: null, reached: to, stoppedBy: crossing };
+            seeker.startWindow(from);
+            const fromHash = log.replay(snapshot, to, inputsAtTo, seeker.onInstruction, seeker.onWrite);
+            if (fromHash === null || stateHash(cpu) !== hash)
+                return { found: null, snapshot: null, reached: to, stoppedBy: Unrepeated };
+            const found = seeker.inWindow();
+            if (found !== null) return { found, snapshot, reached: from, stoppedBy: null };
+            [to, hash, inputsAtTo] = [from, fromHash, false];
+            yield;
+        }
+        return { found: null, snapshot: null, reached: to, stoppedBy: null };
+    }
+
+    _original() {
+        const { cpu } = this;
+        const { memStatOffset } = cpu;
+        return { state: cpu.snapshotState(), host: hostInputs(cpu), picture: cpu.video.fb32.slice(), memStatOffset };
+    }
+
+    /**
+     * Puts the machine, the host's inputs and the picture back as `_original` kept them, with the half of the paging
+     * tables the last instruction's fetch chose, which a snapshot leaves out.
+     */
+    _putBack({ state, host, picture, memStatOffset }) {
+        const { cpu } = this;
+        this.log.withoutRecording(() => {
+            restoreHostInputs(cpu, host);
+            cpu.restoreState(state);
+        });
+        cpu.video.fb32.set(picture);
+        cpu.memStatOffset = memStatOffset;
+    }
+
+    // Steps back to the cycle `seeker` finds, or returns why it could not, `notFound` if no stretch held one.
+    _stepBackFinding(seeker, notFound) {
+        const refused = this.refusal();
+        if (refused) return refused;
+        const original = this._original();
+        let landed = false;
+        try {
+            const { found, snapshot, stoppedBy } = withoutPainting(this.cpu.video, () =>
+                finished(this._searchBack(seeker)),
+            );
+            if (stoppedBy === Unrepeated) return NotRepeated;
+            if (stoppedBy) return `Step back cannot go back past ${stoppedBy}.`;
+            if (found === null) return notFound;
+            if (this.log.replay(snapshot, found, true, null, null) === null) return NotRepeated;
+            landed = true;
+            this._landedAt(found, original.host);
+            return null;
+        } finally {
+            if (!landed) this._putBack(original);
+        }
     }
 
     /**
@@ -370,42 +551,57 @@ export class ReplayHistory extends EventTarget {
      * Returns why it could not, having left the machine and its picture as they were, or null.
      */
     stepBack(over) {
+        return this._stepBackFinding(new Landing(this.cpu, over), NoCallFound);
+    }
+
+    /** Steps the machine back to `cycle`, an instruction boundary since its oldest snapshot, as stepBack does. */
+    stepBackTo(cycle) {
+        if (cycle >= cycleCount(this.cpu)) return NotBehind;
+        return this._stepBackFinding(new Arrival(cycle), TooFarBack);
+    }
+
+    /**
+     * Searches for the last write to `address`, as the machine pages it now (see LastWrite), by replaying its
+     * history back from now a stretch at a time, as a step back does, painting none of it. Yields between
+     * stretches, with the machine as it was, so that a long search can let the page go on; if the machine has moved
+     * on when it resumes, it stops.
+     * Returns `{ refusal }` when it cannot search (ROM, which no write changes, among the reasons), or else
+     * `{ write, searched, stoppedBy }`: `write` is `{ pc, cycle, value }`, `cycle` where the instruction at `pc`
+     * started, or with `pc` null where an input such as a memory panel edit wrote it, or null if nothing wrote it in
+     * the `searched` cycles back from now; `stoppedBy` is why the search went back no further (as `_searchBack`
+     * gives it), or null where the history ends. Leaves the machine as it was.
+     */
+    *lastWrite(address) {
+        const refusal = this._unavailable("Searching back", NothingToSearch);
+        if (refusal) return { refusal };
         const { cpu, log } = this;
-        const refused = this.refusal();
-        if (refused) return refused;
+        if (cpu.memStat[cpu.memStatOffset + (address >>> 8)] === RomStat) return { refusal: IsRom };
         const now = cycleCount(cpu);
-        const original = { state: cpu.snapshotState(), host: hostInputs(cpu), picture: cpu.video.fb32.slice() };
-        const searchFrom = now - LongestCallSearchSeconds * cpu.model.cyclesPerSecond;
-        const landing = new Landing(cpu, over);
-        let [to, hash, inputsAtTo] = [now, stateHash(cpu), true];
-        let landed = false;
+        const nowHash = stateHash(cpu);
+        const original = this._original();
+        const search = this._searchBack(new LastWrite(cpu, log, address));
+        let away = false;
         try {
-            for (const snapshot of this._earlier(now).reverse()) {
-                const from = snapshotCycle(cpu, snapshot);
-                if (landing.seekingCall && from < searchFrom) break;
-                const crossing = this._crossing(from, to);
-                if (crossing) return crossing;
-                landing.startWindow();
-                const fromHash = log.replay(snapshot, to, inputsAtTo, landing.onInstruction);
-                if (fromHash === null || stateHash(cpu) !== hash) return NotRepeated;
-                const target = landing.inWindow();
-                if (target !== null) {
-                    if (log.replay(snapshot, target, true, null) === null) return NotRepeated;
-                    landed = true;
-                    this._landedAt(target, original.host);
-                    return null;
+            for (;;) {
+                away = true;
+                const { done, value } = withoutPainting(cpu.video, () => search.next());
+                this._putBack(original);
+                away = false;
+                if (!done) {
+                    yield;
+                    if (cycleCount(cpu) !== now || stateHash(cpu) !== nowHash) return { refusal: MovedOn };
+                    continue;
                 }
-                [to, hash, inputsAtTo] = [from, fromHash, false];
+                const { found, reached, stoppedBy } = value;
+                if (stoppedBy && reached === now) {
+                    return {
+                        refusal: stoppedBy === Unrepeated ? NotRepeatedHere : `${CannotSearchPast} ${stoppedBy}.`,
+                    };
+                }
+                return { write: found, searched: now - reached, stoppedBy };
             }
-            return NoCallFound;
         } finally {
-            if (!landed) {
-                log.withoutRecording(() => {
-                    restoreHostInputs(cpu, original.host);
-                    cpu.restoreState(original.state);
-                });
-                cpu.video.fb32.set(original.picture);
-            }
+            if (away) this._putBack(original);
         }
     }
 

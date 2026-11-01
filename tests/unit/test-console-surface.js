@@ -11,6 +11,7 @@ const ExpectedNames = [
     "soundChip",
     "go",
     "stop",
+    "whoWrote",
     "hd",
     "m7dump",
     "benchmarkCpu",
@@ -35,6 +36,7 @@ function make(processor) {
         processor,
         video: {},
         audioHandler: { soundChip: {} },
+        dbgr: { whoWrote: vi.fn() },
     };
     exposeConsoleSurface(target, deps);
     return { target, ...deps };
@@ -51,12 +53,18 @@ describe("exposeConsoleSurface", () => {
         for (const name of ExpectedNames) expect(target[name], name).toBeDefined();
     });
 
-    it("go and stop drive the loop", () => {
-        const { target, loop } = make(AddressEcho);
+    it("go and stop drive the loop, and whoWrote asks the debugger", () => {
+        const { target, loop, dbgr } = make(AddressEcho);
         target.go();
         expect(loop.go).toHaveBeenCalled();
         target.stop(true);
         expect(loop.stop).toHaveBeenCalledWith(true);
+        target.whoWrote(0x70);
+        expect(dbgr.whoWrote).toHaveBeenCalledWith(0x70);
+        for (const notAnAddress of ["&70", 0x10000, -1]) {
+            expect(() => target.whoWrote(notAnAddress)).toThrow(/an address from 0 to 0xffff/);
+        }
+        expect(dbgr.whoWrote).toHaveBeenCalledTimes(1);
     });
 
     it("exposes the machine's parts", () => {
