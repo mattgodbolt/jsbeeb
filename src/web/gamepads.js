@@ -33,27 +33,34 @@ export class GamePad {
         switch (gamepadKey) {
             case "LEFT":
                 this.gamepadMapping[3] = mappedKey;
+                this.gamepadMapping[14] = mappedKey; // the D-pad
                 this.gamepadAxisMapping[0][-1] = mappedKey;
                 this.gamepadAxisMapping[2][-1] = mappedKey;
                 break;
             case "RIGHT":
                 this.gamepadMapping[1] = mappedKey;
+                this.gamepadMapping[15] = mappedKey; // the D-pad
                 this.gamepadAxisMapping[0][1] = mappedKey;
                 this.gamepadAxisMapping[2][1] = mappedKey;
                 break;
             case "UP":
                 this.gamepadMapping[0] = mappedKey;
+                this.gamepadMapping[12] = mappedKey; // the D-pad
                 this.gamepadAxisMapping[1][-1] = mappedKey;
                 this.gamepadAxisMapping[3][-1] = mappedKey;
                 break;
             case "DOWN":
                 this.gamepadMapping[2] = mappedKey;
+                this.gamepadMapping[13] = mappedKey; // the D-pad
                 this.gamepadAxisMapping[1][1] = mappedKey;
                 this.gamepadAxisMapping[3][1] = mappedKey;
                 break;
             case "FIRE":
-                for (let i = 0; i < 16; i++) {
-                    this.gamepadMapping[i] = mappedKey;
+                // Every fire control, usually what a one-button game wants: the face and
+                // shoulder buttons and the sticks' clicks. The D-pad (12 to 15), Start (9)
+                // and Back (8) keep their own meaning.
+                for (const button of [0, 1, 2, 3, 4, 5, 6, 7, 10, 11]) {
+                    this.gamepadMapping[button] = mappedKey;
                 }
                 break;
 
