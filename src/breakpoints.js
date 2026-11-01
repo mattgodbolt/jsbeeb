@@ -268,13 +268,67 @@ export class Breakpoints {
         }
         const covered = new Uint8Array(AddressSpace);
         for (const { from, to } of entries) covered.fill(1, from, to + 1);
-        const handler = watching?.handler ?? this._cpu[HookOfAccess.get(access)].add(this._handler(access));
+        const handler =
+            watching?.handler ??
+            this._cpu[HookOfAccess.get(access)].add(
+                this._handler(access, (address, value, returnsTo, taken) =>
+                    this._check(access, address, value, returnsTo, taken),
+                ),
+            );
         this._watching[access] = { handler, entries, covered };
     }
 
-    _handler(access) {
-        if (access === "interrupt") return (taken, returnsTo) => this._check(access, this._cpu.pc, 0, returnsTo, taken);
-        return (address, value) => this._check(access, address, value & 0xff, undefined, undefined);
+    /** A debug hook for `access` calling `check(address, value, returnsTo, taken)`. */
+    _handler(access, check) {
+        if (access === "interrupt") return (taken, returnsTo) => check(this._cpu.pc, 0, returnsTo, taken);
+        return (address, value) => check(address, value & 0xff, undefined, undefined);
+    }
+
+    /**
+     * Debug hooks, as `asReplay` takes them, that call `onHit(access, address)` wherever an enabled breakpoint that
+     * stops would act in a replay, at every hit whatever its hit count, counting none and telling no one; null for
+     * each kind of access none needs.
+     */
+    replayHooks(onHit) {
+        const hook = (access) => {
+            const entries = [...this._entries.values()].filter(
+                (entry) => entry.enabled && entry.action === "stop" && entry.accesses.includes(access),
+            );
+            if (!entries.length) return null;
+            const covered = new Uint8Array(AddressSpace);
+            for (const { from, to } of entries) covered.fill(1, from, to + 1);
+            const fires = new Map(entries.map((entry) => [entry, EventKinds.get(entry.kind)?.firesOn() ?? null]));
+            return this._handler(access, (address, value, returnsTo, taken) => {
+                if (!covered[address]) return;
+                const { pc, old } = this._made(access, address, value, returnsTo);
+                let acts = false;
+                // Every entry is asked, so that each test for a change sees every instruction.
+                for (const entry of entries) {
+                    if (this._acts(entry, fires.get(entry), address, value, taken, pc, old)) acts = true;
+                }
+                if (acts) onHit(access, address);
+            });
+        };
+        return { instruction: hook("execute"), read: hook("read"), write: hook("write"), interrupt: hook("interrupt") };
+    }
+
+    /** The instruction that made the access, for an interrupt the one it returns to, and the byte a write replaces. */
+    _made(access, address, value, returnsTo) {
+        const cpu = this._cpu;
+        return {
+            pc: { execute: address, interrupt: returnsTo }[access] ?? cpu.getPrevPc(0),
+            old: access === "write" ? cpu.peekmem(address) : value,
+        };
+    }
+
+    /** Whether `entry`, its change tested by `fires`, acts on the access, before its hit count is counted. */
+    _acts(entry, fires, address, value, taken, pc, old) {
+        const cpu = this._cpu;
+        if (address < entry.from || address > entry.to) return false;
+        if (fires && !fires(cpu, entry, address, value, taken)) return false;
+        if (entry.bank !== undefined && !cpu.isBankPagedAt(entry.bank, address)) return false;
+        if (entry.test && !entry.test(cpu, pc, value, old)) return false;
+        return !entry.accepts || entry.accepts(address, value, pc);
     }
 
     /** `returnsTo` and `taken`, "irq" or "nmi", are an interrupt's. */
@@ -283,18 +337,12 @@ export class Breakpoints {
         const watching = this._watching[access];
         if (!watching?.covered[address]) return false;
         const { entries } = watching;
-        const cpu = this._cpu;
         // An instruction a stop halted before runs on resuming; no execute breakpoint stops it a second time.
-        if (access === "execute" && cpu.resumingFromStop) return false;
-        const old = access === "write" ? cpu.peekmem(address) : value;
-        const pc = { execute: address, interrupt: returnsTo }[access] ?? cpu.getPrevPc(0);
+        if (access === "execute" && this._cpu.resumingFromStop) return false;
+        const { pc, old } = this._made(access, address, value, returnsTo);
         let stop = false;
         for (const entry of entries) {
-            if (address < entry.from || address > entry.to) continue;
-            if (entry.fires && !entry.fires(cpu, entry, address, value, taken)) continue;
-            if (entry.bank !== undefined && !cpu.isBankPagedAt(entry.bank, address)) continue;
-            if (entry.test && !entry.test(cpu, pc, value, old)) continue;
-            if (entry.accepts && !entry.accepts(address, value, pc)) continue;
+            if (!this._acts(entry, entry.fires, address, value, taken, pc, old)) continue;
             if (++entry.hits < entry.hitCount) continue;
             const hit = {
                 id: entry.id,

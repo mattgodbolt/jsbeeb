@@ -1422,6 +1422,29 @@ describe("Debugger", () => {
                 ]);
             });
 
+            it("runs back on G to each breakpoint hit before, newest first, and on from one as from a stop there", async () => {
+                const loopCycles = 9;
+                // NOP; NOP; NOP; JMP $2000
+                load(0x2000, [0xea, 0xea, 0xea, 0x4c, 0x00, 0x20]);
+                stepBackHere();
+                keyPress("n");
+                cpu.breakpoints.add({ kind: "execute", start: 0x2001, action: "log" });
+                cpu.breakpoints.add({ kind: "execute", start: 0x2001, enabled: false });
+                await pressAndSettle("G");
+                expect(toasts()).toEqual([expect.stringMatching(/no breakpoint or watch that stops the machine/)]);
+                cpu.breakpoints.add({ kind: "execute", start: 0x2001 });
+                for (let i = 0; i < 5; i++) keyPress("n");
+                await pressAndSettle("G");
+                const lastHit = cycleCount(cpu);
+                await pressAndSettle("G");
+                expect([pc(), cycleCount(cpu)]).toEqual(["2001", lastHit - loopCycles]);
+                await pressAndSettle("G");
+                expect(toasts().at(-1)).toMatch(/found no breakpoint or watch hit .* as far back as the history goes/);
+                keyPress("g");
+                loop.tick(MachineSecond);
+                expect([pc(), cycleCount(cpu)]).toEqual(["2001", lastHit]);
+            });
+
             it("ends a search back when another starts", async () => {
                 load(0x3000, [0xea, 0xea, 0xea]);
                 const history = stepBackHere();
@@ -1487,7 +1510,7 @@ describe("Debugger", () => {
                     set();
                     dbgr.debug(cpu.pc);
                     const stoppedAt = pc();
-                    for (const run of ["stepBack", "stepBackOver", "stepBackOut"]) {
+                    for (const run of ["stepBack", "stepBackOver", "stepBackOut", "reverseContinue"]) {
                         expect(button(run).getAttribute("aria-disabled")).toBe("true");
                         expect(button(run).title).toMatch(why);
                     }
@@ -1504,6 +1527,7 @@ describe("Debugger", () => {
                 expect(button("stepBack").title).toMatch(/\(p\)$/);
                 expect(button("stepBackOver").title).toMatch(/\(P\)$/);
                 expect(button("stepBackOut").title).toMatch(/\(O\)$/);
+                expect(button("reverseContinue").title).toMatch(/\(G\)$/);
             });
 
             describe("who wrote a byte", () => {

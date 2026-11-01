@@ -53,7 +53,7 @@ const NoStepBackInSession = "Step back is not available in a shared session.";
 const NoSearchInSession = "Searching back is not available in a shared session.";
 const NoHistoryToSearch = "There is no history to search back through here.";
 const MovedSinceSearch = "The machine has moved on since that search; search again to step back to a write.";
-const StepBackRuns = ["stepBack", "stepBackOver", "stepBackOut"];
+const StepBackRuns = ["stepBack", "stepBackOver", "stepBackOut", "reverseContinue"];
 // What a search back resolves to when a later one ended it.
 const Ended = Symbol("ended");
 
@@ -254,7 +254,13 @@ class MemoryView {
 
 /** The keys of the debugger's toolbar, answering only in the debugger; see panel-keys.js for the shape. */
 export const ToolbarKeys = [
-    { combo: "g", key: "g", run: "go", label: "run", description: "Resume running" },
+    {
+        combo: "g G",
+        label: "run",
+        description: "Resume running (G: back to the previous breakpoint or watch hit)",
+    },
+    { key: "g", run: "go" },
+    { key: "G", run: "reverseContinue" },
     {
         combo: "n N",
         label: "step",
@@ -468,6 +474,8 @@ export class Debugger {
             stepBack: () => this._fromDebugger(() => this.stepBack(false)),
             stepBackOver: () => this._fromDebugger(() => this.stepBack(true)),
             stepBackOut: () => this._fromDebugger(() => this.stepBackSearching((history) => history.stepBackOut())),
+            reverseContinue: () =>
+                this._fromDebugger(() => this.stepBackSearching((history) => history.reverseContinue())),
             runToCursor: () => this._fromDebugger(() => this.runToCursor()),
             runToVsync: () => this._fromDebugger(() => this.runToVsync()),
         };
