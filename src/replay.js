@@ -11,6 +11,7 @@ import { NoReplayHooks } from "./6502.js";
 // How far back step back over looks for the call it is to land on, past which the wait is not worth it.
 const LongestCallSearchSeconds = 2;
 const InterruptPushes = 3;
+const EmptyStack = 0xff;
 
 // As the CPU's memStat marks a page.
 const RamStat = 1;
@@ -22,6 +23,7 @@ const NothingToStepBackTo = `There is nothing to step back to: ${KeepsHistory}.`
 const NothingToSearch = `There is no history to search back through: ${KeepsHistory}.`;
 const NotRepeated = "Step back could not repeat the machine's run exactly, so the machine is left where it was.";
 const NoCallFound = `Step back over found no call this returned from in the last ${LongestCallSearchSeconds} seconds.`;
+const NothingToStepOutOf = "There is no call or interrupt to step back out of: the stack is empty (S is &FF).";
 const NothingToContinueTo = "There is no breakpoint or watch that stops the machine to reverse continue to.";
 const TooFarBack = "That is further back than the machine keeps its history.";
 const NotBehind = "That is not before where the machine is now.";
@@ -739,9 +741,10 @@ export class ReplayHistory extends EventTarget {
 
     /**
      * Steps the machine back to the call or interrupt that entered the routine it is in, a stretch at a time as
-     * `_steppingBack` does.
+     * `_steppingBack` does. With the stack empty, as at the top level of a program that reset it, there is none.
      */
     *stepBackOut() {
+        if (this.cpu.s === EmptyStack) return NothingToStepOutOf;
         return yield* this._steppingBack(
             new OutLanding(this.cpu),
             this._searchedFor("Step back out found no call or interrupt that entered this routine"),
