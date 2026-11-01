@@ -311,4 +311,17 @@ describe("ReplayHistory", () => {
         expect(finished(history.stepBackOut())).toMatch(why);
         expect(snapshotToJSON(cpu.snapshotState())).toEqual(before);
     });
+
+    it("reverse continues to a watch hit on the last instruction before a snapshot, where that snapshot was taken", async () => {
+        const cpu = await machineAt(WriterAt, {});
+        loadBytes(cpu, WriterAt, WriteThenIdle);
+        const history = new ReplayHistory(cpu);
+        take(history);
+        singleStep(cpu);
+        const afterWrite = cycleCount(cpu);
+        takeAndRun(history);
+        cpu.breakpoints.add({ kind: "write", start: Written });
+        expect(finished(history.reverseContinue())).toBeNull();
+        expect([cpu.pc, cycleCount(cpu)]).toEqual([IdleAt, afterWrite]);
+    });
 });
