@@ -22,6 +22,7 @@ import { hexbyte, hexword } from "./hex.js";
 import { ReplayHistory, finished, snapshotCycle } from "./replay.js";
 import { RewindBuffer } from "./rewind.js";
 import { cycleCount } from "./lockstep.js";
+import { FramesPerSecond } from "./emulation-tick.js";
 
 // BBC framebuffer is 1024×625 pixels
 const FB_WIDTH = 1024;
@@ -38,8 +39,6 @@ const AccconShadowBit = 4;
 const KeyboardBufferOffsets = { read: 0x2d8, write: 0x2e1 };
 const MasterKeyboardBufferOffsets = { read: 0x2d7, write: 0x2e0 };
 
-// At most one recent snapshot a frame, as the page takes them.
-const RecentSnapshotsPerSecond = 50;
 const NoHistory = "The session keeps no history to step back through: keepHistory turns it on.";
 const StillTyping = "Text from type() is still being typed, which a replay cannot put back.";
 
@@ -378,8 +377,10 @@ export class MachineSession {
 
     /**
      * Keep the machine's history as it runs, for stepBack and the rest to replay, as the page keeps it for its
-     * debugger: `recent` snapshots at most a frame apart, and `seconds` more a second apart (PageHistory in
-     * replay.js is what the page keeps). Zero for both keeps none. Forgets any history kept before.
+     * debugger: `recent` snapshots, at most one a frame, and `seconds` more, at most one a second (PageHistory in
+     * replay.js is what the page keeps), each taken between the slices a run executes in. Zero for both keeps none.
+     * Forgets any history kept before. Call it after initialise(), whose reset would leave a snapshot from before
+     * the ROMs.
      * @param {{recent: number, seconds: number}} sizes
      */
     keepHistory({ recent, seconds }) {
@@ -401,7 +402,7 @@ export class MachineSession {
         });
         const { cyclesPerSecond } = cpu.model;
         this._historyRings = [
-            { ring: new RewindBuffer(recent), apart: cyclesPerSecond / RecentSnapshotsPerSecond },
+            { ring: new RewindBuffer(recent), apart: cyclesPerSecond / FramesPerSecond },
             { ring: new RewindBuffer(seconds), apart: cyclesPerSecond },
         ].filter(({ ring }) => ring.maxSnapshots > 0);
         this._machine.betweenExecutes = () => this._takeHistorySnapshots();
@@ -448,15 +449,25 @@ export class MachineSession {
 
     /**
      * Run `replay` on the history, returning why it could not, or what it returns. A step back leaves the
-     * breakpoints' hit flags clear, as what stopped the machine is now in its future, and leaves the captured text
-     * as it was.
+     * breakpoints' hit flags clear, as what stopped the machine is now in its future. Replays count no frames and
+     * capture no sound writes; the captured text stays as it was, and the last complete frame is the newest the
+     * replay to the landing painted, or if it painted none the one painted before the step back.
      */
     _replaying(replay) {
         if (!this._history) return NoHistory;
         if (this.typingPending) return StillTyping;
-        const refusal = replay(this._history);
+        const refusal = this._asReplay(() => replay(this._history));
         if (refusal === null) this.resetBreakpointHits();
         return refusal;
+    }
+
+    _asReplay(run) {
+        const frameCount = this._frameCount;
+        try {
+            return this._soundChip.withoutCapturing(run);
+        } finally {
+            this._frameCount = frameCount;
+        }
     }
 
     /**
@@ -467,6 +478,15 @@ export class MachineSession {
      */
     stepBack(over) {
         return this._replaying((history) => history.stepBack(over));
+    }
+
+    /**
+     * Step the machine back to `cycle`, an instruction boundary within the history, as whoWrote gives a write's.
+     * @param {number} cycle
+     * @returns {string|null}
+     */
+    stepBackTo(cycle) {
+        return this._replaying((history) => history.stepBackTo(cycle));
     }
 
     /** Step the machine back to the call or interrupt that entered the routine it is in, as stepBack does. */
@@ -492,7 +512,7 @@ export class MachineSession {
     whoWrote(address) {
         if (!this._history) return { refusal: NoHistory };
         if (this.typingPending) return { refusal: StillTyping };
-        return finished(this._history.lastWrite(address));
+        return this._asReplay(() => finished(this._history.lastWrite(address)));
     }
 
     /** Tokenise BBC BASIC source and write it into PAGE */
@@ -843,6 +863,10 @@ export class MachineSession {
      * @param {boolean} [opts.shadow] on a Master, read shadow RAM (true) or main RAM (false) at &3000 to &7FFF
      */
     readMemory(address, length = 16, { bank, shadow } = {}) {
+        const cpu = this._machine.processor;
+        if (Array.from({ length }, (_, i) => address + i).some((at) => cpu.isDevice(at))) {
+            cpu.inputLog?.refuse("a read of a device register, which can change the device");
+        }
         return this._withPaging({ bank, shadow }, () => {
             const bytes = [];
             for (let i = 0; i < length; i++) {

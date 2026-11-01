@@ -8,7 +8,7 @@ import { applyInput, cycleCount, stateHash } from "./lockstep.js";
 import { tickCycles } from "./emulation-tick.js";
 import { NoReplayHooks } from "./6502.js";
 
-/** How much history the page keeps: a snapshot at each of the last few frames, and one a second for 30 seconds. */
+/** How much history the page keeps: snapshots at each of the last `recent` frames, and one a second for `seconds`. */
 export const PageHistory = Object.freeze({ recent: 3, seconds: 30 });
 
 // How far back step back over looks for the call it is to land on, past which the wait is not worth it.

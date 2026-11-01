@@ -984,6 +984,7 @@ describe("MachineSession history", () => {
     const Counter = 0x1900;
     const Edited = 0x1a00;
     const EditedValue = 0x55;
+    const SysViaOrb = 0xfe40;
     // SEI and LDX #0, then for ever JSR to STX &1900 and RTS, and INX; with interrupts off nothing comes between.
     const Program = [0x78, 0xa2, 0x00, 0x20, 0x10, 0x20, 0xe8, 0x4c, 0x03, 0x20];
     const Subroutine = [0x8e, Counter & 0xff, Counter >> 8, 0x60];
@@ -1020,15 +1021,14 @@ describe("MachineSession history", () => {
         await session.runFrames(5);
     }
 
-    it.each([
-        ["stepBack", () => session.stepBack(false)],
-        ["stepBackOut", () => session.stepBackOut()],
-        ["reverseContinue", () => session.reverseContinue()],
-        ["whoWrote", () => session.whoWrote(Counter).refusal],
-    ])("refuses %s while it keeps no history", async (_name, replay) => {
-        await loopingWithHistory({ recent: 0, seconds: 0 });
-
-        expect(replay()).toMatch(/keeps no history/);
+    it("refuses every replay while it keeps no history", () => {
+        expect([
+            session.stepBack(false),
+            session.stepBackTo(0),
+            session.stepBackOut(),
+            session.reverseContinue(),
+            session.whoWrote(Counter).refusal,
+        ]).toEqual(Array(5).fill(expect.stringMatching(/keeps no history/)));
         expect(session.historyState()).toEqual({ recent: 0, seconds: 0, snapshots: 0, oldestCycle: null });
     });
 
@@ -1047,9 +1047,10 @@ describe("MachineSession history", () => {
 
     it("reverse continues to its own breakpoint's previous hit, leaving no hit to report, and runs on from there", async () => {
         await loopingWithHistory(PageHistory);
-        await runTo(AfterCall);
-        const x = session.registers().x;
         session.addBreakpoint("execute", AfterCall);
+        await session.runFor(CyclesPerInterlacedFrame);
+        const x = session.registers().x;
+        expect(session.hitBreakpoint()).not.toBeNull();
 
         expect(session.reverseContinue()).toBeNull();
         expect([session.registers().pc, session.registers().x]).toEqual([AfterCall, x - 1]);
@@ -1070,8 +1071,54 @@ describe("MachineSession history", () => {
         );
     });
 
+    it("finds who wrote a byte, and steps back to that write", async () => {
+        await loopingWithHistory(PageHistory);
+        await runTo(AfterCall);
+
+        const { write } = session.whoWrote(Counter);
+        expect(write).toMatchObject({ pc: SubroutineAt, value: session.registers().x });
+        expect(session.stepBackTo(write.cycle)).toBeNull();
+        expect([session.registers().pc, session.elapsedCycles]).toEqual([SubroutineAt, write.cycle]);
+    });
+
+    it("refuses to replay while text from type() is still going in", async () => {
+        session.writeMemory(LoopAt, Program);
+        session.writeMemory(SubroutineAt, Subroutine);
+        session.keepHistory(PageHistory);
+        session.addBreakpoint("execute", LoopAt);
+        await session.type(CallLoop);
+        expect(session.typingPending).toBe(true);
+
+        expect([session.stepBack(false), session.whoWrote(Counter).refusal]).toEqual([
+            expect.stringMatching(/still being typed/),
+            expect.stringMatching(/still being typed/),
+        ]);
+    });
+
+    it("counts no frames and captures no sound writes as it replays", async () => {
+        await loopingWithHistory(PageHistory);
+        const chip = session._soundChip;
+        chip.startCapture();
+        session.reset(false);
+        await session.runFrames(10);
+        expect(chip.stopCapture()).not.toEqual([]);
+        const frames = session.frameCount;
+        chip.startCapture();
+
+        expect(session.whoWrote(Counter).write).not.toBeNull();
+        expect([chip.stopCapture(), session.frameCount]).toEqual([[], frames]);
+    });
+
     it.each([
         ["a soft reset, which it replays", () => session.reset(false), null],
+        ["keeping history afresh", () => session.keepHistory(PageHistory), /nothing to step back to/],
+        ["a read of a device register", () => session.readMemory(SysViaOrb, 1), /past a read of a device register/],
+        ["a tape", () => session.loadTape(path.join(RepoRoot, "public/tapes/Welcome.uef")), /past a tape change/],
+        [
+            "a disc from a file",
+            () => session.loadDisc(path.join(RepoRoot, "public/discs/elite.ssd")),
+            /past a disc change in drive 0/,
+        ],
         ["a restore", () => session.restore(session.snapshot()), /nothing to step back to/],
         ["a BASIC program", () => session.loadBasic('PRINT "HI"'), /past a BASIC program going into memory/],
         ["a disc", () => session.loadDiscImage("elite.ssd", 1), /past a disc change in drive 1/],

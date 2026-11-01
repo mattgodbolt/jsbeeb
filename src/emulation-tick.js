@@ -3,6 +3,8 @@
 // else runs execute() (the benchmarks, the same-answer check) uses slices of this size too, to call it as the
 // page does: its exit deopts, so the slice size changes what runs.
 export const TickMs = 10;
+// The frames a second the page counts its frame captures in, as the PAL picture is 50 fields a second.
+export const FramesPerSecond = 50;
 const MsPerSecond = 1000;
 
 /** The CPU cycles one tick runs on a machine of `cyclesPerSecond`. */
