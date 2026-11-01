@@ -10,7 +10,7 @@ import { DebugGroup, FloatingPanel, MenuGroup } from "./floating-panel.js";
 import { EndEdge, Gap, StartEdge } from "./panel-layout.js";
 import { keyLine } from "./panel-keys.js";
 import { cpuMoment, cycleCount, stateHash } from "../lockstep.js";
-import { notDeeper } from "../replay.js";
+import { durationText, notDeeper } from "../replay.js";
 import { NumRomBanks } from "../6502.js";
 import { describeHit } from "../breakpoints.js";
 import { sheilaAddress, machineSheilaBlocks } from "../sheila.js";
@@ -53,17 +53,9 @@ const NoStepBackInSession = "Step back is not available in a shared session.";
 const NoSearchInSession = "Searching back is not available in a shared session.";
 const NoHistoryToSearch = "There is no history to search back through here.";
 const MovedSinceSearch = "The machine has moved on since that search; search again to step back to a write.";
-const MicrosecondsPerSecond = 1e6;
-const MillisecondsPerSecond = 1e3;
 const StepBackRuns = ["stepBack", "stepBackOver", "stepBackOut"];
 // What a search back resolves to when a later one ended it.
 const Ended = Symbol("ended");
-
-function durationText(seconds) {
-    if (seconds * MillisecondsPerSecond < 1) return `${(seconds * MicrosecondsPerSecond).toFixed(1)} \u00b5s`;
-    if (seconds < 1) return `${(seconds * MillisecondsPerSecond).toFixed(1)} ms`;
-    return `${seconds.toFixed(1)} s`;
-}
 
 function sourceNode(source) {
     return isHttps(source) ? externalLink(source, "source") : document.createTextNode(source);
@@ -1334,18 +1326,19 @@ export class Debugger {
             return;
         }
         this.updatePrevMem();
-        const steppedBack = await this._searchBack(search(this._history), "Searching back.", "Step back");
+        const steppedBack = await this._runSearch(search(this._history), "Searching back.", "Step back");
         if (steppedBack === Ended) return;
         if (this._stopwatchFrom > this.cpu.scheduler.epoch) this._stopwatchFrom = null;
         if (steppedBack) toast(steppedBack, { title: "Step back" });
-        this.debug(this.cpu.pc);
+        // A search the machine moved on from, as by a run, leaves it to whatever moved it.
+        if (this._loop.mode === RunMode.debugging) this.debug(this.cpu.pc);
     }
 
     /**
      * Runs `searching`, a search back through the history, a stretch at a time, saying `searchingText` under `title`
      * while it takes more than one. Resolves to what it returns, or Ended if a later search ended it.
      */
-    async _searchBack(searching, searchingText, title) {
+    async _runSearch(searching, searchingText, title) {
         this._searching = searching;
         let step = searching.next();
         const notice = step.done ? null : toast(searchingText, { title });
@@ -1386,7 +1379,7 @@ export class Debugger {
             toast(unavailable, { title });
             return { refusal: unavailable };
         }
-        const found = await this._searchBack(
+        const found = await this._runSearch(
             this._history.lastWrite(address),
             `Searching back for the last write to ${where}.`,
             title,

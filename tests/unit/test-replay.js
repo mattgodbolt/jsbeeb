@@ -289,7 +289,7 @@ describe("ReplayHistory", () => {
                     runFor(history.cpu, QuarterSecond);
                 }
             },
-            /found no call or interrupt .* in the last 0\.50 seconds, and that is as far back as the history goes\.$/,
+            /found no call or interrupt .* in the last \d+ cycles \(500\.0 ms\), and that is as far back as the history goes\.$/,
         ],
         [
             "back to an input no replay can put back",
@@ -300,7 +300,7 @@ describe("ReplayHistory", () => {
                 take(history);
                 runFor(history.cpu, QuarterSecond);
             },
-            /found no call or interrupt .* in the last 0\.25 seconds, and cannot go back past a refusal the test made\.$/,
+            /found no call or interrupt .* in the last \d+ cycles \(250\.0 ms\), and cannot go back past a refusal the test made\.$/,
         ],
     ])("says how far back a step back out looked, %s, leaving the machine be", async (_, setUp, why) => {
         const cpu = await machineAt(CallAt, {});

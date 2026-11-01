@@ -1,0 +1,264 @@
+{
+  "numTotalTestSuites": 3,
+  "numPassedTestSuites": 1,
+  "numFailedTestSuites": 2,
+  "numPendingTestSuites": 0,
+  "numTotalTests": 20,
+  "numPassedTests": 18,
+  "numFailedTests": 2,
+  "numPendingTests": 0,
+  "numTodoTests": 0,
+  "snapshot": {
+    "added": 0,
+    "failure": false,
+    "filesAdded": 0,
+    "filesRemoved": 0,
+    "filesRemovedList": [],
+    "filesUnmatched": 0,
+    "filesUpdated": 0,
+    "matched": 0,
+    "total": 0,
+    "unchecked": 0,
+    "uncheckedKeysByFile": [],
+    "unmatched": 0,
+    "updated": 0,
+    "didUpdate": false
+  },
+  "startTime": 1793547681488,
+  "success": false,
+  "testResults": [
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": ["Finding the last write to a byte"],
+          "fullName": "Finding the last write to a byte is found in the newest stretch, leaving the machine be",
+          "status": "passed",
+          "title": "is found in the newest stretch, leaving the machine be",
+          "duration": 51.15987499999994,
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["Finding the last write to a byte"],
+          "fullName": "Finding the last write to a byte is found in an older stretch, leaving the machine be",
+          "status": "passed",
+          "title": "is found in an older stretch, leaving the machine be",
+          "duration": 23.50353800000005,
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["Finding the last write to a byte"],
+          "fullName": "Finding the last write to a byte is found by a memory panel edit, leaving the machine be",
+          "status": "passed",
+          "title": "is found by a memory panel edit, leaving the machine be",
+          "duration": 13.721164000000044,
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["Finding the last write to a byte"],
+          "fullName": "Finding the last write to a byte is found nowhere the history reaches, leaving the machine be",
+          "status": "passed",
+          "title": "is found nowhere the history reaches, leaving the machine be",
+          "duration": 10.45324400000004,
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["Finding the last write to a byte"],
+          "fullName": "Finding the last write to a byte is found nowhere a search can reach, past a refusal, leaving the machine be",
+          "status": "passed",
+          "title": "is found nowhere a search can reach, past a refusal, leaving the machine be",
+          "duration": 10.606562999999937,
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["Finding the last write to a byte"],
+          "fullName": "Finding the last write to a byte is of the byte as the CPU pages it now: on a Master, the main RAM's, not the shadow RAM's a later write at the address reached",
+          "status": "passed",
+          "title": "is of the byte as the CPU pages it now: on a Master, the main RAM's, not the shadow RAM's a later write at the address reached",
+          "duration": 13.71096399999999,
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["Finding the last write to a byte"],
+          "fullName": "Finding the last write to a byte is of the byte as the CPU pages it now: a device register's, as written to its address",
+          "status": "passed",
+          "title": "is of the byte as the CPU pages it now: a device register's, as written to its address",
+          "duration": 6.784715000000006,
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["Finding the last write to a byte"],
+          "fullName": "Finding the last write to a byte refuses a search with no history to search, leaving the machine be",
+          "status": "passed",
+          "title": "refuses a search with no history to search, leaving the machine be",
+          "duration": 6.824185000000057,
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["Finding the last write to a byte"],
+          "fullName": "Finding the last write to a byte refuses a search past a refusal in the newest stretch, leaving the machine be",
+          "status": "passed",
+          "title": "refuses a search past a refusal in the newest stretch, leaving the machine be",
+          "duration": 8.040886999999998,
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["Finding the last write to a byte"],
+          "fullName": "Finding the last write to a byte refuses a search of ROM, leaving the machine be",
+          "status": "passed",
+          "title": "refuses a search of ROM, leaving the machine be",
+          "duration": 7.35607600000003,
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["Finding the last write to a byte"],
+          "fullName": "Finding the last write to a byte refuses a search when the run since the newest snapshot cannot be repeated, leaving the machine be",
+          "status": "passed",
+          "title": "refuses a search when the run since the newest snapshot cannot be repeated, leaving the machine be",
+          "duration": 8.724739,
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["Finding the last write to a byte"],
+          "fullName": "Finding the last write to a byte refuses a step back to a cycle now or later",
+          "status": "passed",
+          "title": "refuses a step back to a cycle now or later",
+          "duration": 6.511155000000031,
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["Finding the last write to a byte"],
+          "fullName": "Finding the last write to a byte refuses a step back to a cycle before the oldest snapshot",
+          "status": "passed",
+          "title": "refuses a step back to a cycle before the oldest snapshot",
+          "duration": 4.139712000000031,
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["Finding the last write to a byte"],
+          "fullName": "Finding the last write to a byte stops, as it was left between stretches, once the machine has moved on",
+          "status": "passed",
+          "title": "stops, as it was left between stretches, once the machine has moved on",
+          "duration": 6.652043000000049,
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["ReplayHistory"],
+          "fullName": "ReplayHistory refuses to step back with Econet fitted",
+          "status": "passed",
+          "title": "refuses to step back with Econet fitted",
+          "duration": 13.594984000000068,
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["ReplayHistory"],
+          "fullName": "ReplayHistory refuses to step back while the cassette motor runs",
+          "status": "passed",
+          "title": "refuses to step back while the cassette motor runs",
+          "duration": 2.4929389999999785,
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["ReplayHistory"],
+          "fullName": "ReplayHistory refuses to step back while an Atom's tape plays",
+          "status": "passed",
+          "title": "refuses to step back while an Atom's tape plays",
+          "duration": 4.523142000000007,
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["ReplayHistory"],
+          "fullName": "ReplayHistory gives up looking for the call it is to step back over more than two seconds back, leaving the machine be",
+          "status": "passed",
+          "title": "gives up looking for the call it is to step back over more than two seconds back, leaving the machine be",
+          "duration": 287.69379400000014,
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["ReplayHistory"],
+          "fullName": "ReplayHistory says how far back a step back out looked, as far back as the history goes, past two snapshots at one cycle, leaving the machine be",
+          "status": "failed",
+          "title": "says how far back a step back out looked, as far back as the history goes, past two snapshots at one cycle, leaving the machine be",
+          "duration": 108.71656699999994,
+          "failureMessages": [
+            "AssertionError: expected 'Step back out found no call or interr…' to match /found no call or interrupt .* in the …/\n    at /home/matthew/dev/jsbeeb/.claude/worktrees/agent-a054a607aee789dff/tests/unit/test-replay.js:311:49\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at async file:///home/matthew/dev/jsbeeb/.claude/worktrees/agent-a054a607aee789dff/node_modules/vitest/dist/chunks/run.BPv-BBRv.js:2801:20"
+          ],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["ReplayHistory"],
+          "fullName": "ReplayHistory says how far back a step back out looked, back to an input no replay can put back, leaving the machine be",
+          "status": "failed",
+          "title": "says how far back a step back out looked, back to an input no replay can put back, leaving the machine be",
+          "duration": 70.95936499999993,
+          "failureMessages": [
+            "AssertionError: expected 'Step back out found no call or interr…' to match /found no call or interrupt .* in the …/\n    at /home/matthew/dev/jsbeeb/.claude/worktrees/agent-a054a607aee789dff/tests/unit/test-replay.js:311:49\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at async file:///home/matthew/dev/jsbeeb/.claude/worktrees/agent-a054a607aee789dff/node_modules/vitest/dist/chunks/run.BPv-BBRv.js:2801:20"
+          ],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        }
+      ],
+      "startTime": 1793547682275,
+      "endTime": 1793547682941.9595,
+      "status": "failed",
+      "message": "",
+      "name": "/home/matthew/dev/jsbeeb/.claude/worktrees/agent-a054a607aee789dff/tests/unit/test-replay.js"
+    }
+  ]
+}

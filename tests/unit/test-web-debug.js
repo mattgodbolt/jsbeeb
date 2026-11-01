@@ -1300,10 +1300,13 @@ describe("Debugger", () => {
         describe("back", () => {
             const button = (run) => document.querySelector(`#toolbar-panel [data-run="${run}"]`);
             const x = () => document.getElementById("cpu6502_x").textContent;
-            // Presses `key` and lets a search back it starts go on, a stretch at a time, to its end.
+            // Lets a search back go on, a stretch at a time, to its end.
+            const settle = async () => {
+                for (let i = 0; i < SearchTicks; i++) await new Promise((resolve) => setTimeout(resolve, 0));
+            };
             const pressAndSettle = async (key) => {
                 keyPress(key);
-                for (let i = 0; i < SearchTicks; i++) await new Promise((resolve) => setTimeout(resolve, 0));
+                await settle();
             };
             const stepBackHere = () => {
                 const history = new ReplayHistory(cpu);
@@ -1427,8 +1430,27 @@ describe("Debugger", () => {
                 history.taken(cpu.snapshotState(), null);
                 keyPress("n");
                 keyPress("O");
+                expect(toasts()).toEqual([expect.stringMatching(/Searching back/)]);
                 await pressAndSettle("O");
                 expect([pc(), toasts()]).toEqual(["2000", []]);
+            });
+
+            it("ends a search back when the machine is run on, leaving the run to its stop", async () => {
+                load(0x3000, [0xea, 0xea, 0xea]);
+                const history = stepBackHere();
+                keyPress("n");
+                keyPress("n");
+                history.taken(cpu.snapshotState(), null);
+                keyPress("n");
+                let checks = 0;
+                keyPress("O");
+                dbgr.runUntil(() => ++checks > ChecksPastAQuickRun);
+                expect(loop.isRunning()).toBe(true);
+                await settle();
+                expect([loop.isRunning(), toasts()]).toEqual([true, [expect.stringMatching(/moved on/)]]);
+                loop.tick(MachineSecond);
+                expect(loop.mode).toBe(RunMode.debugging);
+                expect(checks).toBe(ChecksPastAQuickRun + 1);
             });
 
             it.each([

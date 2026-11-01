@@ -36,6 +36,16 @@ export function notDeeper(s, startS) {
     return ((s - startS) & 0xff) < 0x80;
 }
 
+const MicrosecondsPerSecond = 1e6;
+const MillisecondsPerSecond = 1e3;
+
+/** `seconds` in the unit that suits it, to a tenth. */
+export function durationText(seconds) {
+    if (seconds * MillisecondsPerSecond < 1) return `${(seconds * MicrosecondsPerSecond).toFixed(1)} \u00b5s`;
+    if (seconds < 1) return `${(seconds * MillisecondsPerSecond).toFixed(1)} ms`;
+    return `${seconds.toFixed(1)} s`;
+}
+
 export const snapshotCycle = (cpu, snapshot) =>
     snapshot.cycleSeconds * cpu.model.cyclesPerSecond + snapshot.currentCycles;
 
@@ -531,8 +541,9 @@ export class ReplayHistory extends EventTarget {
      * is replayed towards (the state now or the next snapshot's), until `seeker` finds in one what it looks for,
      * yielding after each stretch that does not have it. A seeker replays each stretch with its `hooks`, is told of
      * each with `startWindow(from)`, says with `inWindow(to)` what it found there or null, and with
-     * `searches(from)` whether a stretch from `from` is worth replaying. Returns `{ found, snapshot, reached, stoppedBy }`: what it
-     * found, or null, and the snapshot of the stretch it was found in; the cycle the search reached back to; and
+     * `searches(from)` whether a stretch from `from` is worth replaying. Returns
+     * `{ found, snapshot, reached, stoppedBy }`: what it found, or null, and the snapshot of the stretch it was found
+     * in; the cycle the search reached back to; and
      * why it went no further, null if it ran out of stretches or `seeker` wanted none older: something no replay
      * crosses, or Unrepeated. Leaves the machine at the end of whichever stretch it replayed last.
      */
@@ -581,57 +592,71 @@ export class ReplayHistory extends EventTarget {
     // Steps back to the cycle `seeker` finds, or returns why it could not, `notFound` if no stretch held one.
     _stepBackFinding(seeker, notFound) {
         return finished(
-            this._steppingBack(seeker, (stoppedBy) =>
-                stoppedBy ? `Step back cannot go back past ${stoppedBy}.` : notFound,
-            ),
+            this._steppingBack(seeker, (stoppedBy) => {
+                if (stoppedBy === Unrepeated) return NotRepeated;
+                return stoppedBy ? `Step back cannot go back past ${stoppedBy}.` : notFound;
+            }),
         );
+    }
+
+    /**
+     * Runs `_searchBack(seeker)` a stretch at a time, painting none of it, putting the machine back as `original`
+     * keeps it between stretches and yielding there. Returns what the search returns, with the machine where its
+     * last stretch left it, or `{ movedOn: true }` if the machine has moved on when the search resumes.
+     */
+    *_searchingAway(seeker, original) {
+        const { cpu } = this;
+        const [now, nowHash] = [cycleCount(cpu), stateHash(cpu)];
+        const search = this._searchBack(seeker);
+        for (;;) {
+            let step;
+            try {
+                step = withoutPainting(cpu.video, () => search.next());
+            } catch (e) {
+                this._putBack(original);
+                throw e;
+            }
+            if (step.done) return step.value;
+            this._putBack(original);
+            yield;
+            if (cycleCount(cpu) !== now || stateHash(cpu) !== nowHash) return { movedOn: true };
+        }
     }
 
     /**
      * Steps back to the cycle `seeker` finds, searching back a stretch at a time as lastWrite does, painting none of
      * it, and yielding between stretches with the machine as it was; if the machine has moved on when it resumes,
      * it stops. Returns why it could not, having left the machine and its picture as they were, or null. If no
-     * stretch held what it seeks, `unfound(stoppedBy, searched)` says why, with `stoppedBy` what no replay crosses,
-     * or null where the history ends, and `searched` how many cycles back from now it looked.
+     * stretch held what it seeks, `unfound(stoppedBy, searched)` says why, with `stoppedBy` what no replay crosses
+     * (Unrepeated among them), or null where the history ends, and `searched` how many cycles back from now it
+     * looked.
      */
     *_steppingBack(seeker, unfound) {
         const refused = this.refusal();
         if (refused) return refused;
-        const { cpu } = this;
-        const [now, nowHash] = [cycleCount(cpu), stateHash(cpu)];
+        const now = cycleCount(this.cpu);
         const original = this._original();
-        const search = this._searchBack(seeker);
-        let away = false;
+        const { movedOn, found, snapshot, reached, stoppedBy } = yield* this._searchingAway(seeker, original);
+        if (movedOn) return MovedOn;
+        let landed = false;
         try {
-            for (;;) {
-                away = true;
-                const { done, value } = withoutPainting(cpu.video, () => search.next());
-                if (!done) {
-                    this._putBack(original);
-                    away = false;
-                    yield;
-                    if (cycleCount(cpu) !== now || stateHash(cpu) !== nowHash) return MovedOn;
-                    continue;
-                }
-                const { found, snapshot, reached, stoppedBy } = value;
-                if (stoppedBy === Unrepeated) return NotRepeated;
-                if (found === null) return unfound(stoppedBy, now - reached);
-                if (this.log.replay(snapshot, found, true, NoReplayHooks) === null) return NotRepeated;
-                away = false;
-                this._landedAt(found, original.host);
-                return null;
-            }
+            if (stoppedBy === Unrepeated && reached === now) return NotRepeated;
+            if (found === null) return unfound(stoppedBy, now - reached);
+            if (this.log.replay(snapshot, found, true, NoReplayHooks) === null) return NotRepeated;
+            landed = true;
+            this._landedAt(found, original.host);
+            return null;
         } finally {
-            if (away) this._putBack(original);
+            if (!landed) this._putBack(original);
         }
     }
 
-    /** Says that `what` found nothing in the `searched` cycles back from now, and why it stopped, as `_steppingBack`. */
+    /** Says that `what` was found nowhere in the cycles searched, and why the search stopped, as `unfound` does. */
     _searchedFor(what) {
         return (stoppedBy, searched) => {
-            const seconds = (searched / this.cpu.model.cyclesPerSecond).toFixed(2);
+            const ago = `${searched} cycles (${durationText(searched / this.cpu.model.cyclesPerSecond)})`;
             const why = stoppedBy ? `cannot go back past ${stoppedBy}` : "that is as far back as the history goes";
-            return `${what} in the last ${seconds} seconds, and ${why}.`;
+            return `${what} in the last ${ago}, and ${why}.`;
         };
     }
 
@@ -680,32 +705,17 @@ export class ReplayHistory extends EventTarget {
         const { cpu, log } = this;
         if (cpu.memStat[cpu.memStatOffset + (address >>> 8)] === RomStat) return { refusal: IsRom };
         const now = cycleCount(cpu);
-        const nowHash = stateHash(cpu);
         const original = this._original();
-        const search = this._searchBack(new LastWrite(cpu, log, address));
-        let away = false;
-        try {
-            for (;;) {
-                away = true;
-                const { done, value } = withoutPainting(cpu.video, () => search.next());
-                this._putBack(original);
-                away = false;
-                if (!done) {
-                    yield;
-                    if (cycleCount(cpu) !== now || stateHash(cpu) !== nowHash) return { refusal: MovedOn };
-                    continue;
-                }
-                const { found, reached, stoppedBy } = value;
-                if (stoppedBy && reached === now) {
-                    return {
-                        refusal: stoppedBy === Unrepeated ? NotRepeatedHere : `${CannotSearchPast} ${stoppedBy}.`,
-                    };
-                }
-                return { write: found, searched: now - reached, stoppedBy };
-            }
-        } finally {
-            if (away) this._putBack(original);
+        const { movedOn, found, reached, stoppedBy } = yield* this._searchingAway(
+            new LastWrite(cpu, log, address),
+            original,
+        );
+        if (movedOn) return { refusal: MovedOn };
+        this._putBack(original);
+        if (stoppedBy && reached === now) {
+            return { refusal: stoppedBy === Unrepeated ? NotRepeatedHere : `${CannotSearchPast} ${stoppedBy}.` };
         }
+        return { write: found, searched: now - reached, stoppedBy };
     }
 
     // What came after `cycle` was a future the machine has left, and runs from here make their own.
