@@ -18,7 +18,7 @@ const BreakModifiers = new Set(["SHIFT", "CTRL"]);
 const GapReachPx = 8;
 const VibrateMs = 8;
 const BreakKey = "BREAK";
-// The narrowest margin the pad takes beside the picture: room for its d-pad and a strip of four keys.
+// The narrowest margin the pad takes beside the picture: room for its d-pad and a row of four keys.
 const PadSidePx = 156;
 const OpenClass = "touch-keyboard-open";
 const NavbarHiddenClass = "touch-keyboard-navbar-hidden";
@@ -134,14 +134,12 @@ export const PromptGroups = [
  * - `buttons`: the big buttons, by role `fire` and `second`;
  * - `column`: keys one above another in order, as a rocker such as aim up, centre and down reads;
  * - `row`: keys side by side in order, in even lines when there are many.
- * Each thumb's core dpad or buttons goes at the bottom of its side, its core columns beside that and core rows below,
- * and its often groups above, as rows.
  */
 export const PadPresets = {
     classic: {
         title: "classic",
         groups: [
-            move(["Z", "X", "COLON_STAR", "SLASH"], ["left", "right", "up", "down"]),
+            move(["Z", "X", "COLON_STAR", "SLASH"], [null, null, null, null]),
             group("buttons", "buttons", "right", "core", [
                 action("RETURN", null, "fire"),
                 action("SPACE", null, "second"),
@@ -153,7 +151,7 @@ export const PadPresets = {
     zxmkl: {
         title: "ZXMKL",
         groups: [
-            move(["Z", "X", "K", "M"], ["left", "right", "up", "down"]),
+            move(["Z", "X", "K", "M"], [null, null, null, null]),
             group("buttons", "buttons", "right", "core", [
                 action("L", "fire", "fire"),
                 action("SPACE", "action", "second"),
@@ -166,7 +164,7 @@ export const PadPresets = {
     exile: {
         title: "Exile",
         groups: [
-            move(["Q", "W", "P", "L"], ["left", "right", "jet / jump", "down"]),
+            move(["Q", "W", "P", "L"], [null, null, "jet / jump", null]),
             group("body", "row", "left", "often", [
                 action("AT", "boost", "booster"),
                 action("S", "store", "store"),
@@ -196,7 +194,10 @@ export const PadPresets = {
     },
 };
 
-/** Where each side's groups go: its thumb control (a d-pad or the big buttons), columns beside it, rows below. */
+/**
+ * Where each side's groups go, top to bottom: its often groups as rows, its core d-pad or big buttons with its core
+ * columns beside them, then its core rows.
+ */
 export function placeGroups(groups) {
     const side = (name) => {
         const mine = groups.filter((each) => each.side === name);
@@ -452,7 +453,6 @@ export class TouchKeyboard {
         this.dpad = null;
         this.dpadKeys = {};
         const thumb = (control) => {
-            if (!control) return div("tk-pad-fire");
             if (control.shape === "buttons") {
                 const onlyFire = control.actions.every((one) => one.role !== "second");
                 return div(
@@ -464,7 +464,7 @@ export class TouchKeyboard {
             this.dpad = div(
                 "tk-dpad",
                 ...control.actions.map((one) =>
-                    this.buildKey({ ...padKey(one.key, null, one.role), arrow: DpadArrows[one.role] }, false),
+                    this.buildKey({ ...padKey(one.key, one.label, one.role), arrow: DpadArrows[one.role] }, false),
                 ),
                 div("tk-dpad-hub"),
             );

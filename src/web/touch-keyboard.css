@@ -270,7 +270,7 @@ body.touch-keyboard-beside-picture #header-bar {
   gap: 0;
 }
 
-#touch-keyboard .tk-pad .meaning > :not(.tk-meaning) {
+#touch-keyboard .tk-pad .meaning > :not(.tk-meaning, .tk-arrow) {
   font-size: 9px;
   opacity: 0.6;
 }
