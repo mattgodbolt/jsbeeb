@@ -985,6 +985,12 @@ describe("MachineSession history", () => {
     const Edited = 0x1a00;
     const EditedValue = 0x55;
     const SysViaOrb = 0xfe40;
+    const SysViaOra = 0xfe4f;
+    // IC32 bit 0 low, then high: the sound chip's write enable, which takes the byte on the slow data bus.
+    const SoundChipEnable = 0x00;
+    const SoundChipDisable = 0x08;
+    const SilenceChannel0 = 0x9f;
+    const WriteEnableCycles = 100;
     // SEI and LDX #0, then for ever JSR to STX &1900 and RTS, and INX; with interrupts off nothing comes between.
     const Program = [0x78, 0xa2, 0x00, 0x20, 0x10, 0x20, 0xe8, 0x4c, 0x03, 0x20];
     const Subroutine = [0x8e, Counter & 0xff, Counter >> 8, 0x60];
@@ -1088,24 +1094,47 @@ describe("MachineSession history", () => {
     });
 
     // One-a-second snapshots only, so that the step back replays frames from the one before the reset.
-    it("counts no frames and captures no sound writes as it replays", async () => {
+    it("counts no frames, captures no sound writes and keeps the text as it replays", async () => {
         await loopingWithHistory({ recent: 0, seconds: PageHistory.seconds });
         const chip = session._soundChip;
         chip.startCapture();
         session.reset(false);
         await session.runFrames(10);
         expect(chip.stopCapture()).not.toEqual([]);
-        const frames = session.frameCount;
+        const [frames, text] = [session.frameCount, session.drainOutput({ clear: false })];
         chip.startCapture();
 
         expect(session.whoWrote(Counter).write).not.toBeNull();
         expect(session.stepBack(false)).toBeNull();
-        expect([chip.stopCapture(), session.frameCount]).toEqual([[], frames]);
+        expect([chip.stopCapture(), session.frameCount, session.drainOutput()]).toEqual([[], frames, text]);
+    });
+
+    it("times the sound writes either side of a replay by the cycles the machine ran between them", async () => {
+        await loopingWithHistory({ recent: 0, seconds: PageHistory.seconds });
+        const chip = session._soundChip;
+        // The chip takes the byte a few cycles after its write enable goes low.
+        const soundWrite = async () => {
+            session.writeMemory(SysViaOra, [SilenceChannel0]);
+            session.writeMemory(SysViaOrb, [SoundChipEnable]);
+            const enabledAt = session.elapsedCycles;
+            await session.runFor(WriteEnableCycles);
+            session.writeMemory(SysViaOrb, [SoundChipDisable]);
+            return enabledAt;
+        };
+        chip.startCapture();
+        const first = await soundWrite();
+        await session.runFor(CyclesPerInterlacedFrame);
+        session.whoWrote(Counter);
+        const second = await soundWrite();
+
+        const [a, b] = chip.stopCapture();
+        expect(b.cycle - a.cycle).toBe(second - first);
     });
 
     it.each([
         ["a soft reset, which it replays", () => session.reset(false), null],
         ["keeping history afresh", () => session.keepHistory(PageHistory), /nothing to step back to/],
+        ["switching history off", () => session.keepHistory({ recent: 0, seconds: 0 }), /keeps no history/],
         ["a read of RAM, which it needs no log of", () => session.readMemory(Counter, 1), null],
         ["a read of a device register", () => session.readMemory(SysViaOrb, 1), /past a read of a device register/],
         ["a tape", () => session.loadTape(path.join(RepoRoot, "public/tapes/Welcome.uef")), /past a tape change/],
