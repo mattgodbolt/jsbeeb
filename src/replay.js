@@ -528,7 +528,9 @@ export class ReplayHistory extends EventTarget {
         const original = this._original();
         let landed = false;
         try {
-            const { found, snapshot, stoppedBy } = finished(this._searchBack(seeker));
+            const { found, snapshot, stoppedBy } = withoutPainting(this.cpu.video, () =>
+                finished(this._searchBack(seeker)),
+            );
             if (stoppedBy === Unrepeated) return NotRepeated;
             if (stoppedBy) return `Step back cannot go back past ${stoppedBy}.`;
             if (found === null) return notFound;
@@ -560,8 +562,9 @@ export class ReplayHistory extends EventTarget {
 
     /**
      * Searches for the last write to `address`, as the machine pages it now (see LastWrite), by replaying its
-     * history back from now a stretch at a time, as a step back does, painting none of it. Yields between stretches,
-     * with the machine as it was, so that a long search can let the page go on; if the machine has moved on when it resumes, it stops.
+     * history back from now a stretch at a time, as a step back does, painting none of it. Yields between
+     * stretches, with the machine as it was, so that a long search can let the page go on; if the machine has moved
+     * on when it resumes, it stops.
      * Returns `{ refusal }` when it cannot search (ROM, which no write changes, among the reasons), or else
      * `{ write, searched, stoppedBy }`: `write` is `{ pc, cycle, value }`, `cycle` where the instruction at `pc`
      * started, or with `pc` null where an input such as a memory panel edit wrote it, or null if nothing wrote it in

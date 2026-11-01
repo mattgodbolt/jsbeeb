@@ -247,9 +247,12 @@ describe.each([
         const history = historyFromHere(machine);
         await change(machine);
         singleStep(machine.processor);
+        const painted = vi.fn();
+        machine.processor.video.paint_ext = painted;
         const before = machineNow(machine);
         expect(history.stepBack(false)).toMatch(why);
         expect(machineNow(machine)).toEqual(before);
+        expect(painted).not.toHaveBeenCalled();
     });
 
     it("searches several stretches for a write nothing made, painting none of them, leaving the machine and its picture alone", async () => {
