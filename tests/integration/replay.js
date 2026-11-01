@@ -252,16 +252,21 @@ describe.each([
         expect(machineNow(machine)).toEqual(before);
     });
 
-    it("searches several stretches for a write nothing made, leaving the machine and its picture alone", async () => {
+    it("searches several stretches for a write nothing made, painting none of them, leaving the machine and its picture alone", async () => {
         const machine = await booted(model);
         const history = historyFromHere(machine);
         await seconds(machine, CursorBlinkSeconds);
         history.taken(machine.processor.snapshotState(), null);
         await seconds(machine, CursorBlinkSeconds);
+        const { video } = machine.processor;
+        const painted = vi.fn();
+        video.paint_ext = painted;
         const before = machineNow(machine);
         const { write, stoppedBy } = finished(history.lastWrite(ScratchAddress));
         expect([write, stoppedBy]).toEqual([null, null]);
         expect(machineNow(machine)).toEqual(before);
+        expect(painted).not.toHaveBeenCalled();
+        expect(video.paint_ext).toBe(painted);
     });
 });
 

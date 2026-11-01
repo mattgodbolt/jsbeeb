@@ -45,6 +45,20 @@ export function finished(generator) {
     }
 }
 
+/**
+ * Runs `run` with `video` painting nothing to the screen, as the benchmark page's video-only pass does, so that the
+ * screen keeps showing the machine as it stands while its past is replayed.
+ */
+function withoutPainting(video, run) {
+    const paint = video.paint_ext;
+    video.paint_ext = () => {};
+    try {
+        return run();
+    } finally {
+        video.paint_ext = paint;
+    }
+}
+
 // Between executes the CPU has reached its cycle target or been stopped short of it; inside one, as a scheduled
 // task or a debug hook runs, it has done neither.
 const insideExecute = (cpu) => !cpu.halted && cpu.currentCycles < cpu.targetCycles;
@@ -546,8 +560,8 @@ export class ReplayHistory extends EventTarget {
 
     /**
      * Searches for the last write to `address`, as the machine pages it now (see LastWrite), by replaying its
-     * history back from now a stretch at a time, as a step back does. Yields between stretches, with the machine as
-     * it was, so that a long search can let the page go on; if the machine has moved on when it resumes, it stops.
+     * history back from now a stretch at a time, as a step back does, painting none of it. Yields between stretches,
+     * with the machine as it was, so that a long search can let the page go on; if the machine has moved on when it resumes, it stops.
      * Returns `{ refusal }` when it cannot search (ROM, which no write changes, among the reasons), or else
      * `{ write, searched, stoppedBy }`: `write` is `{ pc, cycle, value }`, `cycle` where the instruction at `pc`
      * started, or with `pc` null where an input such as a memory panel edit wrote it, or null if nothing wrote it in
@@ -567,7 +581,7 @@ export class ReplayHistory extends EventTarget {
         try {
             for (;;) {
                 away = true;
-                const { done, value } = search.next();
+                const { done, value } = withoutPainting(cpu.video, () => search.next());
                 this._putBack(original);
                 away = false;
                 if (!done) {

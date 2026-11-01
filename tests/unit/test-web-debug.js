@@ -1477,12 +1477,6 @@ describe("Debugger", () => {
                     expect(pc()).toBe("2002");
                 });
 
-                it("repaints the stopped machine's picture after each stretch a search replays", async () => {
-                    video.debugPaint.mockClear();
-                    await dbgr.whoWrote(0x70);
-                    expect(video.debugPaint).toHaveBeenCalledTimes(2);
-                });
-
                 it("ends a search when the machine is run on, leaving the run to its stop", async () => {
                     let checks = 0;
                     const searching = dbgr.whoWrote(0x70);

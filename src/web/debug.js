@@ -1347,8 +1347,6 @@ export class Debugger {
         const notice = step.done ? null : toast(`Searching back for the last write to ${where}.`, { title });
         try {
             while (!step.done) {
-                // A stretch's replay painted frames from the past.
-                this.cpu.video.debugPaint();
                 await new Promise((resolve) => setTimeout(resolve, 0));
                 if (this._searching !== searching) return null;
                 step = searching.next();
@@ -1357,7 +1355,6 @@ export class Debugger {
             if (notice) dismissToast(notice);
         }
         this._searching = null;
-        this.cpu.video.debugPaint();
         const found = step.value;
         const { write } = found;
         const action =
