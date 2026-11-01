@@ -111,8 +111,8 @@ export class Typist {
      */
     execute(cycles) {
         const { processor } = this;
-        // Gone back (a step back, a rewind, a hard reset), the matrix holds the keys of that earlier moment, not the
-        // ones the typist last pressed, so what is left of the text is dropped rather than typed into it.
+        // Gone back (a step back, a rewind, a hard reset), the text typed since then is undone, and what is left of
+        // it would go in with those characters missing, so it is dropped.
         if (this.isTyping && cycleCount(processor) < this._ranTo) this._abandon();
         let left = cycles;
         for (;;) {
