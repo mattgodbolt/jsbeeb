@@ -1,3 +1,5 @@
+import { NoReplayHooks } from "../6502.js";
+
 const ThumbnailWidth = 160;
 const ThumbnailHeight = 128;
 const FramebufferWidth = 1024;
@@ -53,7 +55,7 @@ function captureThumbnail(fb32) {
  *    so fb32 retains the completed frame for capture.
  */
 function executeUntilFrame(processor, video) {
-    processor.asReplay(null, null, () => {
+    processor.asReplay(NoReplayHooks, () => {
         const startFrame = video.frameCount;
 
         // Phase 1: run to first vsync (completes partial frame, clears fb32)

@@ -45,6 +45,7 @@ const PanelElements = [
 
 const MachineSecond = 2000000;
 const ChecksPastAQuickRun = 100000;
+const SearchTicks = 10;
 const WatchRowSelector = "#watch-panel .watch-list tr:not(.watch-formats):not(.watch-breaks)";
 
 /** Runs and stops as the emulation loop does, a tick at a time; it starts in the debugger. */
@@ -1299,6 +1300,14 @@ describe("Debugger", () => {
         describe("back", () => {
             const button = (run) => document.querySelector(`#toolbar-panel [data-run="${run}"]`);
             const x = () => document.getElementById("cpu6502_x").textContent;
+            // Lets a search back go on, a stretch at a time, to its end.
+            const settle = async () => {
+                for (let i = 0; i < SearchTicks; i++) await new Promise((resolve) => setTimeout(resolve, 0));
+            };
+            const pressAndSettle = async (key) => {
+                keyPress(key);
+                await settle();
+            };
             const stepBackHere = () => {
                 const history = new ReplayHistory(cpu);
                 history.taken(cpu.snapshotState(), null);
@@ -1373,6 +1382,95 @@ describe("Debugger", () => {
             });
 
             it.each([
+                [
+                    "to the call, from past a push and a call returned from inside it",
+                    { 0x3000: [0x48, 0x20, 0x00, 0x31, 0xea], 0x3100: [0x60] },
+                    4,
+                    0,
+                    "2000",
+                ],
+                ["to the call, from an older snapshot than the call's", { 0x3000: [0xea, 0xea, 0xea] }, 3, 2, "2000"],
+                [
+                    "nowhere, from pushes after a call returned in a newer snapshot than the call's",
+                    { 0x2003: [0x48, 0x48], 0x3000: [0x60] },
+                    4,
+                    2,
+                    "2005",
+                ],
+                // With no OS, the BRK vector reads as zero.
+                ["to the BRK, from inside its handler", { 0x2000: [0x00], 0x0000: [0xea, 0xea] }, 2, 0, "2000"],
+            ])("goes back out on O %s", async (_, code, steps, snapshotAfter, landsAt) => {
+                for (const [address, bytes] of Object.entries(code)) load(Number(address), bytes);
+                const history = stepBackHere();
+                for (let i = 0; i < steps; i++) {
+                    if (i === snapshotAfter && i > 0) history.taken(cpu.snapshotState(), null);
+                    keyPress("n");
+                }
+                await pressAndSettle("O");
+                expect(pc()).toBe(landsAt);
+            });
+
+            it("says how far back it looked on O when nothing entered the code it is in, leaving the machine alone", async () => {
+                load(0x2000, [0xea, 0xea, 0xea]);
+                stepBackHere();
+                keyPress("n");
+                keyPress("n");
+                await pressAndSettle("O");
+                expect(pc()).toBe("2002");
+                expect(toasts()).toEqual([
+                    expect.stringMatching(/found no call or interrupt .* as far back as the history goes/),
+                ]);
+            });
+
+            it("ends a search back when another starts", async () => {
+                load(0x3000, [0xea, 0xea, 0xea]);
+                const history = stepBackHere();
+                keyPress("n");
+                keyPress("n");
+                history.taken(cpu.snapshotState(), null);
+                keyPress("n");
+                keyPress("O");
+                expect(toasts()).toEqual([expect.stringMatching(/Searching back/)]);
+                await pressAndSettle("O");
+                expect([pc(), toasts()]).toEqual(["2000", []]);
+            });
+
+            it("stops a search back the machine has stepped on from, and says so", async () => {
+                load(0x3000, [0xea, 0xea, 0xea]);
+                const history = stepBackHere();
+                keyPress("n");
+                keyPress("n");
+                history.taken(cpu.snapshotState(), null);
+                keyPress("n");
+                keyPress("O");
+                keyPress("n");
+                await settle();
+                expect([pc(), loop.mode, toasts()]).toEqual([
+                    "3003",
+                    RunMode.debugging,
+                    [expect.stringMatching(/moved on/)],
+                ]);
+            });
+
+            it("ends a search back when the machine is run on, leaving the run to its stop", async () => {
+                load(0x3000, [0xea, 0xea, 0xea]);
+                const history = stepBackHere();
+                keyPress("n");
+                keyPress("n");
+                history.taken(cpu.snapshotState(), null);
+                keyPress("n");
+                let checks = 0;
+                keyPress("O");
+                dbgr.runUntil(() => ++checks > ChecksPastAQuickRun);
+                expect(loop.isRunning()).toBe(true);
+                await settle();
+                expect([loop.isRunning(), toasts()]).toEqual([true, []]);
+                loop.tick(MachineSecond);
+                expect(loop.mode).toBe(RunMode.debugging);
+                expect(checks).toBe(ChecksPastAQuickRun + 1);
+            });
+
+            it.each([
                 ["with nothing earlier to go back to", stepBackHere, /There is nothing to step back to/],
                 [
                     "in a shared session",
@@ -1389,7 +1487,7 @@ describe("Debugger", () => {
                     set();
                     dbgr.debug(cpu.pc);
                     const stoppedAt = pc();
-                    for (const run of ["stepBack", "stepBackOver"]) {
+                    for (const run of ["stepBack", "stepBackOver", "stepBackOut"]) {
                         expect(button(run).getAttribute("aria-disabled")).toBe("true");
                         expect(button(run).title).toMatch(why);
                     }
@@ -1405,6 +1503,7 @@ describe("Debugger", () => {
                 expect(button("stepBack").getAttribute("aria-disabled")).toBe("false");
                 expect(button("stepBack").title).toMatch(/\(p\)$/);
                 expect(button("stepBackOver").title).toMatch(/\(P\)$/);
+                expect(button("stepBackOut").title).toMatch(/\(O\)$/);
             });
 
             describe("who wrote a byte", () => {

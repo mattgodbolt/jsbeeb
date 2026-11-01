@@ -40,6 +40,15 @@ const AtomTextScreenBytes = 512;
 const AtomTextColumns = 32;
 const AtomLetterOffset = 0x40;
 const AdcFullScale = 0xffff;
+// JSR OSWRCH; JMP &3000, printing whatever A holds for ever.
+const PrintForever = [0x20, 0xee, 0xff, 0x4c, 0x00, 0x30];
+const Oswrch = 0xffee;
+const IrqVector = 0xfffe;
+const StepsInside = 3;
+const Irq1v = 0x0204;
+const HandlerAddress = 0x3100;
+// LDA &FC; RTI: the OS's IRQ entry keeps A in &FC. Its source left alone, the interrupt is taken again at once.
+const ReturnLeavingInterrupt = [0xa5, 0xfc, 0x40];
 const AtomPauseThenSaveToTheCard = ["10 F.I=1TO50;WAIT;N.", '20 *SAVE "NEW" 2900 2A00'];
 
 async function booted(model, options) {
@@ -64,6 +73,13 @@ async function waitingIn(model, lines) {
 }
 
 const seconds = (machine, count) => machine.runFor(count * machine.model.cyclesPerSecond);
+
+async function printingForever(model) {
+    const machine = await booted(model);
+    PrintForever.forEach((byte, i) => machine.writebyte(ScratchAddress + i, byte));
+    await machine.type("A%=88:CALL &3000");
+    return machine;
+}
 
 async function pressA(machine) {
     machine.keyDown(keyCodes.A);
@@ -270,6 +286,58 @@ describe.each([
         expect(machineNow(machine)).toEqual(before);
         expect(painted).not.toHaveBeenCalled();
         expect(video.paint_ext).toBe(painted);
+    });
+});
+
+describe.each([
+    ["a B", "B-DFS1.2"],
+    ["a Master", "Master"],
+])("Stepping back out on %s", (_, model) => {
+    it.each([
+        ["the OS's write character call", () => Oswrch, 1, () => {}],
+        ["an interrupt handler", (machine) => machine.readword(IrqVector), 1, () => {}],
+        [
+            "an interrupt handler, taken again as it returns",
+            (machine) => machine.readword(IrqVector),
+            2,
+            (machine) => {
+                ReturnLeavingInterrupt.forEach((byte, i) => machine.writebyte(HandlerAddress + i, byte));
+                machine.writebyte(Irq1v, HandlerAddress & 0xff);
+                machine.writebyte(Irq1v + 1, HandlerAddress >> 8);
+            },
+        ],
+    ])("lands where one step on enters %s, from inside it", async (_, entryOf, entries, set) => {
+        const machine = await printingForever(model);
+        set(machine);
+        const history = historyFromHere(machine);
+        const entry = entryOf(machine);
+        let entered;
+        for (let i = 0; i < entries; i++) {
+            await machine.runUntilAddress(entry, 1);
+            entered = machine.elapsedCycles;
+            singleStep(machine.processor);
+        }
+        for (let i = 1; i < StepsInside; i++) singleStep(machine.processor);
+        expect(finished(history.stepBackOut())).toBeNull();
+        expect(machine.elapsedCycles).toBeLessThan(entered);
+        singleStep(machine.processor);
+        expect([machine.processor.pc, machine.elapsedCycles]).toEqual([entry, entered]);
+    });
+
+    it("searches several stretches for a call made before them, painting none of them, leaving the machine and its picture alone", async () => {
+        const machine = await printingForever(model);
+        const history = historyFromHere(machine);
+        await seconds(machine, CursorBlinkSeconds);
+        history.taken(machine.processor.snapshotState(), null);
+        await seconds(machine, CursorBlinkSeconds);
+        await machine.runUntilAddress(ScratchAddress + PrintForever.length - 3, 1);
+        const { video } = machine.processor;
+        const painted = vi.fn();
+        video.paint_ext = painted;
+        const before = machineNow(machine);
+        expect(finished(history.stepBackOut())).toMatch(/as far back as the history goes/);
+        expect(machineNow(machine)).toEqual(before);
+        expect(painted).not.toHaveBeenCalled();
     });
 });
 
