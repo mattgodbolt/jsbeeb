@@ -40,6 +40,7 @@ const UserViaDdrb = 0xfe62;
 const RomAddress = 0xc000;
 const OtherPagingHalf = 256;
 const QuarterSecond = 500000;
+const EmptyStack = 0xff;
 const JmpTo = (at) => [0x4c, at & 0xff, at >>> 8];
 
 // A tape that plays forever, giving the PPIA nothing.
@@ -301,6 +302,15 @@ describe("ReplayHistory", () => {
                 runFor(history.cpu, QuarterSecond);
             },
             /found no call or interrupt .* in the last \d+ cycles \(250\.0 ms\), and cannot go back past a refusal the test made\.$/,
+        ],
+        [
+            "nowhere, at once, with the stack empty",
+            (history) => {
+                history.cpu.s = EmptyStack;
+                take(history);
+                runFor(history.cpu, QuarterSecond);
+            },
+            /^There is no call or interrupt to step back out of: the stack is empty \(S is &FF\)\.$/,
         ],
     ])("says how far back a step back out looked, %s, leaving the machine be", async (_, setUp, why) => {
         const cpu = await machineAt(CallAt, {});
