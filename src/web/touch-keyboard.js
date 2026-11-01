@@ -1,9 +1,14 @@
 import "./touch-keyboard.css";
+import { navbarHeightOf } from "./floating-panel.js";
+import { toast } from "./toast.js";
 
 const StorageKey = "touchKeyboardOpen";
+const LayerStorageKey = "touchKeyboardLayer";
+const PresetStorageKey = "touchPadPreset";
 const NarrowScreenQuery = "(max-width: 700px)";
 const TouchQuery = "(pointer: coarse)";
-const LandscapePhoneQuery = "(orientation: landscape) and (max-height: 500px)";
+const PhoneShortSidePx = 500;
+const LandscapePhoneQuery = `(orientation: landscape) and (max-height: ${PhoneShortSidePx}px)`;
 // In the machine's own time, which falls behind the wall clock when the page is busy. The OS scans the keyboard every
 // 10 ms and misses a press shorter than two scans, and reads SHIFT and CTRL some 20 ms after BREAK comes up.
 const MinHoldMs = 40;
@@ -13,7 +18,13 @@ const BreakModifiers = new Set(["SHIFT", "CTRL"]);
 const GapReachPx = 8;
 const VibrateMs = 8;
 const BreakKey = "BREAK";
+// The narrowest margin the pad takes beside the picture: room for its d-pad and a row of four keys.
+const PadSidePx = 156;
 const OpenClass = "touch-keyboard-open";
+const NavbarHiddenClass = "touch-keyboard-navbar-hidden";
+const BesidePictureClass = "touch-keyboard-beside-picture";
+const LandscapeClass = "landscape";
+const OnPadClass = "on-pad";
 const HeldClass = "held";
 const ShiftedClass = "shifted";
 
@@ -74,7 +85,7 @@ export const Layers = {
         BottomRow("more", "more"),
     ],
     more: [
-        [gap(11), k("\\", "PIPE_BACKSLASH", { sub: "|" })],
+        [k("pad", null, { w: 2, cls: "layer", layer: "pad" }), gap(9), k("\\", "PIPE_BACKSLASH", { sub: "|" })],
         [
             k("TAB", "TAB", { w: 2 }, small),
             gap(7),
@@ -94,12 +105,167 @@ export const Layers = {
     ],
 };
 
+const DpadRoles = ["left", "right", "up", "down"];
+const DpadArrows = { left: "←", right: "→", up: "↑", down: "↓" };
+const MaxKeysPerLine = 5;
+const action = (key, label, role) => ({ key, label, role });
+const group = (name, shape, side, use, actions) => ({ name, shape, side, use, actions });
+const move = (keys, labels) =>
+    group(
+        "move",
+        "dpad",
+        "left",
+        "core",
+        DpadRoles.map((role, i) => action(keys[i], labels[i], role)),
+    );
+const legends = (keys) => keys.map((key) => action(key, null, null));
+
+/** ESC, Y and N and the digits, for the prompts between goes; a preset keeps them unless it has a better use for the room. */
+export const PromptGroups = [
+    group("answers", "row", "left", "often", legends(["ESCAPE", "Y", "N"])),
+    group("digits", "row", "right", "often", legends([..."1234567890"].map((digit) => `K${digit}`))),
+];
+
+/**
+ * Game pad layouts, as data in the shape per-game controls will take. A preset is a list of groups, each with a shape,
+ * the thumb it is for, whether it is in use all the time (core) or often, and actions that name the BBC key pressed,
+ * what it does in the game (null where the key's own legend says it) and its role in the group. The shapes:
+ * - `dpad`: the four directions by role, left, right, up and down;
+ * - `buttons`: the big buttons, by role `fire` and `second`;
+ * - `column`: keys one above another in order, as a rocker such as aim up, centre and down reads;
+ * - `row`: keys side by side in order, in even lines when there are many.
+ */
+export const PadPresets = {
+    classic: {
+        title: "classic",
+        groups: [
+            move(["Z", "X", "COLON_STAR", "SLASH"], [null, null, null, null]),
+            group("buttons", "buttons", "right", "core", [
+                action("RETURN", null, "fire"),
+                action("SPACE", null, "second"),
+            ]),
+            ...PromptGroups,
+        ],
+    },
+    // Kieran's keys for the Bitshifters ports: 1942, Paradroid, Stryker's Run Redux.
+    zxmkl: {
+        title: "ZXMKL",
+        groups: [
+            move(["Z", "X", "K", "M"], [null, null, null, null]),
+            group("buttons", "buttons", "right", "core", [
+                action("L", "fire", "fire"),
+                action("SPACE", "action", "second"),
+            ]),
+            ...PromptGroups,
+            group("enter", "row", "right", "often", legends(["RETURN"])),
+        ],
+    },
+    // Superior's Exile (1988), by how often each is used; the keys are from the action table in Level 7's disassembly.
+    exile: {
+        title: "Exile",
+        groups: [
+            move(["Q", "W", "P", "L"], [null, null, "jet / jump", null]),
+            group("body", "row", "left", "often", [
+                action("AT", "boost", "booster"),
+                action("S", "store", "store"),
+                action("G", "get", "retrieve"),
+                action("TAB", "turn", "turn"),
+                action("CTRL", "lie", "lie-down"),
+            ]),
+            group(
+                "weapons",
+                "row",
+                "right",
+                "often",
+                ["jet", "pistol", "icer", "blast", "plasma", "suit"].map((label, n) => action(`F${n}`, label, label)),
+            ),
+            group("fire", "buttons", "right", "core", [action("SPACE", "fire", "fire")]),
+            group("aim", "column", "right", "core", [
+                action("O", "aim ▲", "up"),
+                action("I", "aim ●", "centre"),
+                action("K", "aim ▼", "down"),
+            ]),
+            group("hand", "row", "right", "core", [
+                action("COMMA", "pick up", "pick-up"),
+                action("M", "drop", "drop"),
+                action("PERIOD", "throw", "throw"),
+            ]),
+        ],
+    },
+};
+
+/**
+ * Where each side's groups go, top to bottom: its often groups as rows, its core d-pad or big buttons with its core
+ * columns beside them, then its core rows.
+ */
+export function placeGroups(groups) {
+    const side = (name) => {
+        const mine = groups.filter((each) => each.side === name);
+        const core = mine.filter((each) => each.use === "core");
+        return {
+            often: mine.filter((each) => each.use === "often"),
+            thumb: core.find((each) => each.shape === "dpad" || each.shape === "buttons") ?? null,
+            columns: core.filter((each) => each.shape === "column"),
+            rows: core.filter((each) => each.shape === "row"),
+        };
+    };
+    return { left: side("left"), right: side("right") };
+}
+
+/** How many keys a row of `count` puts on each line, so that its lines come out even. */
+export const keysPerLine = (count) => Math.ceil(count / Math.ceil(count / MaxKeysPerLine));
+
+/** The `GP.` URL parameter whose key each role of the d-pad and big buttons takes, so one remap moves a gamepad and the pad. */
+const GamepadControlByRole = { left: "LEFT", right: "RIGHT", up: "UP", down: "DOWN", fire: "FIRE", second: "START" };
+
+/** `preset` with the keys the URL gave a gamepad's directions, FIRE and START in place of its own. */
+export function followingGamepad(preset, remapped) {
+    const follow = (each) => {
+        if (each.shape !== "dpad" && each.shape !== "buttons") return each;
+        const actions = each.actions.map((one) => {
+            const key = remapped[GamepadControlByRole[one.role]];
+            return key ? { ...one, key } : one;
+        });
+        return { ...each, actions };
+    };
+    return { ...preset, groups: preset.groups.map(follow) };
+}
+
+/**
+ * The keys a d-pad presses for a touch at `x`, `y`: its outer thirds are the directions, so a corner presses two.
+ * A touch past its edge counts as on the edge, so a thumb that slides off keeps its direction.
+ */
+export function dpadKeysAt(box, x, y, keyFor) {
+    const third = (from, size, at) => Math.min(2, Math.max(0, Math.floor(((at - from) / size) * 3)));
+    const column = third(box.left, box.width, x);
+    const row = third(box.top, box.height, y);
+    const roles = [column === 0 && "left", column === 2 && "right", row === 0 && "up", row === 2 && "down"];
+    return roles.filter((role) => role).map((role) => keyFor[role]);
+}
+
 /** The Model B's lights, along the bottom left of its keyboard. */
 const Leds = [
     ["cassette motor", (processor) => processor.tapeInterface.motorOn],
     ["caps lock", (processor) => processor.sysvia.capsLockLight],
     ["shift lock", (processor) => processor.sysvia.shiftLockLight],
 ];
+
+const FunctionRowKeys = new Set(FunctionRow.map((def) => def.key));
+const LayerNames = [...Object.keys(Layers), "pad"];
+const UprightHint = "Turn the phone upright to type.";
+
+/** What each key's cap says, by the key it presses, for the pad's buttons to say the same. */
+const LegendOf = new Map(
+    [FunctionRow, ...Object.values(Layers).flat()]
+        .flat()
+        .filter((def) => def.key)
+        .map(({ key, label, sub, digit, cls }) => [key, { label, sub, digit, cls }]),
+);
+
+const padKey = (key, meaning, cls) => {
+    const legend = LegendOf.get(key) ?? { label: key };
+    return k(legend.label, key, legend, { meaning, cls: `${legend.cls ?? ""} ${cls}` });
+};
 
 export const wantsTouchKeyboard = (forced, matches) => forced || matches(TouchQuery) || matches(NarrowScreenQuery);
 
@@ -110,7 +276,7 @@ export const wantsTouchKeyboard = (forced, matches) => forced || matches(TouchQu
 export class KeyPresses {
     constructor(send) {
         this.send = send;
-        /** @type {Map<number, {key: string, pressedAt: number}>} by pointer */
+        /** @type {Map<number, Map<string, number>>} by pointer, the keys it holds and when each went down */
         this.held = new Map();
         /** @type {Map<string, number>} keys lifted from the glass and not yet sent up, by when they went down */
         this.releasing = new Map();
@@ -118,16 +284,20 @@ export class KeyPresses {
         this.breakUpAt = -Infinity;
     }
 
-    press(pointerId, key, now) {
-        this.held.set(pointerId, { key, pressedAt: now });
-        this.sendKey(key, true);
+    /** Makes `keys` all that a pointer holds, pressing the new ones; true if any was. */
+    hold(pointerId, keys, now) {
+        const before = this.held.get(pointerId) ?? new Map();
+        const after = new Map(keys.map((key) => [key, before.get(key) ?? now]));
+        for (const [key, pressedAt] of before) if (!after.has(key)) this.releasing.set(key, pressedAt);
+        if (after.size) this.held.set(pointerId, after);
+        else this.held.delete(pointerId);
+        const pressed = keys.filter((key) => !before.has(key));
+        for (const key of pressed) this.sendKey(key, true);
+        return pressed.length > 0;
     }
 
     release(pointerId) {
-        const press = this.held.get(pointerId);
-        if (!press) return;
-        this.held.delete(pointerId);
-        this.releasing.set(press.key, press.pressedAt);
+        this.hold(pointerId, [], null);
     }
 
     releaseAll() {
@@ -135,7 +305,7 @@ export class KeyPresses {
     }
 
     isHeld(key) {
-        return [...this.held.values()].some((press) => press.key === key);
+        return [...this.held.values()].some((keys) => keys.has(key));
     }
 
     /** SHIFT and CTRL stay down until BREAK has been up a while, so SHIFT+BREAK boots whichever thumb lifts first. */
@@ -161,11 +331,12 @@ export class KeyPresses {
 }
 
 /**
- * An on-screen BBC keyboard. Keys go to the machine's matrix by position through the same input as the physical
- * keyboard, so held keys and chords work with as many fingers as the screen reports.
+ * An on-screen BBC keyboard, and a game pad that a landscape phone shows in the margins beside the picture. Keys go to
+ * the machine's matrix by position through the same input as the physical keyboard, so held keys and chords work with
+ * as many fingers as the screen reports.
  */
 export class TouchKeyboard {
-    constructor({ processor, model, keyboard, layout, loop, forced, openMedia, onAnyKeyDown }) {
+    constructor({ processor, model, keyboard, layout, loop, forced, openMedia, onAnyKeyDown, gamepadRemaps }) {
         if (!wantsTouchKeyboard(forced, (query) => window.matchMedia(query).matches)) return;
         this.processor = processor;
         this.model = model;
@@ -177,10 +348,19 @@ export class TouchKeyboard {
             if (key === BreakKey) input.setReset(down);
             else input.keyRaw(model.keys[key], down);
         });
+        this.presets = { ...PadPresets, classic: followingGamepad(PadPresets.classic, gamepadRemaps) };
+        const storedPreset = window.localStorage[PresetStorageKey];
+        this.presetName = Object.hasOwn(PadPresets, storedPreset) ? storedPreset : "classic";
+        const storedLayer = window.localStorage[LayerStorageKey];
+        this.portraitLayer = LayerNames.includes(storedLayer) ? storedLayer : "main";
+        /** @type {Set<number>} pointers that went down on the d-pad, whose keys follow them as they slide */
+        this.dpadPointers = new Set();
+        this.navbarWanted = false;
 
         this.root = this.build(openMedia);
         this.toggle = this.buildToggle();
         document.body.append(this.root, this.toggle);
+        window.addEventListener("pointermove", (evt) => this.slide(evt));
         window.addEventListener("pointerup", (evt) => this.release(evt));
         window.addEventListener("pointercancel", (evt) => this.release(evt));
         window.addEventListener("blur", () => this.releaseAll());
@@ -189,9 +369,12 @@ export class TouchKeyboard {
             this.syncLeds();
         });
         this.landscapePhone = window.matchMedia(LandscapePhoneQuery);
-        this.landscapePhone.addEventListener("change", () => this.show());
+        this.landscapePhone.addEventListener("change", () => {
+            this.releaseAll();
+            this.navbarWanted = false;
+            this.show();
+        });
         new ResizeObserver(() => this.show()).observe(this.root);
-        this.showLayer("main");
         this.setOpen(window.localStorage[StorageKey] !== "false");
     }
 
@@ -200,8 +383,11 @@ export class TouchKeyboard {
         root.id = "touch-keyboard";
         const bar = document.createElement("div");
         bar.className = "tk-bar";
+        this.presetButton = this.buildButton("", "tk-preset", () => this.nextPreset());
         bar.append(
+            this.buildButton("☰ menu", "tk-menu", () => this.toggleNavbar()),
             this.buildButton("media", "tk-media", openMedia),
+            this.presetButton,
             this.buildButton("⌄ hide", "tk-hide", () => this.setOpen(false)),
         );
         root.append(bar, this.buildRow(FunctionRow));
@@ -215,6 +401,11 @@ export class TouchKeyboard {
             layer.append(grid, this.buildRow(rows.at(-1)));
             return layer;
         });
+        this.padLayer = document.createElement("div");
+        this.padLayer.className = "tk-layer tk-pad";
+        this.padLayer.dataset.name = "pad";
+        this.layers.push(this.padLayer);
+        this.buildPad();
         root.append(...this.layers, this.buildLeds());
         root.addEventListener("pointerdown", (evt) => this.press(evt));
         for (const type of ["contextmenu", "selectstart", "mousedown"]) {
@@ -229,6 +420,93 @@ export class TouchKeyboard {
             { passive: false },
         );
         return root;
+    }
+
+    /** The chosen preset's groups, placed by `placeGroups` on the side of the thumb each is for. */
+    buildPad() {
+        const { title, groups } = this.presets[this.presetName];
+        this.presetButton.textContent = `⇄ ${title}`;
+        const div = (className, ...children) => {
+            const el = document.createElement("div");
+            el.className = className;
+            el.append(...children);
+            return el;
+        };
+        const keyOf = (one, cls) => this.buildKey(padKey(one.key, one.label, cls), false);
+        const onFunctionRow = (one) => (FunctionRowKeys.has(one.key) ? "on-function-row" : "");
+        const row = (keys, visibleCount, cls) => {
+            const el = div(`tk-pad-group tk-pad-row ${cls}`, ...keys);
+            el.style.setProperty("--per-line", String(keysPerLine(visibleCount)));
+            return el;
+        };
+        const oftenRow = ({ actions }, extra) =>
+            row(
+                [...actions.map((one) => keyOf(one, onFunctionRow(one))), ...extra],
+                actions.length + (extra.length ? 1 : 0),
+                actions.every((one) => onFunctionRow(one)) ? "on-function-row" : "",
+            );
+        // One of the two shows, by orientation.
+        const layerKeys = [
+            this.buildKey(k("ABC", null, { cls: "layer portrait", layer: "main" }), false),
+            this.buildKey(k("⌨", null, { cls: "layer landscape", hint: UprightHint }), false),
+        ];
+        this.dpad = null;
+        this.dpadKeys = {};
+        const thumb = (control) => {
+            if (control.shape === "buttons") {
+                const onlyFire = control.actions.every((one) => one.role !== "second");
+                return div(
+                    `tk-pad-fire${onlyFire ? " only-fire" : ""}`,
+                    ...control.actions.map((one) => keyOf(one, one.role)),
+                );
+            }
+            this.dpadKeys = Object.fromEntries(control.actions.map((one) => [one.role, one.key]));
+            this.dpad = div(
+                "tk-dpad",
+                ...control.actions.map((one) =>
+                    this.buildKey({ ...padKey(one.key, one.label, one.role), arrow: DpadArrows[one.role] }, false),
+                ),
+                div("tk-dpad-hub"),
+            );
+            return div("tk-dpad-room", this.dpad);
+        };
+        const side = (name, { often, thumb: control, columns, rows }) => {
+            const oftenRows = often.map((each, i) => oftenRow(each, name === "left" && i === 0 ? layerKeys : []));
+            if (name === "left" && !often.length) oftenRows.push(row(layerKeys, 1, ""));
+            return div(
+                `tk-pad-side ${name}`,
+                ...oftenRows,
+                div(
+                    "tk-pad-core",
+                    thumb(control),
+                    ...columns.map(({ actions }) =>
+                        div("tk-pad-group tk-pad-column", ...actions.map((one) => keyOf(one, ""))),
+                    ),
+                ),
+                ...rows.map(({ actions }) =>
+                    row(
+                        actions.map((one) => keyOf(one, "")),
+                        actions.length,
+                        "",
+                    ),
+                ),
+            );
+        };
+        const sides = placeGroups(groups);
+        this.padLayer.replaceChildren(side("left", sides.left), side("right", sides.right));
+    }
+
+    nextPreset() {
+        const names = Object.keys(this.presets);
+        this.presetName = names[(names.indexOf(this.presetName) + 1) % names.length];
+        window.localStorage[PresetStorageKey] = this.presetName;
+        this.releaseAll();
+        this.buildPad();
+    }
+
+    toggleNavbar() {
+        this.navbarWanted = !this.navbarWanted;
+        this.show();
     }
 
     buildButton(text, className, onClick) {
@@ -252,6 +530,12 @@ export class TouchKeyboard {
             leds.append(light);
             return { led, lit };
         });
+        const hint = document.createElement("span");
+        hint.className = "tk-rotate-hint";
+        hint.textContent = "rotate for gamepad";
+        hint.hidden =
+            !window.matchMedia(TouchQuery).matches || Math.min(screen.width, screen.height) > PhoneShortSidePx;
+        leds.append(hint);
         return leds;
     }
 
@@ -277,21 +561,21 @@ export class TouchKeyboard {
         }
         if (!def.label) return el;
         el.className = `tk-key ${def.cls ?? ""}`;
-        if (def.sub) {
-            const sub = document.createElement("span");
-            sub.className = "tk-shifted";
-            sub.textContent = def.sub;
-            el.append(sub);
-        }
-        const label = document.createElement("span");
-        label.textContent = def.label;
-        if (def.digit) {
-            const digit = document.createElement("span");
-            digit.className = "tk-digit";
-            digit.textContent = def.digit;
-            label.append(digit);
-        }
+        const span = (className, text) => {
+            const child = document.createElement("span");
+            child.className = className;
+            child.textContent = text;
+            return child;
+        };
+        if (def.arrow) el.append(span("tk-arrow", def.arrow));
+        if (def.sub) el.append(span("tk-shifted", def.sub));
+        const label = span("", def.label);
+        if (def.digit) label.append(span("tk-digit", def.digit));
         el.append(label);
+        if (def.meaning) {
+            el.classList.add("meaning");
+            el.append(span("tk-meaning", def.meaning));
+        }
         el.def = def;
         return el;
     }
@@ -309,37 +593,77 @@ export class TouchKeyboard {
         this.show();
     }
 
-    /** A landscape phone has no height to spare for the keys, so there the page is as it is without them. */
+    /** Upright, the keys go below the picture; a landscape phone has room only beside it, and there shows the pad. */
     show() {
         const landscape = this.landscapePhone.matches;
-        const shown = this.open && !landscape;
-        this.root.hidden = !shown;
-        this.toggle.hidden = this.open || landscape;
-        document.body.classList.toggle(OpenClass, shown);
-        if (!shown) this.releaseAll();
-        this.layout.reserveForTouchKeyboard(shown ? this.root.offsetHeight : null);
+        const layer = landscape ? "pad" : this.portraitLayer;
+        this.root.hidden = !this.open;
+        this.toggle.hidden = this.open;
+        this.root.classList.toggle(LandscapeClass, landscape);
+        this.root.classList.toggle(OnPadClass, layer === "pad");
+        for (const el of this.layers) el.hidden = el.dataset.name !== layer;
+        document.body.classList.toggle(OpenClass, this.open);
+        document.body.classList.toggle(BesidePictureClass, this.open && landscape);
+        document.body.classList.toggle(NavbarHiddenClass, this.open && landscape && !this.navbarWanted);
+        if (!this.open) {
+            this.releaseAll();
+            this.layout.reserveForTouchKeyboard(null);
+            return;
+        }
+        this.layout.reserveForTouchKeyboard(
+            landscape ? { below: 0, beside: PadSidePx } : { below: this.root.offsetHeight, beside: 0 },
+        );
+        const side = (window.innerWidth - this.layout.cubMonitor.offsetWidth) / 2;
+        this.root.style.setProperty("--tk-side", `${side}px`);
+        this.root.style.setProperty("--tk-top", `${navbarHeightOf(document.getElementById("header-bar"))}px`);
     }
 
-    showLayer(name) {
-        for (const layer of this.layers) layer.hidden = layer.dataset.name !== name;
+    chooseLayer(name) {
+        this.releaseAll();
+        this.portraitLayer = name;
+        window.localStorage[LayerStorageKey] = name;
+        this.show();
     }
 
     press(evt) {
         if (evt.target.closest("button")) return;
+        if (this.presses.held.has(evt.pointerId) || this.dpadPointers.has(evt.pointerId)) return;
+        if (evt.target.closest(".tk-dpad")) {
+            evt.preventDefault();
+            if (!this.loop.running) return;
+            this.dpadPointers.add(evt.pointerId);
+            this.slide(evt);
+            return;
+        }
         const el = evt.target.closest(".tk-key") ?? this.nearestKey(evt.clientX, evt.clientY);
-        if (!el || this.presses.held.has(evt.pointerId)) return;
+        if (!el) return;
         evt.preventDefault();
         const { def } = el;
-        if (def.layer) this.showLayer(def.layer);
-        else if (this.loop.running) this.presses.press(evt.pointerId, def.key, this.machineMs());
+        if (def.layer) this.chooseLayer(def.layer);
+        else if (def.hint) toast(def.hint);
+        else if (this.loop.running) this.presses.hold(evt.pointerId, [def.key], this.machineMs());
         else return;
         buzz();
         this.onAnyKeyDown();
         this.showHeld();
     }
 
+    /** A thumb on the d-pad presses what is under it now, so it can roll from one direction through a diagonal. */
+    slide(evt) {
+        if (!this.dpadPointers.has(evt.pointerId)) return;
+        const keys = dpadKeysAt(this.dpad.getBoundingClientRect(), evt.clientX, evt.clientY, this.dpadKeys);
+        const holding = this.presses.held.get(evt.pointerId) ?? new Map();
+        if (keys.length === holding.size && keys.every((key) => holding.has(key))) return;
+        if (this.presses.hold(evt.pointerId, keys, this.machineMs())) {
+            buzz();
+            this.onAnyKeyDown();
+        }
+        this.showHeld();
+    }
+
     /** A touch's pointerdown does not count as a user gesture for starting audio, but its pointerup does. */
     release(evt) {
+        this.dpadPointers.delete(evt.pointerId);
         if (!this.presses.held.has(evt.pointerId)) return;
         this.onAnyKeyDown();
         this.presses.release(evt.pointerId);
@@ -366,6 +690,7 @@ export class TouchKeyboard {
     }
 
     releaseAll() {
+        this.dpadPointers.clear();
         this.presses.releaseAll();
         this.showHeld();
     }

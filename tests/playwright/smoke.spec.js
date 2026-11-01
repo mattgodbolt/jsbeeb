@@ -969,37 +969,160 @@ test.describe("on a phone", () => {
         await beeb.expectScreenText("automatically loaded");
     });
 
-    test("the on-screen keyboard steps aside in landscape for the lights bar, and comes back as it was left, even after a reload", async ({
+    test("a landscape phone shows the game pad beside the picture in place of the navbar, and upright shows the keys as they were left, even after a reload", async ({
         beeb,
         page,
     }) => {
         const keyboard = page.locator("#touch-keyboard");
         const toggle = page.locator("#touch-keyboard-toggle");
-        const lights = page.locator("#leds");
+        const navbar = page.locator("#header-bar");
+        const layer = (name) => page.locator(`#touch-keyboard .tk-layer[data-name="${name}"]`);
         const turn = (width, height) => page.setViewportSize({ width, height });
         await beeb.open();
-        await expect(keyboard).toBeVisible();
-        await expect(lights).toBeHidden();
+        await expect(layer("main")).toBeVisible();
+        await expect(page.locator("#touch-keyboard .tk-rotate-hint")).toBeVisible();
         const monitor = await page.locator("#cub-monitor").boundingBox();
         expect(monitor.y + monitor.height).toBeLessThanOrEqual((await keyboard.boundingBox()).y);
 
-        await turn(915, 412);
-        await expect(keyboard).toBeHidden();
-        await expect(toggle).toBeHidden();
-        await expect(lights).toBeVisible();
+        await turn(844, 390);
+        await expect(layer("pad")).toBeVisible();
+        await expect(layer("main")).toBeHidden();
+        await expect(navbar).toBeHidden();
+        await expect(page.locator("#leds")).toBeHidden();
+        const sides = async () => {
+            const picture = await page.locator("#cub-monitor").boundingBox();
+            const left = await page.locator("#touch-keyboard .tk-pad-side.left").boundingBox();
+            const right = await page.locator("#touch-keyboard .tk-pad-side.right").boundingBox();
+            return {
+                clear: left.x + left.width <= picture.x && right.x >= picture.x + picture.width,
+                pictureFits: picture.y + picture.height <= 390,
+            };
+        };
+        expect(await sides()).toEqual({ clear: true, pictureFits: true });
+        await page.locator("#touch-keyboard .tk-menu").tap();
+        await expect(navbar).toBeVisible();
+        expect((await keyboard.boundingBox()).y).toBeGreaterThanOrEqual((await navbar.boundingBox()).height);
         await turn(412, 915);
-        await expect(keyboard).toBeVisible();
+        await turn(844, 390);
+        await expect(navbar).toBeHidden();
+
+        await turn(412, 915);
+        await expect(layer("main")).toBeVisible();
+        await expect(navbar).toBeVisible();
+        await page.locator("#touch-keyboard .tk-key", { hasText: /^more$/ }).tap();
+        await page.locator("#touch-keyboard .tk-key:visible", { hasText: /^pad$/ }).tap();
+        await expect(layer("pad")).toBeVisible();
+        await page.reload();
+        await expect(layer("pad")).toBeVisible();
 
         await page.locator("#touch-keyboard .tk-hide").tap();
-        await expect(lights).toBeVisible();
-        await turn(915, 412);
-        await expect(toggle).toBeHidden();
-        await turn(412, 915);
+        await turn(844, 390);
         await expect(keyboard).toBeHidden();
         await expect(toggle).toBeVisible();
+        await expect(navbar).toBeVisible();
         await page.reload();
         await expect(toggle).toBeVisible();
-        await expect(keyboard).toBeHidden();
+        await toggle.tap();
+        await expect(layer("pad")).toBeVisible();
+    });
+
+    test("the d-pad presses two keys at a corner, follows a sliding thumb, and lets go of them when the phone turns or the layer changes", async ({
+        beeb,
+        page,
+    }) => {
+        await page.setViewportSize({ width: 844, height: 390 });
+        await beeb.open();
+        await beeb.expectScreenText(">");
+        const held = () =>
+            page.evaluate(() =>
+                ["Z", "X", "COLON_STAR", "SLASH"].filter((key) => {
+                    const [column, row] = window.processor.model.keys[key];
+                    return window.processor.sysvia.keys[column][row];
+                }),
+            );
+        const cdp = await page.context().newCDPSession(page);
+        const touch = (type, touchPoints) => cdp.send("Input.dispatchTouchEvent", { type, touchPoints });
+        const onDpad = async () => {
+            const dpad = await page.locator("#touch-keyboard .tk-dpad").boundingBox();
+            return (across, down) => ({ x: dpad.x + dpad.width * across, y: dpad.y + dpad.height * down, id: 1 });
+        };
+        let at = await onDpad();
+        await touch("touchStart", [at(0.1, 0.1)]);
+        await expect.poll(held).toEqual(["Z", "COLON_STAR"]);
+        await touch("touchMove", [at(0.1, 0.5)]);
+        await expect.poll(held).toEqual(["Z"]);
+        await touch("touchMove", [at(0.9, 0.9)]);
+        await expect.poll(held).toEqual(["X", "SLASH"]);
+        await page.setViewportSize({ width: 390, height: 844 });
+        await expect.poll(held).toEqual([]);
+        await touch("touchEnd", []);
+
+        await page.locator("#touch-keyboard .tk-key", { hasText: /^more$/ }).tap();
+        await page.locator("#touch-keyboard .tk-key:visible", { hasText: /^pad$/ }).tap();
+        at = await onDpad();
+        const tapWhileHolding = async (selector) => {
+            await touch("touchStart", [at(0.1, 0.5)]);
+            await expect.poll(held).toEqual(["Z"]);
+            const box = await page.locator(`#touch-keyboard ${selector}`).boundingBox();
+            const other = { x: box.x + box.width / 2, y: box.y + box.height / 2, id: 2 };
+            await touch("touchStart", [at(0.1, 0.5), other]);
+            await touch("touchEnd", [at(0.1, 0.5)]);
+        };
+        await touch("touchStart", [at(0.1, 0.5)]);
+        await expect.poll(held).toEqual(["Z"]);
+        // A second finger's tap is no click to Chrome, so the button is clicked as a mouse would.
+        await page.locator("#touch-keyboard .tk-preset").dispatchEvent("click");
+        await expect(page.locator("#touch-keyboard .tk-preset")).toHaveText("⇄ ZXMKL");
+        await touch("touchMove", [at(0.1, 0.1)]);
+        await expect.poll(held).toEqual([]);
+        await touch("touchEnd", []);
+        await tapWhileHolding(".tk-key.layer.portrait");
+        await touch("touchMove", [at(0.1, 0.1)]);
+        await expect.poll(held).toEqual([]);
+        await touch("touchEnd", []);
+    });
+
+    test("the pad's preset is remembered, the classic one presses what the URL's gamepad mapping says, Exile's aim is a column and it has no digits, and only keys on the function row stay off the upright pad", async ({
+        beeb,
+        page,
+    }) => {
+        await page.setViewportSize({ width: 844, height: 390 });
+        await beeb.open("?GP.LEFT=CAPSLOCK&GP.FIRE=F0");
+        const preset = page.locator("#touch-keyboard .tk-preset");
+        const key = (selector) => page.locator(`#touch-keyboard ${selector}`);
+        await expect(preset).toHaveText("⇄ classic");
+        await expect(key(".tk-dpad .left")).toContainText("CAPS");
+        const digitOne = key(".tk-pad-group .tk-key").filter({ hasText: /^!1$/ });
+        await expect(digitOne).toHaveCount(1);
+        await expect(key(".tk-dpad .tk-meaning")).toHaveCount(0);
+        await page.locator("#touch-keyboard .tk-key.landscape").tap();
+        await expect(page.locator(".toast", { hasText: "Turn the phone upright to type." })).toBeVisible();
+
+        await page.setViewportSize({ width: 390, height: 844 });
+        await key(".tk-key")
+            .filter({ hasText: /^more$/ })
+            .tap();
+        await key(".tk-key:visible").filter({ hasText: /^pad$/ }).tap();
+        await expect(key(".tk-pad-fire .fire")).toBeVisible();
+        await preset.tap();
+        await expect(key(".tk-dpad .up")).toContainText("K");
+        await preset.tap();
+        await expect(preset).toHaveText("⇄ Exile");
+        const weapon = key(".tk-pad-group .tk-key").filter({ hasText: "pistol" });
+        await expect(weapon).toBeHidden();
+        await page.setViewportSize({ width: 844, height: 390 });
+        await expect(weapon).toBeVisible();
+        await expect(digitOne).toHaveCount(0);
+        await expect(key(".tk-dpad .up .tk-meaning")).toHaveText("jet / jump");
+        const aim = await Promise.all(
+            ["▲", "●", "▼"].map((mark) =>
+                key(".tk-pad-group.tk-pad-column .tk-key").filter({ hasText: mark }).boundingBox(),
+            ),
+        );
+        expect(aim.map((box) => box.x)).toEqual([aim[0].x, aim[0].x, aim[0].x]);
+        expect(aim[0].y < aim[1].y && aim[1].y < aim[2].y).toBe(true);
+        await page.reload();
+        await expect(preset).toHaveText("⇄ Exile");
     });
 
     test("a touch in the gap between keys presses the nearer one", async ({ beeb, page }) => {
@@ -1059,6 +1182,16 @@ test.describe("on a phone", () => {
         await beeb.expectScreenText(">");
         await expect(page.locator("#touch-keyboard, #touch-keyboard-toggle")).toHaveCount(0);
     });
+});
+
+test("a narrow window without a touch screen gets the on-screen keyboard but no hint to turn it for the game pad", async ({
+    beeb,
+    page,
+}) => {
+    await page.setViewportSize({ width: 600, height: 800 });
+    await beeb.open();
+    await expect(page.locator('#touch-keyboard .tk-layer[data-name="main"]')).toBeVisible();
+    await expect(page.locator("#touch-keyboard .tk-rotate-hint")).toBeHidden();
 });
 
 test("each of help's tabs fits a desktop or tablet window whole and a phone's width, and opens on the debugging tab while paused or debugging", async ({

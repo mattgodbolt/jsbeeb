@@ -40,6 +40,7 @@ describe("GamePad", function () {
 
             expect(gamepad.remap("B", "K9")).toBeNull();
             expect(gamepad.gamepadMapping[1]).toEqual(BBC.K9);
+            expect(gamepad.remapped).toEqual({ A: "K0", B: "K9" });
         });
 
         it("reports an unknown key without changing anything", function () {
@@ -48,6 +49,7 @@ describe("GamePad", function () {
 
             expect(gamepad.remap("A", "NOTAKEY")).toMatch(/not a key on the emulated machine/);
             expect(gamepad.gamepadMapping[0]).toEqual(before);
+            expect(gamepad.remapped).toEqual({});
         });
 
         it("reports an unknown gamepad control", function () {

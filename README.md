@@ -258,7 +258,8 @@ The gamepad control names are:
 
 The key names are the same as for the keyboard, the Atom's own on the Atom. As with `KEY.`, the whole parameter is
 case-insensitive, so `gp.fire=copy` works too. Digits may be written either way round: `GP.A=1` and `GP.A=K1` both
-press `1`. The D-pad's default mapping can't currently be changed.
+press `1`. The D-pad's default mapping can't currently be changed. The on-screen game pad's classic layout follows
+`LEFT`, `RIGHT`, `UP`, `DOWN`, `FIRE` and `START`, so `?GP.LEFT=CAPSLOCK&GP.RIGHT=CTRL` steers both.
 
 The older `LEFT=`, `RIGHT=`, `UP=`, `DOWN=` and `FIRE=` parameters (no `GP.` prefix, and in capitals) still work and
 mean the same thing.
@@ -392,7 +393,7 @@ sudo rpm -i out/dist/jsbeeb-<version>.x86_64.rpm
 - `embed` - Remove the margins around the screen, hide most navigation entries and make the page background
   transparent (intended for use when running within an iframe in a third-party site).
 - `touchkeys` - offers the on-screen BBC keyboard, which otherwise appears only on a touch screen or in a window up to
-  700px wide (and never on a landscape phone, embedded, or on the Atom).
+  700px wide (and never embedded or on the Atom; a landscape phone gets its game pad instead).
 - `cpuMultiplier=X` speeds up the CPU by a factor of `X` relative to the peripherals: video, sound and the VIAs keep
   running at their real-world rates. May be fractional or below one to slow the CPU down. NB disc loads become
   unreliable with a too-slow CPU, and running too fast might cause the browser to hang.

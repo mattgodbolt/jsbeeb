@@ -396,6 +396,7 @@ if (!parsedQuery.embed && !model.isAtom) {
         forced: !!parsedQuery.touchkeys,
         openMedia: () => mediaWindow.openFor(0),
         onAnyKeyDown,
+        gamepadRemaps: gamepad.remapped,
     });
 }
 

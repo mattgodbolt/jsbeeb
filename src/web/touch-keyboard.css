@@ -188,3 +188,255 @@ body.touch-keyboard-open #leds {
   font-size: 24px;
   line-height: 1;
 }
+
+#touch-keyboard .tk-bar .tk-preset {
+  margin-left: auto;
+}
+
+#touch-keyboard:not(.landscape) .tk-menu,
+#touch-keyboard:not(.on-pad) .tk-preset {
+  display: none;
+}
+
+body.touch-keyboard-navbar-hidden #header-bar {
+  display: none;
+}
+
+/* Over the pad, so that its menu opens on top. */
+body.touch-keyboard-beside-picture #header-bar {
+  position: relative;
+  z-index: 6;
+}
+
+#touch-keyboard .tk-leds .tk-rotate-hint {
+  margin-left: auto;
+  align-self: center;
+}
+
+#touch-keyboard .tk-leds .tk-rotate-hint[hidden],
+#touch-keyboard.landscape .tk-rotate-hint,
+#touch-keyboard.landscape .layer.portrait,
+#touch-keyboard:not(.landscape) .layer.landscape,
+#touch-keyboard:not(.landscape) .tk-pad .on-function-row {
+  display: none;
+}
+
+/* The pad is the keyboard's height, so the picture stays put when it is chosen. */
+#touch-keyboard .tk-pad {
+  flex-direction: row;
+  gap: 8px;
+  height: calc(5 * var(--key-height) + 12px);
+}
+
+#touch-keyboard .tk-pad-side {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+#touch-keyboard .tk-pad-group {
+  display: grid;
+  grid-auto-rows: calc(var(--key-height) * 0.72);
+  gap: 3px;
+}
+
+#touch-keyboard .tk-pad-group.tk-pad-row {
+  grid-template-columns: repeat(var(--per-line), minmax(0, 1fr));
+}
+
+#touch-keyboard .tk-pad-group.tk-pad-column {
+  flex: 0 0 34%;
+}
+
+#touch-keyboard .tk-pad-core {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+#touch-keyboard .tk-pad .tk-key {
+  font-size: 14px;
+}
+
+#touch-keyboard .tk-pad .tk-key.small {
+  font-size: 10px;
+}
+
+#touch-keyboard .tk-pad .tk-key.meaning {
+  gap: 0;
+}
+
+#touch-keyboard .tk-pad .meaning > :not(.tk-meaning, .tk-arrow) {
+  font-size: 9px;
+  opacity: 0.6;
+}
+
+#touch-keyboard .tk-meaning {
+  font:
+    600 11px/1.05 system-ui,
+    sans-serif;
+  text-align: center;
+}
+
+#touch-keyboard .tk-dpad-room {
+  flex: 1;
+  align-self: stretch;
+  min-width: 0;
+  container-type: size;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#touch-keyboard .tk-dpad {
+  --dpad: min(100cqw, 100cqh);
+  width: var(--dpad);
+  height: var(--dpad);
+  display: grid;
+  grid-template: repeat(3, 1fr) / repeat(3, 1fr);
+  background: radial-gradient(closest-side, rgba(0, 0, 0, 0.12), rgba(0, 0, 0, 0.12) 96%, transparent);
+}
+
+#touch-keyboard .tk-dpad .tk-key {
+  border-radius: 0;
+  font-size: 15px;
+}
+
+#touch-keyboard .tk-dpad .up {
+  grid-area: 1 / 2;
+  border-radius: 8px 8px 0 0;
+  border-bottom: 0;
+}
+
+#touch-keyboard .tk-dpad .down {
+  grid-area: 3 / 2;
+  border-radius: 0 0 8px 8px;
+}
+
+#touch-keyboard .tk-dpad .left {
+  grid-area: 2 / 1;
+  border-radius: 8px 0 0 8px;
+}
+
+#touch-keyboard .tk-dpad .right {
+  grid-area: 2 / 3;
+  border-radius: 0 8px 8px 0;
+}
+
+#touch-keyboard .tk-dpad-hub {
+  grid-area: 2 / 2;
+  background: #25221f;
+}
+
+#touch-keyboard .tk-arrow {
+  font-size: 20px;
+  color: #e8a317;
+}
+
+#touch-keyboard .tk-key.held .tk-arrow {
+  color: #111;
+}
+
+#touch-keyboard .tk-pad-fire {
+  flex: 1;
+  align-self: stretch;
+  min-width: 0;
+  container-type: size;
+  position: relative;
+}
+
+#touch-keyboard .tk-pad-fire .tk-key {
+  position: absolute;
+}
+
+#touch-keyboard .tk-pad-fire .fire {
+  --fire: min(64cqh, 62cqw);
+  width: var(--fire);
+  height: var(--fire);
+  right: 0;
+  top: 0;
+  border-radius: 50%;
+  border-bottom-width: 5px;
+}
+
+#touch-keyboard .tk-pad-fire.only-fire .fire {
+  top: auto;
+  bottom: 0;
+}
+
+#touch-keyboard .tk-pad-fire .second {
+  width: min(60cqw, 140px);
+  height: min(32cqh, 52px);
+  left: 0;
+  bottom: 0;
+  border-radius: 999px;
+}
+
+#touch-keyboard .tk-pad-fire .tk-key.small {
+  font-size: 15px;
+}
+
+#touch-keyboard .tk-pad-fire .meaning .tk-meaning {
+  font-size: 15px;
+}
+
+/* A landscape phone: the pad's two sides go in the margins beside the picture, and nothing covers the picture. */
+#touch-keyboard.landscape {
+  top: var(--tk-top);
+  padding: 2px 6px 4px;
+  background: none;
+  border: 0;
+  box-shadow: none;
+  pointer-events: none;
+  --key-height: 40px;
+}
+
+#touch-keyboard.landscape > .tk-row {
+  display: none;
+}
+
+#touch-keyboard.landscape .tk-bar button,
+#touch-keyboard.landscape .tk-pad-side {
+  pointer-events: auto;
+}
+
+#touch-keyboard.landscape .tk-bar button {
+  color: #9a917a;
+}
+
+#touch-keyboard.landscape .tk-pad {
+  flex: 1;
+  height: auto;
+  min-height: 0;
+  justify-content: space-between;
+}
+
+#touch-keyboard.landscape .tk-pad-side {
+  flex: none;
+  width: calc(var(--tk-side) - 12px);
+}
+
+#touch-keyboard.landscape .tk-pad-side.left {
+  padding-bottom: 22px;
+}
+
+#touch-keyboard.landscape .tk-key {
+  box-shadow: 0 0 0 1px #57514a;
+}
+
+#touch-keyboard.landscape .tk-dpad {
+  background: radial-gradient(closest-side, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.06) 96%, transparent);
+}
+
+#touch-keyboard.landscape .tk-leds {
+  position: absolute;
+  left: 6px;
+  bottom: 2px;
+  gap: 8px;
+  font-size: 8px;
+  color: #9a917a;
+}
