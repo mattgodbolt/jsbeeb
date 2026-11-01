@@ -248,9 +248,10 @@ the AtoMMC's joystick port, whichever of the two a game reads. To play Superior'
 
 The gamepad control names are:
 
-- `FIRE`: every button at once, which is usually what you want for a one-button game
-- `UP` `DOWN` `LEFT` `RIGHT`: both analogue sticks at once, plus one face button each (`UP` is also `A`, `DOWN` is
-  `X`, `LEFT` is `Y`, `RIGHT` is `B`)
+- `FIRE`: every fire button at once - the face and shoulder buttons and the sticks' clicks - which is usually
+  what you want for a one-button game; the D-pad, Start and Back keep their own meaning
+- `UP` `DOWN` `LEFT` `RIGHT`: both analogue sticks at once, plus one face button and the D-pad direction each
+  (`UP` is also `A`, `DOWN` is `X`, `LEFT` is `Y`, `RIGHT` is `B`)
 - `UP1` `DOWN1` `LEFT1` `RIGHT1`: the left stick only; `UP2` `DOWN2` and so on: the right stick only; `UP3` `DOWN3`
   and so on: the face buttons only
 - `A` `B` `X` `Y` `START` `BACK` `LB` `RB` `LT` `RT`: individual buttons, by their Xbox 360 names
@@ -258,7 +259,7 @@ The gamepad control names are:
 
 The key names are the same as for the keyboard, the Atom's own on the Atom. As with `KEY.`, the whole parameter is
 case-insensitive, so `gp.fire=copy` works too. Digits may be written either way round: `GP.A=1` and `GP.A=K1` both
-press `1`. The D-pad's default mapping can't currently be changed. The on-screen game pad's classic layout follows
+press `1`. The on-screen game pad's classic layout follows
 `LEFT`, `RIGHT`, `UP`, `DOWN`, `FIRE` and `START`, so `?GP.LEFT=CAPSLOCK&GP.RIGHT=CTRL` steers both.
 
 The older `LEFT=`, `RIGHT=`, `UP=`, `DOWN=` and `FIRE=` parameters (no `GP.` prefix, and in capitals) still work and
