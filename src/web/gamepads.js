@@ -1,3 +1,43 @@
+/** Each stick direction as [axis, direction], in the browser's standard mapping. */
+const LeftStick = { up: [1, -1], down: [1, 1], left: [0, -1], right: [0, 1] };
+const RightStick = { up: [3, -1], down: [3, 1], left: [2, -1], right: [2, 1] };
+
+/**
+ * The buttons, by their index in the browser's standard mapping, and the stick directions each `GP.` control name
+ * sets. A direction takes the D-pad and both sticks; `FIRE` takes every button that is neither a direction nor Start.
+ */
+const Controls = {
+    A: { buttons: [0], axes: [] },
+    B: { buttons: [1], axes: [] },
+    X: { buttons: [2], axes: [] },
+    Y: { buttons: [3], axes: [] },
+    LB: { buttons: [4], axes: [] },
+    RB: { buttons: [5], axes: [] },
+    LT: { buttons: [6], axes: [] },
+    RT: { buttons: [7], axes: [] },
+    BACK: { buttons: [8], axes: [] },
+    START: { buttons: [9], axes: [] },
+    FIRE1: { buttons: [10], axes: [] },
+    FIRE2: { buttons: [11], axes: [] },
+    FIRE: { buttons: [0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 11], axes: [] },
+    UP: { buttons: [12], axes: [LeftStick.up, RightStick.up] },
+    DOWN: { buttons: [13], axes: [LeftStick.down, RightStick.down] },
+    LEFT: { buttons: [14], axes: [LeftStick.left, RightStick.left] },
+    RIGHT: { buttons: [15], axes: [LeftStick.right, RightStick.right] },
+    UP1: { buttons: [], axes: [LeftStick.up] },
+    DOWN1: { buttons: [], axes: [LeftStick.down] },
+    LEFT1: { buttons: [], axes: [LeftStick.left] },
+    RIGHT1: { buttons: [], axes: [LeftStick.right] },
+    UP2: { buttons: [], axes: [RightStick.up] },
+    DOWN2: { buttons: [], axes: [RightStick.down] },
+    LEFT2: { buttons: [], axes: [RightStick.left] },
+    RIGHT2: { buttons: [], axes: [RightStick.right] },
+    UP3: { buttons: [0], axes: [] },
+    DOWN3: { buttons: [2], axes: [] },
+    LEFT3: { buttons: [3], axes: [] },
+    RIGHT3: { buttons: [1], axes: [] },
+};
+
 export class GamePad {
     /**
      * @param {object} model - the emulated machine, whose keys the controls press
@@ -30,109 +70,12 @@ export class GamePad {
             return `"${machineKey}" is not a key on the emulated machine.`;
         }
 
-        switch (gamepadKey) {
-            case "LEFT":
-                this.gamepadMapping[3] = mappedKey;
-                this.gamepadAxisMapping[0][-1] = mappedKey;
-                this.gamepadAxisMapping[2][-1] = mappedKey;
-                break;
-            case "RIGHT":
-                this.gamepadMapping[1] = mappedKey;
-                this.gamepadAxisMapping[0][1] = mappedKey;
-                this.gamepadAxisMapping[2][1] = mappedKey;
-                break;
-            case "UP":
-                this.gamepadMapping[0] = mappedKey;
-                this.gamepadAxisMapping[1][-1] = mappedKey;
-                this.gamepadAxisMapping[3][-1] = mappedKey;
-                break;
-            case "DOWN":
-                this.gamepadMapping[2] = mappedKey;
-                this.gamepadAxisMapping[1][1] = mappedKey;
-                this.gamepadAxisMapping[3][1] = mappedKey;
-                break;
-            case "FIRE":
-                for (let i = 0; i < 16; i++) {
-                    this.gamepadMapping[i] = mappedKey;
-                }
-                break;
-
-            // XBox 360 Controller names
-            case "UP2":
-                this.gamepadAxisMapping[3][-1] = mappedKey;
-                break;
-            case "UP1":
-                this.gamepadAxisMapping[1][-1] = mappedKey;
-                break;
-            case "UP3":
-                this.gamepadMapping[0] = mappedKey;
-                break;
-            case "DOWN2":
-                this.gamepadAxisMapping[3][1] = mappedKey;
-                break;
-            case "DOWN1":
-                this.gamepadAxisMapping[1][1] = mappedKey;
-                break;
-            case "DOWN3":
-                this.gamepadMapping[2] = mappedKey;
-                break;
-            case "LEFT2":
-                this.gamepadAxisMapping[2][-1] = mappedKey;
-                break;
-            case "LEFT1":
-                this.gamepadAxisMapping[0][-1] = mappedKey;
-                break;
-            case "LEFT3":
-                this.gamepadMapping[3] = mappedKey;
-                break;
-            case "RIGHT2":
-                this.gamepadAxisMapping[2][1] = mappedKey;
-                break;
-            case "RIGHT1":
-                this.gamepadAxisMapping[0][1] = mappedKey;
-                break;
-            case "RIGHT3":
-                this.gamepadMapping[1] = mappedKey;
-                break;
-            case "FIRE2":
-                this.gamepadMapping[11] = mappedKey;
-                break;
-            case "FIRE1":
-                this.gamepadMapping[10] = mappedKey;
-                break;
-            case "A":
-                this.gamepadMapping[0] = mappedKey;
-                break;
-            case "B":
-                this.gamepadMapping[1] = mappedKey;
-                break;
-            case "X":
-                this.gamepadMapping[2] = mappedKey;
-                break;
-            case "Y":
-                this.gamepadMapping[3] = mappedKey;
-                break;
-            case "START":
-                this.gamepadMapping[9] = mappedKey;
-                break;
-            case "BACK":
-                this.gamepadMapping[8] = mappedKey;
-                break;
-            case "RB":
-                this.gamepadMapping[5] = mappedKey;
-                break;
-            case "RT":
-                this.gamepadMapping[7] = mappedKey;
-                break;
-            case "LB":
-                this.gamepadMapping[4] = mappedKey;
-                break;
-            case "LT":
-                this.gamepadMapping[6] = mappedKey;
-                break;
-            default:
-                return `unknown gamepad control "${gamepadKey}".`;
+        if (!Object.hasOwn(Controls, gamepadKey)) {
+            return `unknown gamepad control "${gamepadKey}".`;
         }
+        const { buttons, axes } = Controls[gamepadKey];
+        for (const button of buttons) this.gamepadMapping[button] = mappedKey;
+        for (const [axis, direction] of axes) this.gamepadAxisMapping[axis][direction] = mappedKey;
 
         this.remapped[gamepadKey] = machineKey;
         return null;
