@@ -79,6 +79,12 @@ export function packSidewaysRam(banks, into) {
     return { swram, swramBankMask: bankNumbers.reduce((mask, bank) => mask | (1 << bank), 0) };
 }
 
+/**
+ * The debug hooks a replay runs with, as `asReplay` takes them: `instruction(pc, opcode)`, `read(address, value)`,
+ * `write(address, value)` and `interrupt(taken, returnsTo)`, each called as the CPU's own debug hooks are, or null.
+ */
+export const NoReplayHooks = Object.freeze({ instruction: null, read: null, write: null, interrupt: null });
+
 /** One bit per device that can drive the NMI line; the CPU takes the OR of them all. */
 export const NmiSource = Object.freeze({
     fdc: 0x01,
@@ -1885,14 +1891,17 @@ export class Cpu6502 extends Base6502 {
 
     /**
      * Runs `run` as a replay of time the machine has run already, or is only previewing: every debug hook detached
-     * but `onInstruction(pc, opcode)` and `onWrite(address, value)`, either null for none, and `replaying` set, so
-     * that output devices send the host nothing it has had or will have from the run itself.
+     * and `hooks` attached in their place (see NoReplayHooks), and `replaying` set, so that output devices send the
+     * host nothing it has had or will have from the run itself.
      */
-    asReplay(onInstruction, onWrite, run) {
+    asReplay({ instruction, read, write, interrupt }, run) {
         const attached = [this._debugInstruction, this._debugRead, this._debugWrite, this._debugInterrupt];
-        this._debugInstruction = onInstruction;
-        this._debugWrite = onWrite;
-        this._debugRead = this._debugInterrupt = null;
+        [this._debugInstruction, this._debugRead, this._debugWrite, this._debugInterrupt] = [
+            instruction,
+            read,
+            write,
+            interrupt,
+        ];
         this.replaying = true;
         this.refreshLook();
         try {

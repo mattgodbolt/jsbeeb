@@ -39,6 +39,8 @@ const TestRefusal = "a refusal the test made";
 const UserViaDdrb = 0xfe62;
 const RomAddress = 0xc000;
 const OtherPagingHalf = 256;
+const QuarterSecond = 500000;
+const JmpTo = (at) => [0x4c, at & 0xff, at >>> 8];
 
 // A tape that plays forever, giving the PPIA nothing.
 const SilentTape = { poll: () => 1000, rewind: () => {} };
@@ -275,5 +277,38 @@ describe("ReplayHistory", () => {
         expect(cpu.pc).toBe(CallAt + 3);
         expect(history.stepBack(false)).toBeNull();
         expect(cpu.pc).toBe(ReturnAt);
+    });
+
+    it.each([
+        [
+            "as far back as the history goes, past two snapshots at one cycle",
+            (history) => {
+                for (let i = 0; i < 2; i++) {
+                    take(history);
+                    take(history);
+                    runFor(history.cpu, QuarterSecond);
+                }
+            },
+            /found no call or interrupt .* in the last 0\.50 seconds, and that is as far back as the history goes\.$/,
+        ],
+        [
+            "back to an input no replay can put back",
+            (history) => {
+                take(history);
+                history.log.refuse(TestRefusal);
+                runFor(history.cpu, QuarterSecond);
+                take(history);
+                runFor(history.cpu, QuarterSecond);
+            },
+            /found no call or interrupt .* in the last 0\.25 seconds, and cannot go back past a refusal the test made\.$/,
+        ],
+    ])("says how far back a step back out looked, %s, leaving the machine be", async (_, setUp, why) => {
+        const cpu = await machineAt(CallAt, {});
+        loadBytes(cpu, CallAt, JmpTo(CallAt));
+        const history = new ReplayHistory(cpu);
+        setUp(history);
+        const before = snapshotToJSON(cpu.snapshotState());
+        expect(finished(history.stepBackOut())).toMatch(why);
+        expect(snapshotToJSON(cpu.snapshotState())).toEqual(before);
     });
 });

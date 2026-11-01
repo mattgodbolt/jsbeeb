@@ -55,7 +55,9 @@ const NoHistoryToSearch = "There is no history to search back through here.";
 const MovedSinceSearch = "The machine has moved on since that search; search again to step back to a write.";
 const MicrosecondsPerSecond = 1e6;
 const MillisecondsPerSecond = 1e3;
-const StepBackRuns = ["stepBack", "stepBackOver"];
+const StepBackRuns = ["stepBack", "stepBackOver", "stepBackOut"];
+// What a search back resolves to when a later one ended it.
+const Ended = Symbol("ended");
 
 function durationText(seconds) {
     if (seconds * MillisecondsPerSecond < 1) return `${(seconds * MicrosecondsPerSecond).toFixed(1)} \u00b5s`;
@@ -283,12 +285,13 @@ export const ToolbarKeys = [
         description: "Step over a call, or a loop from its backward branch",
     },
     {
-        combo: "o",
-        key: "o",
-        run: "stepOut",
+        combo: "o O",
         label: "step out",
-        description: "Run until this subroutine or interrupt handler returns",
+        description:
+            "Run until this subroutine or interrupt handler returns (O: back to the call or interrupt that entered it)",
     },
+    { key: "o", run: "stepOut" },
+    { key: "O", run: "stepBackOut" },
     { combo: "v", key: "v", run: "runToVsync", label: "vsync", description: "Run to the start of the next vsync" },
 ];
 
@@ -472,6 +475,7 @@ export class Debugger {
             stepOut: () => this._fromDebugger(() => this.stepOut()),
             stepBack: () => this._fromDebugger(() => this.stepBack(false)),
             stepBackOver: () => this._fromDebugger(() => this.stepBack(true)),
+            stepBackOut: () => this._fromDebugger(() => this.stepBackSearching((history) => history.stepBackOut())),
             runToCursor: () => this._fromDebugger(() => this.runToCursor()),
             runToVsync: () => this._fromDebugger(() => this.runToVsync()),
         };
@@ -1318,6 +1322,46 @@ export class Debugger {
         this.debug(this.cpu.pc);
     }
 
+    /**
+     * Steps back as `search(history)`, one of the ReplayHistory's steps back a stretch at a time, does, letting the
+     * page go on between stretches; a later search ends one still going. Resolves once it has landed, said why it
+     * could not, or been ended.
+     */
+    async stepBackSearching(search) {
+        const refusal = this._stepBackRefusal();
+        if (refusal) {
+            toast(refusal, { title: "Step back" });
+            return;
+        }
+        this.updatePrevMem();
+        const steppedBack = await this._searchBack(search(this._history), "Searching back.", "Step back");
+        if (steppedBack === Ended) return;
+        if (this._stopwatchFrom > this.cpu.scheduler.epoch) this._stopwatchFrom = null;
+        if (steppedBack) toast(steppedBack, { title: "Step back" });
+        this.debug(this.cpu.pc);
+    }
+
+    /**
+     * Runs `searching`, a search back through the history, a stretch at a time, saying `searchingText` under `title`
+     * while it takes more than one. Resolves to what it returns, or Ended if a later search ended it.
+     */
+    async _searchBack(searching, searchingText, title) {
+        this._searching = searching;
+        let step = searching.next();
+        const notice = step.done ? null : toast(searchingText, { title });
+        try {
+            while (!step.done) {
+                await new Promise((resolve) => setTimeout(resolve, 0));
+                if (this._searching !== searching) return Ended;
+                step = searching.next();
+            }
+        } finally {
+            if (notice) dismissToast(notice);
+        }
+        this._searching = null;
+        return step.value;
+    }
+
     _steppedBack(goBack) {
         this.updatePrevMem();
         const refusal = goBack();
@@ -1342,20 +1386,12 @@ export class Debugger {
             toast(unavailable, { title });
             return { refusal: unavailable };
         }
-        const searching = (this._searching = this._history.lastWrite(address));
-        let step = searching.next();
-        const notice = step.done ? null : toast(`Searching back for the last write to ${where}.`, { title });
-        try {
-            while (!step.done) {
-                await new Promise((resolve) => setTimeout(resolve, 0));
-                if (this._searching !== searching) return null;
-                step = searching.next();
-            }
-        } finally {
-            if (notice) dismissToast(notice);
-        }
-        this._searching = null;
-        const found = step.value;
+        const found = await this._searchBack(
+            this._history.lastWrite(address),
+            `Searching back for the last write to ${where}.`,
+            title,
+        );
+        if (found === Ended) return null;
         const { write } = found;
         const action =
             write && write.pc !== null ? { label: "Step back to it", run: this._stepBackToWrite(write) } : null;

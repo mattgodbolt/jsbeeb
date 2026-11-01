@@ -34,7 +34,7 @@ function createMockProcessor(video) {
     return {
         snapshotState: vi.fn(() => ({ saved: true })),
         restoreState: vi.fn(),
-        asReplay: (_onInstruction, _onWrite, run) => run(),
+        asReplay: (_hooks, run) => run(),
         // Simulate: each execute call advances the video frameCount
         execute: vi.fn(() => {
             video.frameCount++;
