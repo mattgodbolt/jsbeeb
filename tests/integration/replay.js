@@ -49,6 +49,10 @@ const Irq1v = 0x0204;
 const HandlerAddress = 0x3100;
 // LDA &FC; RTI: the OS's IRQ entry keeps A in &FC. Its source left alone, the interrupt is taken again at once.
 const ReturnLeavingInterrupt = [0xa5, 0xfc, 0x40];
+const LoopJump = ScratchAddress + 3;
+const TextCursorX = 0x0318;
+const ForwardWindows = 3;
+const ForwardWindowSeconds = 0.007;
 const AtomPauseThenSaveToTheCard = ["10 F.I=1TO50;WAIT;N.", '20 *SAVE "NEW" 2900 2A00'];
 
 async function booted(model, options) {
@@ -338,6 +342,63 @@ describe.each([
         expect(finished(history.stepBackOut())).toMatch(/as far back as the history goes/);
         expect(machineNow(machine)).toEqual(before);
         expect(painted).not.toHaveBeenCalled();
+    });
+});
+
+describe("Reverse continuing", () => {
+    it.each([
+        ["an instruction breakpoint", { kind: "execute", start: Oswrch }],
+        ["a write watch", { kind: "write", start: TextCursorX }],
+        ["a read watch on data", { kind: "read", start: TextCursorX }],
+        ["a read watch on an opcode, which the CPU reads just before running it", { kind: "read", start: LoopJump }],
+        ["an IRQ breakpoint", { kind: "irq" }],
+        ["a vsync breakpoint", { kind: "vsync" }],
+    ])("stops, newest first, everywhere a run forward stopped at %s", async (_, breakpoint) => {
+        const machine = await printingForever("B-DFS1.2");
+        const cpu = machine.processor;
+        const history = new ReplayHistory(cpu);
+        cpu.breakpoints.add(breakpoint);
+        cpu.breakpoints.add({ ...breakpoint, action: "log" });
+        const stops = [];
+        for (let window = 0; window < ForwardWindows; window++) {
+            history.taken(cpu.snapshotState(), null);
+            const end = machine.elapsedCycles + ForwardWindowSeconds * machine.model.cyclesPerSecond;
+            while (machine.elapsedCycles < end) {
+                if (await machine.runFor(end - machine.elapsedCycles)) stops.push([cpu.pc, machine.elapsedCycles]);
+            }
+        }
+        expect(stops).not.toEqual([]);
+        const hits = cpu.breakpoints.list().map(({ hits }) => hits);
+        const told = vi.fn();
+        cpu.breakpoints.onHit(told);
+        for (const stop of stops.reverse()) {
+            expect(finished(history.reverseContinue())).toBeNull();
+            expect([cpu.pc, machine.elapsedCycles]).toEqual(stop);
+        }
+        const painted = vi.fn();
+        cpu.video.paint_ext = painted;
+        expect(finished(history.reverseContinue())).toMatch(
+            /found no breakpoint or watch hit .* as far back as the history goes/,
+        );
+        expect([cpu.breakpoints.list().map(({ hits }) => hits), told.mock.calls]).toEqual([hits, []]);
+        expect(painted).not.toHaveBeenCalled();
+    });
+
+    it("finds no vsync start where an older window begins inside a vsync a newer window ends outside", async () => {
+        const machine = await printingForever("B-DFS1.2");
+        const cpu = machine.processor;
+        const history = new ReplayHistory(cpu);
+        const vsync = cpu.breakpoints.add({ kind: "vsync" });
+        await machine.runFor(machine.model.cyclesPerSecond);
+        cpu.breakpoints.remove(vsync);
+        singleStep(cpu);
+        expect(cpu.video.beamPosition().inVSync).toBe(true);
+        for (let window = 0; window < 2; window++) {
+            history.taken(cpu.snapshotState(), null);
+            await seconds(machine, ForwardWindowSeconds);
+        }
+        cpu.breakpoints.add({ kind: "vsync" });
+        expect(finished(history.reverseContinue())).toMatch(/found no breakpoint or watch hit/);
     });
 });
 

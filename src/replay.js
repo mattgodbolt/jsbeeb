@@ -22,6 +22,7 @@ const NothingToStepBackTo = `There is nothing to step back to: ${KeepsHistory}.`
 const NothingToSearch = `There is no history to search back through: ${KeepsHistory}.`;
 const NotRepeated = "Step back could not repeat the machine's run exactly, so the machine is left where it was.";
 const NoCallFound = `Step back over found no call this returned from in the last ${LongestCallSearchSeconds} seconds.`;
+const NothingToContinueTo = "There is no breakpoint or watch that stops the machine to reverse continue to.";
 const TooFarBack = "That is further back than the machine keeps its history.";
 const NotBehind = "That is not before where the machine is now.";
 const IsRom = "That is ROM, which a write leaves as it is.";
@@ -475,6 +476,72 @@ class OutLanding {
 }
 
 /**
+ * Where a reverse continue lands: where the machine would have stopped, running forward, at the newest breakpoint
+ * or watch hit before now. An instruction breakpoint stops before its instruction; a watch, or an interrupt
+ * breakpoint, at the instruction after the access, or after the interrupt is taken.
+ */
+class HitLanding {
+    constructor(cpu) {
+        this.cpu = cpu;
+        this.now = cycleCount(cpu);
+        this.armed = Object.values(this._tests()).some((test) => test !== null);
+        this.found = null;
+    }
+
+    searches() {
+        return true;
+    }
+
+    _tests() {
+        return this.cpu.breakpoints.replayHooks((access, address) => this._hit(access, address));
+    }
+
+    // Afresh for each window, as a test for a change must not take the end of a later window for what came before.
+    startWindow() {
+        const tests = this._tests();
+        this.hooks = {
+            ...tests,
+            instruction: (pc, opcode) => {
+                this._passing(pc);
+                tests.instruction?.(pc, opcode);
+            },
+        };
+        this.last = null;
+        this.next = null;
+        this.read = null;
+    }
+
+    // The CPU reads an instruction's opcode just before it starts, so a hit on the read of this one's stops the
+    // machine after it, as an access by the instruction before stops it here.
+    _passing(pc) {
+        this.at = cycleCount(this.cpu);
+        const fetched = this.read?.address === pc;
+        const here = fetched ? this.read.before : this.next;
+        if (here) this.last = { ...here, cycle: this.at };
+        this.next = fetched ? { stoppedBefore: false } : null;
+        this.read = null;
+    }
+
+    _hit(access, address) {
+        if (access === "execute") {
+            this.last = { cycle: this.at, stoppedBefore: true };
+            return;
+        }
+        const before = this.next;
+        this.next = { stoppedBefore: before?.stoppedBefore || access === "interrupt" };
+        this.read = access === "read" ? { address, before } : null;
+    }
+
+    // A stop after the window's last instruction falls where the window ends, which, the window ending now, is
+    // where the machine is.
+    inWindow(to) {
+        if (this.next && to < this.now) this.last = { ...this.next, cycle: to };
+        this.found = this.last;
+        return this.last?.cycle ?? null;
+    }
+}
+
+/**
  * What the debugger can step back through: the snapshots kept of the machine since its state was last replaced,
  * and the input log back to the oldest of them. Dispatches "landed", with the snapshots it forgot as
  * `detail.forgotten`, once a step back has forgotten everything after where it landed, for whoever else keeps them.
@@ -540,7 +607,7 @@ export class ReplayHistory extends EventTarget {
      * Replays the stretches between the snapshots before now, newest first, each checked to end on the machine it
      * is replayed towards (the state now or the next snapshot's), until `seeker` finds in one what it looks for,
      * yielding after each stretch that does not have it. A seeker replays each stretch with its `hooks`, is told of
-     * each with `startWindow(from)`, says with `inWindow()` what it found there or null, and with `searches(from)`
+     * each with `startWindow(from)`, says with `inWindow(to)` what it found there or null, and with `searches(from)`
      * whether a stretch from `from` is worth replaying. Returns `{ found, snapshot, reached, stoppedBy }`: what it
      * found, or null, and the snapshot of the stretch it was found in; the cycle the search reached back to; and why
      * it went no further, null if it ran out of stretches or `seeker` wanted none older: something no replay
@@ -560,7 +627,7 @@ export class ReplayHistory extends EventTarget {
             const fromHash = log.replay(snapshot, to, inputsAtTo, seeker.hooks);
             if (fromHash === null || stateHash(cpu) !== hash)
                 return { found: null, snapshot: null, reached: to, stoppedBy: Unrepeated };
-            const found = seeker.inWindow();
+            const found = seeker.inWindow(to);
             if (found !== null) return { found, snapshot, reached: from, stoppedBy: null };
             [to, hash, inputsAtTo] = [from, fromHash, false];
             yield;
@@ -679,6 +746,23 @@ export class ReplayHistory extends EventTarget {
             new OutLanding(this.cpu),
             this._searchedFor("Step back out found no call or interrupt that entered this routine"),
         );
+    }
+
+    /**
+     * Steps the machine back to where it would have stopped at the newest breakpoint or watch hit before now, a
+     * stretch at a time as `_steppingBack` does. Every hit counts, whatever a breakpoint's hit count, as how many
+     * hits it had at each moment is not kept.
+     */
+    *reverseContinue() {
+        const landing = new HitLanding(this.cpu);
+        if (!landing.armed) return NothingToContinueTo;
+        const refusal = yield* this._steppingBack(
+            landing,
+            this._searchedFor("Reverse continue found no breakpoint or watch hit"),
+        );
+        // Stopped at a breakpoint as a forward run would be, so that none stops the machine there again on resuming.
+        if (refusal === null && landing.found.stoppedBefore) this.cpu.debugInstruction.rememberUnseenStop();
+        return refusal;
     }
 
     /** Steps the machine back to `cycle`, an instruction boundary since its oldest snapshot, as stepBack does. */
