@@ -1082,7 +1082,7 @@ test.describe("on a phone", () => {
         await touch("touchEnd", []);
     });
 
-    test("the pad's preset is remembered, the classic one presses what the URL's gamepad mapping says, and only keys on the function row stay off the upright pad", async ({
+    test("the pad's preset is remembered, the classic one presses what the URL's gamepad mapping says, Exile's aim is a column and it has no digits, and only keys on the function row stay off the upright pad", async ({
         beeb,
         page,
     }) => {
@@ -1105,10 +1105,18 @@ test.describe("on a phone", () => {
         await expect(key(".tk-dpad .up")).toContainText("K");
         await preset.tap();
         await expect(preset).toHaveText("⇄ Exile");
-        const weapon = key(".tk-pad-strip .tk-key").filter({ hasText: "pistol" });
+        const weapon = key(".tk-pad-group .tk-key").filter({ hasText: "pistol" });
         await expect(weapon).toBeHidden();
         await page.setViewportSize({ width: 844, height: 390 });
         await expect(weapon).toBeVisible();
+        await expect(key(".tk-pad-group .tk-key").filter({ hasText: /^1$/ })).toHaveCount(0);
+        const aim = await Promise.all(
+            ["▲", "●", "▼"].map((mark) =>
+                key(".tk-pad-group.tk-pad-column .tk-key").filter({ hasText: mark }).boundingBox(),
+            ),
+        );
+        expect(aim.map((box) => box.x)).toEqual([aim[0].x, aim[0].x, aim[0].x]);
+        expect(aim[0].y < aim[1].y && aim[1].y < aim[2].y).toBe(true);
         await page.reload();
         await expect(preset).toHaveText("⇄ Exile");
     });

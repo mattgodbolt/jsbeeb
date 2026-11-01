@@ -107,67 +107,127 @@ export const Layers = {
 
 const DpadRoles = ["left", "right", "up", "down"];
 const DpadArrows = { left: "←", right: "→", up: "↑", down: "↓" };
-const move = (keys) => DpadRoles.map((role, i) => ({ key: keys[i], label: role, group: "move", role, use: "core" }));
-const core = (key, label, group, role) => ({ key, label, group, role, use: "core" });
-const often = (key, label, group) => ({ key, label, group, role: null, use: "often" });
+const MaxKeysPerLine = 5;
+const action = (key, label, role) => ({ key, label, role });
+const group = (name, shape, side, use, actions) => ({ name, shape, side, use, actions });
+const move = (keys, labels) =>
+    group(
+        "move",
+        "dpad",
+        "left",
+        "core",
+        DpadRoles.map((role, i) => action(keys[i], labels[i], role)),
+    );
+const legends = (keys) => keys.map((key) => action(key, null, null));
+
+/** ESC, Y and N and the digits, for the prompts between goes; a preset keeps them unless it has a better use for the room. */
+export const PromptGroups = [
+    group("answers", "row", "left", "often", legends(["ESCAPE", "Y", "N"])),
+    group("digits", "row", "right", "often", legends([..."1234567890"].map((digit) => `K${digit}`))),
+];
 
 /**
- * Game pad layouts, as data in the shape per-game controls will take: each action names the BBC key it presses, what
- * it does (null where the key's own legend says it), its group and role there, and whether it is in use all the time
- * or often. The pad places them: the move group's directions make the d-pad, fire and second the big buttons, the
- * other core actions a block beside those, and the often ones a strip.
+ * Game pad layouts, as data in the shape per-game controls will take. A preset is a list of groups, each with a shape,
+ * the thumb it is for, whether it is in use all the time (core) or often, and actions that name the BBC key pressed,
+ * what it does in the game (null where the key's own legend says it) and its role in the group. The shapes:
+ * - `dpad`: the four directions by role, left, right, up and down;
+ * - `buttons`: the big buttons, by role `fire` and `second`;
+ * - `column`: keys one above another in order, as a rocker such as aim up, centre and down reads;
+ * - `row`: keys side by side in order, in even lines when there are many.
+ * Each thumb's core dpad or buttons goes at the bottom of its side, its core columns beside that and core rows below,
+ * and its often groups above, as rows.
  */
 export const PadPresets = {
     classic: {
         title: "classic",
-        actions: [
-            ...move(["Z", "X", "COLON_STAR", "SLASH"]),
-            core("RETURN", null, "buttons", "fire"),
-            core("SPACE", null, "buttons", "second"),
+        groups: [
+            move(["Z", "X", "COLON_STAR", "SLASH"], ["left", "right", "up", "down"]),
+            group("buttons", "buttons", "right", "core", [
+                action("RETURN", null, "fire"),
+                action("SPACE", null, "second"),
+            ]),
+            ...PromptGroups,
         ],
     },
     // Kieran's keys for the Bitshifters ports: 1942, Paradroid, Stryker's Run Redux.
     zxmkl: {
         title: "ZXMKL",
-        actions: [
-            ...move(["Z", "X", "K", "M"]),
-            core("L", "fire", "buttons", "fire"),
-            core("SPACE", "action", "buttons", "second"),
-            often("RETURN", null, "buttons"),
+        groups: [
+            move(["Z", "X", "K", "M"], ["left", "right", "up", "down"]),
+            group("buttons", "buttons", "right", "core", [
+                action("L", "fire", "fire"),
+                action("SPACE", "action", "second"),
+            ]),
+            ...PromptGroups,
+            group("enter", "row", "right", "often", legends(["RETURN"])),
         ],
     },
     // Superior's Exile (1988), by how often each is used; the keys are from the action table in Level 7's disassembly.
     exile: {
         title: "Exile",
-        actions: [
-            ...move(["Q", "W", "P", "L"]),
-            core("SPACE", "fire", "buttons", "fire"),
-            core("AT", "boost", "buttons", "second"),
-            core("O", "aim up", "aim", "up"),
-            core("I", "aim mid", "aim", "centre"),
-            core("K", "aim low", "aim", "down"),
-            core("COMMA", "pick up", "hand", "pick-up"),
-            core("M", "drop", "hand", "drop"),
-            core("PERIOD", "throw", "hand", "throw"),
-            often("S", "store", "pockets"),
-            often("G", "get", "pockets"),
-            often("TAB", "turn", "body"),
-            often("CTRL", "lie", "body"),
-            ...["jet", "pistol", "icer", "blast", "plasma", "suit"].map((label, n) => often(`F${n}`, label, "weapons")),
+        groups: [
+            move(["Q", "W", "P", "L"], ["left", "right", "jet / jump", "down"]),
+            group("body", "row", "left", "often", [
+                action("AT", "boost", "booster"),
+                action("S", "store", "store"),
+                action("G", "get", "retrieve"),
+                action("TAB", "turn", "turn"),
+                action("CTRL", "lie", "lie-down"),
+            ]),
+            group(
+                "weapons",
+                "row",
+                "right",
+                "often",
+                ["jet", "pistol", "icer", "blast", "plasma", "suit"].map((label, n) => action(`F${n}`, label, label)),
+            ),
+            group("fire", "buttons", "right", "core", [action("SPACE", "fire", "fire")]),
+            group("aim", "column", "right", "core", [
+                action("O", "aim ▲", "up"),
+                action("I", "aim ●", "centre"),
+                action("K", "aim ▼", "down"),
+            ]),
+            group("hand", "row", "right", "core", [
+                action("COMMA", "pick up", "pick-up"),
+                action("M", "drop", "drop"),
+                action("PERIOD", "throw", "throw"),
+            ]),
         ],
     },
 };
 
-/** The `GP.` URL parameter whose key each of the pad's roles takes, so one remap moves a gamepad and the pad. */
+/** Where each side's groups go: its thumb control (a d-pad or the big buttons), columns beside it, rows below. */
+export function placeGroups(groups) {
+    const side = (name) => {
+        const mine = groups.filter((each) => each.side === name);
+        const core = mine.filter((each) => each.use === "core");
+        return {
+            often: mine.filter((each) => each.use === "often"),
+            thumb: core.find((each) => each.shape === "dpad" || each.shape === "buttons") ?? null,
+            columns: core.filter((each) => each.shape === "column"),
+            rows: core.filter((each) => each.shape === "row"),
+        };
+    };
+    return { left: side("left"), right: side("right") };
+}
+
+/** How many keys a row of `count` puts on each line, so that its lines come out even. */
+export const keysPerLine = (count) => Math.ceil(count / Math.ceil(count / MaxKeysPerLine));
+
+/** The `GP.` URL parameter whose key each role of the d-pad and big buttons takes, so one remap moves a gamepad and the pad. */
 const GamepadControlByRole = { left: "LEFT", right: "RIGHT", up: "UP", down: "DOWN", fire: "FIRE", second: "START" };
 
 /** `preset` with the keys the URL gave a gamepad's directions, FIRE and START in place of its own. */
 export function followingGamepad(preset, remapped) {
-    const actions = preset.actions.map((action) => {
-        const key = remapped[GamepadControlByRole[action.role]];
-        return key ? { ...action, key } : action;
-    });
-    return { ...preset, actions };
+    const follow = (each) => {
+        if (each.shape !== "dpad" && each.shape !== "buttons") return each;
+        const actions = each.actions.map((one) => {
+            const key = remapped[GamepadControlByRole[one.role]];
+            return key ? { ...one, key } : one;
+        });
+        return { ...each, actions };
+    };
+    return { ...preset, groups: preset.groups.map(follow) };
 }
 
 /**
@@ -361,9 +421,9 @@ export class TouchKeyboard {
         return root;
     }
 
-    /** The chosen preset's pad: on the left a strip of keys over the d-pad, on the right the digits over the buttons. */
+    /** The chosen preset's groups, placed by `placeGroups` on the side of the thumb each is for. */
     buildPad() {
-        const { title, actions } = this.presets[this.presetName];
+        const { title, groups } = this.presets[this.presetName];
         this.presetButton.textContent = `⇄ ${title}`;
         const div = (className, ...children) => {
             const el = document.createElement("div");
@@ -371,42 +431,69 @@ export class TouchKeyboard {
             el.append(...children);
             return el;
         };
-        const keyOf = (action, cls) => this.buildKey(padKey(action.key, action.label, cls), false);
-        const moves = actions.filter((action) => action.group === "move");
-        const buttons = actions.filter((action) => action.group !== "move" && action.use === "core");
-        const big = buttons.filter((action) => action.role === "fire" || action.role === "second");
-
-        const strip = div(
-            "tk-pad-strip",
-            ...["ESCAPE", "Y", "N"].map((key) => this.buildKey(padKey(key, null, ""), false)),
+        const keyOf = (one, cls) => this.buildKey(padKey(one.key, one.label, cls), false);
+        const onFunctionRow = (one) => (FunctionRowKeys.has(one.key) ? "on-function-row" : "");
+        const row = (keys, visibleCount, cls) => {
+            const el = div(`tk-pad-group tk-pad-row ${cls}`, ...keys);
+            el.style.setProperty("--per-line", String(keysPerLine(visibleCount)));
+            return el;
+        };
+        const oftenRow = ({ actions }, extra) =>
+            row(
+                [...actions.map((one) => keyOf(one, onFunctionRow(one))), ...extra],
+                actions.length + (extra.length ? 1 : 0),
+                actions.every((one) => onFunctionRow(one)) ? "on-function-row" : "",
+            );
+        // One of the two shows, by orientation.
+        const layerKeys = [
             this.buildKey(k("ABC", null, { cls: "layer portrait", layer: "main" }), false),
             this.buildKey(k("⌨", null, { cls: "layer landscape", hint: UprightHint }), false),
-            ...actions
-                .filter((action) => action.use === "often")
-                .map((action) => keyOf(action, FunctionRowKeys.has(action.key) ? "on-function-row" : "")),
-        );
-        this.dpadKeys = Object.fromEntries(moves.map((action) => [action.role, action.key]));
-        this.dpad = div(
-            "tk-dpad",
-            ...moves.map((action) =>
-                this.buildKey({ ...padKey(action.key, null, action.role), arrow: DpadArrows[action.role] }, false),
-            ),
-            div("tk-dpad-hub"),
-        );
-        const digits = div(
-            "tk-pad-strip digits",
-            ...[..."1234567890"].map((digit) => this.buildKey(padKey(`K${digit}`, null, ""), false)),
-        );
-        const small = buttons.filter((action) => !big.includes(action));
-        this.padLayer.replaceChildren(
-            div("tk-pad-side left", strip, div("tk-dpad-room", this.dpad)),
-            div(
-                "tk-pad-side right",
-                digits,
-                div("tk-pad-block", ...small.map((action) => keyOf(action, ""))),
-                div("tk-pad-fire", ...big.map((action) => keyOf(action, action.role))),
-            ),
-        );
+        ];
+        this.dpad = null;
+        this.dpadKeys = {};
+        const thumb = (control) => {
+            if (!control) return div("tk-pad-fire");
+            if (control.shape === "buttons") {
+                const onlyFire = control.actions.every((one) => one.role !== "second");
+                return div(
+                    `tk-pad-fire${onlyFire ? " only-fire" : ""}`,
+                    ...control.actions.map((one) => keyOf(one, one.role)),
+                );
+            }
+            this.dpadKeys = Object.fromEntries(control.actions.map((one) => [one.role, one.key]));
+            this.dpad = div(
+                "tk-dpad",
+                ...control.actions.map((one) =>
+                    this.buildKey({ ...padKey(one.key, null, one.role), arrow: DpadArrows[one.role] }, false),
+                ),
+                div("tk-dpad-hub"),
+            );
+            return div("tk-dpad-room", this.dpad);
+        };
+        const side = (name, { often, thumb: control, columns, rows }) => {
+            const oftenRows = often.map((each, i) => oftenRow(each, name === "left" && i === 0 ? layerKeys : []));
+            if (name === "left" && !often.length) oftenRows.push(row(layerKeys, 1, ""));
+            return div(
+                `tk-pad-side ${name}`,
+                ...oftenRows,
+                div(
+                    "tk-pad-core",
+                    thumb(control),
+                    ...columns.map(({ actions }) =>
+                        div("tk-pad-group tk-pad-column", ...actions.map((one) => keyOf(one, ""))),
+                    ),
+                ),
+                ...rows.map(({ actions }) =>
+                    row(
+                        actions.map((one) => keyOf(one, "")),
+                        actions.length,
+                        "",
+                    ),
+                ),
+            );
+        };
+        const sides = placeGroups(groups);
+        this.padLayer.replaceChildren(side("left", sides.left), side("right", sides.right));
     }
 
     nextPreset() {

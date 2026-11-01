@@ -6,9 +6,12 @@ import {
     dpadKeysAt,
     followingGamepad,
     FunctionRow,
+    keysPerLine,
     KeyPresses,
     Layers,
     PadPresets,
+    placeGroups,
+    PromptGroups,
     wantsTouchKeyboard,
 } from "../../src/web/touch-keyboard.js";
 
@@ -66,29 +69,68 @@ describe("touch keyboard", () => {
 
     describe("pad presets", () => {
         const presets = Object.values(PadPresets);
+        const actionsOf = ({ groups }) => groups.flatMap((each) => each.actions);
 
-        it("press only keys the BBC matrix has, and each key once", () => {
-            for (const { title, actions } of presets) {
-                const keys = actions.map((action) => action.key);
-                for (const key of keys) expect(BBC[key], `${title} ${key}`).toBeDefined();
-                expect(new Set(keys).size, title).toBe(keys.length);
+        it("press only keys the BBC matrix has, each once, from groups of a known shape, side and use", () => {
+            for (const preset of presets) {
+                const keys = actionsOf(preset).map((one) => one.key);
+                for (const key of keys) expect(BBC[key], `${preset.title} ${key}`).toBeDefined();
+                expect(new Set(keys).size, preset.title).toBe(keys.length);
+                for (const { name, shape, side, use } of preset.groups) {
+                    expect(["dpad", "buttons", "column", "row"], name).toContain(shape);
+                    expect(["left", "right"], name).toContain(side);
+                    expect(["core", "often"], name).toContain(use);
+                }
             }
         });
 
-        it("each have a d-pad of four directions and a fire button", () => {
-            for (const { title, actions } of presets) {
-                const roles = (group) =>
-                    actions.filter((action) => action.group === group).map((action) => action.role);
-                expect(roles("move"), title).toEqual(["left", "right", "up", "down"]);
-                expect(
-                    actions.filter((action) => action.role === "fire"),
-                    title,
-                ).toHaveLength(1);
+        it("each give the left thumb a d-pad of four directions and the right a fire button, and no thumb two", () => {
+            for (const preset of presets) {
+                const { left, right } = placeGroups(preset.groups);
+                expect(left.thumb.shape, preset.title).toBe("dpad");
+                expect(left.thumb.actions.map((one) => one.role)).toEqual(["left", "right", "up", "down"]);
+                expect(right.thumb.actions.map((one) => one.role)).toContain("fire");
+                const thumbs = preset.groups.filter(
+                    (each) => each.use === "core" && ["dpad", "buttons"].includes(each.shape),
+                );
+                expect(thumbs, preset.title).toHaveLength(2);
             }
+        });
+
+        it("keep the prompt keys unless they drop them, as Exile does for its own keys", () => {
+            const hasPrompts = (preset) => PromptGroups.every((prompt) => preset.groups.includes(prompt));
+            expect(hasPrompts(PadPresets.classic)).toBe(true);
+            expect(hasPrompts(PadPresets.zxmkl)).toBe(true);
+            expect(actionsOf(PadPresets.exile).map((one) => one.key)).not.toContain("K1");
+        });
+
+        it("place Exile's aim as a column beside the fire button, its hand as a row below, and its often keys above", () => {
+            const { left, right } = placeGroups(PadPresets.exile.groups);
+            const names = (groups) => groups.map((each) => each.name);
+            expect({
+                left: [names(left.often), left.thumb.name, names(left.columns), names(left.rows)],
+                right: [names(right.often), right.thumb.name, names(right.columns), names(right.rows)],
+            }).toEqual({
+                left: [["body"], "move", [], []],
+                right: [["weapons"], "fire", ["aim"], ["hand"]],
+            });
+            expect(right.columns[0].actions.map((one) => one.role)).toEqual(["up", "centre", "down"]);
+        });
+
+        it.each([
+            [1, 1],
+            [3, 3],
+            [5, 5],
+            [6, 3],
+            [7, 4],
+            [10, 5],
+        ])("puts a row of %i keys %i to a line, so its lines come out even", (count, perLine) => {
+            expect(keysPerLine(count)).toBe(perLine);
         });
 
         it("take the keys the URL gives a gamepad's directions, FIRE and START, and only those", () => {
-            const keysOf = (preset) => Object.fromEntries(preset.actions.map((action) => [action.role, action.key]));
+            const keysOf = (preset) =>
+                Object.fromEntries(actionsOf(preset).map((one) => [one.role ?? one.key, one.key]));
             const classic = keysOf(PadPresets.classic);
             expect(keysOf(followingGamepad(PadPresets.classic, {}))).toEqual(classic);
             const zalaga = { LEFT: "CAPSLOCK", RIGHT: "CTRL", FIRE: "SHIFT", START: "K1", A: "COPY" };
