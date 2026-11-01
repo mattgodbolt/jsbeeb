@@ -52,6 +52,32 @@ describe("GamePad", function () {
             expect(gamepad.remapped).toEqual({});
         });
 
+        it.each([
+            ["UP", 12],
+            ["DOWN", 13],
+            ["LEFT", 14],
+            ["RIGHT", 15],
+        ])("maps the D-pad %s button too", function (name, button) {
+            const gamepad = bbcGamepad();
+
+            expect(gamepad.remap(name, "COPY")).toBeNull();
+            expect(gamepad.gamepadMapping[button]).toEqual(BBC.COPY);
+        });
+
+        it("keeps the D-pad, Start and Back out of FIRE", function () {
+            const gamepad = bbcGamepad();
+
+            expect(gamepad.remap("FIRE", "COPY")).toBeNull();
+            for (const button of [0, 1, 2, 3, 4, 5, 6, 7, 10, 11]) {
+                expect(gamepad.gamepadMapping[button]).toEqual(BBC.COPY);
+            }
+            expect(gamepad.gamepadMapping[12]).toEqual(BBC.COLON_STAR);
+            expect(gamepad.gamepadMapping[13]).toEqual(BBC.SLASH);
+            expect(gamepad.gamepadMapping[14]).toEqual(BBC.Z);
+            expect(gamepad.gamepadMapping[15]).toEqual(BBC.X);
+            expect(gamepad.gamepadMapping[9]).toEqual(BBC.SPACE);
+        });
+
         it("reports an unknown gamepad control", function () {
             const gamepad = bbcGamepad();
 
