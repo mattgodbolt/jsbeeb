@@ -1435,18 +1435,21 @@ describe("Debugger", () => {
                 expect([pc(), toasts()]).toEqual(["2000", []]);
             });
 
-            it("ends a search back on g, before the machine has run a cycle, leaving it to run on", async () => {
+            it("stops a search back the machine has stepped on from, and says so", async () => {
                 load(0x3000, [0xea, 0xea, 0xea]);
                 const history = stepBackHere();
                 keyPress("n");
                 keyPress("n");
                 history.taken(cpu.snapshotState(), null);
                 keyPress("n");
-                const searchedFrom = cycleCount(cpu);
                 keyPress("O");
-                keyPress("g");
+                keyPress("n");
                 await settle();
-                expect([loop.isRunning(), cycleCount(cpu), toasts()]).toEqual([true, searchedFrom, []]);
+                expect([pc(), loop.mode, toasts()]).toEqual([
+                    "3003",
+                    RunMode.debugging,
+                    [expect.stringMatching(/moved on/)],
+                ]);
             });
 
             it("ends a search back when the machine is run on, leaving the run to its stop", async () => {
