@@ -1094,6 +1094,7 @@ test.describe("on a phone", () => {
         await expect(key(".tk-dpad .left")).toContainText("CAPS");
         const digitOne = key(".tk-pad-group .tk-key").filter({ hasText: /^!1$/ });
         await expect(digitOne).toHaveCount(1);
+        await expect(key(".tk-dpad .tk-meaning")).toHaveCount(0);
         await page.locator("#touch-keyboard .tk-key.landscape").tap();
         await expect(page.locator(".toast", { hasText: "Turn the phone upright to type." })).toBeVisible();
 
@@ -1112,6 +1113,7 @@ test.describe("on a phone", () => {
         await page.setViewportSize({ width: 844, height: 390 });
         await expect(weapon).toBeVisible();
         await expect(digitOne).toHaveCount(0);
+        await expect(key(".tk-dpad .up .tk-meaning")).toHaveText("jet / jump");
         const aim = await Promise.all(
             ["▲", "●", "▼"].map((mark) =>
                 key(".tk-pad-group.tk-pad-column .tk-key").filter({ hasText: mark }).boundingBox(),
