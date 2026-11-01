@@ -1435,6 +1435,20 @@ describe("Debugger", () => {
                 expect([pc(), toasts()]).toEqual(["2000", []]);
             });
 
+            it("ends a search back on g, before the machine has run a cycle, leaving it to run on", async () => {
+                load(0x3000, [0xea, 0xea, 0xea]);
+                const history = stepBackHere();
+                keyPress("n");
+                keyPress("n");
+                history.taken(cpu.snapshotState(), null);
+                keyPress("n");
+                const searchedFrom = cycleCount(cpu);
+                keyPress("O");
+                keyPress("g");
+                await settle();
+                expect([loop.isRunning(), cycleCount(cpu), toasts()]).toEqual([true, searchedFrom, []]);
+            });
+
             it("ends a search back when the machine is run on, leaving the run to its stop", async () => {
                 load(0x3000, [0xea, 0xea, 0xea]);
                 const history = stepBackHere();
@@ -1447,7 +1461,7 @@ describe("Debugger", () => {
                 dbgr.runUntil(() => ++checks > ChecksPastAQuickRun);
                 expect(loop.isRunning()).toBe(true);
                 await settle();
-                expect([loop.isRunning(), toasts()]).toEqual([true, [expect.stringMatching(/moved on/)]]);
+                expect([loop.isRunning(), toasts()]).toEqual([true, []]);
                 loop.tick(MachineSecond);
                 expect(loop.mode).toBe(RunMode.debugging);
                 expect(checks).toBe(ChecksPastAQuickRun + 1);

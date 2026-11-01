@@ -540,11 +540,10 @@ export class ReplayHistory extends EventTarget {
      * Replays the stretches between the snapshots before now, newest first, each checked to end on the machine it
      * is replayed towards (the state now or the next snapshot's), until `seeker` finds in one what it looks for,
      * yielding after each stretch that does not have it. A seeker replays each stretch with its `hooks`, is told of
-     * each with `startWindow(from)`, says with `inWindow(to)` what it found there or null, and with
-     * `searches(from)` whether a stretch from `from` is worth replaying. Returns
-     * `{ found, snapshot, reached, stoppedBy }`: what it found, or null, and the snapshot of the stretch it was found
-     * in; the cycle the search reached back to; and
-     * why it went no further, null if it ran out of stretches or `seeker` wanted none older: something no replay
+     * each with `startWindow(from)`, says with `inWindow()` what it found there or null, and with `searches(from)`
+     * whether a stretch from `from` is worth replaying. Returns `{ found, snapshot, reached, stoppedBy }`: what it
+     * found, or null, and the snapshot of the stretch it was found in; the cycle the search reached back to; and why
+     * it went no further, null if it ran out of stretches or `seeker` wanted none older: something no replay
      * crosses, or Unrepeated. Leaves the machine at the end of whichever stretch it replayed last.
      */
     *_searchBack(seeker) {
@@ -561,7 +560,7 @@ export class ReplayHistory extends EventTarget {
             const fromHash = log.replay(snapshot, to, inputsAtTo, seeker.hooks);
             if (fromHash === null || stateHash(cpu) !== hash)
                 return { found: null, snapshot: null, reached: to, stoppedBy: Unrepeated };
-            const found = seeker.inWindow(to);
+            const found = seeker.inWindow();
             if (found !== null) return { found, snapshot, reached: from, stoppedBy: null };
             [to, hash, inputsAtTo] = [from, fromHash, false];
             yield;

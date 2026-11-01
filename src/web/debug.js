@@ -1326,7 +1326,12 @@ export class Debugger {
             return;
         }
         this.updatePrevMem();
-        const steppedBack = await this._runSearch(search(this._history), "Searching back.", "Step back");
+        const steppedBack = await this._runSearch(
+            search(this._history),
+            "Searching back.",
+            "Step back",
+            () => this._loop.mode === RunMode.debugging,
+        );
         if (steppedBack === Ended) return;
         if (this._stopwatchFrom > this.cpu.scheduler.epoch) this._stopwatchFrom = null;
         if (steppedBack) toast(steppedBack, { title: "Step back" });
@@ -1336,16 +1341,17 @@ export class Debugger {
 
     /**
      * Runs `searching`, a search back through the history, a stretch at a time, saying `searchingText` under `title`
-     * while it takes more than one. Resolves to what it returns, or Ended if a later search ended it.
+     * while it takes more than one, as long as `wanted()` holds between stretches. Resolves to what it returns, or
+     * Ended if a later search ended it or it was no longer wanted.
      */
-    async _runSearch(searching, searchingText, title) {
+    async _runSearch(searching, searchingText, title, wanted) {
         this._searching = searching;
         let step = searching.next();
         const notice = step.done ? null : toast(searchingText, { title });
         try {
             while (!step.done) {
                 await new Promise((resolve) => setTimeout(resolve, 0));
-                if (this._searching !== searching) return Ended;
+                if (this._searching !== searching || !wanted()) return Ended;
                 step = searching.next();
             }
         } finally {
@@ -1383,6 +1389,7 @@ export class Debugger {
             this._history.lastWrite(address),
             `Searching back for the last write to ${where}.`,
             title,
+            () => true,
         );
         if (found === Ended) return null;
         const { write } = found;
