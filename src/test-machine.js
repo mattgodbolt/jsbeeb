@@ -45,6 +45,8 @@ export class TestMachine {
         this.typist = new Typist(this.processor);
         this._capturedChars = [];
         this._captureHookInstalled = false;
+        /** Called after each execute a run makes, where the CPU is between instructions, or null. */
+        this.betweenExecutes = null;
     }
 
     async initialise() {
@@ -138,6 +140,7 @@ export class TestMachine {
                 // execute() adds each request to a running targetCycles, so budget
                 // left unspent by an early stop would silently lengthen the next run.
                 if (stopped) cpu.targetCycles = cpu.currentCycles;
+                this.betweenExecutes?.();
                 // Not truthiness: a negative or NaN request clamps todo to zero,
                 // so left would never move and the loop never end.
                 if (left > 0 && !stopped) {

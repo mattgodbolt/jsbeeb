@@ -1,11 +1,12 @@
-import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from "vitest";
+import { describe, it, expect, beforeAll, beforeEach, afterAll, afterEach, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { MachineSession, MaxLoggedHits } from "../../src/machine-session.js";
 import { BBC, keyCodes } from "../../src/keymap.js";
 import { ATOM } from "../../src/keymap-atom.js";
+import { PageHistory } from "../../src/replay.js";
 import { RepoRoot } from "./helpers.js";
-import { BootTimeout, bootedSession } from "../helpers/machine-session.js";
+import { BootTimeout, CyclesPerSecond, bootedSession } from "../helpers/machine-session.js";
 
 const CyclesPerInterlacedFrame = 40000;
 const CyclesPerNonInterlacedFrame = 39936;
@@ -972,4 +973,126 @@ describe("MachineSession VideoNuLA", () => {
         },
         BootTimeout,
     );
+});
+
+describe("MachineSession history", () => {
+    const LoopAt = 0x2000;
+    const CallAt = 0x2003;
+    const AfterCall = 0x2006;
+    const SubroutineAt = 0x2010;
+    const ReturnAt = 0x2013;
+    const Counter = 0x1900;
+    const Edited = 0x1a00;
+    const EditedValue = 0x55;
+    // SEI and LDX #0, then for ever JSR to STX &1900 and RTS, and INX; with interrupts off nothing comes between.
+    const Program = [0x78, 0xa2, 0x00, 0x20, 0x10, 0x20, 0xe8, 0x4c, 0x03, 0x20];
+    const Subroutine = [0x8e, Counter & 0xff, Counter >> 8, 0x60];
+    const CallLoop = `CALL &${LoopAt.toString(16)}`;
+    let session;
+
+    // Each test leaves the machine in the loop, deaf to the keyboard, so each boots its own.
+    beforeEach(async () => {
+        session = await frameAlignedSession();
+    }, BootTimeout);
+
+    afterEach(() => session.destroy());
+
+    async function runTo(address) {
+        const id = session.addBreakpoint("execute", address);
+        await session.runFor(CyclesPerInterlacedFrame);
+        expect(session.hitBreakpoint().id).toBe(id);
+        session.removeBreakpoint(id);
+        session.resetBreakpointHits();
+    }
+
+    // Typed keys go in part way through an instruction, which no replay crosses, so history starts once CALL is in.
+    async function loopingWithHistory(sizes) {
+        session.writeMemory(LoopAt, Program);
+        session.writeMemory(SubroutineAt, Subroutine);
+        const id = session.addBreakpoint("execute", LoopAt);
+        await session.type(CallLoop);
+        if (!session.hitBreakpoint()) await session.runFor(CyclesPerInterlacedFrame);
+        expect(session.hitBreakpoint().id).toBe(id);
+        session.removeBreakpoint(id);
+        session.resetBreakpointHits();
+        while (session.typingPending) await session.runFor(CyclesPerInterlacedFrame);
+        session.keepHistory(sizes);
+        await session.runFrames(5);
+    }
+
+    it.each([
+        ["stepBack", () => session.stepBack(false)],
+        ["stepBackOut", () => session.stepBackOut()],
+        ["reverseContinue", () => session.reverseContinue()],
+        ["whoWrote", () => session.whoWrote(Counter).refusal],
+    ])("refuses %s while it keeps no history", async (_name, replay) => {
+        await loopingWithHistory({ recent: 0, seconds: 0 });
+
+        expect(replay()).toMatch(/keeps no history/);
+        expect(session.historyState()).toEqual({ recent: 0, seconds: 0, snapshots: 0, oldestCycle: null });
+    });
+
+    it("steps back one instruction, back over a call and back out of one, through what it kept as it ran", async () => {
+        await loopingWithHistory(PageHistory);
+        await runTo(AfterCall);
+
+        expect(session.stepBack(true)).toBeNull();
+        expect(session.registers().pc).toBe(CallAt);
+        expect(session.stepBack(false)).toBeNull();
+        expect(session.registers().pc).toBe(AfterCall + 1);
+        await runTo(ReturnAt);
+        expect(session.stepBackOut()).toBeNull();
+        expect(session.registers().pc).toBe(CallAt);
+    });
+
+    it("reverse continues to its own breakpoint's previous hit, leaving no hit to report, and runs on from there", async () => {
+        await loopingWithHistory(PageHistory);
+        await runTo(AfterCall);
+        const x = session.registers().x;
+        session.addBreakpoint("execute", AfterCall);
+
+        expect(session.reverseContinue()).toBeNull();
+        expect([session.registers().pc, session.registers().x]).toEqual([AfterCall, x - 1]);
+        expect(session.hitBreakpoint()).toBeNull();
+        await session.runFor(CyclesPerInterlacedFrame);
+        expect([session.registers().pc, session.registers().x]).toEqual([AfterCall, x]);
+    });
+
+    it("replays its own memory writes, and refuses to go back past one paged in for that write alone", async () => {
+        await loopingWithHistory(PageHistory);
+        session.writeMemory(Edited, [EditedValue]);
+        await session.runFrames(2);
+
+        expect(session.whoWrote(Edited)).toMatchObject({ write: { pc: null, value: EditedValue } });
+        session.writeMemory(Edited, [EditedValue], { bank: 0 });
+        expect(session.stepBack(false)).toBe(
+            "Step back cannot go back past a write to memory paged in for that write alone.",
+        );
+    });
+
+    it.each([
+        ["a soft reset, which it replays", () => session.reset(false), null],
+        ["a restore", () => session.restore(session.snapshot()), /nothing to step back to/],
+        ["a BASIC program", () => session.loadBasic('PRINT "HI"'), /past a BASIC program going into memory/],
+        ["a disc", () => session.loadDiscImage("elite.ssd", 1), /past a disc change in drive 1/],
+        ["a hard reset", () => session.reset(true), /nothing to step back to/],
+    ])("steps back across %s as the history allows", async (_name, act, refusal) => {
+        await loopingWithHistory(PageHistory);
+        await act();
+
+        expect(session.stepBack(false)).toEqual(refusal === null ? null : expect.stringMatching(refusal));
+    });
+
+    it("keeps as many snapshots as it is asked to, the oldest as far back as the one-a-second ones reach", async () => {
+        const Recent = 2;
+        const Seconds = 3;
+        await loopingWithHistory({ recent: Recent, seconds: Seconds });
+        await session.runFor((Seconds + 2) * CyclesPerSecond);
+
+        const { snapshots, oldestCycle, ...sizes } = session.historyState();
+        expect(sizes).toEqual({ recent: Recent, seconds: Seconds });
+        expect(snapshots).toBe(Recent + Seconds);
+        expect(session.elapsedCycles - oldestCycle).toBeGreaterThan((Seconds - 1) * CyclesPerSecond);
+        expect(session.elapsedCycles - oldestCycle).toBeLessThan((Seconds + 1) * CyclesPerSecond);
+    });
 });

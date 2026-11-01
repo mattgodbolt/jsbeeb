@@ -1,11 +1,9 @@
 import { renderThumbnails, executeUntilFrame } from "./rewind-thumbnail.js";
 import { RewindBuffer } from "../rewind.js";
 import { copySnapshot } from "../6502.js";
+import { PageHistory } from "../replay.js";
 import { RewindCaptureInterval } from "./emulation-loop.js";
 import { noteFeature } from "./analytics.js";
-
-const RewindBufferSnapshots = 30;
-const FrameSnapshots = 3;
 
 /**
  * Rewind scrubber UI — a filmstrip overlay showing thumbnails of recent
@@ -22,9 +20,9 @@ export class RewindUI {
      * a future the machine no longer has
      */
     constructor({ processor, video, loop, history }) {
-        this.rewindBuffer = new RewindBuffer(RewindBufferSnapshots);
+        this.rewindBuffer = new RewindBuffer(PageHistory.seconds);
         // The last few frames, newest last; the rewind history is copied from them.
-        this.frames = new RewindBuffer(FrameSnapshots);
+        this.frames = new RewindBuffer(PageHistory.recent);
         this.history = history;
         this.processor = processor;
         this.video = video;
