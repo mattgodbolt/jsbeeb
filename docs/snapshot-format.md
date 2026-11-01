@@ -212,19 +212,18 @@ The caps lock and shift lock lights are IC32 bits 6 and 7 (lit when clear), so t
 
 Present only on the Atom.
 
-| Field             | Type       | Description                                          |
-| ----------------- | ---------- | ---------------------------------------------------- |
-| `latcha`          | number     | Port A output latch (keyboard row, VDG mode)         |
-| `latchc`          | number     | Port C latch (output bits 0-3, input bits 4-7)       |
-| `portapins`       | number     | Port A pin levels                                    |
-| `portbpins`       | number     | Always 0; port B reads come from the keyboard matrix |
-| `portcpins`       | number     | Port C pin levels                                    |
-| `creg`            | number     | Last control register write                          |
-| `keys`            | number[][] | Keyboard matrix, 1 where a key is down               |
-| `keyboardEnabled` | boolean    | Whether host key events reach the matrix             |
-| `lastSpeakerBit`  | number     | Port C bit 2 as last sent to the speaker             |
+| Field            | Type       | Description                                          |
+| ---------------- | ---------- | ---------------------------------------------------- |
+| `latcha`         | number     | Port A output latch (keyboard row, VDG mode)         |
+| `latchc`         | number     | Port C latch (output bits 0-3, input bits 4-7)       |
+| `portapins`      | number     | Port A pin levels                                    |
+| `portbpins`      | number     | Always 0; port B reads come from the keyboard matrix |
+| `portcpins`      | number     | Port C pin levels                                    |
+| `creg`           | number     | Last control register write                          |
+| `keys`           | number[][] | Keyboard matrix, 1 where a key is down               |
+| `lastSpeakerBit` | number     | Port C bit 2 as last sent to the speaker             |
 
-Older snapshots also carry `latchb`, which was always 0 since port B is input only; it is ignored on restore.
+Older snapshots also carry `latchb`, which was always 0 since port B is input only, and `keyboardEnabled`, which said whether a paste was holding the keyboard from the host's keys, the page's state rather than the machine's; both are ignored on restore.
 
 ### Atom MMC (`state.atommc`)
 

@@ -1,29 +1,17 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { Typist } from "../../src/typist.js";
-import { findModel } from "../../src/models.js";
-import { Scheduler } from "../../src/scheduler.js";
 import { BBC } from "../../src/keymap.js";
 import { ATOM } from "../../src/keymap-atom.js";
+import { fakeKeyboardProcessor } from "../helpers/fake-keyboard-processor.js";
 
 function typistFor(modelName) {
-    const model = findModel(modelName);
-    const keyboard = {
-        keyToggleRaw: vi.fn(),
-        disableKeyboard: vi.fn(),
-        enableKeyboard: vi.fn(),
-        capsLockLight: true,
-        shiftLockLight: false,
-    };
-    const scheduler = new Scheduler();
-    const typist = new Typist({
-        model,
-        scheduler,
-        peripheralCyclesPerSecond: model.cyclesPerSecond,
-        keyboardInterface: keyboard,
-    });
-    const fire = () => scheduler.polltime(1);
-    const tick = (ms) => scheduler.polltime((ms * model.cyclesPerSecond) / 1000);
+    const processor = fakeKeyboardProcessor(modelName);
+    const { model, keyboardInterface: keyboard, peripheralCyclesPerSecond } = processor;
+    keyboard.capsLockLight = true;
+    const typist = new Typist(processor);
+    const fire = () => typist.execute(1);
+    const tick = (ms) => typist.execute((ms * peripheralCyclesPerSecond) / 1000);
     const toggles = () => keyboard.keyToggleRaw.mock.calls.map(([key]) => key);
     const finish = () => {
         for (let ticks = 0; typist.isTyping && ticks < 100; ++ticks) tick(model.pasteKeyDelayMs);

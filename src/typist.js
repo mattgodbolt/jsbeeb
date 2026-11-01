@@ -1,16 +1,30 @@
 import { BBC } from "./keymap.js";
+import { cycleCount } from "./lockstep.js";
 
 const RepeatedKeyGapMs = 30;
 const StoppedPollMs = 100;
 
-// The processor's scheduler is polled with peripheral cycles, so the delays stay in real time whatever the CPU
-// multiplier is, and the CPU stays on its fast path while the text arrives.
-function schedulerTimer(processor, callback) {
-    const task = processor.scheduler.newTask(callback);
+// Counted in the cycles Typist.execute runs, so the delays stay in emulated time whatever the CPU multiplier is,
+// and each key change goes in between instructions, where the replay's InputLog records it as any key press.
+function cycleTimer(processor, callback) {
+    let cyclesLeft = Infinity;
     return {
-        start: (ms) => task.schedule((ms * processor.peripheralCyclesPerSecond) / 1000),
-        cancel: () => task.cancel(),
-        running: () => task.scheduled(),
+        start(ms) {
+            cyclesLeft = Math.ceil((ms * processor.peripheralCyclesPerSecond * processor.cpuMultiplier) / 1000);
+        },
+        cancel() {
+            cyclesLeft = Infinity;
+        },
+        running: () => cyclesLeft !== Infinity,
+        get cyclesLeft() {
+            return cyclesLeft;
+        },
+        ran(cycles) {
+            cyclesLeft -= cycles;
+            if (cyclesLeft > 0) return;
+            cyclesLeft = Infinity;
+            callback();
+        },
     };
 }
 
@@ -34,6 +48,8 @@ function wallClockTimer(callback, isRunning) {
             timeout = null;
         },
         running: () => timeout !== null,
+        cyclesLeft: Infinity,
+        ran() {},
     };
     return timer;
 }
@@ -76,7 +92,7 @@ export class Typist {
      * @param {object} processor
      * @param {{input: object, isRunning: function(): boolean}} [through] an input, as `Keyboard.setInput` takes, to
      *   press the keys through one by one as someone typing would, timed by the wall clock while `isRunning` says
-     *   the machine runs; without one they go straight into the matrix, timed by the processor's scheduler
+     *   the machine runs; without one they go straight into the matrix, timed by the cycles `execute` runs
      */
     constructor(processor, through) {
         this.processor = processor;
@@ -87,7 +103,24 @@ export class Typist {
         this._keys = [];
         this._lastKey = undefined;
         const deliver = () => this._deliver();
-        this._timer = through ? wallClockTimer(deliver, through.isRunning) : schedulerTimer(processor, deliver);
+        this._timer = through ? wallClockTimer(deliver, through.isRunning) : cycleTimer(processor, deliver);
+    }
+
+    /**
+     * Runs the processor for `cycles`, as its own execute does, stopping between instructions to change each key
+     * that comes due on the way.
+     */
+    execute(cycles) {
+        const { processor } = this;
+        let left = cycles;
+        for (;;) {
+            const run = Math.min(left, this._timer.cyclesLeft);
+            const from = cycleCount(processor);
+            const running = processor.execute(run);
+            left -= run;
+            this._timer.ran(cycleCount(processor) - from);
+            if (!running || left <= 0) return running;
+        }
     }
 
     /**

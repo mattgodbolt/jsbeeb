@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AccessibilitySwitches } from "../../src/web/accessibility-switches.js";
 import { RunMode } from "../../src/web/emulation-loop.js";
+import { Typist } from "../../src/typist.js";
 import { KeyboardSetup } from "../../src/web/keyboard-setup.js";
 import { PanelKeys } from "../../src/web/panel-keys.js";
 import { PanelArrangement } from "../../src/web/floating-panel.js";
@@ -62,6 +63,7 @@ describe("KeyboardSetup", () => {
             actions,
             accessibilitySwitches,
             processor,
+            typist: new Typist(processor),
             loop,
             dbgr,
             keys,

@@ -24,6 +24,7 @@ const isComposing = (evt) => evt.key === "Process" || evt.keyCode === InputMetho
 /**
  * @typedef {Object} KeyboardConfig
  * @property {Object} processor - The processor instance
+ * @property {Typist} typist - Types pastes straight into the machine, as whatever runs the machine through it does
  * @property {Function} inputEnabledFunction - A function to check if input is enabled
  * @property {Function} runningFunction - Whether the machine is running, and so takes keys
  * @property {Function} [resetInputMethodFunction] - Drops a dead key the host's input method is holding
@@ -42,6 +43,7 @@ export class Keyboard extends EventTarget {
         super();
         const {
             processor,
+            typist,
             inputEnabledFunction,
             shortcutsBlockedFunction,
             runningFunction,
@@ -57,7 +59,7 @@ export class Keyboard extends EventTarget {
         this.resetInputMethodFunction = resetInputMethodFunction;
 
         this.keyInterface = processor.keyboardInterface;
-        this.machineTypist = new Typist(processor);
+        this.machineTypist = typist;
         this.typist = this.machineTypist;
         this.input = this.directInput();
 
