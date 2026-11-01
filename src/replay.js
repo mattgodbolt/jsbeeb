@@ -30,7 +30,7 @@ const NotRepeatedHere = "The search could not repeat the machine's run since its
 const CannotSearchPast = "The search cannot go back past";
 const MovedOn = "The machine moved on before the search back finished.";
 const Unrepeated = "a stretch of the run it could not repeat exactly";
-const MidInstruction = "an input that came part way through an instruction, as a paste's or an autotype's keys do";
+const MidInstruction = "an input that came part way through an instruction";
 
 // S counts down and wraps, so "not deeper" is a difference of under half the page, either way round $00.
 export function notDeeper(s, startS) {

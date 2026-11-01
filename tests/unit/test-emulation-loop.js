@@ -28,6 +28,7 @@ describe("EmulationLoop", () => {
                 fdc: { motorOn: [false, false] },
                 keyboardInterface: {},
             },
+            typist: { execute: (cycles) => deps.processor.execute(cycles) },
             display: {
                 video: { polltime: vi.fn() },
                 setSpeedy: vi.fn(),

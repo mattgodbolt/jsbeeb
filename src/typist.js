@@ -1,16 +1,30 @@
 import { BBC } from "./keymap.js";
+import { cycleCount } from "./lockstep.js";
 
 const RepeatedKeyGapMs = 30;
 const StoppedPollMs = 100;
 
-// The processor's scheduler is polled with peripheral cycles, so the delays stay in real time whatever the CPU
-// multiplier is, and the CPU stays on its fast path while the text arrives.
-function schedulerTimer(processor, callback) {
-    const task = processor.scheduler.newTask(callback);
+// Counted in the cycles Typist.execute runs, so the delays stay in emulated time whatever the CPU multiplier is,
+// and each key change goes in between instructions, where the replay's InputLog records it as any key press.
+function cycleTimer(processor, callback) {
+    let cyclesLeft = Infinity;
     return {
-        start: (ms) => task.schedule((ms * processor.peripheralCyclesPerSecond) / 1000),
-        cancel: () => task.cancel(),
-        running: () => task.scheduled(),
+        start(ms) {
+            cyclesLeft = Math.ceil((ms * processor.peripheralCyclesPerSecond * processor.cpuMultiplier) / 1000);
+        },
+        cancel() {
+            cyclesLeft = Infinity;
+        },
+        running: () => cyclesLeft !== Infinity,
+        get cyclesLeft() {
+            return cyclesLeft;
+        },
+        ran(cycles) {
+            cyclesLeft -= cycles;
+            if (cyclesLeft > 0) return;
+            cyclesLeft = Infinity;
+            callback();
+        },
     };
 }
 
@@ -76,7 +90,7 @@ export class Typist {
      * @param {object} processor
      * @param {{input: object, isRunning: function(): boolean}} [through] an input, as `Keyboard.setInput` takes, to
      *   press the keys through one by one as someone typing would, timed by the wall clock while `isRunning` says
-     *   the machine runs; without one they go straight into the matrix, timed by the processor's scheduler
+     *   the machine runs; without one they go straight into the matrix, timed by the cycles `execute` runs
      */
     constructor(processor, through) {
         this.processor = processor;
@@ -86,8 +100,30 @@ export class Typist {
         this._shiftKey = processor.model.keys.SHIFT;
         this._keys = [];
         this._lastKey = undefined;
+        this._ranTo = 0;
         const deliver = () => this._deliver();
-        this._timer = through ? wallClockTimer(deliver, through.isRunning) : schedulerTimer(processor, deliver);
+        this._timer = through ? wallClockTimer(deliver, through.isRunning) : cycleTimer(processor, deliver);
+    }
+
+    /**
+     * Runs the processor for `cycles`, as its own execute does, stopping between instructions to change each key
+     * that comes due on the way.
+     */
+    execute(cycles) {
+        const { processor } = this;
+        // Gone back (a step back, a rewind, a hard reset), the text typed since then is undone, and what is left of
+        // it would go in with those characters missing, so it is dropped.
+        if (this.isTyping && cycleCount(processor) < this._ranTo) this._abandon();
+        let left = cycles;
+        for (;;) {
+            const run = Math.min(left, this._timer.cyclesLeft);
+            const from = cycleCount(processor);
+            const running = processor.execute(run);
+            left -= run;
+            this._ranTo = cycleCount(processor);
+            this._timer.ran(this._ranTo - from);
+            if (!running || left <= 0) return running;
+        }
     }
 
     /**
@@ -111,14 +147,19 @@ export class Typist {
 
         this._keys = keys;
         this._lastKey = undefined;
+        this._ranTo = cycleCount(this.processor);
         // The first press gets the release gap too, as the key before it may have gone up just now.
         this._timer.start(this.processor.model.pasteReleaseGapMs);
     }
 
     cancel() {
         if (!this.isTyping) return;
-        this._timer.cancel();
         this._releaseLastKey();
+        this._abandon();
+    }
+
+    _abandon() {
+        this._timer.cancel();
         this._lastKey = undefined;
         this._keys = [];
         this.keyInterface.enableKeyboard();

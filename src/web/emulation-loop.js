@@ -82,6 +82,7 @@ class VirtualSpeedUpdater {
 export class EmulationLoop extends EventTarget {
     constructor({
         processor,
+        typist,
         display,
         audioHandler,
         dbgr,
@@ -93,6 +94,7 @@ export class EmulationLoop extends EventTarget {
     }) {
         super();
         this.processor = processor;
+        this.typist = typist;
         this.display = display;
         this.audioHandler = audioHandler;
         this.dbgr = dbgr;
@@ -236,7 +238,7 @@ export class EmulationLoop extends EventTarget {
     }
 
     execute(cycles) {
-        return this.lockstep ? this.lockstep.execute(cycles) : this.processor.execute(cycles);
+        return this.lockstep ? this.lockstep.execute(cycles) : this.typist.execute(cycles);
     }
 
     // A user-blocking task runs ahead of rendering and ordinary timers, so a stuck
