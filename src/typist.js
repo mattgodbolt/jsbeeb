@@ -48,8 +48,6 @@ function wallClockTimer(callback, isRunning) {
             timeout = null;
         },
         running: () => timeout !== null,
-        cyclesLeft: Infinity,
-        ran() {},
     };
     return timer;
 }
@@ -102,6 +100,7 @@ export class Typist {
         this._shiftKey = processor.model.keys.SHIFT;
         this._keys = [];
         this._lastKey = undefined;
+        this._ranTo = 0;
         const deliver = () => this._deliver();
         this._timer = through ? wallClockTimer(deliver, through.isRunning) : cycleTimer(processor, deliver);
     }
@@ -112,13 +111,17 @@ export class Typist {
      */
     execute(cycles) {
         const { processor } = this;
+        // Gone back (a step back, a rewind, a hard reset), the matrix holds the keys of that earlier moment, not the
+        // ones the typist last pressed, so what is left of the text is dropped rather than typed into it.
+        if (this.isTyping && cycleCount(processor) < this._ranTo) this._abandon();
         let left = cycles;
         for (;;) {
             const run = Math.min(left, this._timer.cyclesLeft);
             const from = cycleCount(processor);
             const running = processor.execute(run);
             left -= run;
-            this._timer.ran(cycleCount(processor) - from);
+            this._ranTo = cycleCount(processor);
+            this._timer.ran(this._ranTo - from);
             if (!running || left <= 0) return running;
         }
     }
@@ -144,14 +147,19 @@ export class Typist {
 
         this._keys = keys;
         this._lastKey = undefined;
+        this._ranTo = cycleCount(this.processor);
         // The first press gets the release gap too, as the key before it may have gone up just now.
         this._timer.start(this.processor.model.pasteReleaseGapMs);
     }
 
     cancel() {
         if (!this.isTyping) return;
-        this._timer.cancel();
         this._releaseLastKey();
+        this._abandon();
+    }
+
+    _abandon() {
+        this._timer.cancel();
         this._lastKey = undefined;
         this._keys = [];
         this.keyInterface.enableKeyboard();

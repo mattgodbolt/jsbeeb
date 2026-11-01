@@ -24,7 +24,7 @@ const isComposing = (evt) => evt.key === "Process" || evt.keyCode === InputMetho
 /**
  * @typedef {Object} KeyboardConfig
  * @property {Object} processor - The processor instance
- * @property {Typist} typist - Types pastes straight into the machine, as whatever runs the machine through it does
+ * @property {Typist} typist - The machine's own, which pastes are typed by outside a session and the machine is run through
  * @property {Function} inputEnabledFunction - A function to check if input is enabled
  * @property {Function} runningFunction - Whether the machine is running, and so takes keys
  * @property {Function} [resetInputMethodFunction] - Drops a dead key the host's input method is holding
