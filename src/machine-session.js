@@ -19,6 +19,7 @@ import { Video } from "./video.js";
 import { findModel } from "./models.js";
 import { requireBank } from "./paging.js";
 import { hexbyte, hexword } from "./hex.js";
+import { copySnapshot } from "./6502.js";
 import { ReplayHistory, finished, snapshotCycle } from "./replay.js";
 import { RewindBuffer } from "./rewind.js";
 import { cycleCount } from "./lockstep.js";
@@ -380,13 +381,11 @@ export class MachineSession {
      * debugger: `recent` snapshots, at most one a frame, and `seconds` more, at most one a second (PageHistory in
      * replay.js is what the page keeps), each taken between the slices a run executes in. Zero for both keeps none.
      * Forgets any history kept before. Call it after initialise(), whose reset would leave a snapshot from before
-     * the ROMs.
+     * the ROMs. A ring of one keeps only the newest snapshot, often at where the machine is now, so it gives a step
+     * back nothing to start from.
      * @param {{recent: number, seconds: number}} sizes
      */
     keepHistory({ recent, seconds }) {
-        if (![recent, seconds].every((size) => Number.isInteger(size) && size >= 0)) {
-            throw new Error(`keepHistory: give whole numbers of snapshots, not ${recent} and ${seconds}`);
-        }
         const cpu = this._machine.processor;
         this._history?.log.detach();
         this._history = null;
@@ -427,15 +426,15 @@ export class MachineSession {
     _takeHistorySnapshots() {
         const cpu = this._machine.processor;
         const now = cycleCount(cpu);
-        let taken = false;
+        let taken = null;
         for (const { ring, apart } of this._historyRings) {
             const newest = ring.peek();
             if (newest && now - snapshotCycle(cpu, newest) < apart) continue;
             const replacing = ring.nextToReplace();
-            const snapshot = cpu.snapshotState({ into: replacing });
+            const snapshot = taken ? copySnapshot(taken, replacing) : cpu.snapshotState({ into: replacing });
             ring.push(snapshot);
             this._history.taken(snapshot, replacing);
-            taken = true;
+            taken = snapshot;
         }
         if (taken) this._history.trim();
     }
@@ -447,15 +446,16 @@ export class MachineSession {
         this._history.restart();
     }
 
-    /**
-     * Run `replay` on the history, returning why it could not, or what it returns. A step back leaves the
-     * breakpoints' hit flags clear, as what stopped the machine is now in its future. Replays count no frames and
-     * capture no sound writes; the captured text stays as it was, and the last complete frame is the newest the
-     * replay to the landing painted, or if it painted none the one painted before the step back.
-     */
-    _replaying(replay) {
+    _replayRefusal() {
         if (!this._history) return NoHistory;
         if (this.typingPending) return StillTyping;
+        return null;
+    }
+
+    // Runs `replay` on the history, returning why it could not, or what it returns; see stepBack.
+    _replaying(replay) {
+        const refused = this._replayRefusal();
+        if (refused) return refused;
         const refusal = this._asReplay(() => replay(this._history));
         if (refusal === null) this.resetBreakpointHits();
         return refusal;
@@ -473,6 +473,11 @@ export class MachineSession {
     /**
      * Step the machine back one instruction, or with `over` back over the call the instruction before returned
      * from, replaying the history keepHistory keeps. Returns why it could not, leaving the machine as it was, or null.
+     *
+     * This and the other steps back leave the breakpoints' hit flags clear, as what stopped the machine is now in
+     * its future. They and whoWrote count no frames and capture no sound writes as they replay, and leave the
+     * captured text as it was. After a step back the last complete frame, which screenshot() shows, is the newest
+     * the replay to where it landed painted, or if it painted none, the one painted before the step back.
      * @param {boolean} over
      * @returns {string|null}
      */
@@ -481,7 +486,8 @@ export class MachineSession {
     }
 
     /**
-     * Step the machine back to `cycle`, an instruction boundary within the history, as whoWrote gives a write's.
+     * Step the machine back to `cycle`, an instruction boundary within the history, as whoWrote gives a write's;
+     * see stepBack.
      * @param {number} cycle
      * @returns {string|null}
      */
@@ -489,14 +495,14 @@ export class MachineSession {
         return this._replaying((history) => history.stepBackTo(cycle));
     }
 
-    /** Step the machine back to the call or interrupt that entered the routine it is in, as stepBack does. */
+    /** Step the machine back to the call or interrupt that entered the routine it is in; see stepBack. */
     stepBackOut() {
         return this._replaying((history) => finished(history.stepBackOut()));
     }
 
     /**
-     * Step the machine back to where it would have stopped at the newest breakpoint or watch hit before now, as
-     * stepBack does, counting every hit whatever a breakpoint's hit count.
+     * Step the machine back to where it would have stopped at the newest breakpoint or watch hit before now,
+     * counting every hit whatever a breakpoint's hit count; see stepBack.
      */
     reverseContinue() {
         return this._replaying((history) => finished(history.reverseContinue()));
@@ -506,12 +512,12 @@ export class MachineSession {
      * The last write to `address`, as the machine pages it now, found by replaying the history and leaving the
      * machine as it was: `{ refusal }` if it cannot search, or else `{ write, searched, stoppedBy }` as
      * ReplayHistory's lastWrite gives them, `write` being `{ pc, cycle, value }` or null if nothing wrote it in the
-     * `searched` cycles back from now.
+     * `searched` cycles back from now. See stepBack for what its replays leave alone.
      * @param {number} address
      */
     whoWrote(address) {
-        if (!this._history) return { refusal: NoHistory };
-        if (this.typingPending) return { refusal: StillTyping };
+        const refusal = this._replayRefusal();
+        if (refusal) return { refusal };
         return this._asReplay(() => finished(this._history.lastWrite(address)));
     }
 
@@ -864,10 +870,10 @@ export class MachineSession {
      */
     readMemory(address, length = 16, { bank, shadow } = {}) {
         const cpu = this._machine.processor;
-        if (Array.from({ length }, (_, i) => address + i).some((at) => cpu.isDevice(at))) {
-            cpu.inputLog?.refuse("a read of a device register, which can change the device");
-        }
         return this._withPaging({ bank, shadow }, () => {
+            if (Array.from({ length }, (_, i) => address + i).some((at) => cpu.isDevice(at))) {
+                cpu.inputLog?.refuse("a read of a device register, which can change the device");
+            }
             const bytes = [];
             for (let i = 0; i < length; i++) {
                 bytes.push(this._machine.readbyte(address + i));
@@ -883,8 +889,8 @@ export class MachineSession {
     writeMemory(address, bytes, { bank, shadow } = {}) {
         const { inputLog } = this._machine.processor;
         const repaged = bank !== undefined || shadow !== undefined;
-        if (repaged) inputLog?.refuse("a write to memory paged in for that write alone");
         this._withPaging({ bank, shadow }, () => {
+            if (repaged) inputLog?.refuse("a write to memory paged in for that write alone");
             for (let i = 0; i < bytes.length; i++) {
                 if (!repaged) inputLog?.record({ kind: "write", address: address + i, value: bytes[i] });
                 this._machine.writebyte(address + i, bytes[i]);
