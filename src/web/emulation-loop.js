@@ -1,10 +1,9 @@
-import { TickMs } from "../emulation-tick.js";
+import { FramesPerSecond, TickMs } from "../emulation-tick.js";
 import { noteError, noteFeature } from "./analytics.js";
 import { toast } from "./toast.js";
 import { shortcutLabel } from "./shortcuts.js";
 
 export const RewindCaptureInterval = 50; // emulated frames, ~1 second
-const FramesPerSecond = 50;
 
 /**
  * Why the machine is or is not running: stopped until it is first started, then
