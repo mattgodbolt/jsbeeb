@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.19.0](https://github.com/mattgodbolt/jsbeeb/compare/v2.18.0...v2.19.0) (2026-11-02)
+
+
+### Features
+
+* MachineSession keeps a replay history, for step back, back out, reverse continue and who wrote ([#1801](https://github.com/mattgodbolt/jsbeeb/issues/1801)) ([c6ac720](https://github.com/mattgodbolt/jsbeeb/commit/c6ac7200d284376768458a993285192aa4d477f2))
+
+
+### Bug Fixes
+
+* step back out says at once that an empty stack has no call to go back to ([#1797](https://github.com/mattgodbolt/jsbeeb/issues/1797)) ([eba9894](https://github.com/mattgodbolt/jsbeeb/commit/eba98949fa9be70fd54198933ba7abe230ba4827))
+
 ## [2.18.0](https://github.com/mattgodbolt/jsbeeb/compare/v2.17.1...v2.18.0) (2026-11-01)
 
 
