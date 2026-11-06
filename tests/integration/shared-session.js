@@ -24,6 +24,7 @@ async function station(transport, { boot }) {
     if (boot) await machine.runUntilInput();
     const keyboard = new Keyboard({
         processor: machine.processor,
+        typist: machine.typist,
         inputEnabledFunction: () => false,
         runningFunction: () => true,
     });

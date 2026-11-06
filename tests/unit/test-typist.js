@@ -1,35 +1,23 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { Typist } from "../../src/typist.js";
-import { findModel } from "../../src/models.js";
-import { Scheduler } from "../../src/scheduler.js";
 import { BBC } from "../../src/keymap.js";
 import { ATOM } from "../../src/keymap-atom.js";
+import { fakeKeyboardProcessor } from "../helpers/fake-keyboard-processor.js";
 
 function typistFor(modelName) {
-    const model = findModel(modelName);
-    const keyboard = {
-        keyToggleRaw: vi.fn(),
-        disableKeyboard: vi.fn(),
-        enableKeyboard: vi.fn(),
-        capsLockLight: true,
-        shiftLockLight: false,
-    };
-    const scheduler = new Scheduler();
-    const typist = new Typist({
-        model,
-        scheduler,
-        peripheralCyclesPerSecond: model.cyclesPerSecond,
-        keyboardInterface: keyboard,
-    });
-    const fire = () => scheduler.polltime(1);
-    const tick = (ms) => scheduler.polltime((ms * model.cyclesPerSecond) / 1000);
+    const processor = fakeKeyboardProcessor(modelName);
+    const { model, keyboardInterface: keyboard, peripheralCyclesPerSecond } = processor;
+    keyboard.capsLockLight = true;
+    const typist = new Typist(processor);
+    const fire = () => typist.execute(1);
+    const tick = (ms) => typist.execute((ms * peripheralCyclesPerSecond) / 1000);
     const toggles = () => keyboard.keyToggleRaw.mock.calls.map(([key]) => key);
     const finish = () => {
         for (let ticks = 0; typist.isTyping && ticks < 100; ++ticks) tick(model.pasteKeyDelayMs);
         expect(typist.isTyping).toBe(false);
     };
-    return { typist, keyboard, fire, tick, toggles, finish, model };
+    return { typist, processor, keyboard, fire, tick, toggles, finish, model };
 }
 
 describe("Typist", () => {
@@ -104,6 +92,28 @@ describe("Typist", () => {
             fire();
             typist.cancel();
             expect(toggles()).toEqual([BBC.A, BBC.A]);
+            expect(keyboard.enableKeyboard).toHaveBeenCalled();
+            expect(typist.isTyping).toBe(false);
+        });
+
+        it("holds each key for its delay in emulated time, whatever the CPU multiplier", () => {
+            const { typist, processor, fire, tick, toggles } = typistFor("B-DFS1.2");
+            processor.cpuMultiplier = 3;
+            typist.type([BBC.A], false);
+            fire();
+            tick(50);
+            expect(toggles()).toEqual([BBC.A]);
+            tick(2 * 50);
+            expect(toggles()).toEqual([BBC.A, BBC.A]);
+        });
+
+        it("drops the rest of the text and gives the keyboard back once the machine has gone back", () => {
+            const { typist, processor, keyboard, fire, tick, toggles } = typistFor("B-DFS1.2");
+            typist.type([BBC.A, BBC.B, BBC.C], false);
+            fire();
+            processor.currentCycles -= 1;
+            tick(500);
+            expect(toggles()).toEqual([BBC.A]);
             expect(keyboard.enableKeyboard).toHaveBeenCalled();
             expect(typist.isTyping).toBe(false);
         });

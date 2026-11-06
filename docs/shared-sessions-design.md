@@ -53,7 +53,7 @@ a rule; the simplest is that each person's held keys are tracked separately and 
 while that person's key is down, but that is an open question. An analogue channel would be sent as a value
 change, and reset and disc changes would be events too; in v0 only keys and the host's BREAK are. A paste is
 typed as keys through `Keyboard.setInput`'s input, so it goes to whoever orders the inputs, from host or guest, as
-typing does; it is paced by the wall clock rather than the machine's scheduler, so its keys arrive between
+typing does; it is paced by the wall clock rather than the cycles the machine runs, so its keys arrive between
 executes as key events do.
 
 **Pacing.** The emulation loop works out how many cycles to run from `performance.now()`, capped at a tenth of a
