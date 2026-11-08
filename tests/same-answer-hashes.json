@@ -10,36 +10,36 @@
       "peripherals": "719c0397b4beaa47"
     },
     "mode0-lines": {
-      "framebuffer": "e183157060b1f938",
-      "registers": "136d28f8922eb1bc",
-      "memory": "bf894a6712d0e269",
-      "cycles": "a86aa8d846c9c6eb",
-      "sound": "56829f3d99e1ca2c",
-      "peripherals": "54084b1b0f97f547"
+      "framebuffer": "d1f2d4cc00487b01",
+      "registers": "d8852aab8c3515a4",
+      "memory": "e868c81cbc50f89e",
+      "cycles": "c0faf415fa3f247c",
+      "sound": "eceb6de19b7ed4da",
+      "peripherals": "0e496c098430c266"
     },
     "mode7-text": {
-      "framebuffer": "1cd945adb8ea54ff",
-      "registers": "27988c8a7556889d",
-      "memory": "51a744e32b53f8fd",
-      "cycles": "c2f78902539afb32",
-      "sound": "8b0a1afc2cbc4dfb",
-      "peripherals": "c41114d00db980c8"
+      "framebuffer": "571345c944c556ab",
+      "registers": "2cc05a3fcc76b23f",
+      "memory": "0ee736118cd940be",
+      "cycles": "835ea3fd9a6133a6",
+      "sound": "b07867a2819b252d",
+      "peripherals": "7f68a03f9d6d653a"
     },
     "master-shadow": {
-      "framebuffer": "c5de4c289c71a4cf",
-      "registers": "9305fd23aa80e222",
-      "memory": "03a0958ac76e8d68",
-      "cycles": "f62dffab17ab1472",
-      "sound": "920c817e9a2bb78f",
-      "peripherals": "f25fd574d7457235"
+      "framebuffer": "431ab1a541b7da12",
+      "registers": "11efc6255d9bcfbf",
+      "memory": "5c59643c334f19b5",
+      "cycles": "73e1ba7a5d2abc14",
+      "sound": "342cfd5e09592009",
+      "peripherals": "7b016dd23058d2a2"
     },
     "master-disc-cat": {
-      "framebuffer": "b96b7b7448c4e07d",
-      "registers": "ca7607211c82904b",
-      "memory": "822922765d3cfce4",
-      "cycles": "946a74abb174f0e3",
-      "sound": "19aeb0e173e0c368",
-      "peripherals": "ce5a7ba13c42dad0"
+      "framebuffer": "8617b689336a52a0",
+      "registers": "08edb151fa75c24e",
+      "memory": "61f2bc064aa33f07",
+      "cycles": "f6bb6a10faabacc7",
+      "sound": "e55c3f3ff030d190",
+      "peripherals": "94d7c42ce8f21e51"
     }
   }
 }

@@ -35,7 +35,7 @@ const NotRepeatedHere = "The search could not repeat the machine's run since its
 const CannotSearchPast = "The search cannot go back past";
 const MovedOn = "The machine moved on before the search back finished.";
 const Unrepeated = "a stretch of the run it could not repeat exactly";
-const MidInstruction = "an input that came part way through an instruction, as a paste's or an autotype's keys do";
+const MidInstruction = "an input that came part way through an instruction";
 
 // S counts down and wraps, so "not deeper" is a difference of under half the page, either way round $00.
 export function notDeeper(s, startS) {
@@ -78,8 +78,8 @@ function withoutPainting(video, run) {
 }
 
 // Between executes the CPU has reached its cycle target or been stopped short of it; inside one, as a scheduled
-// task or a debug hook runs, it has done neither.
-const insideExecute = (cpu) => !cpu.halted && cpu.currentCycles < cpu.targetCycles;
+// task or a read, write or interrupt hook runs, it has done neither; an instruction hook runs between instructions.
+const insideExecute = (cpu) => !cpu.halted && cpu.currentCycles < cpu.targetCycles && !cpu.debugInstruction.dispatching;
 
 function hostInputs(cpu) {
     const { gamepad, mouse } = cpu.sysvia.fireButtons();

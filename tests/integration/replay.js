@@ -15,6 +15,8 @@ const FbHeight = 768;
 const KeyHoldSeconds = 0.05;
 const CatalogueSeconds = 2;
 const AroundAnInputSeconds = 0.1;
+// Far enough into typing a line that the typist has a key down, on a BBC or an Atom.
+const IntoTypingSeconds = 0.06;
 // Half a blink of the cursor, so that the picture differs from one snapshot to the next.
 const CursorBlinkSeconds = 0.3;
 const ClockAtRecording = Date.UTC(2026, 9, 31, 12, 0, 0);
@@ -195,6 +197,78 @@ describe.each([
         await expectBackAndForthLandsWhereItWas(machine, history);
     });
 
+    it.each([
+        ["across a typed line", false],
+        ["from a snapshot taken while a typed key is down", true],
+    ])("replays %s exactly", async (_, snapshotWhileDown) => {
+        const machine = await booted(model);
+        const cpu = machine.processor;
+        const history = historyFromHere(machine);
+        machine.typist.type(machine.model.stringToKeys("REM\n"), false);
+        await seconds(machine, IntoTypingSeconds);
+        if (snapshotWhileDown) {
+            expect(cpu.keyboardInterface.hasAnyKeyDown()).toBe(true);
+            history.taken(cpu.snapshotState(), null);
+        }
+        while (machine.typist.isTyping) await seconds(machine, IntoTypingSeconds);
+        await seconds(machine, AroundAnInputSeconds);
+        await expectBackAndForthLandsWhereItWas(machine, history);
+    });
+
+    it("records a key pressed from an instruction hook, which runs between instructions", async () => {
+        const machine = await booted(model);
+        const cpu = machine.processor;
+        historyFromHere(machine);
+        const hook = cpu.debugInstruction.add(() => {
+            hook.remove();
+            cpu.keyboardInterface.keyDownRaw(machine.model.keys.SHIFT);
+        });
+        await seconds(machine, AroundAnInputSeconds);
+        expect(cpu.inputLog.inputs.map(({ input, refusal }) => input?.kind ?? refusal)).toEqual(["keyboard"]);
+    });
+
+    it("records a key pressed from an instruction hook that runs on resuming from a stop", async () => {
+        const machine = await booted(model);
+        const cpu = machine.processor;
+        historyFromHere(machine);
+        const breakpoint = cpu.debugInstruction.add(() => true);
+        expect(await machine.runFor(cpu.model.cyclesPerSecond)).toBe(true);
+        breakpoint.remove();
+        const hook = cpu.debugInstruction.add(() => {
+            hook.remove();
+            cpu.keyboardInterface.keyDownRaw(machine.model.keys.SHIFT);
+        });
+        await seconds(machine, AroundAnInputSeconds);
+        expect(cpu.inputLog.inputs.map(({ input, refusal }) => input?.kind ?? refusal)).toEqual(["keyboard"]);
+    });
+
+    it("refuses nothing when a reset ends a paste", async () => {
+        const machine = await booted(model);
+        historyFromHere(machine);
+        const { inputLog } = machine.processor;
+        machine.typist.type(machine.model.stringToKeys("REM\n"), false);
+        await seconds(machine, IntoTypingSeconds);
+        machine.reset(false);
+        await seconds(machine, AroundAnInputSeconds);
+        expect(machine.typist.isTyping).toBe(false);
+        expect(inputLog.inputs.filter(({ refusal }) => refusal)).toEqual([]);
+    });
+
+    it("changes the key before a breakpoint stops in the same instruction, and only once", async () => {
+        const machine = await booted(model);
+        const cpu = machine.processor;
+        const toggles = vi.spyOn(cpu.keyboardInterface, "keyToggleRaw");
+        const gapCycles = (machine.model.pasteReleaseGapMs * cpu.peripheralCyclesPerSecond) / 1000;
+        const dueEpoch = cpu.scheduler.epoch + gapCycles;
+        const breakpoint = cpu.debugInstruction.add(() => cpu.scheduler.epoch >= dueEpoch);
+        machine.typist.type(machine.model.stringToKeys("A"), false);
+        expect(await machine.runFor(IntoTypingSeconds * cpu.model.cyclesPerSecond)).toBe(true);
+        expect(toggles).toHaveBeenCalledTimes(1);
+        breakpoint.remove();
+        while (machine.typist.isTyping) await seconds(machine, IntoTypingSeconds);
+        expect(toggles).toHaveBeenCalledTimes(2);
+    });
+
     it("starts from the keys held at a snapshot taken after they went down, once older inputs are folded away", async () => {
         const machine = await booted(model);
         const cpu = machine.processor;
@@ -250,8 +324,12 @@ describe.each([
 
     it.each([
         [
-            "keys typed in part way through an instruction",
-            async (machine) => machine.type("REM"),
+            "a key pressed part way through an instruction",
+            async (machine) => {
+                const cpu = machine.processor;
+                cpu.scheduler.newTask(() => cpu.keyboardInterface.keyDownRaw(machine.model.keys.SHIFT)).schedule(1);
+                await seconds(machine, AroundAnInputSeconds);
+            },
             /part way through an instruction/,
         ],
         [

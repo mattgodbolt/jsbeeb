@@ -1,35 +1,23 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { Typist } from "../../src/typist.js";
-import { findModel } from "../../src/models.js";
-import { Scheduler } from "../../src/scheduler.js";
 import { BBC } from "../../src/keymap.js";
 import { ATOM } from "../../src/keymap-atom.js";
+import { fakeKeyboardProcessor } from "../helpers/fake-keyboard-processor.js";
 
 function typistFor(modelName) {
-    const model = findModel(modelName);
-    const keyboard = {
-        keyToggleRaw: vi.fn(),
-        disableKeyboard: vi.fn(),
-        enableKeyboard: vi.fn(),
-        capsLockLight: true,
-        shiftLockLight: false,
-    };
-    const scheduler = new Scheduler();
-    const typist = new Typist({
-        model,
-        scheduler,
-        peripheralCyclesPerSecond: model.cyclesPerSecond,
-        keyboardInterface: keyboard,
-    });
-    const fire = () => scheduler.polltime(1);
-    const tick = (ms) => scheduler.polltime((ms * model.cyclesPerSecond) / 1000);
+    const processor = fakeKeyboardProcessor(modelName);
+    const { model, keyboardInterface: keyboard } = processor;
+    keyboard.capsLockLight = true;
+    const typist = new Typist(processor);
+    const fire = () => processor.runInstruction(1);
+    const tick = (ms) => processor.runInstruction((ms * processor.peripheralCyclesPerSecond) / 1000);
     const toggles = () => keyboard.keyToggleRaw.mock.calls.map(([key]) => key);
     const finish = () => {
         for (let ticks = 0; typist.isTyping && ticks < 100; ++ticks) tick(model.pasteKeyDelayMs);
         expect(typist.isTyping).toBe(false);
     };
-    return { typist, keyboard, fire, tick, toggles, finish, model };
+    return { typist, processor, keyboard, fire, tick, toggles, finish, model };
 }
 
 describe("Typist", () => {
@@ -115,6 +103,60 @@ describe("Typist", () => {
             typist.type([BBC.X], false);
             fire();
             expect(toggles()).toEqual([BBC.A, BBC.A, BBC.X]);
+        });
+    });
+
+    describe("between instructions", () => {
+        it("holds one instruction hook while there is text to type, and leaves the fast path after", () => {
+            const { typist, processor, finish } = typistFor("B-DFS1.2");
+            expect(processor.debugInstruction.attached).toBe(0);
+            typist.type([BBC.A, BBC.B], false);
+            expect(processor.debugInstruction.attached).toBe(1);
+            finish();
+            expect(processor.debugInstruction.attached).toBe(0);
+            typist.type([BBC.A], false);
+            typist.cancel();
+            expect(processor.debugInstruction.attached).toBe(0);
+        });
+
+        it("does not change a key before its delay is up, and waits in emulated time", () => {
+            const { typist, processor, toggles } = typistFor("B-DFS1.2");
+            typist.type([BBC.A], false);
+            const gap = (processor.model.pasteReleaseGapMs * processor.peripheralCyclesPerSecond) / 1000;
+            processor.runInstruction(gap - 1);
+            expect(toggles()).toEqual([]);
+            processor.runInstruction(1);
+            expect(toggles()).toEqual([BBC.A]);
+        });
+
+        it.each([
+            ["the scheduler's epoch not moved back", false],
+            ["the scheduler's epoch moved back", true],
+        ])(
+            "drops the text left to type, and gives the keyboard back, once a snapshot has been restored or the machine reset: %s",
+            (_, wentBack) => {
+                const { typist, processor, keyboard, fire, tick, toggles } = typistFor("B-DFS1.2");
+                typist.type([BBC.A, BBC.B], false);
+                fire();
+                const pressed = toggles().length;
+                keyboard.enableKeyboard.mockClear();
+                ++processor.resetsAndLoads;
+                if (wentBack) processor.scheduler.restoreState({ epoch: 0 });
+                tick(1000);
+                expect(typist.isTyping).toBe(false);
+                expect(keyboard.enableKeyboard).toHaveBeenCalled();
+                expect(toggles()).toHaveLength(pressed);
+                expect(processor.debugInstruction.attached).toBe(0);
+            },
+        );
+
+        it("does not release a key when cancelled after a restore", () => {
+            const { typist, processor, fire, toggles } = typistFor("B-DFS1.2");
+            typist.type([BBC.A, BBC.B], false);
+            fire();
+            ++processor.resetsAndLoads;
+            typist.cancel();
+            expect(toggles()).toEqual([BBC.A]);
         });
     });
 

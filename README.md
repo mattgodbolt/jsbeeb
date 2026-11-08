@@ -298,6 +298,10 @@ analytics on the page and sends nothing. `npm run test:e2e` builds with a dummy 
 itself, so it can check what the page would send; it answers every other outside request from the stand-ins in
 `tests/playwright/offline`, and blocks anything else and reports it as one of the page's problems.
 
+The owl is drawn once, as `public/jsbeeb-icon.svg`. After changing it, `npm run icons` renders every icon from it:
+`jsbeeb-icon.png` (the page's navbar, the desktop app's window and its packages), `favicon.ico`, and the installable
+app's icons in `public/icons`. A unit test fails if a checked-in icon no longer matches the SVG.
+
 ## Installing as an App and Working Offline
 
 The deployed site is an installable web app: Chrome offers "Install app" (the address bar on the desktop, the menu on
@@ -321,9 +325,8 @@ What the worker keeps, and when it changes:
 - `npm run test:e2e` removes `navigator.serviceWorker` from its pages, so a worker never answers a request the tests
   route themselves; only `tests/playwright/pwa.spec.js` keeps it, in a fresh browser context of its own.
 
-The icons are `public/icons/icon-192.png`, `icon-512.png`, `maskable-512.png` (the art inside the central 80% so
-Android can crop it) and `apple-touch-icon.png` (180 pixels); the manifest names them in `PwaIcons` in
-`vite.config.js`, and `index.html` names the last. Regenerating them from new art means replacing those four files.
+The manifest names the app's icons in `PwaIcons` in `vite.config.js`, and `index.html` names the Apple one; they are
+rendered from the owl's SVG as described above.
 
 If a release has to be withdrawn from everyone who has installed it, ship a worker that removes itself and its
 caches, by replacing the contents of `src/service-worker.js` with the following and deploying as usual. Each browser
