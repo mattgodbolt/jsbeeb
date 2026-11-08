@@ -35,6 +35,7 @@ export function fakeKeyboardProcessor(modelName = "B-DFS1.2") {
         cycleSeconds: 0,
         currentCycles: 0,
         halted: false,
+        resetsAndLoads: 0,
         stops: 0,
         stop() {
             this.halted = true;

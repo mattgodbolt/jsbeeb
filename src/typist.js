@@ -4,8 +4,7 @@ const RepeatedKeyGapMs = 30;
 const StoppedPollMs = 100;
 
 // The processor's scheduler is polled with peripheral cycles, so the delays stay in real time whatever the CPU
-// multiplier is, and the CPU stays on its fast path while the text arrives. A task fires part way through an
-// instruction, so it only stops the processor; the key changes when the run loop calls deliverPending.
+// multiplier is. A task fires part way through an instruction, so it only stops the processor; the key changes when the run loop calls deliverPending.
 function schedulerTimer(processor, callback) {
     const task = processor.scheduler.newTask(callback);
     return {
@@ -90,6 +89,7 @@ export class Typist {
         this._pending = false;
         this._stoppedByOther = false;
         this._stopsAtDue = 0;
+        this._loadsAtDue = 0;
         this._timer = through
             ? wallClockTimer(() => this._deliver(), through.isRunning)
             : schedulerTimer(processor, () => this._due());
@@ -101,12 +101,14 @@ export class Typist {
      * breakpoint, a watch) stopped the processor in that instruction too.
      */
     deliverPending() {
-        if (!this._pending) {
-            // A restored snapshot has cancelled the scheduler task, so the text left to type is undone and
-            // stranded: the matrix it was typed into is gone.
-            if (this._keys.length > 0 && !this._timer.running()) this._abandon();
+        // A restored snapshot has cancelled the scheduler task and replaced the matrix, so the text left to type
+        // is stranded.
+        if (this._stranded || (this._pending && this.processor.resetsAndLoads !== this._loadsAtDue)) {
+            this._pending = false;
+            this._abandon();
             return false;
         }
+        if (!this._pending) return false;
         this._pending = false;
         this._deliver();
         return !this._stoppedByOther && this.processor.stops === this._stopsAtDue;
@@ -139,9 +141,13 @@ export class Typist {
 
     cancel() {
         if (!this.isTyping) return;
+        if (!this._stranded) this._releaseLastKey();
         this._pending = false;
-        this._releaseLastKey();
         this._abandon();
+    }
+
+    get _stranded() {
+        return this._keys.length > 0 && !this._timer.running() && !this._pending;
     }
 
     _abandon() {
@@ -160,6 +166,7 @@ export class Typist {
         this._stoppedByOther = processor.halted;
         processor.stop();
         this._stopsAtDue = processor.stops;
+        this._loadsAtDue = processor.resetsAndLoads;
         this._pending = true;
     }
 

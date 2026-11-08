@@ -1127,6 +1127,18 @@ describe("Debugger", () => {
             loop = stoppedLoop;
         });
 
+        it("steps through a typed key's stop, which ends the instruction without being a breakpoint", () => {
+            load(0x2000, [0xea, 0xea]);
+            cpu.pc = 0x2000;
+            let pending = false;
+            cpu.scheduler.newTask(() => ((pending = true), cpu.stop())).schedule(1);
+            loop.typist = { deliverPending: () => pending && !(pending = false) };
+            dbgr.debug(cpu.pc);
+            keyPress("n");
+            expect(pc()).toBe("2001");
+            expect(pending).toBe(false);
+        });
+
         it("runs to the cursor from a pause by entering the debugger first", () => {
             dbgr.debug(cpu.pc);
             loop.mode = RunMode.paused;

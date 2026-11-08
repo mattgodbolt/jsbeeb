@@ -141,15 +141,30 @@ describe("Typist", () => {
             expect(toggles()).toEqual([BBC.A]);
         });
 
-        it("drops the text left to type when a restored snapshot has cancelled the scheduler", () => {
-            const { typist, scheduler, keyboard, fire, toggles } = typistFor("B-DFS1.2");
+        it.each([
+            ["between ticks", false],
+            ["after a key came due but before it was delivered", true],
+        ])("drops the text left to type when a snapshot is restored %s", (_, whileDue) => {
+            const { typist, processor, scheduler, keyboard, fire, toggles } = typistFor("B-DFS1.2");
             typist.type([BBC.A, BBC.B], false);
-            fire();
-            keyboard.enableKeyboard.mockClear();
+            if (whileDue) scheduler.polltime(1);
+            else fire();
+            const pressed = toggles().length;
             scheduler.cancelAll();
+            ++processor.resetsAndLoads;
+            keyboard.enableKeyboard.mockClear();
             expect(typist.deliverPending()).toBe(false);
             expect(typist.isTyping).toBe(false);
             expect(keyboard.enableKeyboard).toHaveBeenCalled();
+            expect(toggles()).toHaveLength(pressed);
+        });
+
+        it("does not release a key that a restored snapshot has already let go of", () => {
+            const { typist, scheduler, fire, toggles } = typistFor("B-DFS1.2");
+            typist.type([BBC.A, BBC.B], false);
+            fire();
+            scheduler.cancelAll();
+            typist.type([BBC.C], false);
             expect(toggles()).toEqual([BBC.A]);
         });
     });
