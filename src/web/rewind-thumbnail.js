@@ -6,7 +6,7 @@ const ThumbnailHeight = 128;
 const FramebufferWidth = 1024;
 const FramebufferHeight = 625;
 const VisiblePixels = FramebufferWidth * FramebufferHeight;
-// As far as a preview runs if no vsync comes, as with the CRTC programmed to give none.
+// As far as a preview runs if the display never ends, as with the CRTC's R6 programmed past R4.
 const LongestPreviewSeconds = 0.1;
 const FramesPerSecond = 50;
 
