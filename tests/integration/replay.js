@@ -224,6 +224,26 @@ describe.each([
             cpu.keyboardInterface.keyDownRaw(machine.model.keys.SHIFT);
         });
         await seconds(machine, AroundAnInputSeconds);
+        cpu.scheduler.newTask(() => cpu.keyboardInterface.keyUpRaw(machine.model.keys.SHIFT)).schedule(1);
+        await seconds(machine, AroundAnInputSeconds);
+        expect(cpu.inputLog.inputs.map(({ input, refusal }) => input?.kind ?? refusal)).toEqual([
+            "keyboard",
+            expect.stringMatching(/part way through an instruction/),
+        ]);
+    });
+
+    it("records a key pressed from an instruction hook that runs on resuming from a stop", async () => {
+        const machine = await booted(model);
+        const cpu = machine.processor;
+        historyFromHere(machine);
+        const breakpoint = cpu.debugInstruction.add(() => true);
+        expect(await machine.runFor(cpu.model.cyclesPerSecond)).toBe(true);
+        breakpoint.remove();
+        const hook = cpu.debugInstruction.add(() => {
+            hook.remove();
+            cpu.keyboardInterface.keyDownRaw(machine.model.keys.SHIFT);
+        });
+        await seconds(machine, AroundAnInputSeconds);
         expect(cpu.inputLog.inputs.map(({ input, refusal }) => input?.kind ?? refusal)).toEqual(["keyboard"]);
     });
 
