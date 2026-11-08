@@ -215,6 +215,18 @@ describe.each([
         await expectBackAndForthLandsWhereItWas(machine, history);
     });
 
+    it("records a key pressed from an instruction hook, which runs between instructions", async () => {
+        const machine = await booted(model);
+        const cpu = machine.processor;
+        historyFromHere(machine);
+        const hook = cpu.debugInstruction.add(() => {
+            hook.remove();
+            cpu.keyboardInterface.keyDownRaw(machine.model.keys.SHIFT);
+        });
+        await seconds(machine, AroundAnInputSeconds);
+        expect(cpu.inputLog.inputs.map(({ input, refusal }) => input?.kind ?? refusal)).toEqual(["keyboard"]);
+    });
+
     it("refuses nothing when a reset ends a paste", async () => {
         const machine = await booted(model);
         historyFromHere(machine);

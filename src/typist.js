@@ -4,8 +4,8 @@ const RepeatedKeyGapMs = 30;
 const StoppedPollMs = 100;
 
 // Delays are counted in the scheduler's peripheral cycles, so they stay in emulated time whatever the CPU multiplier
-// is. A hook between instructions makes the key change, which the replay's input log can only record there; the
-// hook is attached while there is text to type, so only a paste leaves the CPU's fast path.
+// is. A hook between instructions makes the key change, and is attached only while there is text to type, so only
+// a paste leaves the CPU's fast path.
 function instructionTimer(processor, deliver, abandon) {
     let dueEpoch = null;
     let hook = null;
@@ -15,14 +15,12 @@ function instructionTimer(processor, deliver, abandon) {
             loadsAtStart = processor.resetsAndLoads;
             dueEpoch = processor.scheduler.epoch + (ms * processor.peripheralCyclesPerSecond) / 1000;
             hook ??= processor.debugInstruction.add(() => {
-                const atBoundary = (run) =>
-                    processor.inputLog ? processor.inputLog.atInstructionBoundary(run) : run();
                 if (timer.stranded()) {
                     timer.cancel();
-                    atBoundary(abandon);
+                    abandon();
                 } else if (processor.scheduler.epoch >= dueEpoch) {
                     dueEpoch = null;
-                    atBoundary(deliver);
+                    deliver();
                     if (dueEpoch === null) timer.cancel();
                 }
                 return false;

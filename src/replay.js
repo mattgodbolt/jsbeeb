@@ -78,8 +78,8 @@ function withoutPainting(video, run) {
 }
 
 // Between executes the CPU has reached its cycle target or been stopped short of it; inside one, as a scheduled
-// task or a debug hook runs, it has done neither.
-const insideExecute = (cpu) => !cpu.halted && cpu.currentCycles < cpu.targetCycles;
+// task or a read, write or interrupt hook runs, it has done neither; an instruction hook runs between instructions.
+const insideExecute = (cpu) => !cpu.halted && cpu.currentCycles < cpu.targetCycles && !cpu.atInstructionBoundary;
 
 function hostInputs(cpu) {
     const { gamepad, mouse } = cpu.sysvia.fireButtons();
@@ -175,7 +175,6 @@ export class InputLog {
         this.sampleReplay = null;
         this.recording = true;
         this.applyingInput = false;
-        this.betweenInstructions = false;
         for (const device of this._devices()) device.inputLog = this;
         this.restart();
     }
@@ -205,18 +204,8 @@ export class InputLog {
 
     record(input) {
         if (!this.recording) return;
-        if (insideExecute(this.cpu) && !this.betweenInstructions) this.refuse(MidInstruction);
+        if (insideExecute(this.cpu)) this.refuse(MidInstruction);
         else this.inputs.push({ at: cycleCount(this.cpu), input });
-    }
-
-    /** Runs `run`, from an instruction hook, which sees the machine at the boundary before an instruction. */
-    atInstructionBoundary(run) {
-        this.betweenInstructions = true;
-        try {
-            run();
-        } finally {
-            this.betweenInstructions = false;
-        }
     }
 
     /** Notes that something went in here that no replay can put back, `reason` naming it for the refusal. */
