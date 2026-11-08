@@ -25,6 +25,7 @@ describe("AnalogueInputs", () => {
             settings: new Settings({ urlState: fakeUrlState() }),
             audioHandler: { tryResume: vi.fn() },
             takeScreenClick: () => false,
+            takeScreenMenu: () => false,
         };
         vi.spyOn(deps.settings.urlState, "updateUrl");
     });
@@ -114,6 +115,17 @@ describe("AnalogueInputs", () => {
             mouse("mousemove");
             expect(deps.takeScreenClick).toHaveBeenCalledTimes(1);
             expect(deps.processor.touchScreen.onMouse).toHaveBeenCalledTimes(1);
+        });
+
+        it.each([
+            ["keeps the browser's menu off the screen when the debugger takes a right click", true],
+            ["leaves the browser's menu to a right click the debugger does not take", false],
+        ])("%s", (_, taken) => {
+            deps.takeScreenMenu = vi.fn(() => taken);
+            make();
+            const event = mouse("contextmenu");
+            expect(deps.takeScreenMenu).toHaveBeenCalledWith(event, expect.any(Number), expect.any(Number));
+            expect(event.defaultPrevented).toBe(taken);
         });
     });
 

@@ -19,6 +19,7 @@ import { FdcPanel } from "../../src/web/fdc-panel.js";
 import { cycleCount, machineMoment } from "../../src/lockstep.js";
 import { BBC } from "../../src/keymap.js";
 import { ReplayHistory } from "../../src/replay.js";
+import { bankView, PagedView, SidewaysStart } from "../../src/paging.js";
 import {
     bankOffset,
     captureDownloads,
@@ -46,6 +47,7 @@ const PanelElements = [
 const MachineSecond = 2000000;
 const ChecksPastAQuickRun = 100000;
 const SearchTicks = 10;
+const UnpagedBank = 7;
 const WatchRowSelector = "#watch-panel .watch-list tr:not(.watch-formats):not(.watch-breaks)";
 
 /** Runs and stops as the emulation loop does, a tick at a time; it starts in the debugger. */
@@ -1552,29 +1554,40 @@ describe("Debugger", () => {
                             type("99", "Enter", false);
                         },
                         0x70,
+                        PagedView,
                         /\$0070 was last written \$99 by an edit in the memory panel, at cycle \d+, 0 cycles \(0\.0 µs\) ago/,
                     ],
                     [
                         "nothing",
                         () => {},
                         0x71,
+                        PagedView,
                         /Nothing wrote \$0071 in the last 7 cycles \(3\.5 µs\), as far back as the history step back keeps goes/,
+                    ],
+                    [
+                        "nothing, in a sideways bank not paged in",
+                        () => {},
+                        SidewaysStart,
+                        bankView(UnpagedBank),
+                        /Nothing wrote \$8000 in bank 7 in the last 7 cycles/,
                     ],
                     [
                         "anything, while running, stopping it first",
                         () => loop.go(),
                         0x70,
+                        PagedView,
                         /\$0070 was last written \$41 by the instruction at \$2002/,
                     ],
                     [
                         "anything in a shared session",
                         () => (loop.lockstep = {}),
                         0x70,
+                        PagedView,
                         /not available in a shared session/,
                     ],
-                ])("says what wrote it: %s", async (_, set, address, says) => {
+                ])("says what wrote it: %s", async (_, set, address, view, says) => {
                     set();
-                    await dbgr.whoWrote(address);
+                    await dbgr.whoWrote(address, view);
                     expect(loop.mode).toBe(RunMode.debugging);
                     expect(toasts()).toContainEqual(expect.stringMatching(says));
                 });
@@ -1600,9 +1613,27 @@ describe("Debugger", () => {
                     expect(pc()).toBe("2002");
                 });
 
+                it("finds who wrote the byte drawn where the stopped screen is right-clicked", async () => {
+                    vi.spyOn(video, "addressShownAt").mockImplementation((x, y) => (y < 0.5 ? 0x70 : null));
+                    const offered = (y) => {
+                        const event = new MouseEvent("contextmenu", { cancelable: true, clientX: 40, clientY: 50 });
+                        return [dbgr.offerScreenByteAt(event, 0.25, y), event.defaultPrevented, visible("watch-menu")];
+                    };
+                    expect(offered(0.75)).toEqual([true, false, false]);
+                    expect(offered(0.25)).toEqual([true, true, true]);
+                    pickFromMenu("Who wrote this?");
+                    await vi.waitFor(() =>
+                        expect(toasts()).toContainEqual(
+                            expect.stringMatching(/\$0070 was last written \$41 by the instruction at \$2002/),
+                        ),
+                    );
+                    loop.go();
+                    expect(offered(0.25)[0]).toBe(false);
+                });
+
                 it("ends a search when the machine is run on, leaving the run to its stop", async () => {
                     let checks = 0;
-                    const searching = dbgr.whoWrote(0x70);
+                    const searching = dbgr.whoWrote(0x70, PagedView);
                     dbgr.runUntil(() => ++checks > ChecksPastAQuickRun);
                     expect(loop.isRunning()).toBe(true);
                     expect((await searching).refusal).toMatch(/moved on/);
@@ -1612,14 +1643,14 @@ describe("Debugger", () => {
                 });
 
                 it("ends a search still going when another starts", async () => {
-                    const first = dbgr.whoWrote(0x70);
-                    const second = dbgr.whoWrote(0x70);
+                    const first = dbgr.whoWrote(0x70, PagedView);
+                    const second = dbgr.whoWrote(0x70, PagedView);
                     expect(await first).toBeNull();
                     expect((await second).write).toMatchObject({ pc: 0x2002, value: 0x41 });
                 });
 
                 it("will not step back to a write once the machine has moved on from the search", async () => {
-                    await dbgr.whoWrote(0x70);
+                    await dbgr.whoWrote(0x70, PagedView);
                     keyPress("n");
                     stepBackButton().click();
                     expect(pc()).toBe("2006");

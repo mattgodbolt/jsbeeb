@@ -7,6 +7,7 @@
 import { applyInput, cycleCount, stateHash } from "./lockstep.js";
 import { tickCycles } from "./emulation-tick.js";
 import { NoReplayHooks } from "./6502.js";
+import { RamStat, RomStat, viewedByte } from "./paging.js";
 
 /** How much history the page keeps: snapshots at each of the last `recent` frames, and one a second for `seconds`. */
 export const PageHistory = Object.freeze({ recent: 3, seconds: 30 });
@@ -15,10 +16,6 @@ export const PageHistory = Object.freeze({ recent: 3, seconds: 30 });
 const LongestCallSearchSeconds = 2;
 const InterruptPushes = 3;
 const EmptyStack = 0xff;
-
-// As the CPU's memStat marks a page.
-const RamStat = 1;
-const RomStat = 2;
 
 const KeepsHistory =
     "the machine keeps its history once it has run a frame since it started, was reset or had its state replaced";
@@ -388,13 +385,11 @@ class Arrival {
 }
 
 /**
- * The last write in a window to the byte a write to `address` reaches as the machine is paged now: the same byte
- * of RAM, however the CPU paged it there at the time, or else a device register at the same address.
+ * The last write in a window to `target`, a byte as viewedByte gives it: that byte of RAM, however the CPU paged it
+ * there at the time, or else the device register at `address`.
  */
 class LastWrite {
-    constructor(cpu, log, address) {
-        const page = cpu.memStatOffset + (address >>> 8);
-        const [stat, look] = [cpu.memStat[page], cpu.memLook[page]];
+    constructor(cpu, log, address, { stat, offset }) {
         let pc = 0;
         let started = 0;
         this.found = null;
@@ -403,11 +398,10 @@ class LastWrite {
             started = cycleCount(cpu);
         };
         const write = (written, value) => {
-            if (written !== address) return;
-            const writtenPage = cpu.memStatOffset + (address >>> 8);
-            const writtenStat = cpu.memStat[writtenPage];
+            const page = cpu.memStatOffset + (written >>> 8);
+            const writtenStat = cpu.memStat[page];
             if (writtenStat !== stat) return;
-            if (stat === RamStat && cpu.memLook[writtenPage] !== look) return;
+            if (stat === RamStat ? cpu.memLook[page] + written !== offset : written !== address) return;
             const byte = value & 0xff;
             this.found = log.applyingInput
                 ? { pc: null, cycle: cycleCount(cpu), value: byte }
@@ -778,7 +772,7 @@ export class ReplayHistory extends EventTarget {
     }
 
     /**
-     * Searches for the last write to `address`, as the machine pages it now (see LastWrite), by replaying its
+     * Searches for the last write to the byte `view` shows at `address` (see LastWrite), by replaying its
      * history back from now a stretch at a time, as a step back does, painting none of it. Yields between
      * stretches, with the machine as it was, so that a long search can let the page go on; if the machine has moved
      * on when it resumes, it stops.
@@ -788,15 +782,16 @@ export class ReplayHistory extends EventTarget {
      * the `searched` cycles back from now; `stoppedBy` is why the search went back no further (as `_searchBack`
      * gives it), or null where the history ends. Leaves the machine as it was.
      */
-    *lastWrite(address) {
+    *lastWrite(address, view) {
         const refusal = this._unavailable("Searching back", NothingToSearch);
         if (refusal) return { refusal };
         const { cpu, log } = this;
-        if (cpu.memStat[cpu.memStatOffset + (address >>> 8)] === RomStat) return { refusal: IsRom };
+        const target = viewedByte(cpu, view, address);
+        if (target.stat === RomStat) return { refusal: IsRom };
         const now = cycleCount(cpu);
         const original = this._original();
         const { movedOn, found, reached, stoppedBy } = yield* this._searchingAway(
-            new LastWrite(cpu, log, address),
+            new LastWrite(cpu, log, address, target),
             original,
         );
         if (movedOn) return { refusal: MovedOn };

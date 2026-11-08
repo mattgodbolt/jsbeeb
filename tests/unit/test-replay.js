@@ -7,6 +7,7 @@ import { fake6502 } from "../../src/fake6502.js";
 import { findModel } from "../../src/models.js";
 import { singleStep } from "../helpers/single-step.js";
 import { loadBytes } from "./helpers.js";
+import { bankView, PagedView, ShadowView } from "../../src/paging.js";
 
 const CallAt = 0x2000;
 const SubroutineAt = 0x3000;
@@ -37,6 +38,15 @@ const ShadowIdleAt = MainWriteAt + MainThenShadowThenIdle.length;
 const JmpToItself = [0x4c, ShadowIdleAt & 0xff, ShadowIdleAt >>> 8];
 const TestRefusal = "a refusal the test made";
 const UserViaDdrb = 0xfe62;
+const RomSel = 0xfe30;
+const SidewaysByte = 0x8000;
+const WrittenBank = 4;
+const BasicBank = 15;
+// On a B: $33 to $8000 in sideways RAM bank 4, then bank 5 paged in.
+const BankWriteThenOtherBank = [
+    ...[0xa9, WrittenBank, 0x8d, RomSel & 0xff, RomSel >>> 8, 0xa9, 0x33, 0x8d, 0x00, 0x80],
+    ...[0xa9, WrittenBank + 1, 0x8d, RomSel & 0xff, RomSel >>> 8],
+];
 const RomAddress = 0xc000;
 const OtherPagingHalf = 256;
 const QuarterSecond = 500000;
@@ -135,7 +145,7 @@ describe("Finding the last write to a byte", () => {
         // As an instruction fetched where the Master's ACCCON E bit maps shadow RAM would leave it.
         cpu.memStatOffset = OtherPagingHalf;
         const before = snapshotToJSON(cpu.snapshotState());
-        const { write, searched, stoppedBy } = finished(history.lastWrite(Written));
+        const { write, searched, stoppedBy } = finished(history.lastWrite(Written, PagedView));
         expect(snapshotToJSON(cpu.snapshotState())).toEqual(before);
         expect(cpu.memStatOffset).toBe(OtherPagingHalf);
         expect(stoppedBy).toBe(expected.stoppedBy);
@@ -155,47 +165,76 @@ describe("Finding the last write to a byte", () => {
 
     it.each([
         [
-            "on a Master, the main RAM's, not the shadow RAM's a later write at the address reached",
+            "on a Master paged as now, the main RAM's, not the shadow RAM's a later write at the address reached",
             "Master",
             [...MainThenShadowThenIdle, ...JmpToItself],
             Written,
+            PagedView,
             { pc: MainWriteAt + 2, value: 0x11 },
+        ],
+        [
+            "on a Master, the shadow RAM's, though main RAM is paged in now",
+            "Master",
+            [...MainThenShadowThenIdle, ...JmpToItself],
+            Written,
+            ShadowView,
+            { pc: MainWriteAt + 12, value: 0x22 },
+        ],
+        [
+            "a sideways RAM bank's, though another is paged in now",
+            "B-DFS1.2",
+            [...BankWriteThenOtherBank, ...JmpToItself],
+            SidewaysByte,
+            bankView(WrittenBank),
+            { pc: MainWriteAt + 7, value: 0x33 },
         ],
         [
             "a device register's, as written to its address",
             "B-DFS1.2",
             [0xa9, 0x5a, 0x8d, UserViaDdrb & 0xff, UserViaDdrb >>> 8, ...JmpToItself],
             UserViaDdrb,
+            PagedView,
             { pc: MainWriteAt + 2, value: 0x5a },
         ],
-    ])("is of the byte as the CPU pages it now: %s", async (_, model, code, address, expected) => {
+    ])("is of the byte the view shows: %s", async (_, model, code, address, view, expected) => {
         const cpu = await machineAt(MainWriteAt, { model: findModel(model) });
         loadBytes(cpu, MainWriteAt, code);
         const history = new ReplayHistory(cpu);
         take(history);
         runTo(cpu, MainWriteAt + code.length - JmpToItself.length);
-        expect(finished(history.lastWrite(address)).write).toMatchObject(expected);
+        expect(finished(history.lastWrite(address, view)).write).toMatchObject(expected);
     });
 
     it.each([
-        ["with no history to search", () => {}, (history) => history.lastWrite(Written), /no history to search/],
+        [
+            "with no history to search",
+            () => {},
+            (history) => history.lastWrite(Written, PagedView),
+            /no history to search/,
+        ],
         [
             "past a refusal in the newest stretch",
             (history) => {
                 takeAndRun(history);
                 history.log.refuse(TestRefusal);
             },
-            (history) => history.lastWrite(Written),
+            (history) => history.lastWrite(Written, PagedView),
             /The search cannot go back past a refusal the test made/,
         ],
-        ["of ROM", takeAndRun, (history) => history.lastWrite(RomAddress), /That is ROM/],
+        ["of ROM", takeAndRun, (history) => history.lastWrite(RomAddress, PagedView), /That is ROM/],
+        [
+            "of a sideways ROM bank",
+            takeAndRun,
+            (history) => history.lastWrite(SidewaysByte, bankView(BasicBank)),
+            /That is ROM/,
+        ],
         [
             "when the run since the newest snapshot cannot be repeated",
             (history) => {
                 takeAndRun(history);
                 history.cpu.writemem(Written, EditedValue);
             },
-            (history) => history.lastWrite(Written),
+            (history) => history.lastWrite(Written, PagedView),
             /could not repeat/,
         ],
     ])("refuses a search %s, leaving the machine be", async (_, set, search, why) => {
@@ -232,7 +271,7 @@ describe("Finding the last write to a byte", () => {
         take(history);
         runFor(cpu, SomeCycles);
         const before = snapshotToJSON(cpu.snapshotState());
-        const search = history.lastWrite(Written);
+        const search = history.lastWrite(Written, PagedView);
         expect(search.next().done).toBe(false);
         expect(snapshotToJSON(cpu.snapshotState())).toEqual(before);
         runFor(cpu, SomeCycles);
