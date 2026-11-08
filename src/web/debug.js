@@ -500,7 +500,7 @@ export class Debugger {
         this.breakpoints = new BreakpointsPanel({
             arrangement,
             resolve: (text) => this._resolveBreakpoint(text),
-            nameOf: (address, bank) => this._breakpointNames(bank).address(address, this.cpu.pc)?.name,
+            nameOf: (address, bank) => this._nameIn(address, bank),
             showCode: (address, bank) => this._showCode(address, bank),
             showMemory: (address, bank) => {
                 this._showPinned(this._paging.memory, bank, address);
@@ -516,7 +516,7 @@ export class Debugger {
             refusal: () => this._searchRefusal(),
             search: () => this._history.callStack(),
             isStopped: () => !this._loop.isRunning(),
-            nameOf: (address, bank) => this._breakpointNames(bank).address(address, this.cpu.pc)?.name,
+            nameOf: (address, bank) => this._nameIn(address, bank),
             showCode: (address, bank) => this._showCode(address, bank),
         });
         this._bindToolbar();
@@ -615,7 +615,7 @@ export class Debugger {
     }
 
     _renameShown() {
-        if (this.cpu && this.breakpoints.floating.isOpen) this._matchSymbols();
+        if (this.cpu && (this.breakpoints.floating.isOpen || this.callStack.floating.isOpen)) this._matchSymbols();
         if (!this.cpu || (!this._inDebugger && !this._ownPanelsShown())) return;
         this._matchSymbols();
         this._refresh.drawNow();
@@ -1082,6 +1082,11 @@ export class Debugger {
         if (bank === undefined) return undefined;
         const view = bankView(bank);
         return viewsFor(this.cpu.model).includes(view) ? view : undefined;
+    }
+
+    /** The name of `address`, in sideways `bank` if given, as the Breakpoints and Call stack panels name it. */
+    _nameIn(address, bank) {
+        return this._breakpointNames(bank).address(address, this.cpu.pc)?.name;
     }
 
     /** Shows the code at `address` in the disassembly, in sideways `bank` where it is given and the view has it. */

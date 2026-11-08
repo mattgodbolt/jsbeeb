@@ -58,7 +58,7 @@ export class CallStackPanel {
         const { floating, body } = panelShell({
             id: "callstack",
             title: "Call stack",
-            feature: "callstack",
+            feature: "call_stack",
             menuGroup: MenuGroup.cpu,
             group: DebugGroup,
             place: () => ({ x: StartEdge, y: { ...StartEdge, attach: { to: "memory", side: "after" } } }),
@@ -88,7 +88,7 @@ export class CallStackPanel {
             this._show([], WhileRunning);
             return;
         }
-        const moment = cpuMoment(this._cpu);
+        const moment = this._moment();
         if (moment === this._shownAt) return;
         this._forget();
         this._shownAt = moment;
@@ -100,6 +100,12 @@ export class CallStackPanel {
     /** Names the frames shown again, as the names the debugger knows change. */
     renamed() {
         for (const { name, address, bank } of this._named) this._name(name, address, bank);
+    }
+
+    // Where the machine is, as a search depends on it: the stack pointer and program counter can be edited in place.
+    _moment() {
+        const { s, pc } = this._cpu;
+        return `${cpuMoment(this._cpu)}:${s}:${pc}`;
     }
 
     _forget() {
@@ -115,11 +121,17 @@ export class CallStackPanel {
             this._show(step.value, Searching);
             await new Promise((resolve) => setTimeout(resolve, 0));
             // A machine that has moved on is searched afresh as the panel is next drawn.
-            if (this._searching !== searching || cpuMoment(this._cpu) !== this._shownAt) return;
+            if (this._searching !== searching || this._moment() !== this._shownAt) return;
             step = searching.next();
         }
         this._searching = null;
         const found = step.value;
+        // Moved without a cycle passing, as by a key or an edit, which the panel is not drawn again for.
+        if (found.movedOn) {
+            this._shownAt = null;
+            this.update();
+            return;
+        }
         if (found.refusal) this._show([], found.refusal);
         else this._show(found.frames, endText(found));
     }

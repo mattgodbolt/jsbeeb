@@ -144,8 +144,10 @@ describe("Finding the last write to a byte", () => {
         // As an instruction fetched where the Master's ACCCON E bit maps shadow RAM would leave it.
         cpu.memStatOffset = OtherPagingHalf;
         const before = snapshotToJSON(cpu.snapshotState());
+        const moment = cpuMoment(cpu);
         const { write, searched, stoppedBy } = finished(history.lastWrite(Written));
         expect(snapshotToJSON(cpu.snapshotState())).toEqual(before);
+        expect(cpuMoment(cpu)).toBe(moment);
         expect(cpu.memStatOffset).toBe(OtherPagingHalf);
         expect(stoppedBy).toBe(expected.stoppedBy);
         if (expected.write === null) {
@@ -399,6 +401,21 @@ describe("Finding the call stack", () => {
         expect(shownBetween[0]).toEqual([inner]);
         expect(snapshotToJSON(cpu.snapshotState())).toEqual(before);
         expect(cpuMoment(cpu)).toBe(moment);
+    });
+
+    it.each([
+        [
+            "deeper, the stack moved where the newest stretch ends",
+            0xe0,
+            { frames: [], accounted: true, txsAt: SpinAt + 2 },
+        ],
+        ["higher, dropping the frame it moved above", 0xfd, { frames: [outer], accounted: true, txsAt: null }],
+    ])("goes back past a TXS that moved the stack only if it moved it %s", async (_, s, expected) => {
+        const { cpu, history } = await nestedCalls(EmptyStack);
+        loadBytes(cpu, SpinAt, [...StackAt(s), ...JmpTo(SpinAt + StackAt(s).length)]);
+        take(history);
+        runTo(cpu, SpinAt + StackAt(s).length);
+        expect(finished(history.callStack())).toEqual(expect.objectContaining(expected));
     });
 
     it("is empty, at once, with the stack empty", async () => {

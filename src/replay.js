@@ -461,16 +461,16 @@ class OutLanding {
     startWindow() {
         this.shallower = [];
         this.entering = null;
-        this.txsAt = null;
+        this.txs = null;
     }
 
     passing(pc, opcode) {
         this._entered(pc);
         const height = this._height(this.cpu.s);
         const cycle = cycleCount(this.cpu);
-        if (this.txsAt !== null) this._keep({ cycle, height, kind: null, txsAt: this.txsAt });
+        this._movedBy(cycle, height);
         const { flow, mnemonic } = this.cpu.disassembler.describeOpcode(opcode);
-        this.txsAt = mnemonic === "TXS" ? pc : null;
+        if (mnemonic === "TXS") this.txs = { at: pc, height };
         const kind = flow === "call" ? "JSR" : flow === "interrupt" ? "BRK" : null;
         this._keep({ cycle, height, kind, site: pc, siteBank: this._bankAt(pc) });
     }
@@ -480,7 +480,16 @@ class OutLanding {
         this._entered(returnsTo);
         const height = this._height((this.cpu.s + InterruptPushes) & 0xff);
         const { cycle } = this.shallower.at(-1);
+        this._movedBy(cycle, height);
         this._keep({ cycle, height, kind: taken.toUpperCase(), site: returnsTo, siteBank: this._bankAt(returnsTo) });
+    }
+
+    // Marks where the TXS just run, if any, moved the stack to, `height`, should that be deeper than it was: frames
+    // above a stack moved up stay as they were, and those its moving up drops are dropped as a return would drop them.
+    _movedBy(cycle, height) {
+        if (this.txs !== null && height < this.txs.height)
+            this._keep({ cycle, height, kind: null, txsAt: this.txs.at });
+        this.txs = null;
     }
 
     // The routine the entry kept last went to starts at `pc`.
@@ -530,11 +539,13 @@ class CallStack extends OutLanding {
 
     /**
      * How the stack was accounted for in the window just replayed, or null if it was not: `{ txsAt }`, the address
-     * of the TXS that moved it to where the outermost frame found entered from, or with `txsAt` null, empty there.
+     * of the TXS that moved it deeper, to where the outermost frame found entered from, or with `txsAt` null, empty
+     * there.
      */
     inWindow() {
         // The machine stands where the window ends, before the instruction after its last.
         this._entered(this.cpu.pc);
+        this._movedBy(cycleCount(this.cpu), this._height(this.cpu.s));
         for (const kept of this.shallower.toReversed()) {
             if (kept.height < this.highestAfter) continue;
             if (kept.txsAt !== undefined) return { txsAt: kept.height === this.emptyHeight ? null : kept.txsAt };
@@ -885,7 +896,8 @@ export class ReplayHistory extends EventTarget {
      * `{ kind, cycle, site, siteBank, routine, routineBank }`: JSR, BRK, IRQ or NMI; the cycle its instruction, or
      * the one the interrupt came after, started; the address it was made from (for an interrupt, the one it returns
      * to) and the routine it entered, each with the sideways bank it was in, if any. Returns `{ refusal }` when it
-     * cannot search, or else `{ frames, accounted, txsAt, stoppedBy }`: `accounted` if the stack was empty or moved
+     * cannot search, with `movedOn` too if the machine moved on before it finished, or else
+     * `{ frames, accounted, txsAt, stoppedBy }`: `accounted` if the stack was empty or moved deeper
      * by a TXS (at `txsAt`) before the outermost frame, so that there are no older ones; if not, `stoppedBy` is why
      * the search went back no further, or null where the history ends. Leaves the machine as it was.
      */
@@ -893,6 +905,7 @@ export class ReplayHistory extends EventTarget {
         const refusal = this._unavailable("The call stack", NothingToSearch);
         if (refusal) return { refusal };
         if (this.cpu.s === EmptyStack) return { frames: [], accounted: true, txsAt: null, stoppedBy: null };
+        const now = cycleCount(this.cpu);
         const stack = new CallStack(this.cpu);
         const original = this._original();
         const search = this._searchingAway(stack, original);
@@ -901,9 +914,10 @@ export class ReplayHistory extends EventTarget {
             yield stack.frames;
             step = search.next();
         }
-        const { movedOn, found, stoppedBy } = step.value;
-        if (movedOn) return { refusal: MovedOn };
+        const { movedOn, found, reached, stoppedBy } = step.value;
+        if (movedOn) return { refusal: MovedOn, movedOn };
         this._putBack(original);
+        if (stoppedBy === Unrepeated && reached === now) return { refusal: NotRepeatedHere };
         const { frames } = stack;
         return found
             ? { frames, accounted: true, txsAt: found.txsAt, stoppedBy: null }

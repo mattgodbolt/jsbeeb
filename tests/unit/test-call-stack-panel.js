@@ -4,6 +4,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { fake6502 } from "../../src/fake6502.js";
 import { CallStackPanel } from "../../src/web/call-stack-panel.js";
 import { PanelArrangement } from "../../src/web/floating-panel.js";
+import { cycleCount } from "../../src/lockstep.js";
+import { durationText } from "../../src/replay.js";
 import { teardownDom } from "./helpers.js";
 
 const Inner = { kind: "JSR", cycle: 0, site: 0x3000, routine: 0xffee, siteBank: undefined, routineBank: undefined };
@@ -16,21 +18,28 @@ describe("CallStackPanel", () => {
     let stopped;
     let showCode;
     let searches;
+    let resumed;
 
-    /** A panel whose searches each yield [Inner] once, then end as `found`, unless `refusal` says why not. */
-    const open = async ({ found, refusal }) => {
+    /**
+     * A panel whose searches each yield [Inner] once, then end as `found`, or the first as `first` if given, unless
+     * `refusal` says why not.
+     */
+    const open = async ({ found, refusal, first }) => {
         cpu = fake6502(null);
         await cpu.initialise();
         stopped = true;
         showCode = vi.fn();
         searches = [];
+        resumed = 0;
         panel = new CallStackPanel({
             arrangement: new PanelArrangement(() => window.localStorage),
             refusal: () => refusal,
             search: () => {
+                const ending = searches.length === 0 && first ? first : found;
                 const search = (function* () {
                     yield [Inner];
-                    return found;
+                    resumed++;
+                    return ending;
                 })();
                 searches.push(search);
                 return search;
@@ -60,6 +69,9 @@ describe("CallStackPanel", () => {
     it("shows the frames found so far while it searches, then the rest, each address showing its code", async () => {
         await open({ found: { frames: [Inner, Outer], accounted: true, txsAt: null, stoppedBy: null } });
         expect(rows()).toEqual([["JSR", "$ffee OSWRCH", "from $3000"]]);
+        expect(panel.panel.querySelector("tr").title).toBe(
+            `A JSR called this routine ${cycleCount(cpu)} cycles (${durationText(cycleCount(cpu) / cpu.model.cyclesPerSecond)}) ago`,
+        );
         expect(endLine().textContent).toMatch(/Searching back/);
         await searched();
         expect(rows()).toEqual([
@@ -96,14 +108,36 @@ describe("CallStackPanel", () => {
         expect([rows(), endLine().textContent, searches.length]).toEqual([[], "No history.", 0]);
     });
 
-    it("ends its search once the machine runs, and searches afresh where it stops next", async () => {
+    it.each([
+        [
+            "the machine runs",
+            () => {
+                stopped = false;
+                panel.update();
+                expect(endLine().textContent).toBe("The call stack shows while the machine is stopped.");
+                stopped = true;
+            },
+        ],
+        ["the panel closes", () => panel.floating.close()],
+        ["the machine steps", () => cpu.execute(1)],
+    ])("ends its search once %s, and searches afresh where it is next shown stopped", async (_, interrupt) => {
         await open({ found: { frames: [Inner], accounted: true, txsAt: null, stoppedBy: null } });
-        stopped = false;
-        panel.update();
-        expect([rows(), endLine().textContent]).toEqual([[], "The call stack shows while the machine is stopped."]);
-        expect(searches[0].next().done).toBe(true);
-        stopped = true;
+        interrupt();
+        await searched();
+        expect(resumed).toBe(0);
+        panel.floating.open();
         panel.update();
         expect(searches).toHaveLength(2);
+        await searched();
+        expect(resumed).toBe(1);
+    });
+
+    it("searches afresh when the machine moved on without a cycle passing", async () => {
+        const found = { frames: [Inner, Outer], accounted: true, txsAt: null, stoppedBy: null };
+        await open({ found, first: { refusal: "Moved on.", movedOn: true } });
+        await searched();
+        expect(searches).toHaveLength(2);
+        await searched();
+        expect(rows()).toHaveLength(2);
     });
 });
