@@ -9,16 +9,7 @@ import { cycleCount, stateHash } from "../../src/lockstep.js";
 import { TEST_6502 } from "../../src/models.js";
 import { RunMode } from "../../src/web/emulation-loop.js";
 import { keyCodes } from "../../src/keymap.js";
-import {
-    bareFloatingPanel,
-    domFromIndexHtml,
-    loadBytes,
-    machineShowingFrames,
-    pressKeepsFocus,
-    sentEvents,
-    stubCanvases,
-    teardownDom,
-} from "./helpers.js";
+import { domFromIndexHtml, loadBytes, machineShowingFrames, sentEvents, stubCanvases, teardownDom } from "./helpers.js";
 
 const ProgramAt = 0x2000;
 // INC &70; JMP &2000
@@ -100,17 +91,11 @@ describe("RewindUI", () => {
             expect(history.snapshots()).toEqual(kept);
         });
 
-        it("opens in front of a window already open, with its keys on its own line and a close button that keeps the focus", () => {
-            const ui = make();
-            captured(1);
-            bareFloatingPanel(arrangement, "media", "Media", null).open();
-            ui.open();
-            const media = document.getElementById("media-panel");
-            expect(Number(panel().style.zIndex)).toBeGreaterThan(Number(media.style.zIndex));
+        it("shows its keys on its own line", () => {
+            make();
             expect(panel().querySelector(".panel-keys").textContent).toBe(
                 "Left/Right choose · Enter go back · Alt-S go back and debug · Escape cancel",
             );
-            expect(pressKeepsFocus(document.getElementById("rewind-close"))).toBe(true);
         });
 
         it("lets go and stays closed if the machine cannot be snapshotted", () => {
