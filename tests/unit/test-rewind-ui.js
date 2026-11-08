@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { RewindUI } from "../../src/web/rewind-ui.js";
+import { previewFrame } from "../../src/web/rewind-thumbnail.js";
 import { ReplayHistory, snapshotCycle } from "../../src/replay.js";
 import { cycleCount, stateHash } from "../../src/lockstep.js";
 import { TEST_6502 } from "../../src/models.js";
@@ -15,6 +16,8 @@ const CountForever = [0xe6, 0x70, 0x4c, 0x00, 0x20];
 const FrameCycles = 40000;
 // A picture no frame draws.
 const Marker = 0x12345678;
+// Compared pixel by pixel, as a failing toEqual on a whole frame takes minutes to describe the difference.
+const samePicture = (a, b) => a.length === b.length && a.every((pixel, i) => pixel === b[i]);
 
 describe("RewindUI", () => {
     let cpu;
@@ -194,15 +197,18 @@ describe("RewindUI", () => {
                 const marked = cpu.video.fb32.slice();
                 ui.open();
                 const strip = ui.snapshots;
-                const painted = [];
-                vi.spyOn(cpu.video, "paint").mockImplementation(() => painted.push(cpu.video.fb32.slice()));
                 key("ArrowLeft");
+                const now = history.original();
+                previewFrame(history, strip[1]);
+                cpu.video.renderPending();
+                const drawn = cpu.video.fb32.slice();
+                history.putBack(now);
                 loop.stop.mockImplementation(() => expect(resume).toHaveBeenCalled());
                 press();
                 const chosen = strip[1];
                 expect([cycleCount(cpu), stateHash(cpu)]).toEqual([at(chosen), hashes[1]]);
-                expect(cpu.video.fb32).toEqual(painted.at(-1));
-                expect(painted.at(-1)).not.toEqual(marked);
+                expect(samePicture(cpu.video.fb32, drawn)).toBe(true);
+                expect(samePicture(drawn, marked)).toBe(false);
                 expect(ui.rewindBuffer.getAll()).toEqual(strip.slice(0, 2));
                 expect(ui.frames.getAll().filter((snapshot) => at(snapshot) > at(chosen))).toEqual([]);
                 expect(Math.max(...history.snapshots().map(at))).toBe(at(chosen));
@@ -256,6 +262,17 @@ describe("RewindUI", () => {
             expect(panel().hidden).toBe(true);
             expect(resume).toHaveBeenCalledTimes(1);
             expect(ui.rewindBuffer.length).toBe(0);
+        });
+
+        it("closes when the debugger steps back while it is open", () => {
+            const ui = make();
+            captured(3);
+            frame();
+            ui.open();
+            expect(history.stepBack(false)).toBeNull();
+            expect(panel().hidden).toBe(true);
+            expect(resume).toHaveBeenCalledTimes(1);
+            expect(ui.snapshots).toEqual([]);
         });
 
         it("takes AltGr-S, which types a character, for no key of its own", () => {

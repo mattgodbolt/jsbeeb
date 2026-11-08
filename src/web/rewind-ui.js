@@ -40,7 +40,11 @@ export class RewindUI {
             if (this.isOpen) this._closePanel();
             this.forgetAll();
         });
-        history.addEventListener("landed", ({ detail }) => this.forget(detail.forgotten));
+        history.addEventListener("landed", ({ detail }) => {
+            // A step back from the debugger moves the machine from under an open panel, and may forget its seconds.
+            if (this.isOpen) this._closePanel();
+            this.forget(detail.forgotten);
+        });
 
         this.panel = document.getElementById("rewind-panel");
         this.filmstrip = document.getElementById("rewind-filmstrip");
@@ -109,6 +113,7 @@ export class RewindUI {
 
         this.resumeLoop = this.loop.hold("the rewind panel");
         this.isOpen = true;
+        this.video.renderPending();
         this.picture = this.video.fb32.slice();
         try {
             this._populateFilmstrip(
@@ -137,6 +142,8 @@ export class RewindUI {
      */
     commit(stopping) {
         if (!this.isOpen) return;
+        // Closed first, so that its own landing is not taken for one from elsewhere.
+        this.isOpen = false;
         this.history.landAt(this.snapshots[this.selectedIndex]);
         noteFeature(this.panel, "rewound");
         const debugging = this.loop.mode === RunMode.debugging;
@@ -198,6 +205,7 @@ export class RewindUI {
     _preview(index) {
         const shown = this._aside(() => {
             previewFrame(this.history, this.snapshots[index]);
+            this.video.renderPending();
             return this.video.fb32.slice();
         });
         this.video.fb32.set(shown);
