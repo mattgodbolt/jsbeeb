@@ -3,7 +3,7 @@ import path from "node:path";
 import sharp from "sharp";
 import { describe, expect, it } from "vitest";
 
-import { Favicon, renderIcons } from "../../tools/make-icons.js";
+import { renderIcons } from "../../tools/make-icons.js";
 
 const RepoRoot = path.join(import.meta.dirname, "..", "..");
 
@@ -33,7 +33,7 @@ describe("make-icons", () => {
     it("has rendered every checked-in icon from the current SVG (npm run icons)", async () => {
         for (const { file, data } of await renderIcons()) {
             const checkedIn = readFileSync(path.join(RepoRoot, file));
-            const pixels = file === Favicon.file ? icoPixels : pngPixels;
+            const pixels = file.endsWith(".ico") ? icoPixels : pngPixels;
             const [expected, actual] = await Promise.all([pixels(checkedIn), pixels(data)]);
             expect(actual.length, file).toBe(expected.length);
             for (let i = 0; i < expected.length; ++i) {

@@ -297,9 +297,9 @@ analytics on the page and sends nothing. `npm run test:e2e` builds with a dummy 
 itself, so it can check what the page would send; it answers every other outside request from the stand-ins in
 `tests/playwright/offline`, and blocks anything else and reports it as one of the page's problems.
 
-The owl is drawn once, as `public/jsbeeb-icon.svg`. After changing it, `npm run icons` renders every icon from it (the
-site's `jsbeeb-icon.png` and `favicon.ico`, the installable app's icons in `public/icons`, and the 256 px PNG the
-desktop app and its packages use), and a unit test fails if a checked-in icon no longer matches the SVG.
+The owl is drawn once, as `public/jsbeeb-icon.svg`. After changing it, `npm run icons` renders every icon from it:
+`jsbeeb-icon.png` (the page's navbar, the desktop app's window and its packages), `favicon.ico`, and the installable
+app's icons in `public/icons`. A unit test fails if a checked-in icon no longer matches the SVG.
 
 ## Running as a Desktop Application
 

@@ -2,15 +2,14 @@
 // Renders every icon jsbeeb ships from the one vector owl, public/jsbeeb-icon.svg.
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import pngToIco from "png-to-ico";
 import sharp from "sharp";
 
 const RepoRoot = path.join(import.meta.dirname, "..");
-const SourceSvg = "public/jsbeeb-icon.svg";
+const SourceSvg = readFileSync(path.join(RepoRoot, "public/jsbeeb-icon.svg"));
 const SvgSize = 256;
 const SvgDensity = 72;
-const Background = "#240202";
+const Background = SourceSvg.toString().match(/<rect [^>]*fill="([^"]+)"/)[1];
 // The farthest dot reaches 146 of the SVG's 256 units from the centre, and a maskable icon's safe zone is a circle
 // of radius 40% of the icon.
 const MaskableScale = 0.7;
@@ -22,12 +21,12 @@ const PngIcons = [
     { file: "public/icons/icon-512.png", size: 512, scale: 1 },
     { file: "public/icons/maskable-512.png", size: 512, scale: MaskableScale },
 ];
-export const Favicon = { file: "public/favicon.ico", sizes: [16, 32, 48] };
+const Favicon = { file: "public/favicon.ico", sizes: [16, 32, 48] };
 
 async function renderPng(size, scale) {
     const owlSize = Math.round(size * scale);
     const border = (size - owlSize) / 2;
-    return sharp(readFileSync(path.join(RepoRoot, SourceSvg)), { density: (SvgDensity * owlSize) / SvgSize })
+    return sharp(SourceSvg, { density: (SvgDensity * owlSize) / SvgSize })
         .extend({
             top: Math.floor(border),
             bottom: Math.ceil(border),
@@ -49,7 +48,7 @@ export async function renderIcons() {
     return icons;
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+if (import.meta.main) {
     for (const { file, data } of await renderIcons()) {
         const target = path.join(RepoRoot, file);
         mkdirSync(path.dirname(target), { recursive: true });
