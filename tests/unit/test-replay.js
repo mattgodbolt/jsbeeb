@@ -199,6 +199,15 @@ describe("Finding the last write to a byte", () => {
             (history) => history.lastWrite(Written),
             /The search cannot go back past a refusal the test made/,
         ],
+        [
+            "for the call stack past a refusal in the newest stretch",
+            (history) => {
+                takeAndRun(history);
+                history.log.refuse(TestRefusal);
+            },
+            (history) => history.callStack(),
+            /The search cannot go back past a refusal the test made/,
+        ],
         ["of ROM", takeAndRun, (history) => history.lastWrite(RomAddress), /That is ROM/],
         [
             "when the run since the newest snapshot cannot be repeated",

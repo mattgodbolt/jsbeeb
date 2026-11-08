@@ -472,7 +472,7 @@ class OutLanding {
         const { flow, mnemonic } = this.cpu.disassembler.describeOpcode(opcode);
         if (mnemonic === "TXS") this.txs = { at: pc, height };
         const kind = flow === "call" ? "JSR" : flow === "interrupt" ? "BRK" : null;
-        this._keep({ cycle, height, kind, site: pc, siteBank: this._bankAt(pc) });
+        this._keep({ cycle, height, kind, site: pc, siteBank: kind ? this._bankAt(pc) : undefined });
     }
 
     // Entered from the stack the instruction before left, which the interrupt pushed three bytes onto.
@@ -917,7 +917,9 @@ export class ReplayHistory extends EventTarget {
         const { movedOn, found, reached, stoppedBy } = step.value;
         if (movedOn) return { refusal: MovedOn, movedOn };
         this._putBack(original);
-        if (stoppedBy === Unrepeated && reached === now) return { refusal: NotRepeatedHere };
+        if (stoppedBy && reached === now) {
+            return { refusal: stoppedBy === Unrepeated ? NotRepeatedHere : `${CannotSearchPast} ${stoppedBy}.` };
+        }
         const { frames } = stack;
         return found
             ? { frames, accounted: true, txsAt: found.txsAt, stoppedBy: null }

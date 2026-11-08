@@ -239,13 +239,15 @@ describe("Debugger", () => {
         [...watchMenu().querySelectorAll("button")].find((choice) => choice.textContent === text).click();
 
     describe("the panels", () => {
-        it("has the call stack shown again as the machine stops, which takes no cycles", () => {
+        it("has the call stack shown again once the machine has stopped, which takes no cycles", async () => {
+            stoppedLoop.running = true;
             dbgr.callStack.floating.open();
             const endLine = () => document.querySelector("#callstack-panel .cs-end").textContent;
-            for (const running of [true, false]) {
-                stoppedLoop.running = running;
-                stoppedLoop.dispatchEvent(new Event("running"));
-            }
+            expect(endLine()).toMatch(/shows while the machine is stopped/);
+            stoppedLoop.running = false;
+            stoppedLoop.dispatchEvent(new Event("running"));
+            expect(endLine()).toMatch(/shows while the machine is stopped/);
+            await Promise.resolve();
             expect(endLine()).toMatch(/no history to search/);
         });
 
