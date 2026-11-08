@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { RewindUI } from "../../src/web/rewind-ui.js";
+import { PanelArrangement } from "../../src/web/floating-panel.js";
 import { ReplayHistory, snapshotCycle } from "../../src/replay.js";
 import { cycleCount, stateHash } from "../../src/lockstep.js";
 import { Video } from "../../src/video.js";
@@ -35,7 +36,7 @@ describe("Rewind on a real machine", () => {
         const cpu = machine.processor;
         const loop = Object.assign(new EventTarget(), { hold: () => () => {}, stop: () => {} });
         const history = new ReplayHistory(cpu);
-        const ui = new RewindUI({ loop, history });
+        const ui = new RewindUI({ loop, history, arrangement: new PanelArrangement(() => window.localStorage) });
         for (let frame = 1; frame <= Seconds * FramesPerSecond; frame++) {
             if (frame === KeyDownFrame) machine.keyDown(keyCodes.A);
             if (frame === KeyUpFrame) machine.keyUp(keyCodes.A);
