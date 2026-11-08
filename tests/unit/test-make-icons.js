@@ -1,9 +1,9 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import sharp from "sharp";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 
-import { MaskableMargin, SafeZoneRadius, owlReach, renderIcons } from "../../tools/make-icons.js";
+import { MaskableMargin, SafeZoneRadius, renderIcons } from "../../tools/make-icons.js";
 
 const RepoRoot = path.join(import.meta.dirname, "..", "..");
 
@@ -29,9 +29,30 @@ function maxDifference(a, b) {
     return max;
 }
 
+/** How far the owl's pixels reach from the image's centre, as a fraction of its size. The corner pixel is background. */
+async function renderedReach(png) {
+    const { data, info } = await sharp(png).raw().toBuffer({ resolveWithObject: true });
+    const { width, height, channels } = info;
+    const centre = width / 2;
+    let reach = 0;
+    for (let y = 0; y < height; ++y) {
+        for (let x = 0; x < width; ++x) {
+            const pixel = (y * width + x) * channels;
+            if (data.compare(data, 0, channels, pixel, pixel + channels) === 0) continue;
+            reach = Math.max(reach, Math.hypot(x + 0.5 - centre, y + 0.5 - centre));
+        }
+    }
+    return reach / width;
+}
+
 describe("make-icons", () => {
+    let icons;
+    beforeAll(async () => {
+        icons = await renderIcons();
+    });
+
     it("has rendered every checked-in icon from the current SVG (npm run icons)", async () => {
-        for (const { file, data } of await renderIcons()) {
+        for (const { file, data } of icons) {
             const checkedIn = readFileSync(path.join(RepoRoot, file));
             const pixels = file.endsWith(".ico") ? icoPixels : pngPixels;
             const [expected, actual] = await Promise.all([pixels(checkedIn), pixels(data)]);
@@ -43,8 +64,10 @@ describe("make-icons", () => {
     });
 
     it("keeps the maskable owl inside the safe zone by the margin", async () => {
-        const maskable = (await renderIcons()).find(({ file }) => file.endsWith("maskable-512.png"));
-        const onePixel = 1 / 512;
-        expect(await owlReach(maskable.data)).toBeLessThanOrEqual(SafeZoneRadius - MaskableMargin + onePixel);
+        const maskable = icons.find(({ file }) => file.endsWith("maskable-512.png"));
+        // An anti-aliased edge pixel's centre lies up to 0.71 px past the edge, and an odd border puts the owl half a
+        // pixel off centre.
+        const edgeSlack = 1.5 / 512;
+        expect(await renderedReach(maskable.data)).toBeLessThanOrEqual(SafeZoneRadius - MaskableMargin + edgeSlack);
     });
 });

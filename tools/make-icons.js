@@ -13,7 +13,19 @@ const Background = SourceSvg.toString().match(/<rect [^>]*fill="([^"]+)"/)[1];
 // Fractions of the icon's size; launchers may crop a maskable icon to any shape that holds this circle.
 export const SafeZoneRadius = 0.4;
 export const MaskableMargin = 0.09;
-const MaskableScale = (SafeZoneRadius - MaskableMargin) / (await owlReach(await renderPng(SvgSize, 1)));
+const MaskableScale = (SafeZoneRadius - MaskableMargin) / owlReach();
+
+/** How far the farthest dot's edge is from the SVG's centre, as a fraction of its size. */
+function owlReach() {
+    const svg = SourceSvg.toString();
+    const [, left, top, unit] = svg.match(/translate\(([\d.]+) ([\d.]+)\) scale\(([\d.]+)\)/).map(Number);
+    const dotRadius = Number(svg.match(/<circle id="dot" r="([\d.]+)"/)[1]);
+    const centre = SvgSize / 2;
+    const centreDistances = [...svg.matchAll(/<use href="#dot" x="(\d+)" y="(\d+)"/g)].map(([, x, y]) =>
+        Math.hypot(left + x * unit - centre, top + y * unit - centre),
+    );
+    return (Math.max(...centreDistances) + dotRadius * unit) / SvgSize;
+}
 
 const PngIcons = [
     { file: "public/jsbeeb-icon.png", size: 256, scale: 1 },
@@ -37,22 +49,6 @@ async function renderPng(size, scale) {
         })
         .png()
         .toBuffer();
-}
-
-/** How far the owl reaches from the image's centre, as a fraction of its size. The corner pixel is background. */
-export async function owlReach(png) {
-    const { data, info } = await sharp(png).raw().toBuffer({ resolveWithObject: true });
-    const { width, height, channels } = info;
-    const centre = width / 2;
-    let reach = 0;
-    for (let y = 0; y < height; ++y) {
-        for (let x = 0; x < width; ++x) {
-            const pixel = (y * width + x) * channels;
-            if (data.compare(data, 0, channels, pixel, pixel + channels) === 0) continue;
-            reach = Math.max(reach, Math.hypot(x + 0.5 - centre, y + 0.5 - centre));
-        }
-    }
-    return reach / width;
 }
 
 /** Every icon file, as the bytes to write under the repo root. */
