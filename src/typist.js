@@ -15,13 +15,14 @@ function instructionTimer(processor, deliver, abandon) {
             loadsAtStart = processor.resetsAndLoads;
             dueEpoch = processor.scheduler.epoch + (ms * processor.peripheralCyclesPerSecond) / 1000;
             hook ??= processor.debugInstruction.add(() => {
+                const atBoundary = (run) =>
+                    processor.inputLog ? processor.inputLog.atInstructionBoundary(run) : run();
                 if (timer.stranded()) {
                     timer.cancel();
-                    abandon();
+                    atBoundary(abandon);
                 } else if (processor.scheduler.epoch >= dueEpoch) {
                     dueEpoch = null;
-                    if (processor.inputLog) processor.inputLog.atInstructionBoundary(deliver);
-                    else deliver();
+                    atBoundary(deliver);
                     if (dueEpoch === null) timer.cancel();
                 }
                 return false;

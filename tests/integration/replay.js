@@ -215,6 +215,18 @@ describe.each([
         await expectBackAndForthLandsWhereItWas(machine, history);
     });
 
+    it("refuses nothing when a reset ends a paste", async () => {
+        const machine = await booted(model);
+        historyFromHere(machine);
+        const { inputLog } = machine.processor;
+        machine.typist.type(machine.model.stringToKeys("REM\n"), false);
+        await seconds(machine, IntoTypingSeconds);
+        machine.reset(false);
+        await seconds(machine, AroundAnInputSeconds);
+        expect(machine.typist.isTyping).toBe(false);
+        expect(inputLog.inputs.filter(({ refusal }) => refusal)).toEqual([]);
+    });
+
     it("changes the key before a breakpoint stops in the same instruction, and only once", async () => {
         const machine = await booted(model);
         const cpu = machine.processor;
