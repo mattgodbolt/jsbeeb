@@ -805,9 +805,10 @@ export class ReplayHistory extends EventTarget {
 
     /**
      * Puts the machine at `snapshot`, one of those kept, holding what the host held then, and lands there as a step
-     * back does, forgetting everything newer and changing what the machine holds to `holding`.
+     * back does, forgetting everything newer and changing what the machine holds to what the host holds now.
      */
-    landAt(snapshot, holding) {
+    landAt(snapshot) {
+        const holding = hostInputs(this.cpu);
         const cycle = snapshotCycle(this.cpu, snapshot);
         this.log.replay(snapshot, cycle, true, NoReplayHooks);
         this._landedAt(cycle, holding);

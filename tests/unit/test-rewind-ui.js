@@ -6,6 +6,7 @@ import { ReplayHistory, snapshotCycle } from "../../src/replay.js";
 import { cycleCount, stateHash } from "../../src/lockstep.js";
 import { TEST_6502 } from "../../src/models.js";
 import { RunMode } from "../../src/web/emulation-loop.js";
+import { keyCodes } from "../../src/keymap.js";
 import { domFromIndexHtml, loadBytes, machineShowingFrames, sentEvents, stubCanvases, teardownDom } from "./helpers.js";
 
 const ProgramAt = 0x2000;
@@ -120,14 +121,18 @@ describe("RewindUI", () => {
     });
 
     describe("choosing a snapshot", () => {
-        it("previews a clicked thumbnail by replaying on from it", () => {
+        it("previews a clicked thumbnail by replaying on from it, then puts the machine back where it is", () => {
             const ui = make();
             captured(3);
             ui.open();
+            const before = machineNow();
+            const shownAt = [];
+            vi.spyOn(cpu.video, "paint").mockImplementation(() => shownAt.push(cycleCount(cpu)));
             thumbs()[0].click();
             expect(selectedIndex()).toBe(0);
-            expect(cycleCount(cpu)).toBeGreaterThan(at(ui.snapshots[0]));
-            expect(cycleCount(cpu)).toBeLessThan(at(ui.snapshots[2]));
+            expect(shownAt.at(-1)).toBeGreaterThan(at(ui.snapshots[0]));
+            expect(shownAt.at(-1)).toBeLessThan(at(ui.snapshots[2]));
+            expect(machineNow()).toEqual(before);
         });
 
         it("walks the filmstrip with the arrow keys, stopping at the ends", () => {
@@ -218,18 +223,17 @@ describe("RewindUI", () => {
         it.each([
             ["cancelling", () => key("Escape")],
             ["going back", () => key("Enter")],
-        ])("lets go of a key let go while open once the machine is put where it belongs, on %s", (_, close) => {
+        ])("takes a key pressed while open where the machine is, and keeps it held on %s", (_, close) => {
             const ui = make();
-            captured(2);
+            captured(3);
+            frame();
             ui.open();
-            const letGo = vi.fn();
-            document.addEventListener("keyup", letGo);
-            document.dispatchEvent(new KeyboardEvent("keyup", { key: "z", code: "KeyZ" }));
-            expect(letGo).not.toHaveBeenCalled();
-            resume.mockImplementation(() => expect(letGo).toHaveBeenCalled());
+            ui.selectSnapshot(1);
+            cpu.keyboardInterface.keyDown(keyCodes.A);
             close();
-            expect(letGo.mock.calls.map(([e]) => [e.key, e.code])).toEqual([["z", "KeyZ"]]);
-            document.removeEventListener("keyup", letGo);
+            expect(cpu.sysvia.hasAnyKeyDown()).toBe(true);
+            expect(history.refusal()).toBeNull();
+            expect(history.stepBack(false)).toBeNull();
         });
 
         it("stops listening for keys once closed", () => {

@@ -46,18 +46,10 @@ export class RewindUI {
 
         this.isOpen = false;
         this.resumeLoop = null;
-        this.letGo = [];
         this.selectedIndex = -1;
         this.snapshots = [];
-        this.original = null;
 
         this._onKeyDown = this._onKeyDown.bind(this);
-        // A key let go while the machine is held is let go once the panel has put it back or taken it back, so
-        // that the machine and its history both see the key go up where the machine then is.
-        this._onKeyUp = (e) => {
-            e.stopPropagation();
-            this.letGo.push(e);
-        };
         this.closeBtn.addEventListener("click", () => this.close());
         this.openBtn.addEventListener("click", (e) => {
             e.preventDefault();
@@ -112,12 +104,12 @@ export class RewindUI {
         this.resumeLoop = this.loop.hold("the rewind panel");
         this.isOpen = true;
         try {
-            this.original = this.history.original();
-            this._populateFilmstrip(renderThumbnails(this.history, this.snapshots, RewindCaptureInterval));
+            this._populateFilmstrip(
+                this._aside(() => renderThumbnails(this.history, this.snapshots, RewindCaptureInterval)),
+            );
             this.panel.hidden = false;
             // Use capture phase so keys don't leak to the emulator's keyboard handler
             document.addEventListener("keydown", this._onKeyDown, true);
-            document.addEventListener("keyup", this._onKeyUp, true);
 
             this.selectedIndex = this.snapshots.length - 1;
             this._preview(this.selectedIndex);
@@ -125,7 +117,6 @@ export class RewindUI {
             this.filmstrip.scrollLeft = this.filmstrip.scrollWidth;
             noteFeature(this.panel, "open");
         } catch (e) {
-            if (this.original) this.history.putBack(this.original);
             this._closePanel();
             throw e;
         }
@@ -133,22 +124,21 @@ export class RewindUI {
 
     /**
      * Closes the panel with the machine gone back to the chosen snapshot, as a step back lands: the seconds after it
-     * are forgotten, and the machine runs on from it holding what the host held when the panel opened, less any
-     * key let go since. In the debugger, or with `stopping`, it stops in the debugger there.
+     * are forgotten, and the machine runs on from it holding what the host holds now. In the debugger, or with
+     * `stopping`, it stops in the debugger there.
      */
     commit(stopping) {
         if (!this.isOpen) return;
-        this.history.landAt(this.snapshots[this.selectedIndex], this.original.host);
+        this.history.landAt(this.snapshots[this.selectedIndex]);
         noteFeature(this.panel, "rewound");
         const debugging = this.loop.mode === RunMode.debugging;
         this._closePanel();
         if (stopping || debugging) this.loop.stop(true);
     }
 
-    /** Closes the panel with the machine, its picture and its history as they were before it opened. */
+    /** Closes the panel with the machine, its picture and its history where they are. */
     cancel() {
         if (!this.isOpen) return;
-        this.history.putBack(this.original);
         this.video.paint();
         this._closePanel();
     }
@@ -189,19 +179,30 @@ export class RewindUI {
         this.panel.hidden = true;
         this.filmstrip.innerHTML = "";
         this.snapshots = [];
-        this.original = null;
         document.removeEventListener("keydown", this._onKeyDown, true);
-        document.removeEventListener("keyup", this._onKeyUp, true);
-        for (const { key, code } of this.letGo.splice(0))
-            document.dispatchEvent(new KeyboardEvent("keyup", { key, code }));
         this.resumeLoop?.();
         this.resumeLoop = null;
     }
 
-    // Leaves the machine where the preview ran to; going back or cancelling puts it where it belongs.
     _preview(index) {
-        previewFrame(this.history, this.snapshots[index]);
-        this.video.paint();
+        this._aside(() => {
+            previewFrame(this.history, this.snapshots[index]);
+            this.video.paint();
+        });
+    }
+
+    /**
+     * Runs `run` on the machine's past, then puts the machine, the host's inputs and the picture back as they are now,
+     * so that whatever the host does while the panel is open (a key let go, the page losing the focus, an edit in the
+     * debugger) goes in where the machine is.
+     */
+    _aside(run) {
+        const now = this.history.original();
+        try {
+            return run();
+        } finally {
+            this.history.putBack(now);
+        }
     }
 
     _updateSelectionHighlight() {

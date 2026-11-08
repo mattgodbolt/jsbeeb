@@ -52,8 +52,10 @@ describe("Rewind on a real machine", () => {
         const { cpu, history, ui, held } = await rewindable();
         const before = { state: stateHash(cpu), held: held(), picture: cpu.video.fb32.slice() };
         ui.open();
+        const heldWhenShown = [];
+        vi.spyOn(cpu.video, "paint").mockImplementation(() => heldWhenShown.push(cpu.sysvia.hasAnyKeyDown()));
         ui.selectSnapshot(HeldAt);
-        expect(cpu.sysvia.hasAnyKeyDown()).toBe(true);
+        expect(heldWhenShown.at(-1)).toBe(true);
         key("Escape");
         expect({ state: stateHash(cpu), held: held(), picture: cpu.video.fb32.slice() }).toEqual(before);
         expect(cpu.sysvia.hasAnyKeyDown()).toBe(false);

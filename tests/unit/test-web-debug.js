@@ -1814,7 +1814,7 @@ describe("Debugger", () => {
                         const snapshot = cpu.snapshotState();
                         history.taken(snapshot, null);
                         dbgr.attachStepBack(history);
-                        history.landAt(snapshot, history.original().host);
+                        history.landAt(snapshot);
                     },
                 ],
             ])("forgets the run when the machine %s", (_, replace) => {
