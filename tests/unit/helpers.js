@@ -325,3 +325,16 @@ export function machineWithRealChips(model, options) {
         soundChip: new SoundChip(() => {}),
     });
 }
+
+const ModeSevenCrtc = [63, 40, 51, 0x24, 30, 2, 25, 27, 0x93, 18];
+
+/** A machine with real chips (see machineWithRealChips) whose CRTC is set up for MODE 7, so that frames come. */
+export async function machineShowingFrames(model) {
+    const cpu = machineWithRealChips(model);
+    await cpu.initialise();
+    ModeSevenCrtc.forEach((value, register) => {
+        cpu.video.crtc.write(0, register);
+        cpu.video.crtc.write(1, value);
+    });
+    return cpu;
+}
