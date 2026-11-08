@@ -10,6 +10,7 @@ import { hd, hexbyte, hexword } from "../../src/hex.js";
 
 const log = false;
 const BinDir = path.join(RepoRoot, "tests/6502_65C02_functional_tests/bin_files");
+const RecentPcsShown = 16;
 
 async function runTest(processor, test, name) {
     const base = path.join(BinDir, test);
@@ -36,6 +37,7 @@ async function runTest(processor, test, name) {
     for (let i = 0; i < data.length; ++i) processor.writemem(i, data[i]);
 
     processor.pc = 0x400;
+    const recentPcs = [];
     processor.debugInstruction.add(function (addr) {
         if (log) {
             console.log(
@@ -52,22 +54,23 @@ async function runTest(processor, test, name) {
         }
 
         // Stop once we get stuck at the same address.
-        return addr === processor.getPrevPc(1);
+        const stuck = addr === recentPcs.at(-1);
+        recentPcs.push(addr);
+        if (recentPcs.length > RecentPcsShown) recentPcs.shift();
+        return stuck;
     });
     console.log("Running Dormann " + name + " tests...");
     processor.execute(2000000 * 60);
     console.log(`Run complete at $${hexword(processor.pc)}`);
     const result = processor.pc === expectedPc;
-    if (!result) logFailure(processor);
+    if (!result) logFailure(processor, recentPcs);
     return result;
 }
 
-function logFailure(processor) {
+function logFailure(processor, recentPcs) {
     console.log("Failed at " + hexword(processor.pc));
     console.log("Previous PCs:");
-    for (let i = 1; i < 16; ++i) {
-        console.log("  " + hexword(processor.getPrevPc(i)));
-    }
+    for (const pc of recentPcs) console.log("  " + hexword(pc));
     console.log("A: " + hexbyte(processor.a));
     console.log("X: " + hexbyte(processor.x));
     console.log("Y: " + hexbyte(processor.y));

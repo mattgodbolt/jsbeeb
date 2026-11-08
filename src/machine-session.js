@@ -21,6 +21,7 @@ import { requireBank } from "./paging.js";
 import { hexbyte, hexword } from "./hex.js";
 import { copySnapshot } from "./6502.js";
 import { ReplayHistory, finished, snapshotCycle } from "./replay.js";
+import { recentInstructions } from "./instruction-trace.js";
 import { RewindBuffer } from "./rewind.js";
 import { cycleCount } from "./lockstep.js";
 import { FramesPerSecond } from "./emulation-tick.js";
@@ -519,6 +520,19 @@ export class MachineSession {
         const refusal = this._replayRefusal();
         if (refusal) return { refusal };
         return this._asReplay(() => finished(this._history.lastWrite(address)));
+    }
+
+    /**
+     * The last `count` instructions the machine ran, and the interrupts it took between them, found by replaying the
+     * history and leaving the machine as it was: `{ refusal }` if it cannot replay, or else `{ entries, stoppedBy }`
+     * as instruction-trace.js's recentInstructions gives them, the newest last. See stepBack for what its replays
+     * leave alone.
+     * @param {number} count
+     */
+    trace(count) {
+        const refusal = this._replayRefusal();
+        if (refusal) return { refusal };
+        return this._asReplay(() => finished(recentInstructions(this._history, count)));
     }
 
     /** Tokenise BBC BASIC source and write it into PAGE */

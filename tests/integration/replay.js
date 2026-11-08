@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { finished, ReplayHistory, snapshotCycle } from "../../src/replay.js";
+import { recentInstructions } from "../../src/instruction-trace.js";
+import { cycleCount } from "../../src/lockstep.js";
 import { createSnapshot, restoreSnapshot, snapshotFromJSON, snapshotToJSON } from "../../src/snapshot.js";
 import { Video } from "../../src/video.js";
 import { AtomSoundChip, SoundChip } from "../../src/soundchip.js";
@@ -55,6 +57,8 @@ const LoopJump = ScratchAddress + 3;
 const TextCursorX = 0x0318;
 const ForwardWindows = 3;
 const ForwardWindowSeconds = 0.007;
+// More than the newest stretch holds, so that a trace reaches into an older one.
+const TraceEntries = 3000;
 const AtomPauseThenSaveToTheCard = ["10 F.I=1TO50;WAIT;N.", '20 *SAVE "NEW" 2900 2A00'];
 
 async function booted(model, options) {
@@ -477,6 +481,101 @@ describe("Reverse continuing", () => {
         }
         cpu.breakpoints.add({ kind: "vsync" });
         expect(finished(history.reverseContinue())).toMatch(/found no breakpoint or watch hit/);
+    });
+});
+
+describe.each([
+    ["a B", "B-DFS1.2"],
+    ["a Master", "Master"],
+])("Tracing on %s", (_, model) => {
+    /** What the machine runs from here on, as a trace of it should give it. */
+    function recording(cpu) {
+        const ran = [];
+        const note = (kind, address, bytes) => {
+            const { a, x, y, s } = cpu;
+            ran.push({ kind, cycle: cycleCount(cpu), address, bytes, a, x, y, s, p: cpu.p.asByte() });
+        };
+        const instruction = cpu.debugInstruction.add((pc) => {
+            note(
+                "instruction",
+                pc,
+                [0, 1, 2].map((i) => cpu.peekmem(pc + i)),
+            );
+        });
+        const interrupt = cpu.debugInterrupt.add((taken, returnsTo) => note(taken, returnsTo, null));
+        return { ran, stop: () => [instruction, interrupt].forEach((hook) => hook.remove()) };
+    }
+
+    /** A history of `stretches` stretches, each `seconds` long, as the machine ran them. */
+    async function recorded(stretches, seconds) {
+        const machine = await printingForever(model);
+        const cpu = machine.processor;
+        const history = new ReplayHistory(cpu);
+        const { ran, stop } = recording(cpu);
+        for (let stretch = 0; stretch < stretches; stretch++) {
+            history.taken(cpu.snapshotState(), null);
+            await machine.runFor(seconds * machine.model.cyclesPerSecond);
+        }
+        stop();
+        return { machine, cpu, history, ran };
+    }
+
+    it("gives the instructions and interrupts the machine ran, the newest last, painting none of them and leaving the machine and its picture alone", async () => {
+        const { machine, cpu, history, ran } = await recorded(ForwardWindows, ForwardWindowSeconds);
+        const painted = vi.fn();
+        cpu.video.paint_ext = painted;
+        const before = machineNow(machine);
+        const { entries, stoppedBy } = finished(recentInstructions(history, TraceEntries));
+        expect(ran.length).toBeGreaterThan(TraceEntries);
+        expect(new Set(entries.map(({ kind }) => kind))).toEqual(new Set(["instruction", "irq"]));
+        expect([entries, stoppedBy]).toEqual([ran.slice(-TraceEntries), null]);
+        expect(machineNow(machine)).toEqual(before);
+        expect(painted).not.toHaveBeenCalled();
+    });
+
+    it.each([
+        ["the history ends", () => {}, null],
+        ["something no replay crosses", (cpu) => cpu.inputLog.refuse("a disc change"), "a disc change"],
+    ])("gives fewer where %s", async (_, change, stoppedBy) => {
+        const machine = await printingForever(model);
+        const cpu = machine.processor;
+        const history = new ReplayHistory(cpu);
+        history.taken(cpu.snapshotState(), null);
+        const { ran, stop } = recording(cpu);
+        await seconds(machine, ForwardWindowSeconds);
+        change(cpu);
+        await seconds(machine, ForwardWindowSeconds);
+        history.taken(cpu.snapshotState(), null);
+        const newest = ran.length;
+        await seconds(machine, ForwardWindowSeconds);
+        stop();
+        const entries = stoppedBy ? ran.slice(newest) : ran;
+        expect(finished(recentInstructions(history, ran.length + 1))).toEqual({ entries, stoppedBy });
+    });
+
+    it("refuses where the run did not repeat", async () => {
+        const { machine, history } = await recorded(1, ForwardWindowSeconds);
+        machine.writebyte(ScratchAddress, 0x42);
+        await seconds(machine, ForwardWindowSeconds);
+        expect(finished(recentInstructions(history, TraceEntries))).toEqual({
+            refusal: "The trace could not repeat the machine's run exactly.",
+        });
+    });
+
+    it("replays forward only the stretches between the cycles asked for", async () => {
+        const { cpu, history, ran } = await recorded(ForwardWindows, ForwardWindowSeconds);
+        const [, middle, newest] = history.snapshots().map((snapshot) => snapshotCycle(cpu, snapshot));
+        const cycles = [];
+        const hooks = {
+            instruction: () => void cycles.push(cycleCount(cpu)),
+            read: null,
+            write: null,
+            interrupt: null,
+        };
+        const replayed = finished(history.replayForward(middle + 1, newest, { hooks }));
+        expect(replayed).toEqual({ from: middle, to: newest, stoppedBy: null });
+        const inStretch = ran.filter(({ kind, cycle }) => kind === "instruction" && cycle >= middle && cycle < newest);
+        expect(cycles).toEqual(inStretch.map(({ cycle }) => cycle));
     });
 });
 

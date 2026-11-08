@@ -316,7 +316,7 @@ export class Breakpoints {
     _made(access, address, value, returnsTo) {
         const cpu = this._cpu;
         return {
-            pc: { execute: address, interrupt: returnsTo }[access] ?? cpu.getPrevPc(0),
+            pc: { execute: address, interrupt: returnsTo }[access] ?? cpu.instructionPc,
             old: access === "write" ? cpu.peekmem(address) : value,
         };
     }

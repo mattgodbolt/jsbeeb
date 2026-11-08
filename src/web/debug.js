@@ -15,6 +15,7 @@ import { NumRomBanks } from "../6502.js";
 import { describeHit } from "../breakpoints.js";
 import { sheilaAddress, machineSheilaBlocks } from "../sheila.js";
 import { BreakpointsPanel } from "./breakpoints-panel.js";
+import { TracePanel } from "./trace-panel.js";
 import { bindGotoForm, externalLink, FittedRows, labelHtml, powerOfTwoColumnsThatFit } from "./debug-dom.js";
 import { DisassemblyView } from "./disassembly-view.js";
 import { PagingOverride } from "./paging-override.js";
@@ -52,6 +53,8 @@ const NoHistory = "There is nothing to step back to here.";
 const NoStepBackInSession = "Step back is not available in a shared session.";
 const NoSearchInSession = "Searching back is not available in a shared session.";
 const NoHistoryToSearch = "There is no history to search back through here.";
+const NoTraceInSession = "The trace is not available in a shared session.";
+const NoHistoryToTrace = "There is no history to trace here.";
 const MovedSinceSearch = "The machine has moved on since that search; search again to step back to a write.";
 const StepBackRuns = ["stepBack", "stepBackOver", "stepBackOut", "reverseContinue"];
 // What a search back resolves to when a later one ended it.
@@ -514,6 +517,17 @@ export class Debugger {
         });
         // So a name typed while the machine runs can resolve, and the panel names its breakpoints' addresses.
         this.breakpoints.floating.addEventListener("open", () => this._matchSymbols());
+        this.trace = new TracePanel({
+            arrangement,
+            history: () => this._history,
+            unavailable: () => (this._loop.lockstep ? NoTraceInSession : this._history ? null : NoHistoryToTrace),
+            stopped: () => this._loop.mode === RunMode.debugging,
+            nameOf: (address) => this._names.address(address, this.cpu.pc)?.name,
+            showCode: (address) => {
+                this.panels.disassembly.open();
+                this._disassembly.update(address);
+            },
+        });
         this._bindToolbar();
         this._bindKeys(keys);
         this._bindLabelDrops();
@@ -953,6 +967,7 @@ export class Debugger {
         });
         this._sheila = machineSheilaBlocks(cpu);
         this.breakpoints.setCpu(cpu);
+        this.trace.setCpu(cpu);
         if (this._ownPanelsShown()) this._refresh.drawNow();
     }
     updateElem(elem, val) {
@@ -1050,6 +1065,7 @@ export class Debugger {
         }
         this._arrangement.keepAttached();
         this._showStepBack();
+        this.trace.refresh();
         this.cpu.video.debugPaint();
     }
 
@@ -1211,7 +1227,8 @@ export class Debugger {
     _showRunning() {
         const running = this._loop.isRunning();
         for (const [run, button] of Object.entries(this._buttons)) button.disabled = running !== (run === "stop");
-        if (!running) this._showStepBack();
+        if (running) this.trace.refresh();
+        else this._showStepBack();
     }
 
     _stepBackRefusal() {

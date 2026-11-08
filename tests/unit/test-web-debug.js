@@ -334,6 +334,7 @@ describe("Debugger", () => {
                 "Disassembly",
                 "Memory",
                 "Registers",
+                "Trace",
                 "Watches",
             ]);
         });
