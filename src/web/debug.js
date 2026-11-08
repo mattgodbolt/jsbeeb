@@ -722,7 +722,6 @@ export class Debugger {
         floating.open();
     }
 
-    // Who wrote a byte, the one `view` shows, is offered only while stopped.
     _offerWatch(e, address, name, view) {
         e.preventDefault();
         const offered = { address, label: name ?? `$${hexword(address)}`, view };
