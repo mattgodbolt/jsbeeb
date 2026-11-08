@@ -37,17 +37,26 @@ export function silenceAnalytics() {
 /*global gtag*/
 const injectedGtag = () => (!silenced && measurementId() && typeof gtag === "function" ? gtag : undefined);
 
+const InstalledDisplayModes = ["standalone", "window-controls-overlay", "minimal-ui", "fullscreen"];
+
+/** How the page is shown: the installed app's display mode, or "browser" for a tab. */
+export const displayMode = () =>
+    InstalledDisplayModes.find((mode) => window.matchMedia(`(display-mode: ${mode})`).matches) ??
+    // Safari on iOS has no display-mode query for a page added to the home screen.
+    (window.navigator.standalone ? "standalone" : "browser");
+
 const pageLocations = () => ({
     page_location: analyticsLocation(window.location.href),
     page_referrer: analyticsLocation(document.referrer),
 });
 
 /**
- * Sends the page_view, telling Google Analytics where the page is as analyticsLocation does, and notes the errors
- * `page` reports.
+ * Sends the page_view, telling Google Analytics where the page is as analyticsLocation does and how it is shown, and
+ * notes the errors `page` reports and its being installed as an app.
  */
 export function configureAnalytics(page = window) {
-    injectedGtag()?.("config", measurementId(), pageLocations());
+    injectedGtag()?.("config", measurementId(), { ...pageLocations(), display_mode: displayMode() });
+    page.addEventListener("appinstalled", () => note("app_installed", {}));
     page.addEventListener("error", (event) =>
         noteError("window", event.error ?? event.message, {
             file: event.filename,

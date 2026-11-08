@@ -22,6 +22,7 @@ jsbeeb supports the browser versions listed under `browserslist` in [package.jso
 - [Save State and Rewind](#save-state-and-rewind)
 - [Joystick Support](#joystick-support)
 - [Getting Set Up to Run Locally](#getting-set-up-to-run-locally)
+- [Installing as an App and Working Offline](#installing-as-an-app-and-working-offline)
 - [Running as a Desktop Application](#running-as-a-desktop-application)
 - [URL Parameters](#url-parameters)
 - [Patches](#patches)
@@ -296,6 +297,54 @@ variable of that name, and every other build (`npm start`, a clone's own build, 
 analytics on the page and sends nothing. `npm run test:e2e` builds with a dummy id and answers Google's requests
 itself, so it can check what the page would send; it answers every other outside request from the stand-ins in
 `tests/playwright/offline`, and blocks anything else and reports it as one of the page's problems.
+
+## Installing as an App and Working Offline
+
+The deployed site is an installable web app: Chrome offers "Install app" (the address bar on the desktop, the menu on
+Android), and the installed window has no browser chrome. A service worker, `src/service-worker.js`, built by
+`vite-plugin-pwa` in `vite.config.js` (which also holds the manifest), is what lets it start with no network. The
+desktop application above loads from `file://`, where service workers do not exist, and `src/web/install.js` does
+not register one there, on the dev server, in a browser without service workers, or for a `?benchmark` page.
+
+What the worker keeps, and when it changes:
+
+- The page itself is fetched from the network first, so a deploy is live on the next load; the copy kept at install
+  time is only used when the network does not answer within four seconds.
+- The built scripts and styles, every ROM, the images, fonts and sounds are kept when a version installs. The
+  Teletext data, the Econet data and the benchmarks are not.
+- A disc or tape served from this site is kept the first time it is used, so a game played once can be played
+  offline. Discs from any other site (Bitshifters, GitHub, archive.org, Google Drive) always come from the network.
+- A new version installs in the background and then waits. The page shows an "A new version of jsbeeb is ready"
+  notice, and only its Reload button switches to the new version, because switching reloads the page and would lose a
+  running machine. A tab that stays open is checked for a new version whenever it comes back into view.
+- `npm run test:e2e` blocks service workers, so the tests see the network, and only `tests/playwright/pwa.spec.js`
+  allows them, in a fresh browser context of its own.
+
+The icons are `public/icons/icon-192.png`, `icon-512.png`, `maskable-512.png` (the art inside the central 80% so
+Android can crop it) and `apple-touch-icon.png` (180 pixels); the manifest names them in `PwaIcons` in
+`vite.config.js`, and `index.html` names the last. Regenerating them from new art means replacing those four files.
+
+If a release has to be withdrawn from everyone who has installed it, ship a worker that removes itself and its
+caches, by replacing the contents of `src/service-worker.js` with the following and deploying as usual. Each browser
+replaces the old worker on its next visit, and the page it was serving is then loaded from the network. The
+`self.__WB_MANIFEST` line is there only because the build insists on finding it.
+
+```js
+self.__WB_MANIFEST;
+self.addEventListener("install", () => self.skipWaiting());
+self.addEventListener("activate", (event) =>
+  event.waitUntil(
+    (async () => {
+      await Promise.all((await caches.keys()).map((name) => caches.delete(name)));
+      await self.registration.unregister();
+      for (const client of await self.clients.matchAll({ type: "window" })) client.navigate(client.url);
+    })(),
+  ),
+);
+```
+
+The deploy serves `service-worker.js` with `Cache-Control: max-age=30`, as it does every file outside `assets/`, so a
+browser asks for a new worker within half a minute of a deploy.
 
 ## Running as a Desktop Application
 

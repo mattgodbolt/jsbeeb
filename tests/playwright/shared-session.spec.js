@@ -42,7 +42,7 @@ test("a paused machine hosts from the More menu, and a guest joins by the pasted
     const room = new URL(await link.textContent()).searchParams.get("client");
 
     const guestContext = await browser.newContext();
-    const guest = new Beeb(await guestContext.newPage());
+    const guest = new Beeb(await guestContext.newPage(), { withServiceWorker: false });
     try {
         await guest.open("?audioLatencyMs=80&fasttape");
         await guest.expectScreenText("BASIC");

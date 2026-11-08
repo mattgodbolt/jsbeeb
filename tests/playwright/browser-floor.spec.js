@@ -77,7 +77,7 @@ const breakBundle = async (page) => {
 test("a bundle that fails to parse leaves the message, and its own page_view, instead of a blank page", async ({
     page,
 }) => {
-    const beeb = new Beeb(page);
+    const beeb = new Beeb(page, { withServiceWorker: false });
     await breakBundle(page);
     await beeb.open("./?disc1=elite");
     await expect(page.locator("#browser-floor")).toBeVisible();

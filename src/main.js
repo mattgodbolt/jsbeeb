@@ -122,7 +122,7 @@ if (!window.isSecureContext)
         quietKey: "quietInsecureGamepads",
     });
 
-if (!benchmarkPage) registerServiceWorker();
+registerServiceWorker(window, { benchmark: !!benchmarkPage });
 
 const printer = new Printer();
 

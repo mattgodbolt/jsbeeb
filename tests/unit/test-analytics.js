@@ -109,9 +109,13 @@ describe("analytics", () => {
             };
         };
 
+        const showAs = (mode) =>
+            vi.stubGlobal("matchMedia", (query) => ({ matches: query === `(display-mode: ${mode})` }));
+
         beforeEach(() => {
             gtag = vi.fn();
             vi.stubGlobal("gtag", gtag);
+            showAs("browser");
             vi.spyOn(console, "log").mockImplementation(() => {});
             vi.spyOn(Document.prototype, "referrer", "get").mockReturnValue(
                 "https://bbc.xania.org/?disc1=gd:1AbC/Before.ssd&model=B",
@@ -167,7 +171,45 @@ describe("analytics", () => {
                 expect(gtag).toHaveBeenCalledWith("config", measurementId, {
                     page_location: `${origin()}/?disc1=browser&model=B`,
                     page_referrer: "https://bbc.xania.org/?disc1=gdrive&model=B",
+                    display_mode: "browser",
                 });
+            });
+
+            it.each(["standalone", "window-controls-overlay", "minimal-ui", "fullscreen"])(
+                "tells the page_view the page is an installed app in %s display mode",
+                async (mode) => {
+                    const { configureAnalytics } = await loadWithMeasurementId(measurementId);
+                    showAs(mode);
+                    configureAnalytics(new EventTarget());
+                    expect(gtag).toHaveBeenCalledWith(
+                        "config",
+                        measurementId,
+                        expect.objectContaining({ display_mode: mode }),
+                    );
+                },
+            );
+
+            it("tells the page_view about a home screen app on iOS, which has no display-mode query", async () => {
+                const { configureAnalytics } = await loadWithMeasurementId(measurementId);
+                Object.defineProperty(window.navigator, "standalone", { value: true, configurable: true });
+                try {
+                    configureAnalytics(new EventTarget());
+                } finally {
+                    delete window.navigator.standalone;
+                }
+                expect(gtag).toHaveBeenCalledWith(
+                    "config",
+                    measurementId,
+                    expect.objectContaining({ display_mode: "standalone" }),
+                );
+            });
+
+            it("notes the app being installed", async () => {
+                const { configureAnalytics } = await loadWithMeasurementId(measurementId);
+                const page = new EventTarget();
+                configureAnalytics(page);
+                page.dispatchEvent(new Event("appinstalled"));
+                expect(gtag).toHaveBeenCalledWith("event", "app_installed", {});
             });
 
             it("moves the location later events report without another page_view", async () => {
