@@ -14,8 +14,8 @@ const ShortcutCodesWhileOpen = new Set(
 );
 
 /**
- * Rewind scrubber UI — a filmstrip overlay showing thumbnails of recent
- * emulator states, allowing the user to click to restore any of them.
+ * The rewind panel: a filmstrip of the machine's last seconds, any of which it previews on the screen and can go
+ * back to. The machine is held while it is open.
  */
 export class RewindUI {
     /**
@@ -36,7 +36,10 @@ export class RewindUI {
         loop.addEventListener("frame-capture", () => this.captureFrame());
         loop.addEventListener("rewind-capture", () => this.capture());
         // What came before is another machine's past, which neither rewind nor step back can go back into.
-        loop.addEventListener("replacing-state", () => this.forgetAll());
+        loop.addEventListener("replacing-state", () => {
+            if (this.isOpen) this._closePanel();
+            this.forgetAll();
+        });
         history.addEventListener("landed", ({ detail }) => this.forget(detail.forgotten));
 
         this.panel = document.getElementById("rewind-panel");
@@ -48,6 +51,7 @@ export class RewindUI {
         this.resumeLoop = null;
         this.selectedIndex = -1;
         this.snapshots = [];
+        this.picture = null;
 
         this._onKeyDown = this._onKeyDown.bind(this);
         // Whatever a keypress would do, as the debugger's keys answer it, would act on a machine that is held.
@@ -105,6 +109,7 @@ export class RewindUI {
 
         this.resumeLoop = this.loop.hold("the rewind panel");
         this.isOpen = true;
+        this.picture = this.video.fb32.slice();
         try {
             this._populateFilmstrip(
                 this._aside(() => renderThumbnails(this.history, this.snapshots, RewindCaptureInterval)),
@@ -142,6 +147,7 @@ export class RewindUI {
     /** Closes the panel with the machine, its picture and its history where they are. */
     cancel() {
         if (!this.isOpen) return;
+        this.video.fb32.set(this.picture);
         this.video.paint();
         this._closePanel();
     }
@@ -157,8 +163,7 @@ export class RewindUI {
     }
 
     /**
-     * Restore the emulator to the snapshot at the given index and update
-     * both the main display and the filmstrip selection highlight.
+     * Chooses the snapshot at `index`, showing it on the screen and in the filmstrip; the machine stays where it is.
      * @param {number} index - index into the snapshots array
      */
     selectSnapshot(index) {
@@ -182,17 +187,21 @@ export class RewindUI {
         this.panel.hidden = true;
         this.filmstrip.innerHTML = "";
         this.snapshots = [];
+        this.picture = null;
         document.removeEventListener("keydown", this._onKeyDown, true);
         document.removeEventListener("keypress", this._onKeyPress, true);
         this.resumeLoop?.();
         this.resumeLoop = null;
     }
 
+    // The preview stays in the picture, so that a repaint while the panel is open, or going back, shows it.
     _preview(index) {
-        this._aside(() => {
+        const shown = this._aside(() => {
             previewFrame(this.history, this.snapshots[index]);
-            this.video.paint();
+            return this.video.fb32.slice();
         });
+        this.video.fb32.set(shown);
+        this.video.paint();
     }
 
     /**

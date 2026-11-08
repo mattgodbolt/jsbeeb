@@ -1,14 +1,16 @@
 // @vitest-environment jsdom
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { previewFrame, renderThumbnails } from "../../src/web/rewind-thumbnail.js";
-import { ReplayHistory } from "../../src/replay.js";
+import { describe, expect, it, vi } from "vitest";
+import { previewFrame } from "../../src/web/rewind-thumbnail.js";
+import { ReplayHistory, snapshotCycle } from "../../src/replay.js";
+import { cycleCount } from "../../src/lockstep.js";
 import { TEST_6502 } from "../../src/models.js";
-import { loadBytes, machineShowingFrames, stubCanvases } from "./helpers.js";
+import { loadBytes, machineShowingFrames } from "./helpers.js";
 
 const ProgramAt = 0x2000;
 // STA &3000; JMP &2000
 const StoreThenLoop = [0x8d, 0x00, 0x30, 0x4c, 0x00, 0x20];
 const FrameCycles = 40000;
+const LongestInstructionCycles = 8;
 
 async function historyRunning() {
     const cpu = await machineShowingFrames(TEST_6502);
@@ -44,21 +46,20 @@ describe("previewFrame", () => {
         breaking = false;
         expect(cpu.execute(1000)).toBe(false);
     });
-});
 
-describe("renderThumbnails", () => {
-    beforeEach(stubCanvases);
+    it("goes no further than a tenth of a second when the display never ends", async () => {
+        const { cpu, history } = await historyRunning();
+        // R6, the rows displayed, past R4, the rows in a frame.
+        cpu.video.crtc.write(0, 6);
+        cpu.video.crtc.write(1, 0x7f);
+        const snapshot = cpu.snapshotState();
+        const startFrame = cpu.video.frameCount;
 
-    afterEach(() => vi.restoreAllMocks());
+        previewFrame(history, snapshot);
 
-    it("gives each snapshot a thumbnail, aged from the newest", async () => {
-        const { history, snapshots } = await historyRunning();
-        const thumbnails = renderThumbnails(history, snapshots, 50);
-
-        expect(thumbnails.map(({ index, ageSeconds }) => [index, ageSeconds])).toEqual([
-            [0, 2],
-            [1, 1],
-            [2, 0],
-        ]);
+        expect(cpu.video.frameCount).toBe(startFrame);
+        const ran = cycleCount(cpu) - snapshotCycle(cpu, snapshot);
+        expect(ran).toBeGreaterThanOrEqual(cpu.model.cyclesPerSecond / 10);
+        expect(ran).toBeLessThan(cpu.model.cyclesPerSecond / 10 + LongestInstructionCycles);
     });
 });

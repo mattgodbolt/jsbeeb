@@ -13,6 +13,8 @@ const ProgramAt = 0x2000;
 // INC &70; JMP &2000
 const CountForever = [0xe6, 0x70, 0x4c, 0x00, 0x20];
 const FrameCycles = 40000;
+// A picture no frame draws.
+const Marker = 0x12345678;
 
 describe("RewindUI", () => {
     let cpu;
@@ -130,8 +132,7 @@ describe("RewindUI", () => {
             vi.spyOn(cpu.video, "paint").mockImplementation(() => shownAt.push(cycleCount(cpu)));
             thumbs()[0].click();
             expect(selectedIndex()).toBe(0);
-            expect(shownAt.at(-1)).toBeGreaterThan(at(ui.snapshots[0]));
-            expect(shownAt.at(-1)).toBeLessThan(at(ui.snapshots[2]));
+            expect(shownAt.some((cycle) => cycle > at(ui.snapshots[0]) && cycle < at(ui.snapshots[2]))).toBe(true);
             expect(machineNow()).toEqual(before);
         });
 
@@ -182,26 +183,35 @@ describe("RewindUI", () => {
                 () => key("ß", { code: "KeyS", altKey: true }),
                 true,
             ],
-        ])("goes back to the chosen snapshot on %s, forgetting everything newer", (_, mode, press, stops) => {
-            loop.mode = mode;
-            const ui = make();
-            const hashes = captured(3);
-            frame();
-            ui.open();
-            const strip = ui.snapshots;
-            key("ArrowLeft");
-            loop.stop.mockImplementation(() => expect(resume).toHaveBeenCalled());
-            press();
-            const chosen = strip[1];
-            expect([cycleCount(cpu), stateHash(cpu)]).toEqual([at(chosen), hashes[1]]);
-            expect(ui.rewindBuffer.getAll()).toEqual(strip.slice(0, 2));
-            expect(ui.frames.getAll().filter((snapshot) => at(snapshot) > at(chosen))).toEqual([]);
-            expect(Math.max(...history.snapshots().map(at))).toBe(at(chosen));
-            expect(panel().hidden).toBe(true);
-            expect(thumbs()).toHaveLength(0);
-            expect(resume).toHaveBeenCalledTimes(1);
-            expect(loop.stop.mock.calls).toEqual(stops ? [[true]] : []);
-        });
+        ])(
+            "goes back to the chosen snapshot on %s, showing it, forgetting everything newer",
+            (_, mode, press, stops) => {
+                loop.mode = mode;
+                const ui = make();
+                const hashes = captured(3);
+                frame();
+                cpu.video.fb32.fill(Marker);
+                const marked = cpu.video.fb32.slice();
+                ui.open();
+                const strip = ui.snapshots;
+                const painted = [];
+                vi.spyOn(cpu.video, "paint").mockImplementation(() => painted.push(cpu.video.fb32.slice()));
+                key("ArrowLeft");
+                loop.stop.mockImplementation(() => expect(resume).toHaveBeenCalled());
+                press();
+                const chosen = strip[1];
+                expect([cycleCount(cpu), stateHash(cpu)]).toEqual([at(chosen), hashes[1]]);
+                expect(cpu.video.fb32).toEqual(painted.at(-1));
+                expect(painted.at(-1)).not.toEqual(marked);
+                expect(ui.rewindBuffer.getAll()).toEqual(strip.slice(0, 2));
+                expect(ui.frames.getAll().filter((snapshot) => at(snapshot) > at(chosen))).toEqual([]);
+                expect(Math.max(...history.snapshots().map(at))).toBe(at(chosen));
+                expect(panel().hidden).toBe(true);
+                expect(thumbs()).toHaveLength(0);
+                expect(resume).toHaveBeenCalledTimes(1);
+                expect(loop.stop.mock.calls).toEqual(stops ? [[true]] : []);
+            },
+        );
 
         it.each([
             ["Escape", () => key("Escape")],
@@ -211,6 +221,7 @@ describe("RewindUI", () => {
             const ui = make();
             captured(2);
             frame();
+            cpu.video.fb32.fill(Marker);
             const [before, kept] = [machineNow(), history.snapshots()];
             ui.open();
             key("ArrowLeft");
@@ -235,6 +246,25 @@ describe("RewindUI", () => {
             expect(cpu.sysvia.hasAnyKeyDown()).toBe(true);
             expect(history.refusal()).toBeNull();
             expect(history.stepBack(false)).toBeNull();
+        });
+
+        it("closes, leaving the machine to its new state, when the state is replaced while it is open", () => {
+            const ui = make();
+            captured(2);
+            ui.open();
+            loop.dispatchEvent(new Event("replacing-state"));
+            expect(panel().hidden).toBe(true);
+            expect(resume).toHaveBeenCalledTimes(1);
+            expect(ui.rewindBuffer.length).toBe(0);
+        });
+
+        it("takes AltGr-S, which types a character, for no key of its own", () => {
+            const ui = make();
+            captured(2);
+            ui.open();
+            key("ś", { code: "KeyS", altKey: true, ctrlKey: true });
+            expect(panel().hidden).toBe(false);
+            expect(loop.stop).not.toHaveBeenCalled();
         });
 
         it("stops listening for keys once closed", () => {
