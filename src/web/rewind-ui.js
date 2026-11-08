@@ -1,4 +1,4 @@
-import { renderThumbnails, executeUntilFrame } from "./rewind-thumbnail.js";
+import { renderThumbnails, previewFrame } from "./rewind-thumbnail.js";
 import { RewindBuffer } from "../rewind.js";
 import { copySnapshot } from "../6502.js";
 import { PageHistory } from "../replay.js";
@@ -20,20 +20,18 @@ const ShortcutCodesWhileOpen = new Set(
 export class RewindUI {
     /**
      * @param {object} options
-     * @param {object} options.processor - Cpu6502 instance
-     * @param {object} options.video - Video instance
      * @param {object} options.loop - the emulation loop: says when to capture, and is held while the panel is open
      * @param {import("../replay.js").ReplayHistory} options.history - what the debugger steps back through, told of
      * every snapshot kept and when they are all forgotten, and telling of a step back that leaves the newer ones
-     * a future the machine no longer has
+     * a future the machine no longer has; the panel previews and goes back through it too
      */
-    constructor({ processor, video, loop, history }) {
+    constructor({ loop, history }) {
         this.rewindBuffer = new RewindBuffer(PageHistory.seconds);
         // The last few frames, newest last; the rewind history is copied from them.
         this.frames = new RewindBuffer(PageHistory.recent);
         this.history = history;
-        this.processor = processor;
-        this.video = video;
+        this.processor = history.cpu;
+        this.video = history.cpu.video;
         this.loop = loop;
         loop.addEventListener("frame-capture", () => this.captureFrame());
         loop.addEventListener("rewind-capture", () => this.capture());
@@ -52,7 +50,7 @@ export class RewindUI {
         this.resumeLoop = null;
         this.selectedIndex = -1;
         this.snapshots = [];
-        this.savedState = null;
+        this.original = null;
 
         this._onKeyDown = this._onKeyDown.bind(this);
         this.closeBtn.addEventListener("click", () => this.close());
@@ -103,56 +101,52 @@ export class RewindUI {
         if (this.snapshots.length === 0) return;
 
         this.resumeLoop = this.loop.hold("the rewind panel");
-        this.loop.replacingState();
         this.isOpen = true;
         try {
-            this.savedState = this.processor.snapshotState();
-            const thumbnails = renderThumbnails(
-                this.processor,
-                this.snapshots,
-                this.video,
-                RewindCaptureInterval,
-                this.savedState,
-            );
-            this._populateFilmstrip(thumbnails);
+            this.original = this.history.original();
+            this._populateFilmstrip(renderThumbnails(this.history, this.snapshots, RewindCaptureInterval));
             this.panel.hidden = false;
             // Use capture phase so keys don't leak to the emulator's keyboard handler
             document.addEventListener("keydown", this._onKeyDown, true);
 
-            // Select the newest snapshot ("now") and jump to it
             this.selectedIndex = this.snapshots.length - 1;
-            this._restoreAndPaint(this.selectedIndex);
+            this._preview(this.selectedIndex);
             this._updateSelectionHighlight();
             this.filmstrip.scrollLeft = this.filmstrip.scrollWidth;
             noteFeature(this.panel, "open");
         } catch (e) {
-            if (this.savedState) this.processor.restoreState(this.savedState);
+            if (this.original) this.history.putBack(this.original);
             this._closePanel();
             throw e;
         }
     }
 
     /**
-     * Close the rewind panel, committing the selected snapshot.
-     * The emulator resumes from the exact snapshot state.
+     * Closes the panel with the machine gone back to the chosen snapshot, as a step back lands: the seconds after it
+     * are forgotten, and the machine runs on from it holding what the host holds now.
      */
     commit() {
         if (!this.isOpen) return;
-        // Re-restore the snapshot so the CPU resumes from the exact point,
-        // not from the state advanced by executeUntilFrame during preview.
-        if (this.selectedIndex >= 0 && this.selectedIndex < this.snapshots.length) {
-            this.processor.restoreState(this.snapshots[this.selectedIndex]);
-        }
+        const snapshot = this.snapshots[this.selectedIndex];
+        this.history.landAt(snapshot, this.original.host);
+        // The history forgets only what it keeps, which leaves out seconds from before a state was loaded.
+        while (this.rewindBuffer.peek() !== snapshot) this.rewindBuffer.pop();
         noteFeature(this.panel, "rewound");
         this._closePanel();
     }
 
-    /**
-     * Close the rewind panel, restoring the state from before it was opened.
-     */
+    /** Goes back as `commit` does and stops in the debugger there. */
+    commitAndStop() {
+        if (!this.isOpen) return;
+        this.commit();
+        this.loop.stop(true);
+    }
+
+    /** Closes the panel with the machine, its picture and its history as they were before it opened. */
     cancel() {
         if (!this.isOpen) return;
-        this._renderState(this.savedState);
+        this.history.putBack(this.original);
+        this.video.paint();
         this._closePanel();
     }
 
@@ -175,7 +169,7 @@ export class RewindUI {
         if (index < 0 || index >= this.snapshots.length) return;
 
         this.selectedIndex = index;
-        this._restoreAndPaint(index);
+        this._preview(index);
         this._updateSelectionHighlight();
         this._scrollToSelected();
     }
@@ -192,29 +186,16 @@ export class RewindUI {
         this.panel.hidden = true;
         this.filmstrip.innerHTML = "";
         this.snapshots = [];
-        this.savedState = null;
-        // What the previews read and ran into is not the machine's own past.
-        this.history.restart();
+        this.original = null;
         document.removeEventListener("keydown", this._onKeyDown, true);
         this.resumeLoop?.();
         this.resumeLoop = null;
     }
 
-    /**
-     * Render a snapshot's frame to the display without advancing CPU state.
-     * Restores the snapshot, runs to vsync for a complete frame, paints it,
-     * then re-restores the snapshot so the CPU stays at the exact point.
-     */
-    _restoreAndPaint(index) {
-        this._renderState(this.snapshots[index]);
-    }
-
-    /** Render a state to the display, restoring it afterwards. */
-    _renderState(state) {
-        this.processor.restoreState(state);
-        executeUntilFrame(this.processor, this.video);
+    // Leaves the machine where the preview ran to; going back or cancelling puts it where it belongs.
+    _preview(index) {
+        previewFrame(this.history, this.snapshots[index]);
         this.video.paint();
-        this.processor.restoreState(state);
     }
 
     _updateSelectionHighlight() {
@@ -251,6 +232,13 @@ export class RewindUI {
 
     _onKeyDown(e) {
         if (e.altKey && !e.ctrlKey && ShortcutCodesWhileOpen.has(e.code)) return;
+        // By key code, so that the Mac's Option characters count.
+        if (e.altKey && e.code === "KeyS") {
+            e.preventDefault();
+            e.stopPropagation();
+            this.commitAndStop();
+            return;
+        }
         switch (e.key) {
             case "Escape":
                 e.preventDefault();

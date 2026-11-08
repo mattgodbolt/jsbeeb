@@ -6,7 +6,7 @@ import { nullIo } from "../../src/machine-spec.js";
 import { findModel } from "../../src/models.js";
 import { Printer } from "../../src/printer.js";
 import { ReplayHistory } from "../../src/replay.js";
-import { executeUntilFrame } from "../../src/web/rewind-thumbnail.js";
+import { previewFrame } from "../../src/web/rewind-thumbnail.js";
 import { IntCa1, PcrCa2High, PcrCa2Low, ViaRegister, domFromIndexHtml, loadBytes, teardownDom } from "./helpers.js";
 import { singleStep } from "../helpers/single-step.js";
 
@@ -234,13 +234,7 @@ describe("Machine", () => {
 
         it.each([
             ["stepping back", ({ history }) => expect(history.stepBack(false)).toBeNull()],
-            [
-                "previewing a rewind",
-                ({ cpu, start }) => {
-                    cpu.restoreState(start);
-                    executeUntilFrame(cpu, cpu.video);
-                },
-            ],
+            ["previewing a rewind", ({ history, start }) => previewFrame(history, start)],
         ])(
             "sends the host nothing it printed or spoke again when %s, and the machine still has it all",
             (_, replay) => {

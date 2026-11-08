@@ -222,11 +222,15 @@ The emulator continuously captures snapshots into a 30-slot rewind buffer (~1 pe
 
 - **Left/Right arrows**: navigate between snapshots (the main screen updates live)
 - **Click** a thumbnail to jump to that point
-- **Enter**: commit selection and close the panel
+- **Enter**: go back to the chosen moment and close the panel; the seconds after it are forgotten
+- **Alt-S**: go back to the chosen moment and stop in the debugger there
 - **Escape** or **Alt-W**: cancel and restore the original state
 
-While it is open, `Alt-T` and `Alt-B` still work; the other shortcuts, and every key for the emulated machine, are
-ignored.
+While it is open, `Alt-T` and `Alt-B` also still work; the other shortcuts, and every key for the emulated machine,
+are ignored.
+
+Rewind and the debugger's step back share one history, so opening rewind and cancelling leaves step back able to go
+as far back as before, and a preview replays the keys that were held at the time.
 
 ### Joystick Support
 

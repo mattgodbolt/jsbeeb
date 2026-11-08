@@ -8,7 +8,7 @@ import { AtomSoundChip, SoundChip } from "../../src/soundchip.js";
 import { keyCodes } from "../../src/keymap.js";
 import { bootedTestMachine, mode7Text } from "./helpers.js";
 import { singleStep } from "../helpers/single-step.js";
-import { executeUntilFrame } from "../../src/web/rewind-thumbnail.js";
+import { previewFrame } from "../../src/web/rewind-thumbnail.js";
 import { WFNFile } from "../../src/mmc.js";
 import { NoReplayHooks } from "../../src/6502.js";
 
@@ -492,11 +492,10 @@ describe("Replaying a Master's writes to its CMOS", () => {
         ["stepping back", ({ history }) => expect(history.stepBack(false)).toBeNull()],
         [
             "previewing a rewind",
-            ({ cpu, start }) => {
-                const live = cpu.snapshotState();
-                cpu.restoreState(start);
-                executeUntilFrame(cpu, cpu.video);
-                cpu.restoreState(live);
+            ({ history, start }) => {
+                const original = history.original();
+                previewFrame(history, start);
+                history.putBack(original);
             },
         ],
     ])("leaves the settings, the clock and the stored copy as the machine had them after %s", async (_, replay) => {
@@ -537,11 +536,10 @@ describe("Replaying an Atom's writes to its MMC card", () => {
         [
             "previewing a rewind",
             "after",
-            ({ cpu, start }) => {
-                const live = cpu.snapshotState();
-                cpu.restoreState(start);
-                executeUntilFrame(cpu, cpu.video);
-                cpu.restoreState(live);
+            ({ history, start }) => {
+                const original = history.original();
+                previewFrame(history, start);
+                history.putBack(original);
             },
         ],
         ["rewinding to before it", "before", ({ cpu, start }) => cpu.restoreState(start)],

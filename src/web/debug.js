@@ -1206,6 +1206,12 @@ export class Debugger {
     /** What the machine steps back through; until there is one, there is nothing to step back to. */
     attachStepBack(history) {
         this._history = history;
+        // Wherever the machine lands, by a step back or a rewind, a run to a stop has nothing to go on with, and a
+        // stopwatch started after there has nothing to time from.
+        history.addEventListener("landed", () => {
+            this.cancelRun();
+            if (this._stopwatchFrom > this.cpu.scheduler.epoch) this._stopwatchFrom = null;
+        });
     }
 
     _showRunning() {
@@ -1341,7 +1347,6 @@ export class Debugger {
             () => this._loop.mode === RunMode.debugging,
         );
         if (steppedBack === Ended) return;
-        if (this._stopwatchFrom > this.cpu.scheduler.epoch) this._stopwatchFrom = null;
         if (steppedBack) toast(steppedBack, { title: "Step back" });
         // A search the machine moved on from, as by a run, leaves it to whatever moved it.
         if (this._loop.mode === RunMode.debugging) this.debug(this.cpu.pc);
@@ -1371,10 +1376,7 @@ export class Debugger {
 
     _steppedBack(goBack) {
         this.updatePrevMem();
-        const refusal = goBack();
-        // Gone back past where the stopwatch was started, it has nothing to time from.
-        if (this._stopwatchFrom > this.cpu.scheduler.epoch) this._stopwatchFrom = null;
-        return refusal;
+        return goBack();
     }
 
     /**
