@@ -3,7 +3,7 @@ import path from "node:path";
 import sharp from "sharp";
 import { describe, expect, it } from "vitest";
 
-import { renderIcons } from "../../tools/make-icons.js";
+import { MaskableMargin, SafeZoneRadius, owlReach, renderIcons } from "../../tools/make-icons.js";
 
 const RepoRoot = path.join(import.meta.dirname, "..", "..");
 
@@ -40,5 +40,11 @@ describe("make-icons", () => {
                 expect(maxDifference(actual[i], expected[i]), file).toBeLessThanOrEqual(MaxChannelDifference);
             }
         }
+    });
+
+    it("keeps the maskable owl inside the safe zone by the margin", async () => {
+        const maskable = (await renderIcons()).find(({ file }) => file.endsWith("maskable-512.png"));
+        const onePixel = 1 / 512;
+        expect(await owlReach(maskable.data)).toBeLessThanOrEqual(SafeZoneRadius - MaskableMargin + onePixel);
     });
 });

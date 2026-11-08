@@ -10,9 +10,10 @@ const SourceSvg = readFileSync(path.join(RepoRoot, "public/jsbeeb-icon.svg"));
 const SvgSize = 256;
 const SvgDensity = 72;
 const Background = SourceSvg.toString().match(/<rect [^>]*fill="([^"]+)"/)[1];
-// The farthest dot reaches 146 of the SVG's 256 units from the centre, and a maskable icon's safe zone is a circle
-// of radius 40% of the icon.
-const MaskableScale = 0.7;
+// Fractions of the icon's size; launchers may crop a maskable icon to any shape that holds this circle.
+export const SafeZoneRadius = 0.4;
+export const MaskableMargin = 0.09;
+const MaskableScale = (SafeZoneRadius - MaskableMargin) / (await owlReach(await renderPng(SvgSize, 1)));
 
 const PngIcons = [
     { file: "public/jsbeeb-icon.png", size: 256, scale: 1 },
@@ -36,6 +37,22 @@ async function renderPng(size, scale) {
         })
         .png()
         .toBuffer();
+}
+
+/** How far the owl reaches from the image's centre, as a fraction of its size. The corner pixel is background. */
+export async function owlReach(png) {
+    const { data, info } = await sharp(png).raw().toBuffer({ resolveWithObject: true });
+    const { width, height, channels } = info;
+    const centre = width / 2;
+    let reach = 0;
+    for (let y = 0; y < height; ++y) {
+        for (let x = 0; x < width; ++x) {
+            const pixel = (y * width + x) * channels;
+            if (data.compare(data, 0, channels, pixel, pixel + channels) === 0) continue;
+            reach = Math.max(reach, Math.hypot(x + 0.5 - centre, y + 0.5 - centre));
+        }
+    }
+    return reach / width;
 }
 
 /** Every icon file, as the bytes to write under the repo root. */
