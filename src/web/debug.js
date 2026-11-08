@@ -15,6 +15,7 @@ import { NumRomBanks } from "../6502.js";
 import { describeHit } from "../breakpoints.js";
 import { sheilaAddress, machineSheilaBlocks } from "../sheila.js";
 import { BreakpointsPanel } from "./breakpoints-panel.js";
+import { CallStackPanel } from "./call-stack-panel.js";
 import { bindGotoForm, externalLink, FittedRows, labelHtml, powerOfTwoColumnsThatFit } from "./debug-dom.js";
 import { DisassemblyView } from "./disassembly-view.js";
 import { PagingOverride } from "./paging-override.js";
@@ -500,11 +501,7 @@ export class Debugger {
             arrangement,
             resolve: (text) => this._resolveBreakpoint(text),
             nameOf: (address, bank) => this._breakpointNames(bank).address(address, this.cpu.pc)?.name,
-            showCode: (address, bank) => {
-                this._showPinned(this._paging.disassembly, bank, address);
-                this.panels.disassembly.open();
-                this._disassembly.update(address);
-            },
+            showCode: (address, bank) => this._showCode(address, bank),
             showMemory: (address, bank) => {
                 this._showPinned(this._paging.memory, bank, address);
                 this.panels.memory.open();
@@ -514,6 +511,14 @@ export class Debugger {
         });
         // So a name typed while the machine runs can resolve, and the panel names its breakpoints' addresses.
         this.breakpoints.floating.addEventListener("open", () => this._matchSymbols());
+        this.callStack = new CallStackPanel({
+            arrangement,
+            refusal: () => this._searchRefusal(),
+            search: () => this._history.callStack(),
+            isStopped: () => !this._loop.isRunning(),
+            nameOf: (address, bank) => this._breakpointNames(bank).address(address, this.cpu.pc)?.name,
+            showCode: (address, bank) => this._showCode(address, bank),
+        });
         this._bindToolbar();
         this._bindKeys(keys);
         this._bindLabelDrops();
@@ -953,6 +958,7 @@ export class Debugger {
         });
         this._sheila = machineSheilaBlocks(cpu);
         this.breakpoints.setCpu(cpu);
+        this.callStack.setCpu(cpu);
         if (this._ownPanelsShown()) this._refresh.drawNow();
     }
     updateElem(elem, val) {
@@ -1078,6 +1084,13 @@ export class Debugger {
         return viewsFor(this.cpu.model).includes(view) ? view : undefined;
     }
 
+    /** Shows the code at `address` in the disassembly, in sideways `bank` where it is given and the view has it. */
+    _showCode(address, bank) {
+        this._showPinned(this._paging.disassembly, bank, address);
+        this.panels.disassembly.open();
+        this._disassembly.update(address);
+    }
+
     /** Sets `paging` to show sideways `bank`, a breakpoint's at `address`, where the view can show it there. */
     _showPinned(paging, bank, address) {
         const view = this._bankViewOf(bank);
@@ -1097,6 +1110,7 @@ export class Debugger {
         this._bankNames = new Map();
         this._matchedAt = performance.now();
         this.breakpoints.update();
+        this.callStack.renamed();
     }
 
     /** Credits the sets whose names a panel shows, in its own line. */
@@ -1388,7 +1402,7 @@ export class Debugger {
         if (this._loop.mode !== RunMode.debugging) this._loop.stop(true);
         const where = `$${hexword(address)}`;
         const title = `Who wrote ${where}`;
-        const unavailable = this._loop.lockstep ? NoSearchInSession : this._history ? null : NoHistoryToSearch;
+        const unavailable = this._searchRefusal();
         if (unavailable) {
             toast(unavailable, { title });
             return { refusal: unavailable };
@@ -1405,6 +1419,12 @@ export class Debugger {
             write && write.pc !== null ? { label: "Step back to it", run: this._stepBackToWrite(write) } : null;
         toast(this._lastWriteText(where, found), { title, action });
         return found;
+    }
+
+    /** Why the machine's history cannot be searched back through, or null if it can. */
+    _searchRefusal() {
+        if (this._loop.lockstep) return NoSearchInSession;
+        return this._history ? null : NoHistoryToSearch;
     }
 
     // A cycle found is only that write's while the machine is where the search found it from.

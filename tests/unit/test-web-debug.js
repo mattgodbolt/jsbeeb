@@ -330,6 +330,7 @@ describe("Debugger", () => {
         it("are listed for a menu of panels by their titles, with the watches", () => {
             expect(arrangement.listed().map((floating) => floating.title)).toEqual([
                 "Breakpoints",
+                "Call stack",
                 "Debugger toolbar",
                 "Disassembly",
                 "Memory",

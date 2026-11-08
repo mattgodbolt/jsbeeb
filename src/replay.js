@@ -7,6 +7,7 @@
 import { applyInput, cycleCount, stateHash } from "./lockstep.js";
 import { tickCycles } from "./emulation-tick.js";
 import { NoReplayHooks } from "./6502.js";
+import { SidewaysEnd, SidewaysStart } from "./paging.js";
 
 /** How much history the page keeps: snapshots at each of the last `recent` frames, and one a second for `seconds`. */
 export const PageHistory = Object.freeze({ recent: 3, seconds: 30 });
@@ -432,7 +433,8 @@ class LastWrite {
 /**
  * Where a step back out lands: the latest instruction that entered a routine, a JSR or BRK or one an interrupt was
  * taken after, whose stack is shallower than here and than at every instruction after it. Each window keeps only
- * the instructions shallower than every one after them in it, the only ones it could be.
+ * the instructions shallower than every one after them in it, the only ones it could be, each with where it was
+ * and the routine it entered, if any, and before the first instruction after a TXS, a mark of the stack moving there.
  */
 class OutLanding {
     constructor(cpu) {
@@ -441,10 +443,8 @@ class OutLanding {
         this.highestAfter = 0;
         this.hooks = {
             ...NoReplayHooks,
-            instruction: (_pc, opcode) => this.passing(opcode),
-            // Entered from the stack the instruction before left, which the interrupt pushed three bytes onto.
-            interrupt: () =>
-                this._keep(this.shallower.at(-1).cycle, this._height((this.cpu.s + InterruptPushes) & 0xff), true),
+            instruction: (pc, opcode) => this.passing(pc, opcode),
+            interrupt: (taken, returnsTo) => this.interrupted(taken, returnsTo),
         };
     }
 
@@ -460,22 +460,91 @@ class OutLanding {
 
     startWindow() {
         this.shallower = [];
+        this.entering = null;
+        this.txsAt = null;
     }
 
-    passing(opcode) {
-        const { flow } = this.cpu.disassembler.describeOpcode(opcode);
-        this._keep(cycleCount(this.cpu), this._height(this.cpu.s), flow === "call" || flow === "interrupt");
+    passing(pc, opcode) {
+        this._entered(pc);
+        const height = this._height(this.cpu.s);
+        const cycle = cycleCount(this.cpu);
+        if (this.txsAt !== null) this._keep({ cycle, height, kind: null, txsAt: this.txsAt });
+        const { flow, mnemonic } = this.cpu.disassembler.describeOpcode(opcode);
+        this.txsAt = mnemonic === "TXS" ? pc : null;
+        const kind = flow === "call" ? "JSR" : flow === "interrupt" ? "BRK" : null;
+        this._keep({ cycle, height, kind, site: pc, siteBank: this._bankAt(pc) });
     }
 
-    _keep(cycle, height, enters) {
-        while (this.shallower.length && this.shallower.at(-1).height <= height) this.shallower.pop();
-        this.shallower.push({ cycle, height, enters });
+    // Entered from the stack the instruction before left, which the interrupt pushed three bytes onto.
+    interrupted(taken, returnsTo) {
+        this._entered(returnsTo);
+        const height = this._height((this.cpu.s + InterruptPushes) & 0xff);
+        const { cycle } = this.shallower.at(-1);
+        this._keep({ cycle, height, kind: taken.toUpperCase(), site: returnsTo, siteBank: this._bankAt(returnsTo) });
+    }
+
+    // The routine the entry kept last went to starts at `pc`.
+    _entered(pc) {
+        if (this.entering === null) return;
+        Object.assign(this.entering, { routine: pc, routineBank: this._bankAt(pc) });
+        this.entering = null;
+    }
+
+    /** The sideways bank paged in at `address`, if that is where it is. */
+    _bankAt(address) {
+        const { cpu } = this;
+        if (cpu.model.isAtom || address < SidewaysStart || address >= SidewaysEnd) return undefined;
+        const bank = cpu.pagedBank;
+        return cpu.isBankPagedAt(bank, address) ? bank : undefined;
+    }
+
+    // A mark of the stack moving stays until the stack is higher than where it moved it to.
+    _keep(kept) {
+        const { height } = kept;
+        const covers = (earlier) =>
+            earlier.height < height || (earlier.height === height && earlier.txsAt === undefined);
+        while (this.shallower.length && covers(this.shallower.at(-1))) this.shallower.pop();
+        this.shallower.push(kept);
+        if (kept.kind) this.entering = kept;
     }
 
     inWindow() {
-        const entry = this.shallower.findLast(({ enters, height }) => enters && height > this.highestAfter);
+        const entry = this.shallower.findLast(({ kind, height }) => kind && height > this.highestAfter);
         if (entry) return entry.cycle;
         this.highestAfter = Math.max(this.highestAfter, this.shallower[0].height);
+        return null;
+    }
+}
+
+/**
+ * The calls and interrupts the machine is inside now, innermost first: each entry a step back out would land on,
+ * found in turn by raising the height the next must be above to the last one's, until the stack is accounted for,
+ * empty at some point after the outermost, or a TXS moved it. Its `frames` grow as each window is searched.
+ */
+class CallStack extends OutLanding {
+    constructor(cpu) {
+        super(cpu);
+        this.frames = [];
+        this.emptyHeight = this._height(EmptyStack);
+    }
+
+    /**
+     * How the stack was accounted for in the window just replayed, or null if it was not: `{ txsAt }`, the address
+     * of the TXS that moved it to where the outermost frame found entered from, or with `txsAt` null, empty there.
+     */
+    inWindow() {
+        // The machine stands where the window ends, before the instruction after its last.
+        this._entered(this.cpu.pc);
+        for (const kept of this.shallower.toReversed()) {
+            if (kept.height < this.highestAfter) continue;
+            if (kept.txsAt !== undefined) return { txsAt: kept.height === this.emptyHeight ? null : kept.txsAt };
+            if (kept.kind && kept.height > this.highestAfter) {
+                const { kind, cycle, site, siteBank, routine, routineBank } = kept;
+                this.frames.push({ kind, cycle, site, siteBank, routine, routineBank });
+            }
+            this.highestAfter = kept.height;
+            if (kept.height === this.emptyHeight) return { txsAt: null };
+        }
         return null;
     }
 }
@@ -642,15 +711,17 @@ export class ReplayHistory extends EventTarget {
 
     _original() {
         const { cpu } = this;
-        const { memStatOffset } = cpu;
-        return { state: cpu.snapshotState(), host: hostInputs(cpu), picture: cpu.video.fb32.slice(), memStatOffset };
+        const { memStatOffset, resetsAndLoads } = cpu;
+        const state = cpu.snapshotState();
+        return { state, host: hostInputs(cpu), picture: cpu.video.fb32.slice(), memStatOffset, resetsAndLoads };
     }
 
     /**
      * Puts the machine, the host's inputs and the picture back as `_original` kept them, with the half of the paging
-     * tables the last instruction's fetch chose, which a snapshot leaves out.
+     * tables the last instruction's fetch chose, which a snapshot leaves out, and its count of resets and loads, as
+     * the machine was never replaced.
      */
-    _putBack({ state, host, picture, memStatOffset }) {
+    _putBack({ state, host, picture, memStatOffset, resetsAndLoads }) {
         const { cpu } = this;
         this.log.withoutRecording(() => {
             restoreHostInputs(cpu, host);
@@ -658,6 +729,7 @@ export class ReplayHistory extends EventTarget {
         });
         cpu.video.fb32.set(picture);
         cpu.memStatOffset = memStatOffset;
+        cpu.resetsAndLoads = resetsAndLoads;
     }
 
     // Steps back to the cycle `seeker` finds, or returns why it could not, `notFound` if no stretch held one.
@@ -805,6 +877,37 @@ export class ReplayHistory extends EventTarget {
             return { refusal: stoppedBy === Unrepeated ? NotRepeatedHere : `${CannotSearchPast} ${stoppedBy}.` };
         }
         return { write: found, searched: now - reached, stoppedBy };
+    }
+
+    /**
+     * Finds the calls and interrupts the machine is inside, innermost first, by searching its history back from now
+     * a stretch at a time as lastWrite does, yielding the frames found so far between stretches. Each frame is
+     * `{ kind, cycle, site, siteBank, routine, routineBank }`: JSR, BRK, IRQ or NMI; the cycle its instruction, or
+     * the one the interrupt came after, started; the address it was made from (for an interrupt, the one it returns
+     * to) and the routine it entered, each with the sideways bank it was in, if any. Returns `{ refusal }` when it
+     * cannot search, or else `{ frames, accounted, txsAt, stoppedBy }`: `accounted` if the stack was empty or moved
+     * by a TXS (at `txsAt`) before the outermost frame, so that there are no older ones; if not, `stoppedBy` is why
+     * the search went back no further, or null where the history ends. Leaves the machine as it was.
+     */
+    *callStack() {
+        const refusal = this._unavailable("The call stack", NothingToSearch);
+        if (refusal) return { refusal };
+        if (this.cpu.s === EmptyStack) return { frames: [], accounted: true, txsAt: null, stoppedBy: null };
+        const stack = new CallStack(this.cpu);
+        const original = this._original();
+        const search = this._searchingAway(stack, original);
+        let step = search.next();
+        while (!step.done) {
+            yield stack.frames;
+            step = search.next();
+        }
+        const { movedOn, found, stoppedBy } = step.value;
+        if (movedOn) return { refusal: MovedOn };
+        this._putBack(original);
+        const { frames } = stack;
+        return found
+            ? { frames, accounted: true, txsAt: found.txsAt, stoppedBy: null }
+            : { frames, accounted: false, txsAt: null, stoppedBy };
     }
 
     // What came after `cycle` was a future the machine has left, and runs from here make their own.

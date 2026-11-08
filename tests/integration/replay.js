@@ -423,6 +423,53 @@ describe.each([
     });
 });
 
+describe.each([
+    ["a B", "B-DFS1.2"],
+    ["a Master", "Master"],
+])("Finding the call stack on %s", (_, model) => {
+    it.each([
+        [
+            "from inside the OS's write character call, out to BASIC's CALL in its own bank",
+            async (machine) => {
+                await machine.runUntilAddress(Oswrch, 1);
+                for (let i = 1; i < StepsInside; i++) singleStep(machine.processor);
+            },
+            (frames, machine) => {
+                expect(frames).toContainEqual(
+                    expect.objectContaining({ kind: "JSR", site: ScratchAddress, routine: Oswrch }),
+                );
+                expect(frames.at(-1).routineBank).toBe(machine.processor.pagedBank);
+            },
+        ],
+        [
+            "from inside an interrupt handler",
+            async (machine) => {
+                await machine.runUntilAddress(machine.readword(IrqVector), 1);
+                singleStep(machine.processor);
+            },
+            ([innermost], machine) =>
+                expect(innermost).toMatchObject({ kind: "IRQ", routine: machine.readword(IrqVector) }),
+        ],
+    ])("%s, painting none of it, leaving the machine and its picture alone", async (_, stop, expectFrames) => {
+        const machine = await booted(model);
+        PrintForever.forEach((byte, i) => machine.writebyte(ScratchAddress + i, byte));
+        const history = historyFromHere(machine);
+        await machine.type("A%=88:CALL &3000");
+        history.taken(machine.processor.snapshotState(), null);
+        await seconds(machine, CursorBlinkSeconds);
+        await stop(machine);
+        const { video } = machine.processor;
+        const painted = vi.fn();
+        video.paint_ext = painted;
+        const before = machineNow(machine);
+        const { frames, accounted } = finished(history.callStack());
+        expect(accounted).toBe(true);
+        expectFrames(frames, machine);
+        expect(machineNow(machine)).toEqual(before);
+        expect(painted).not.toHaveBeenCalled();
+    });
+});
+
 describe("Reverse continuing", () => {
     it.each([
         ["an instruction breakpoint", { kind: "execute", start: Oswrch }],
