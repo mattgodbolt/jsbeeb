@@ -58,7 +58,6 @@ const ForwardWindows = 3;
 const ForwardWindowSeconds = 0.007;
 // Channel 1 rising in pitch, a note every twentieth of a second, for ever.
 const RisingTone = ["10 FOR P%=1 TO 255 STEP 8:SOUND 1,-15,P%,1:NEXT:GOTO 10", "RUN"];
-// Latch channel 0's attenuation at its loudest.
 const ChannelZeroLoudest = 0x90;
 const SeekTracks = 10;
 const SeekStepMs = 6;

@@ -456,15 +456,15 @@ export class MachineSession {
     _replaying(replay) {
         const refused = this._replayRefusal();
         if (refused) return refused;
-        const refusal = this._asReplay(() => replay(this._history));
+        const refusal = this._withoutCountingFrames(() => replay(this._history));
         if (refusal === null) this.resetBreakpointHits();
         return refusal;
     }
 
-    _asReplay(run) {
+    _withoutCountingFrames(run) {
         const frameCount = this._frameCount;
         try {
-            return this._soundChip.withoutOutput(run);
+            return run();
         } finally {
             this._frameCount = frameCount;
         }
@@ -518,7 +518,7 @@ export class MachineSession {
     whoWrote(address) {
         const refusal = this._replayRefusal();
         if (refusal) return { refusal };
-        return this._asReplay(() => finished(this._history.lastWrite(address)));
+        return this._withoutCountingFrames(() => finished(this._history.lastWrite(address)));
     }
 
     /** Tokenise BBC BASIC source and write it into PAGE */
