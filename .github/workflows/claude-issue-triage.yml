@@ -12,6 +12,7 @@ jobs:
     permissions:
       contents: read
       issues: write
+      id-token: write
 
     steps:
       - name: Checkout repository
@@ -102,7 +103,10 @@ jobs:
           prompt_file: /tmp/claude-prompts/triage-prompt.txt
           allowed_tools: "Bash(gh label list),mcp__github__get_issue,mcp__github__get_issue_comments,mcp__github__update_issue,mcp__github__search_issues,mcp__github__list_issues"
           timeout_minutes: "5"
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          anthropic_federation_rule_id: fdrl_01Gk6PdXViSNAfdx1hvvCcBr
+          anthropic_organization_id: ee5cd0d6-cb10-4817-aa8f-5fa0f7264d39
+          anthropic_service_account_id: svac_01HzHMeFL3YTfjniqgeGKLme
+          anthropic_workspace_id: wrkspc_01R6LaBoHbtPzynJPnTYZpZw
           mcp_config: /tmp/mcp-config/mcp-servers.json
           claude_env: |
             GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
