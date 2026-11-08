@@ -1,4 +1,4 @@
-// The instructions the machine ran before now, found by replaying its history rather than recorded as it runs.
+// The instructions the machine ran before now, found by replaying its history.
 
 import { NoReplayHooks } from "./6502.js";
 import { cycleCount } from "./lockstep.js";
@@ -9,8 +9,8 @@ export const TraceDepth = 1000;
 
 const InstructionBytes = 3;
 const Registers = 5;
-// Indices into Kinds.
 const Kinds = ["instruction", "irq", "nmi"];
+// Indices into Kinds.
 const Instruction = 0;
 const Irq = 1;
 const Nmi = 2;
@@ -101,13 +101,15 @@ export function* recentInstructions(history, count) {
     const { cpu } = history;
     const now = cycleCount(cpu);
     let since = now - 1;
+    let newer = null;
     for (;;) {
         const ring = new TraceRing(cpu, count);
         const replayed = yield* history.replayForward(since, now, { hooks: ring.hooks });
         if (replayed.refusal) return replayed;
         const { from, stoppedBy } = replayed;
-        if (stoppedBy === Unrepeated) return { refusal: NotRepeated };
+        if (stoppedBy === Unrepeated) return newer ? { entries: newer, stoppedBy } : { refusal: NotRepeated };
         if (ring.full || stoppedBy || from > since) return { entries: ring.entries(), stoppedBy };
+        newer = ring.entries();
         since = from - 1;
     }
 }

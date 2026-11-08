@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { finished, ReplayHistory, snapshotCycle } from "../../src/replay.js";
+import { finished, ReplayHistory, snapshotCycle, Unrepeated } from "../../src/replay.js";
 import { recentInstructions } from "../../src/instruction-trace.js";
 import { cycleCount } from "../../src/lockstep.js";
 import { createSnapshot, restoreSnapshot, snapshotFromJSON, snapshotToJSON } from "../../src/snapshot.js";
@@ -58,7 +58,9 @@ const TextCursorX = 0x0318;
 const ForwardWindows = 3;
 const ForwardWindowSeconds = 0.007;
 // More than the newest stretch holds, so that a trace reaches into an older one.
-const TraceEntries = 3000;
+const TraceEntries = 6000;
+// Away from the program and anything else the tests run.
+const UnloggedAddress = 0x3200;
 const AtomPauseThenSaveToTheCard = ["10 F.I=1TO50;WAIT;N.", '20 *SAVE "NEW" 2900 2A00'];
 
 async function booted(model, options) {
@@ -529,6 +531,7 @@ describe.each([
         expect(ran.length).toBeGreaterThan(TraceEntries);
         expect(new Set(entries.map(({ kind }) => kind))).toEqual(new Set(["instruction", "irq"]));
         expect([entries, stoppedBy]).toEqual([ran.slice(-TraceEntries), null]);
+        expect(entries[0].cycle).toBeLessThan(snapshotCycle(cpu, history.snapshots().at(-1)));
         expect(machineNow(machine)).toEqual(before);
         expect(painted).not.toHaveBeenCalled();
     });
@@ -536,6 +539,7 @@ describe.each([
     it.each([
         ["the history ends", () => {}, null],
         ["something no replay crosses", (cpu) => cpu.inputLog.refuse("a disc change"), "a disc change"],
+        ["an older stretch did not repeat", (cpu) => cpu.writemem(UnloggedAddress, 0x42), Unrepeated],
     ])("gives fewer where %s", async (_, change, stoppedBy) => {
         const machine = await printingForever(model);
         const cpu = machine.processor;

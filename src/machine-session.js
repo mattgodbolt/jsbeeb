@@ -530,6 +530,8 @@ export class MachineSession {
      * @param {number} count
      */
     trace(count) {
+        if (!Number.isInteger(count) || count < 1)
+            throw new Error(`trace takes a whole number of instructions, not ${count}`);
         const refusal = this._replayRefusal();
         if (refusal) return { refusal };
         return this._asReplay(() => finished(recentInstructions(this._history, count)));

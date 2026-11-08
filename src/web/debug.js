@@ -503,11 +503,7 @@ export class Debugger {
             arrangement,
             resolve: (text) => this._resolveBreakpoint(text),
             nameOf: (address, bank) => this._breakpointNames(bank).address(address, this.cpu.pc)?.name,
-            showCode: (address, bank) => {
-                this._showPinned(this._paging.disassembly, bank, address);
-                this.panels.disassembly.open();
-                this._disassembly.update(address);
-            },
+            showCode: (address, bank) => this._showCode(address, bank),
             showMemory: (address, bank) => {
                 this._showPinned(this._paging.memory, bank, address);
                 this.panels.memory.open();
@@ -523,10 +519,7 @@ export class Debugger {
             unavailable: () => (this._loop.lockstep ? NoTraceInSession : this._history ? null : NoHistoryToTrace),
             stopped: () => this._loop.mode === RunMode.debugging,
             nameOf: (address) => this._names.address(address, this.cpu.pc)?.name,
-            showCode: (address) => {
-                this.panels.disassembly.open();
-                this._disassembly.update(address);
-            },
+            showCode: (address) => this._showCode(address, undefined),
         });
         this._bindToolbar();
         this._bindKeys(keys);
@@ -1092,6 +1085,13 @@ export class Debugger {
         if (bank === undefined) return undefined;
         const view = bankView(bank);
         return viewsFor(this.cpu.model).includes(view) ? view : undefined;
+    }
+
+    /** Opens the disassembly at `address`, in sideways `bank` if one is given, or else as paged. */
+    _showCode(address, bank) {
+        this._showPinned(this._paging.disassembly, bank, address);
+        this.panels.disassembly.open();
+        this._disassembly.update(address);
     }
 
     /** Sets `paging` to show sideways `bank`, a breakpoint's at `address`, where the view can show it there. */

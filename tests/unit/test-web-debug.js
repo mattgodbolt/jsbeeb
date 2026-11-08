@@ -1323,6 +1323,25 @@ describe("Debugger", () => {
                 load(0x3000, [0xa2, 0x05, 0x60]);
             });
 
+            it("keeps the Trace panel to what ran before each stop, and to a note while the machine runs", async () => {
+                stepBackHere();
+                dbgr.trace.floating.open();
+                const traced = () =>
+                    [...document.querySelectorAll("#trace-panel tbody tr")].map((row) => row.children[1].textContent);
+                await pressAndSettle("n");
+                expect(traced()).toEqual(["2000"]);
+                await pressAndSettle("n");
+                expect(traced()).toEqual(["2000", "3000"]);
+                document.querySelector("#trace-panel [data-address]").click();
+                expect(addrOf(currentRow())).toBe("2000");
+                stoppedLoop.go();
+                stoppedLoop.dispatchEvent(new Event("running"));
+                expect([document.querySelector("#trace-panel .trace-status").textContent, traced()]).toEqual([
+                    expect.stringMatching(/^Stop the machine/),
+                    [],
+                ]);
+            });
+
             it("goes back one instruction on p, and on P back over the call just returned from, as things were there", () => {
                 stepBackHere();
                 const xAtCall = x();

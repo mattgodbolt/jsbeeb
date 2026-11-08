@@ -11,9 +11,10 @@ import { TracePanel } from "../../src/web/trace-panel.js";
 import { loadBytes, teardownDom } from "./helpers.js";
 
 const LoopAt = 0x2002;
+const JumpAt = LoopAt + 1;
+const JumpTargetLow = JumpAt + 1;
 // LDX #0, then INX and JMP back to it for ever.
 const CountForever = [0xa2, 0x00, 0xe8, 0x4c, LoopAt & 0xff, LoopAt >>> 8];
-const Nop = 0xea;
 const ManyCycles = 5000;
 const FewCycles = 20;
 
@@ -38,14 +39,14 @@ describe("TracePanel", () => {
             history: () => history,
             unavailable: () => unavailable,
             stopped: () => stopped,
-            nameOf: (address) => (address === LoopAt ? "loop" : undefined),
+            nameOf: (address) => ({ [LoopAt]: "loop", [JumpAt]: "jump" })[address],
             showCode,
         });
         panel.setCpu(cpu);
         panel.floating.open();
     }
 
-    /** Runs the machine on, returning each row the trace should show of what it ran. */
+    /** Runs the machine on, returning each row the trace should show of what it ran, its JMP left unnamed. */
     function run(cycles) {
         const ran = [];
         const hook = cpu.debugInstruction.add((pc) => {
@@ -68,11 +69,11 @@ describe("TracePanel", () => {
 
     afterEach(teardownDom);
 
-    it("shows the instructions the machine ran, the newest last, each as it was then with the registers it began with", async () => {
+    it("shows the instructions the machine ran, the newest last, each as it was then with the registers it began with, naming none changed since", async () => {
         await counting();
         const ran = run(ManyCycles);
-        history.log.record({ kind: "write", address: LoopAt, value: Nop });
-        cpu.writemem(LoopAt, Nop);
+        history.log.record({ kind: "write", address: JumpTargetLow, value: 0 });
+        cpu.writemem(JumpTargetLow, 0);
         await panel.refresh();
         const now = cycleCount(cpu);
         expect(ran.length).toBeGreaterThan(TraceDepth);

@@ -79,12 +79,14 @@ export class TracePanel {
             if (at) showCode(Number(at.dataset.address));
         });
         floating.addEventListener("open", () => this.refresh());
+        floating.addEventListener("close", () => (this._tracing = null));
     }
 
     setCpu(cpu) {
         this._cpu = cpu;
-        // Disassembles the instruction `_reading` holds from its bytes as they were when it ran.
         this._reading = null;
+        // Disassembles the instruction `_reading` holds from its bytes as they were when it ran, and what an
+        // indirect operand points at as it is now.
         this._reader = cpu.disassembler.reading((address) => {
             const { address: start, bytes } = this._reading;
             const offset = (address - start) & 0xffff;
@@ -139,6 +141,11 @@ export class TracePanel {
         this._list.scrollTop = this._list.scrollHeight;
     }
 
+    _changed({ address, bytes }) {
+        const { length } = this._cpu.disassembler.describeOpcode(bytes[0]);
+        return bytes.slice(0, length).some((byte, i) => byte !== this._cpu.peekmem((address + i) & 0xffff));
+    }
+
     _row(entry, now) {
         const { kind, cycle, address, a, x, y, s, p } = entry;
         const isInstruction = kind === "instruction";
@@ -154,7 +161,9 @@ export class TracePanel {
         cell(`-${now - cycle}`, "trace-ago");
         const at = cell(hexword(address), "trace-address");
         at.dataset.address = String(address);
-        const name = this._nameOf(address) ?? "";
+        // Names are for memory as paged now, so none for code that has changed or been paged out since it ran.
+        const changed = isInstruction && this._changed(entry);
+        const name = changed ? "" : (this._nameOf(address) ?? "");
         cell(name, "trace-name").title = name;
         if (isInstruction) {
             this._reading = entry;

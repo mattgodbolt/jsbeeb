@@ -612,10 +612,9 @@ export class ReplayHistory extends EventTarget {
     }
 
     /**
-     * The stretches between the snapshots before now, newest first, each `{ snapshot, from, to, next, inputsAtTo,
-     * crossing }`: replayed from `snapshot`, at cycle `from`, to `to`, which is now or where `next`, the next
-     * snapshot, was taken; with the inputs at `to` only where it is now; and `crossing`, the first thing in it that no
-     * replay crosses, or null.
+     * The stretches between the snapshots before now, newest first, each `{ snapshot, from, to, next, crossing }`:
+     * replayed from `snapshot`, at cycle `from`, to `to`, which is now or, with `next` null, where the next snapshot
+     * was taken; and `crossing`, the first thing in it that no replay crosses, or null.
      */
     _stretchesBack() {
         const { cpu, log } = this;
@@ -626,7 +625,7 @@ export class ReplayHistory extends EventTarget {
             // A rewind snapshot is a copy of a frame snapshot, at the same cycle, and has nothing to replay.
             if (from === to) continue;
             const crossing = log.refusalBetween(from, to);
-            stretches.push({ snapshot, from, to, next, inputsAtTo: next === null, crossing });
+            stretches.push({ snapshot, from, to, next, crossing });
             [to, next] = [from, snapshot];
         }
         return stretches;
@@ -634,10 +633,11 @@ export class ReplayHistory extends EventTarget {
 
     /**
      * Replays `stretch` watched by `hooks`, returning the hash of the machine as its snapshot put it, or null if it
-     * did not end on `hash`, that of the machine it is replayed towards.
+     * did not end on `hash`, that of the machine it is replayed towards. Inputs at its end go in only where that is
+     * now, as the next snapshot was taken before them.
      */
-    _replayStretch({ snapshot, to, inputsAtTo }, hash, hooks) {
-        const fromHash = this.log.replay(snapshot, to, inputsAtTo, hooks);
+    _replayStretch({ snapshot, to, next }, hash, hooks) {
+        const fromHash = this.log.replay(snapshot, to, next === null, hooks);
         return fromHash !== null && stateHash(this.cpu) === hash ? fromHash : null;
     }
 
@@ -735,14 +735,6 @@ export class ReplayHistory extends EventTarget {
     }
 
     /**
-     * Runs `_searchBack(seeker)` a stretch at a time as `_away` does, returning what the search returns, or
-     * `{ movedOn: true }`.
-     */
-    *_searchingAway(seeker, original) {
-        return yield* this._away(this._searchBack(seeker), original);
-    }
-
-    /**
      * Runs `replaying`, a replay of the history a stretch at a time, painting none of it, putting the machine back
      * as `original` keeps it between stretches and yielding there. Returns what it returns, with the machine where
      * its last stretch left it, or `{ movedOn: true }` if the machine has moved on when it resumes.
@@ -778,7 +770,7 @@ export class ReplayHistory extends EventTarget {
         if (refused) return refused;
         const now = cycleCount(this.cpu);
         const original = this._original();
-        const { movedOn, found, snapshot, reached, stoppedBy } = yield* this._searchingAway(seeker, original);
+        const { movedOn, found, snapshot, reached, stoppedBy } = yield* this._away(this._searchBack(seeker), original);
         if (movedOn) return MovedOn;
         let landed = false;
         try {
@@ -866,8 +858,8 @@ export class ReplayHistory extends EventTarget {
         if (cpu.memStat[cpu.memStatOffset + (address >>> 8)] === RomStat) return { refusal: IsRom };
         const now = cycleCount(cpu);
         const original = this._original();
-        const { movedOn, found, reached, stoppedBy } = yield* this._searchingAway(
-            new LastWrite(cpu, log, address),
+        const { movedOn, found, reached, stoppedBy } = yield* this._away(
+            this._searchBack(new LastWrite(cpu, log, address)),
             original,
         );
         if (movedOn) return { refusal: MovedOn };
@@ -879,18 +871,11 @@ export class ReplayHistory extends EventTarget {
     }
 
     /**
-     * Replays the machine's history forward, painting none of it, from the stretch between snapshots that holds
-     * `since` to the one that holds `until`, oldest first, with `hooks` (as `asReplay` takes them) watching every
-     * stretch: a gatherer's way of seeing what the machine did, as a profile, a trace or a timeline. Each stretch is
-     * checked to end on the machine it is replayed towards, the next snapshot or the state now, as a step back
-     * checks it. Yields between stretches with the machine as it was, so that a long replay can let the page go on;
-     * if the machine has moved on when it resumes, it stops.
-     * Returns `{ refusal }` when it cannot replay, or else `{ from, to, stoppedBy }`: the hooks saw the machine run
-     * from cycle `from` to `to`, each a snapshot's cycle or now, and `from` is after `since` if the history did not
-     * reach it. `stoppedBy` is why the replay covers less than asked, as `_searchBack` gives it: null if it covers
-     * it or the history ends after `since`; what no replay crosses, which kept `from` after it; or Unrepeated if a
-     * stretch did not end where the original run did, where `to` is, the hooks having seen that stretch's run go
-     * its own way after it. Leaves the machine as it was.
+     * Replays the machine's history forward with `hooks` (as `asReplay` takes them), oldest first, from the stretch
+     * between snapshots that holds `since` to the one that holds `until`, checking and yielding between stretches as
+     * a search back does. Returns `{ refusal }`, or `{ from, to, stoppedBy }`: the hooks saw the run from cycle
+     * `from` to `to`; `stoppedBy` is why it covers less than asked, as `_searchBack` gives it, and with Unrepeated
+     * `to` is where the stretch that went its own way began. Leaves the machine as it was.
      */
     *replayForward(since, until, { hooks }) {
         const refusal = this._unavailable("Replaying the history", NothingToReplay);
