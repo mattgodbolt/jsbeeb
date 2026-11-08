@@ -441,6 +441,8 @@ export class SoundChip {
             return run();
         } finally {
             this.catchUp();
+            // What the replay rendered is not sent later either; a restore drops a part-filled buffer the same way.
+            this.position = 0;
             [this._onBuffer, this._onEvent] = [onBuffer, onEvent];
             if (this.scheduler.epoch !== epoch) this._emit("state", this.snapshotState());
         }
