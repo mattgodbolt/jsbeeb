@@ -4,6 +4,14 @@ import { copySnapshot } from "../6502.js";
 import { PageHistory } from "../replay.js";
 import { RewindCaptureInterval } from "./emulation-loop.js";
 import { noteFeature } from "./analytics.js";
+import { Shortcuts } from "./shortcuts.js";
+import { keyCodes } from "../keymap.js";
+
+// The rest would act on a machine that is only showing a preview, or are the machine's own keys.
+const ShortcutsWhileOpen = new Set(["toggleRewind", "toggleFast", "openPrinter"]);
+const ShortcutCodesWhileOpen = new Set(
+    Shortcuts.filter(({ run }) => ShortcutsWhileOpen.has(run)).map(({ key }) => keyCodes[key]),
+);
 
 /**
  * Rewind scrubber UI — a filmstrip overlay showing thumbnails of recent
@@ -153,6 +161,11 @@ export class RewindUI {
         this.cancel();
     }
 
+    toggle() {
+        if (this.isOpen) this.cancel();
+        else this.open();
+    }
+
     /**
      * Restore the emulator to the snapshot at the given index and update
      * both the main display and the filmstrip selection highlight.
@@ -237,6 +250,7 @@ export class RewindUI {
     }
 
     _onKeyDown(e) {
+        if (e.altKey && !e.ctrlKey && ShortcutCodesWhileOpen.has(e.code)) return;
         switch (e.key) {
             case "Escape":
                 e.preventDefault();

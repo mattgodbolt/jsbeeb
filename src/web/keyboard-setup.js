@@ -47,7 +47,7 @@ export class KeyboardSetup {
     /**
      * @param {object} opts
      * @param {object} opts.actions what each shortcut does, supplied late-bound:
-     *   toggleFast, openRewind, openPrinter, openMedia, paste, onAnyKeyDown
+     *   toggleFast, toggleRewind, openPrinter, openMedia, paste, onAnyKeyDown
      * @param {import("./accessibility-switches.js").AccessibilitySwitches} opts.accessibilitySwitches
      * @param {import("./emulation-loop.js").EmulationLoop} opts.loop
      * @param {import("./debug.js").Debugger} opts.dbgr
@@ -78,7 +78,7 @@ export class KeyboardSetup {
             togglePause: () => (loop.isRunning() ? loop.stop(false) : loop.go()),
             toggleFast: () => actions.toggleFast(),
             openPrinter: () => actions.openPrinter(),
-            openRewind: () => actions.openRewind(),
+            toggleRewind: () => actions.toggleRewind(),
             openMediaDrive: (shift) => actions.openMedia(shift ? 1 : 0),
             openMediaTape: () => actions.openMedia("tape"),
         };
