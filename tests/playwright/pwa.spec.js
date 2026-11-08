@@ -1,6 +1,7 @@
 // The installable app: the manifest Chrome reads, the worker it installs, and the page coming back with no network.
 
 import { readdirSync } from "node:fs";
+import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { expect, test } from "./fixtures.js";
@@ -24,10 +25,7 @@ test("installs a worker that holds every ROM, and reloads with no network", asyn
     });
     const roms = readdirSync(RomsDir, { recursive: true, withFileTypes: true })
         .filter((entry) => entry.isFile())
-        .map(
-            (entry) =>
-                `roms/${entry.parentPath.slice(RomsDir.length)}${entry.parentPath === RomsDir ? "" : "/"}${entry.name}`,
-        );
+        .map((entry) => `roms/${relative(RomsDir, join(entry.parentPath, entry.name))}`);
     expect(roms.length).toBeGreaterThan(0);
     expect(cached).toEqual(expect.arrayContaining(roms));
 

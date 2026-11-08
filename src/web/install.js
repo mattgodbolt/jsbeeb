@@ -21,7 +21,11 @@ export function registerServiceWorker(page, { benchmark }) {
             action: {
                 label: "Reload",
                 run: () => {
-                    navigator.serviceWorker.addEventListener("controllerchange", () => location.reload());
+                    // Another tab may already have switched over, leaving nothing to wait for.
+                    if (!registration.waiting) return location.reload();
+                    navigator.serviceWorker.addEventListener("controllerchange", () => location.reload(), {
+                        once: true,
+                    });
                     registration.waiting.postMessage({ type: SkipWaiting });
                 },
             },

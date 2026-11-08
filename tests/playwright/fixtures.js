@@ -38,7 +38,7 @@ export class Beeb {
             ),
             // Keeps the STUN request off the network; peers in one browser connect by their host addresses.
             page.addInitScript((kept) => {
-                // A worker would answer requests the tests route themselves, so a page has none unless its test is about it.
+                // A worker would answer requests the tests route themselves, so only a test about one keeps it.
                 if (!kept) delete Navigator.prototype.serviceWorker;
                 const Native = window.RTCPeerConnection;
                 window.RTCPeerConnection = class extends Native {

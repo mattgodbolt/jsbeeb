@@ -313,12 +313,12 @@ What the worker keeps, and when it changes:
 - The built scripts and styles, every ROM, the images, fonts and sounds are kept when a version installs. The
   Teletext data, the Econet data and the benchmarks are not.
 - A disc or tape served from this site is kept the first time it is used, so a game played once can be played
-  offline. Discs from any other site (Bitshifters, GitHub, archive.org, Google Drive) always come from the network.
+  offline. These are never evicted, and a changed one is served from the old copy once before the new one takes over. Discs from any other site (Bitshifters, GitHub, archive.org, Google Drive) always come from the network.
 - A new version installs in the background and then waits. The page shows an "A new version of jsbeeb is ready"
   notice, and only its Reload button switches to the new version, because switching reloads the page and would lose a
   running machine. A tab that stays open is checked for a new version whenever it comes back into view.
-- `npm run test:e2e` blocks service workers, so the tests see the network, and only `tests/playwright/pwa.spec.js`
-  allows them, in a fresh browser context of its own.
+- `npm run test:e2e` removes `navigator.serviceWorker` from its pages, so a worker never answers a request the tests
+  route themselves; only `tests/playwright/pwa.spec.js` keeps it, in a fresh browser context of its own.
 
 The icons are `public/icons/icon-192.png`, `icon-512.png`, `maskable-512.png` (the art inside the central 80% so
 Android can crop it) and `apple-touch-icon.png` (180 pixels); the manifest names them in `PwaIcons` in

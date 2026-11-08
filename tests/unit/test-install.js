@@ -110,6 +110,17 @@ describe("the service worker", () => {
             expect(page.location.reload).toHaveBeenCalledOnce();
         });
 
+        it("just reloads when another tab has already switched over", () => {
+            const { registration, waiting, page, begin } = start(true);
+            registration.waiting = waiting;
+            begin();
+            return settle().then(() => {
+                registration.waiting = null;
+                document.querySelector(Reload).click();
+                expect(page.location.reload).toHaveBeenCalledOnce();
+            });
+        });
+
         it("is offered at once when the page opens with one already waiting", async () => {
             const { registration, waiting, begin } = start(true);
             registration.waiting = waiting;
