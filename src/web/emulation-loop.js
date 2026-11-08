@@ -129,8 +129,8 @@ export class EmulationLoop extends EventTarget {
     }
 
     /**
-     * The machine's state is being replaced or previewed, so neither a debugger run to a stop nor the frames
-     * captured before ("replacing-state") apply.
+     * The machine's state is being replaced, so neither a debugger run to a stop nor what was captured before
+     * ("replacing-state") applies.
      */
     replacingState() {
         this.dbgr.replacingState();

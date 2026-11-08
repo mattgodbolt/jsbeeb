@@ -6,7 +6,7 @@ import { ReplayHistory, snapshotCycle } from "../../src/replay.js";
 import { cycleCount, stateHash } from "../../src/lockstep.js";
 import { Video } from "../../src/video.js";
 import { keyCodes } from "../../src/keymap.js";
-import { domFromIndexHtml, teardownDom } from "../unit/helpers.js";
+import { domFromIndexHtml, stubCanvases, teardownDom } from "../unit/helpers.js";
 import { FileBackedXhr } from "../helpers/file-backed-xhr.js";
 import { bootedTestMachine } from "./helpers.js";
 
@@ -24,18 +24,7 @@ describe("Rewind on a real machine", () => {
         domFromIndexHtml("rewind-open", "rewind-panel");
         vi.stubGlobal("XMLHttpRequest", FileBackedXhr);
         Element.prototype.scrollIntoView = () => {};
-        const realCreateElement = document.createElement.bind(document);
-        vi.spyOn(document, "createElement").mockImplementation((tag) => {
-            const element = realCreateElement(tag);
-            if (tag === "canvas") {
-                element.getContext = () => ({
-                    createImageData: (width, height) => ({ data: new Uint8Array(width * height * 4) }),
-                    putImageData: () => {},
-                    drawImage: () => {},
-                });
-            }
-            return element;
-        });
+        stubCanvases();
     });
 
     afterEach(teardownDom);
@@ -64,9 +53,10 @@ describe("Rewind on a real machine", () => {
         const before = { state: stateHash(cpu), held: held(), picture: cpu.video.fb32.slice() };
         ui.open();
         ui.selectSnapshot(HeldAt);
-        expect(held()).not.toEqual(before.held);
+        expect(cpu.sysvia.hasAnyKeyDown()).toBe(true);
         key("Escape");
         expect({ state: stateHash(cpu), held: held(), picture: cpu.video.fb32.slice() }).toEqual(before);
+        expect(cpu.sysvia.hasAnyKeyDown()).toBe(false);
 
         const oldest = snapshotCycle(cpu, history.snapshots()[0]);
         expect(history.stepBackTo(oldest)).toBeNull();

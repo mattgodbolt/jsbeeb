@@ -230,7 +230,8 @@ While it is open, `Alt-T` and `Alt-B` also still work; the other shortcuts, and 
 are ignored.
 
 Rewind and the debugger's step back share one history, so opening rewind and cancelling leaves step back able to go
-as far back as before, and a preview replays the keys that were held at the time.
+as far back as before, and a preview replays the keys that were held at the time. Loading a saved state starts the
+history afresh.
 
 ### Joystick Support
 

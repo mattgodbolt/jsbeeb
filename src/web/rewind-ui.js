@@ -2,7 +2,7 @@ import { renderThumbnails, previewFrame } from "./rewind-thumbnail.js";
 import { RewindBuffer } from "../rewind.js";
 import { copySnapshot } from "../6502.js";
 import { PageHistory } from "../replay.js";
-import { RewindCaptureInterval } from "./emulation-loop.js";
+import { RewindCaptureInterval, RunMode } from "./emulation-loop.js";
 import { noteFeature } from "./analytics.js";
 import { Shortcuts } from "./shortcuts.js";
 import { keyCodes } from "../keymap.js";
@@ -35,10 +35,8 @@ export class RewindUI {
         this.loop = loop;
         loop.addEventListener("frame-capture", () => this.captureFrame());
         loop.addEventListener("rewind-capture", () => this.capture());
-        loop.addEventListener("replacing-state", () => {
-            this.frames.clear();
-            this.history.restart();
-        });
+        // What came before is another machine's past, which neither rewind nor step back can go back into.
+        loop.addEventListener("replacing-state", () => this.forgetAll());
         history.addEventListener("landed", ({ detail }) => this.forget(detail.forgotten));
 
         this.panel = document.getElementById("rewind-panel");
@@ -48,11 +46,18 @@ export class RewindUI {
 
         this.isOpen = false;
         this.resumeLoop = null;
+        this.letGo = [];
         this.selectedIndex = -1;
         this.snapshots = [];
         this.original = null;
 
         this._onKeyDown = this._onKeyDown.bind(this);
+        // A key let go while the machine is held is let go once the panel has put it back or taken it back, so
+        // that the machine and its history both see the key go up where the machine then is.
+        this._onKeyUp = (e) => {
+            e.stopPropagation();
+            this.letGo.push(e);
+        };
         this.closeBtn.addEventListener("click", () => this.close());
         this.openBtn.addEventListener("click", (e) => {
             e.preventDefault();
@@ -87,6 +92,10 @@ export class RewindUI {
     /** Forget everything captured, as on a hard reset or as a guest takes the host's machine. */
     reset() {
         this.close();
+        this.forgetAll();
+    }
+
+    forgetAll() {
         this.rewindBuffer.clear();
         this.frames.clear();
         this.history.restart();
@@ -108,6 +117,7 @@ export class RewindUI {
             this.panel.hidden = false;
             // Use capture phase so keys don't leak to the emulator's keyboard handler
             document.addEventListener("keydown", this._onKeyDown, true);
+            document.addEventListener("keyup", this._onKeyUp, true);
 
             this.selectedIndex = this.snapshots.length - 1;
             this._preview(this.selectedIndex);
@@ -123,23 +133,16 @@ export class RewindUI {
 
     /**
      * Closes the panel with the machine gone back to the chosen snapshot, as a step back lands: the seconds after it
-     * are forgotten, and the machine runs on from it holding what the host holds now.
+     * are forgotten, and the machine runs on from it holding what the host held when the panel opened, less any
+     * key let go since. In the debugger, or with `stopping`, it stops in the debugger there.
      */
-    commit() {
+    commit(stopping) {
         if (!this.isOpen) return;
-        const snapshot = this.snapshots[this.selectedIndex];
-        this.history.landAt(snapshot, this.original.host);
-        // The history forgets only what it keeps, which leaves out seconds from before a state was loaded.
-        while (this.rewindBuffer.peek() !== snapshot) this.rewindBuffer.pop();
+        this.history.landAt(this.snapshots[this.selectedIndex], this.original.host);
         noteFeature(this.panel, "rewound");
+        const debugging = this.loop.mode === RunMode.debugging;
         this._closePanel();
-    }
-
-    /** Goes back as `commit` does and stops in the debugger there. */
-    commitAndStop() {
-        if (!this.isOpen) return;
-        this.commit();
-        this.loop.stop(true);
+        if (stopping || debugging) this.loop.stop(true);
     }
 
     /** Closes the panel with the machine, its picture and its history as they were before it opened. */
@@ -188,6 +191,9 @@ export class RewindUI {
         this.snapshots = [];
         this.original = null;
         document.removeEventListener("keydown", this._onKeyDown, true);
+        document.removeEventListener("keyup", this._onKeyUp, true);
+        for (const { key, code } of this.letGo.splice(0))
+            document.dispatchEvent(new KeyboardEvent("keyup", { key, code }));
         this.resumeLoop?.();
         this.resumeLoop = null;
     }
@@ -233,10 +239,10 @@ export class RewindUI {
     _onKeyDown(e) {
         if (e.altKey && !e.ctrlKey && ShortcutCodesWhileOpen.has(e.code)) return;
         // By key code, so that the Mac's Option characters count.
-        if (e.altKey && e.code === "KeyS") {
+        if (e.altKey && !e.ctrlKey && e.code === "KeyS") {
             e.preventDefault();
             e.stopPropagation();
-            this.commitAndStop();
+            this.commit(true);
             return;
         }
         switch (e.key) {
@@ -248,7 +254,7 @@ export class RewindUI {
             case "Enter":
                 e.preventDefault();
                 e.stopPropagation();
-                this.commit();
+                this.commit(false);
                 break;
             case "ArrowLeft":
                 e.preventDefault();
