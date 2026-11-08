@@ -278,18 +278,14 @@ describe("AtomPPIA", () => {
             expect(ppia2.read(0xb001) & (1 << 2)).toBe(0);
         });
 
-        it.each([
-            ["latchb", { latchb: 0 }],
-            ["keyboardEnabled", { keyboardEnabled: false }],
-        ])("should restore a snapshot from before %s was dropped, taking host keys", (_, dropped) => {
+        it("should restore a snapshot from before latchb was dropped", () => {
             const { ppia } = makePPIA();
             ppia.write(0xb000, 0x42);
             const saved = ppia.snapshotState();
 
             const { ppia: restored } = makePPIA();
-            restored.restoreState({ ...saved, ...dropped });
+            restored.restoreState({ ...saved, latchb: 0 });
             expect(restored.snapshotState()).toEqual(saved);
-            expect(restored.keyboardEnabled).toBe(true);
         });
     });
 });

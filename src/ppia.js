@@ -363,6 +363,7 @@ export class AtomPPIA extends WithKeyMatrix(PPIA) {
             portcpins: this.portcpins,
             creg: this.creg,
             keys: this.keys.map((row) => Array.from(row)),
+            keyboardEnabled: this.keyboardEnabled,
             lastSpeakerBit: this.lastSpeakerBit,
         };
     }
@@ -379,6 +380,7 @@ export class AtomPPIA extends WithKeyMatrix(PPIA) {
                 this.keys[i].set(state.keys[i]);
             }
         }
+        this.keyboardEnabled = state.keyboardEnabled;
         this.lastSpeakerBit = state.lastSpeakerBit;
         // Which held key was forcing shift is not saved, so the matrix's shift is taken as the shift key's.
         const [shiftCol, shiftRow] = ATOM.SHIFT;
