@@ -15,7 +15,6 @@ const KeyTables = [
     ["Disassembly", DisassemblyKeys],
     ["Memory", MemoryKeys],
     ["BASIC", BasicKeys],
-    ["Rewind", RewindKeys],
 ];
 const StartTab = "#help-start";
 const DebuggingTab = "#help-debugging";
@@ -23,6 +22,7 @@ const DebuggingTab = "#help-debugging";
 /** Fills Help's tables of keys from the tables that bind them. */
 export function fillHelp() {
     document.getElementById("shortcuts-help").append(...Shortcuts.map((row) => helpRow([row.combo], row.description)));
+    document.getElementById("rewind-keys-help").append(...helpRows(RewindKeys));
     document.getElementById("debug-keys-help").append(
         ...KeyTables.map(([title, table]) => {
             const block = document.createElement("section");
