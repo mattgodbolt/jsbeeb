@@ -215,6 +215,21 @@ describe.each([
         await expectBackAndForthLandsWhereItWas(machine, history);
     });
 
+    it("changes the key before a breakpoint stops in the same instruction, and only once", async () => {
+        const machine = await booted(model);
+        const cpu = machine.processor;
+        const toggles = vi.spyOn(cpu.keyboardInterface, "keyToggleRaw");
+        const gapCycles = (machine.model.pasteReleaseGapMs * cpu.peripheralCyclesPerSecond) / 1000;
+        const dueEpoch = cpu.scheduler.epoch + gapCycles;
+        const breakpoint = cpu.debugInstruction.add(() => cpu.scheduler.epoch >= dueEpoch);
+        machine.typist.type(machine.model.stringToKeys("A"), false);
+        expect(await machine.runFor(IntoTypingSeconds * cpu.model.cyclesPerSecond)).toBe(true);
+        expect(toggles).toHaveBeenCalledTimes(1);
+        breakpoint.remove();
+        while (machine.typist.isTyping) await seconds(machine, IntoTypingSeconds);
+        expect(toggles).toHaveBeenCalledTimes(2);
+    });
+
     it("starts from the keys held at a snapshot taken after they went down, once older inputs are folded away", async () => {
         const machine = await booted(model);
         const cpu = machine.processor;

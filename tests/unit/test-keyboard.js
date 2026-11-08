@@ -43,8 +43,7 @@ describe("Keyboard", () => {
 
     test("cancels a paste into the machine when its input changes, giving the keyboard back", () => {
         keyboard.sendRawKeyboard([BBC.A, BBC.B], false);
-        mockProcessor.scheduler.polltime(1);
-        keyboard.machineTypist.deliverPending();
+        mockProcessor.runInstruction(1);
         keyboard.setInput({ keyDown: vi.fn(), keyUp: vi.fn(), keyRaw: vi.fn(), setReset: vi.fn(), clearKeys: vi.fn() });
         expect(keyboard.isPasting).toBe(false);
         expect(mockSysvia.keyToggleRaw.mock.calls).toEqual([[BBC.A], [BBC.A]]);
@@ -96,7 +95,7 @@ describe("Keyboard", () => {
                     [BBC.SHIFT, false],
                 ]);
                 expect(keyboard.isPasting).toBe(false);
-                mockProcessor.scheduler.polltime(mockProcessor.peripheralCyclesPerSecond);
+                mockProcessor.runInstruction(mockProcessor.peripheralCyclesPerSecond);
                 expect(mockSysvia.keyToggleRaw).not.toHaveBeenCalled();
                 expect(mockSysvia.disableKeyboard).not.toHaveBeenCalled();
             });
@@ -121,8 +120,7 @@ describe("Keyboard", () => {
             test("pastes into the machine again once the session is over", () => {
                 keyboard.setInput(null);
                 keyboard.sendRawKeyboard([BBC.A], false);
-                mockProcessor.scheduler.polltime(1);
-                keyboard.machineTypist.deliverPending();
+                mockProcessor.runInstruction(1);
                 expect(mockSysvia.keyToggleRaw).toHaveBeenCalledWith(BBC.A);
                 expect(input.keyRaw).not.toHaveBeenCalled();
             });

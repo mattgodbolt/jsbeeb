@@ -1229,23 +1229,15 @@ export class Debugger {
         }
     }
 
-    /** Runs the CPU as the loop does, delivering a typed key that stops it, which a step must not read as a stop. */
-    _execute(cycles) {
-        const typist = this._loop?.typist;
-        let ran = this.cpu.execute(cycles);
-        while (typist?.deliverPending() && !ran) ran = this.cpu.execute(0);
-        return ran;
-    }
-
     /** Runs one instruction, stepping off a breakpoint on it; false when a watch stopped the machine in it. */
     executeOne() {
         const cpu = this.cpu;
         // TODO(#1062) this drops the residual cycles.
         cpu.targetCycles = cpu.currentCycles;
-        if (this._execute(1)) return true;
+        if (cpu.execute(1)) return true;
         if (!cpu.debugInstruction.stopped) return false;
         cpu.targetCycles = cpu.currentCycles;
-        return this._execute(1);
+        return cpu.execute(1);
     }
 
     resetEntry() {
@@ -1277,7 +1269,7 @@ export class Debugger {
         cpu.targetCycles = cpu.currentCycles;
         let ranOn;
         try {
-            ranOn = this._execute(this._loop.clocksPerSecond / QuickRunsPerSecond);
+            ranOn = cpu.execute(this._loop.clocksPerSecond / QuickRunsPerSecond);
         } catch (e) {
             this.debug(cpu.pc);
             throw e;
@@ -1304,7 +1296,7 @@ export class Debugger {
      */
     stepCycle() {
         this.updatePrevMem();
-        this._execute(1);
+        this.cpu.execute(1);
         this.debug(this.cpu.pc);
     }
 

@@ -175,6 +175,7 @@ export class InputLog {
         this.sampleReplay = null;
         this.recording = true;
         this.applyingInput = false;
+        this.betweenInstructions = false;
         for (const device of this._devices()) device.inputLog = this;
         this.restart();
     }
@@ -204,8 +205,18 @@ export class InputLog {
 
     record(input) {
         if (!this.recording) return;
-        if (insideExecute(this.cpu)) this.refuse(MidInstruction);
+        if (insideExecute(this.cpu) && !this.betweenInstructions) this.refuse(MidInstruction);
         else this.inputs.push({ at: cycleCount(this.cpu), input });
+    }
+
+    /** Runs `run`, from an instruction hook, which sees the machine at the boundary before an instruction. */
+    atInstructionBoundary(run) {
+        this.betweenInstructions = true;
+        try {
+            run();
+        } finally {
+            this.betweenInstructions = false;
+        }
     }
 
     /** Notes that something went in here that no replay can put back, `reason` naming it for the refusal. */

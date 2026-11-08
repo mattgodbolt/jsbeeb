@@ -3,15 +3,39 @@ import { BBC } from "./keymap.js";
 const RepeatedKeyGapMs = 30;
 const StoppedPollMs = 100;
 
-// The processor's scheduler is polled with peripheral cycles, so the delays stay in real time whatever the CPU
-// multiplier is. A task fires part way through an instruction, so it only stops the processor (see deliverPending).
-function schedulerTimer(processor, callback) {
-    const task = processor.scheduler.newTask(callback);
-    return {
-        start: (ms) => task.schedule((ms * processor.peripheralCyclesPerSecond) / 1000),
-        cancel: () => task.cancel(),
-        running: () => task.scheduled(),
+// Delays are counted in the scheduler's peripheral cycles, so they stay in emulated time whatever the CPU multiplier
+// is. A hook between instructions makes the key change, which the replay's input log can only record there; the
+// hook is attached while there is text to type, so only a paste leaves the CPU's fast path.
+function instructionTimer(processor, deliver, abandon) {
+    let dueEpoch = null;
+    let hook = null;
+    let loadsAtStart = 0;
+    const timer = {
+        start(ms) {
+            loadsAtStart = processor.resetsAndLoads;
+            dueEpoch = processor.scheduler.epoch + (ms * processor.peripheralCyclesPerSecond) / 1000;
+            hook ??= processor.debugInstruction.add(() => {
+                if (timer.stranded()) {
+                    timer.cancel();
+                    abandon();
+                } else if (processor.scheduler.epoch >= dueEpoch) {
+                    dueEpoch = null;
+                    if (processor.inputLog) processor.inputLog.atInstructionBoundary(deliver);
+                    else deliver();
+                    if (dueEpoch === null) timer.cancel();
+                }
+                return false;
+            });
+        },
+        cancel() {
+            dueEpoch = null;
+            hook?.remove();
+            hook = null;
+        },
+        running: () => dueEpoch !== null,
+        stranded: () => dueEpoch !== null && processor.resetsAndLoads !== loadsAtStart,
     };
+    return timer;
 }
 
 // Keys typed while the machine is stopped would all go in at the cycle it starts again, so a delay that comes due
@@ -34,6 +58,7 @@ function wallClockTimer(callback, isRunning) {
             timeout = null;
         },
         running: () => timeout !== null,
+        stranded: () => false,
     };
     return timer;
 }
@@ -76,7 +101,7 @@ export class Typist {
      * @param {object} processor
      * @param {{input: object, isRunning: function(): boolean}} [through] an input, as `Keyboard.setInput` takes, to
      *   press the keys through one by one as someone typing would, timed by the wall clock while `isRunning` says
-     *   the machine runs; without one they go straight into the matrix, timed by the processor's scheduler
+     *   the machine runs; without one they go straight into the matrix, between the processor's instructions
      */
     constructor(processor, through) {
         this.processor = processor;
@@ -86,32 +111,10 @@ export class Typist {
         this._shiftKey = processor.model.keys.SHIFT;
         this._keys = [];
         this._lastKey = undefined;
-        this._pending = false;
-        this._stoppedByOther = false;
-        this._stopsAtDue = 0;
-        this._loadsAtDue = 0;
+        const deliver = () => this._deliver();
         this._timer = through
-            ? wallClockTimer(() => this._deliver(), through.isRunning)
-            : schedulerTimer(processor, () => this._due());
-    }
-
-    /**
-     * Changes the keys that came due while the processor ran, which stopped it at the end of the instruction they
-     * came due in. Returns whether the run should go on: false if nothing was due, or if something else (a
-     * breakpoint, a watch) stopped the processor in that instruction too.
-     */
-    deliverPending() {
-        // A restored snapshot has cancelled the scheduler task and replaced the matrix, so the text left to type
-        // is stranded.
-        if (this._stranded) {
-            this._pending = false;
-            this._abandon();
-            return false;
-        }
-        if (!this._pending) return false;
-        this._pending = false;
-        this._deliver();
-        return !this._stoppedByOther && this.processor.stops === this._stopsAtDue;
+            ? wallClockTimer(deliver, through.isRunning)
+            : instructionTimer(processor, deliver, () => this._abandon());
     }
 
     /**
@@ -141,14 +144,9 @@ export class Typist {
 
     cancel() {
         if (!this.isTyping) return;
-        if (!this._stranded) this._releaseLastKey();
-        this._pending = false;
+        // A restored machine has its own keys, so one the typist pressed before is not down in it.
+        if (!this._timer.stranded()) this._releaseLastKey();
         this._abandon();
-    }
-
-    get _stranded() {
-        if (this._pending) return this.processor.resetsAndLoads !== this._loadsAtDue;
-        return this.isTyping && !this._timer.running();
     }
 
     _abandon() {
@@ -159,16 +157,7 @@ export class Typist {
     }
 
     get isTyping() {
-        return this._keys.length > 0 || this._timer.running() || this._pending || this._lastKey !== undefined;
-    }
-
-    _due() {
-        const { processor } = this;
-        this._stoppedByOther = processor.halted;
-        processor.stop();
-        this._stopsAtDue = processor.stops;
-        this._loadsAtDue = processor.resetsAndLoads;
-        this._pending = true;
+        return this._keys.length > 0 || this._timer.running();
     }
 
     _releaseLastKey() {

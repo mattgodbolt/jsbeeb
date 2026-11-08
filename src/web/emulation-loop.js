@@ -92,8 +92,6 @@ export class EmulationLoop extends EventTarget {
     }) {
         super();
         this.processor = processor;
-        /** The machine's typist, set once the keyboard has made it, whose key changes the loop delivers. */
-        this.typist = null;
         this.display = display;
         this.audioHandler = audioHandler;
         this.dbgr = dbgr;
@@ -237,10 +235,7 @@ export class EmulationLoop extends EventTarget {
     }
 
     execute(cycles) {
-        if (this.lockstep) return this.lockstep.execute(cycles);
-        let ran = this.processor.execute(cycles);
-        while (this.typist?.deliverPending() && !ran) ran = this.processor.execute(0);
-        return ran;
+        return this.lockstep ? this.lockstep.execute(cycles) : this.processor.execute(cycles);
     }
 
     // A user-blocking task runs ahead of rendering and ordinary timers, so a stuck

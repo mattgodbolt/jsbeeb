@@ -8,7 +8,7 @@ const AtomPeripheralCyclesPerSecond = 1000 * 1000;
 
 /**
  * Enough of a processor for a Keyboard: its key interface (the System VIA, or the PPIA on an Atom) as spies,
- * the reset line, and a scheduler for a paste to type on.
+ * the reset line, a scheduler and instruction hooks for a paste to type on.
  */
 export function fakeKeyboardProcessor(modelName = "B-DFS1.2") {
     const model = findModel(modelName);
@@ -24,6 +24,17 @@ export function fakeKeyboardProcessor(modelName = "B-DFS1.2") {
         capsLockLight: false,
         shiftLockLight: false,
     };
+    const hooks = new Set();
+    const debugInstruction = {
+        add(hook) {
+            hooks.add(hook);
+            hook.remove = () => hooks.delete(hook);
+            return hook;
+        },
+        get attached() {
+            return hooks.size;
+        },
+    };
     return {
         model,
         keyboardInterface: keys,
@@ -34,12 +45,12 @@ export function fakeKeyboardProcessor(modelName = "B-DFS1.2") {
         peripheralCyclesPerSecond: model.isAtom ? AtomPeripheralCyclesPerSecond : BbcPeripheralCyclesPerSecond,
         cycleSeconds: 0,
         currentCycles: 0,
-        halted: false,
         resetsAndLoads: 0,
-        stops: 0,
-        stop() {
-            this.halted = true;
-            ++this.stops;
+        debugInstruction,
+        /** Runs `cycles` of the scheduler, then the instruction hooks, as a CPU does before its next instruction. */
+        runInstruction(cycles) {
+            this.scheduler.polltime(cycles);
+            for (const hook of [...hooks]) hook();
         },
     };
 }

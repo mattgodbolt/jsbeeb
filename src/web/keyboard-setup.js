@@ -71,7 +71,6 @@ export class KeyboardSetup {
             keyLayout,
         }));
         keyboard.addEventListener("notice", showNotice);
-        loop.typist = keyboard.machineTypist;
 
         const runners = {
             toggleDebugger: () => dbgr.toggleDebugger(),

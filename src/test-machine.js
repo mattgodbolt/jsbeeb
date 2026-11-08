@@ -129,9 +129,7 @@ export class TestMachine {
                 const todo = Math.max(0, Math.min(left, MaxCyclesPerIter));
                 if (todo) {
                     try {
-                        let ran = cpu.execute(todo);
-                        while (this.typist.deliverPending() && !ran) ran = cpu.execute(0);
-                        stopped = !ran;
+                        stopped = !cpu.execute(todo);
                     } catch (e) {
                         cpu.targetCycles = cpu.currentCycles;
                         reject(e);

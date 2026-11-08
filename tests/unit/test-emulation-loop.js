@@ -96,17 +96,6 @@ describe("EmulationLoop", () => {
         expect(deps.display.setSpeedy).toHaveBeenLastCalledWith(false);
     });
 
-    it.each([
-        ["goes on with the cycles it had left once a key change is delivered", true, [[1000], [0]]],
-        ["stops when the key change came in an instruction something else stopped", false, [[1000]]],
-    ])("%s", (_, goesOn, expected) => {
-        const loop = make();
-        loop.typist = { deliverPending: vi.fn().mockReturnValueOnce(goesOn).mockReturnValue(false) };
-        deps.processor.execute.mockReturnValueOnce(false);
-        expect(loop.execute(1000)).toBe(goesOn);
-        expect(deps.processor.execute.mock.calls).toEqual(expected);
-    });
-
     it("never emulates more than a tenth of a second in one tick", () => {
         const loop = started();
         vi.advanceTimersByTime(TickMs);
