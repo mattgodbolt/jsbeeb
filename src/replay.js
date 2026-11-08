@@ -385,8 +385,8 @@ class Arrival {
 }
 
 /**
- * The last write in a window to `target`, a byte as viewedByte gives it: that byte of RAM, however the CPU paged it
- * there at the time, or else the device register at `address`.
+ * The last write in a window to the byte viewedByte gives as `{ stat, offset }`: that byte of RAM, however the CPU
+ * paged it there at the time, or else the device register at `address`.
  */
 class LastWrite {
     constructor(cpu, log, address, { stat, offset }) {

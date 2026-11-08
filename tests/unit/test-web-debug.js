@@ -1565,13 +1565,6 @@ describe("Debugger", () => {
                         /Nothing wrote \$0071 in the last 7 cycles \(3\.5 µs\), as far back as the history step back keeps goes/,
                     ],
                     [
-                        "nothing, in a sideways bank not paged in",
-                        () => {},
-                        SidewaysStart,
-                        bankView(UnpagedBank),
-                        /Nothing wrote \$8000 in bank 7 in the last 7 cycles/,
-                    ],
-                    [
                         "anything, while running, stopping it first",
                         () => loop.go(),
                         0x70,
@@ -1620,6 +1613,9 @@ describe("Debugger", () => {
                         return [dbgr.offerScreenByteAt(event, 0.25, y), event.defaultPrevented, visible("watch-menu")];
                     };
                     expect(offered(0.75)).toEqual([true, false, false]);
+                    dbgr.keepOffTouchKeyboard(() => true);
+                    expect(offered(0.25)).toEqual([false, false, false]);
+                    dbgr.keepOffTouchKeyboard(() => false);
                     expect(offered(0.25)).toEqual([true, true, true]);
                     pickFromMenu("Who wrote this?");
                     await vi.waitFor(() =>
@@ -1629,6 +1625,17 @@ describe("Debugger", () => {
                     );
                     loop.go();
                     expect(offered(0.25)[0]).toBe(false);
+                });
+
+                it("searches the byte the memory panel's view shows, naming a view the CPU has not paged in", async () => {
+                    goTo("goto-mem-addr-form", `$8000\`${bankView(UnpagedBank)}`);
+                    rightClick(memByte(SidewaysStart));
+                    pickFromMenu("Who wrote this?");
+                    await vi.waitFor(() =>
+                        expect(toasts()).toContainEqual(
+                            expect.stringMatching(/Nothing wrote \$8000 in bank 7 in the last 7 cycles/),
+                        ),
+                    );
                 });
 
                 it("ends a search when the machine is run on, leaving the run to its stop", async () => {
