@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import browserslistToEsbuild from "browserslist-to-esbuild";
+import { VitePWA } from "vite-plugin-pwa";
 import { configDefaults, defineConfig } from "vitest/config";
 import { firShaderPlugin } from "./tools/vite-plugin-fir-shader.js";
 import { rendezvousPlugin } from "./rendezvous/vite-plugin.js";
@@ -27,10 +28,54 @@ function gitCommit() {
     }
 }
 
+const LargestPrecachedFileBytes = 4 * 1024 * 1024;
+
+const PwaIcons = [
+    { src: "icons/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
+    { src: "icons/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
+    { src: "icons/maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
+];
+
 /** @type {import("vite").UserConfig} */
 export default defineConfig({
     base: "./", // Use relative paths for Electron compatibility
-    plugins: [htmlIncludesPlugin(), firShaderPlugin(), rendezvousPlugin(), analyticsPlugin(), browserFloorPlugin()],
+    plugins: [
+        htmlIncludesPlugin(),
+        firShaderPlugin(),
+        rendezvousPlugin(),
+        analyticsPlugin(),
+        browserFloorPlugin(),
+        VitePWA({
+            strategies: "injectManifest",
+            srcDir: "src",
+            filename: "service-worker.js",
+            registerType: "prompt",
+            injectRegister: false,
+            manifest: {
+                id: "./",
+                name: "jsbeeb",
+                short_name: "jsbeeb",
+                description: "A JavaScript BBC Micro emulator",
+                start_url: "./",
+                scope: "./",
+                display: "standalone",
+                background_color: "#222222",
+                theme_color: "#222222",
+                categories: ["games", "entertainment"],
+                icons: PwaIcons,
+            },
+            injectManifest: {
+                // The big optional data (teletext, econet, benchmarks) and the discs stay out of the install.
+                globPatterns: [
+                    "index.html",
+                    "jsbeeb-icon.png",
+                    "assets/*.{js,css}",
+                    "{icons,images,fonts,sounds,roms}/**/*",
+                ],
+                maximumFileSizeToCacheInBytes: LargestPrecachedFileBytes,
+            },
+        }),
+    ],
     define: { "import.meta.env.JSBEEB_COMMIT": JSON.stringify(gitCommit()) },
     build: {
         target: browserslistToEsbuild(),

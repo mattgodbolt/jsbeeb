@@ -59,7 +59,11 @@
     "png-to-ico": "^3.0.2",
     "prettier": "^3.9.10",
     "vite": "^8.3.5",
-    "vitest": "^5.0.5"
+    "vite-plugin-pwa": "^2.0.0",
+    "vitest": "^5.0.5",
+    "workbox-precaching": "^7.4.1",
+    "workbox-routing": "^7.4.1",
+    "workbox-strategies": "^7.4.1"
   },
   "optionalDependencies": {
     "electron": "^45.1.0",

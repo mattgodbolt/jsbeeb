@@ -13,6 +13,7 @@ import { AudioHandler } from "./web/audio-handler.js";
 import { installIcons } from "./web/icons.js";
 import { QuickSettings } from "./web/quick-settings.js";
 import { toast } from "./web/toast.js";
+import { registerServiceWorker } from "./web/install.js";
 import { MediaLoader } from "./web/media-loader.js";
 import { addArchiveSources } from "./web/archive-sources.js";
 import { GoogleDriveSource } from "./web/google-drive-source.js";
@@ -120,6 +121,8 @@ if (!window.isSecureContext)
         title: "Gamepads",
         quietKey: "quietInsecureGamepads",
     });
+
+registerServiceWorker(window, { benchmark: !!benchmarkPage });
 
 const printer = new Printer();
 

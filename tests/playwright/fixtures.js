@@ -28,7 +28,7 @@ const OfflineDir = fileURLToPath(new URL("offline/", import.meta.url));
 
 /** The page with jsbeeb on it, reached through the console surface main.js exposes. */
 export class Beeb {
-    constructor(page) {
+    constructor(page, { withServiceWorker }) {
         this.page = page;
         this.problems = [];
         this.routed = Promise.all([
@@ -37,14 +37,16 @@ export class Beeb {
                 (route) => this._serveOffline(route),
             ),
             // Keeps the STUN request off the network; peers in one browser connect by their host addresses.
-            page.addInitScript(() => {
+            page.addInitScript((kept) => {
+                // A worker would answer requests the tests route themselves, so only a test about one keeps it.
+                if (!kept) delete Navigator.prototype.serviceWorker;
                 const Native = window.RTCPeerConnection;
                 window.RTCPeerConnection = class extends Native {
                     constructor(config) {
                         super({ ...config, iceServers: [] });
                     }
                 };
-            }),
+            }, withServiceWorker),
         ]);
         page.on("pageerror", (error) => this.problems.push(`exception: ${error.message}`));
         page.on("console", (message) => {
@@ -190,8 +192,9 @@ export class Beeb {
 }
 
 export const test = base.extend({
-    beeb: async ({ page }, use) => {
-        const beeb = new Beeb(page);
+    withServiceWorker: [false, { option: true }],
+    beeb: async ({ page, withServiceWorker }, use) => {
+        const beeb = new Beeb(page, { withServiceWorker });
         await use(beeb);
         expect(beeb.problems, "errors the page logged").toEqual([]);
     },
