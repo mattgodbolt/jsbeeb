@@ -79,7 +79,7 @@ function withoutPainting(video, run) {
 
 // Between executes the CPU has reached its cycle target or been stopped short of it; inside one, as a scheduled
 // task or a read, write or interrupt hook runs, it has done neither; an instruction hook runs between instructions.
-const insideExecute = (cpu) => !cpu.halted && cpu.currentCycles < cpu.targetCycles && !cpu.atInstructionBoundary;
+const insideExecute = (cpu) => !cpu.halted && cpu.currentCycles < cpu.targetCycles && !cpu.debugInstruction.dispatching;
 
 function hostInputs(cpu) {
     const { gamepad, mouse } = cpu.sysvia.fireButtons();

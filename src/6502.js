@@ -655,13 +655,10 @@ class FakeTube {
 }
 
 class DebugHook {
-    constructor(cpu, functionName, { remembersStop = false, atInstructionBoundary = false } = {}) {
+    constructor(cpu, functionName) {
         this.cpu = cpu;
         this.functionName = functionName;
-        this.remembersStop = remembersStop;
-        this.atInstructionBoundary = atInstructionBoundary;
         this.handlers = [];
-        this.calledAtStop = null;
     }
 
     add(handler) {
@@ -670,17 +667,9 @@ class DebugHook {
             this.cpu[this.functionName] = (...args) => {
                 // remove() replaces the array, so a handler removing itself cannot make the loop skip the next one.
                 const handlers = this.handlers;
-                let stop = false;
-                if (this.atInstructionBoundary) this.cpu.atInstructionBoundary = true;
-                try {
-                    for (const hook of handlers) {
-                        if (hook.apply(hook, args)) stop = true;
-                    }
-                } finally {
-                    if (this.atInstructionBoundary) this.cpu.atInstructionBoundary = false;
-                }
+                const stop = this.callAll(handlers, args);
                 if (stop) {
-                    if (this.remembersStop) this.calledAtStop = new Set(handlers);
+                    this.noteStop(handlers);
                     this.cpu.stop();
                 }
                 return stop;
@@ -690,6 +679,16 @@ class DebugHook {
         handler.remove = () => this.remove(handler);
         return handler;
     }
+
+    callAll(handlers, args) {
+        let stop = false;
+        for (const hook of handlers) {
+            if (hook.apply(hook, args)) stop = true;
+        }
+        return stop;
+    }
+
+    noteStop() {}
 
     remove(handler) {
         const i = this.handlers.indexOf(handler);
@@ -705,6 +704,32 @@ class DebugHook {
         this.handlers = [];
         this.cpu[this.functionName] = null;
         this.cpu.refreshLook();
+    }
+}
+
+/**
+ * The hook called before each instruction. It remembers which handlers it stopped the machine at, so none is called
+ * twice for one instruction, and `dispatching` is true while they run, between instructions, where the input log can
+ * take an input.
+ */
+class InstructionHook extends DebugHook {
+    constructor(cpu, functionName) {
+        super(cpu, functionName);
+        this.calledAtStop = null;
+        this.dispatching = false;
+    }
+
+    callAll(handlers, args) {
+        this.dispatching = true;
+        try {
+            return super.callAll(handlers, args);
+        } finally {
+            this.dispatching = false;
+        }
+    }
+
+    noteStop(handlers) {
+        this.calledAtStop = new Set(handlers);
     }
 
     get stopped() {
@@ -723,14 +748,14 @@ class DebugHook {
     callRemaining(...args) {
         const called = this.calledAtStop;
         this.cpu.resumingFromStop = true;
-        if (this.atInstructionBoundary) this.cpu.atInstructionBoundary = true;
+        this.dispatching = true;
         try {
             for (const handler of this.handlers) {
                 if (!called.has(handler)) handler.apply(handler, args);
             }
         } finally {
             this.cpu.resumingFromStop = false;
-            if (this.atInstructionBoundary) this.cpu.atInstructionBoundary = false;
+            this.dispatching = false;
         }
     }
 }
@@ -787,8 +812,6 @@ export class Cpu6502 extends Base6502 {
         this.oldPcIndex = 0;
         this.resetLine = true;
         this.resetsAndLoads = 0;
-        /** True while the instruction hooks run, which is between instructions, so an input then is not mid-instruction. */
-        this.atInstructionBoundary = false;
         /** @type {import("./replay.js").InputLog | null} */
         this.inputLog = null;
         this.cpuMultiplier = this.config.cpuMultiplier;
@@ -814,10 +837,7 @@ export class Cpu6502 extends Base6502 {
         this._debugRead = this._debugWrite = this._debugInstruction = this._debugInterrupt = null;
         this.resumingFromStop = false;
         this.replaying = false;
-        this.debugInstruction = new DebugHook(this, "_debugInstruction", {
-            remembersStop: true,
-            atInstructionBoundary: true,
-        });
+        this.debugInstruction = new InstructionHook(this, "_debugInstruction");
         this.debugRead = new DebugHook(this, "_debugRead");
         this.debugWrite = new DebugHook(this, "_debugWrite");
         // Called with "irq" or "nmi" and the address the interrupt returns to, after an interrupt is taken.

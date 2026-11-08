@@ -16,7 +16,6 @@ function instructionTimer(processor, deliver, abandon) {
             dueEpoch = processor.scheduler.epoch + (ms * processor.peripheralCyclesPerSecond) / 1000;
             hook ??= processor.debugInstruction.add(() => {
                 if (timer.stranded()) {
-                    timer.cancel();
                     abandon();
                 } else if (processor.scheduler.epoch >= dueEpoch) {
                     dueEpoch = null;
