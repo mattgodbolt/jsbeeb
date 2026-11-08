@@ -23,8 +23,8 @@ const ShortcutCodesWhileOpen = new Set(
 
 /**
  * The keys the rewind window answers while it is open, in the shape of the Shortcuts table (see panel-keys.js),
- * whichever window has the focus, as the machine is held and gets no keys meanwhile. A key with Alt is named by
- * its key code, as "Alt-S", so that the Mac's Option characters count.
+ * whichever window has the focus, as the machine is held and gets no keys meanwhile. Keys are named as `keyName`
+ * names them.
  */
 export const RewindKeys = [
     { combo: "Left Right", label: "choose", description: "Choose an earlier or later moment" },
@@ -53,7 +53,8 @@ export const RewindKeys = [
     },
 ];
 
-// AltGr is Ctrl with Alt, and types a character rather than naming a shortcut; Alt with any other key is that key.
+// Alt with a letter is named by its key code, as "Alt-S", so that the Mac's Option characters count. AltGr is Ctrl
+// with Alt, and types a character rather than naming a shortcut; Alt with any other key is that key.
 const keyName = (e) => (e.altKey && !e.ctrlKey && e.code.startsWith("Key") ? `Alt-${e.code.slice(3)}` : e.key);
 
 /**

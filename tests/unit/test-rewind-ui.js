@@ -206,6 +206,7 @@ describe("RewindUI", () => {
         it.each([
             ["Enter, running on", RunMode.running, () => key("Enter"), false],
             ["Enter in the debugger, showing it there", RunMode.debugging, () => key("Enter"), true],
+            ["Enter with Alt held", RunMode.running, () => key("Enter", { code: "Enter", altKey: true }), false],
             [
                 "Alt-S, stopping in the debugger there",
                 RunMode.running,
