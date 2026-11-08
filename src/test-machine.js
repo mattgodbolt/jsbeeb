@@ -274,8 +274,8 @@ export class TestMachine {
 
     /**
      * Types the text at the machine, then a RETURN unless it already ends in
-     * one, running the CPU until the last key is up. The keys arrive from the
-     * scheduler, so a breakpoint that stops the CPU part way leaves the rest to
+     * one, running the CPU until the last key is up. The keys arrive from an
+     * instruction hook, so a breakpoint that stops the CPU part way leaves the rest to
      * be typed when it runs again.
      */
     async type(text) {

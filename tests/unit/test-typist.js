@@ -133,7 +133,7 @@ describe("Typist", () => {
             ["between ticks", false],
             ["a tick that a restore has gone back before", true],
         ])(
-            "drops the text left to type, and gives the keyboard back, once a snapshot has been restored: %s",
+            "drops the text left to type, and gives the keyboard back, once a snapshot has been restored or the machine reset: %s",
             (_, wentBack) => {
                 const { typist, processor, keyboard, fire, tick, toggles } = typistFor("B-DFS1.2");
                 typist.type([BBC.A, BBC.B], false);
