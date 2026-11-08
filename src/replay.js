@@ -6,7 +6,7 @@
 
 import { applyInput, cycleCount, stateHash } from "./lockstep.js";
 import { tickCycles } from "./emulation-tick.js";
-import { NoReplayHooks } from "./6502.js";
+import { NoReplayHooks, withoutCalling } from "./6502.js";
 
 /** How much history the page keeps: snapshots at each of the last `recent` frames, and one a second for `seconds`. */
 export const PageHistory = Object.freeze({ recent: 3, seconds: 30 });
@@ -60,20 +60,6 @@ export function finished(generator) {
     for (;;) {
         const { done, value } = generator.next();
         if (done) return value;
-    }
-}
-
-/**
- * Runs `run` with `video` painting nothing to the screen, as the benchmark page's video-only pass does, so that the
- * screen keeps showing the machine as it stands while its past is replayed.
- */
-function withoutPainting(video, run) {
-    const paint = video.paint_ext;
-    video.paint_ext = () => {};
-    try {
-        return run();
-    } finally {
-        video.paint_ext = paint;
     }
 }
 
@@ -682,7 +668,7 @@ export class ReplayHistory extends EventTarget {
         for (;;) {
             let step;
             try {
-                step = withoutPainting(cpu.video, () => search.next());
+                step = withoutCalling([[cpu.video, "paint_ext"]], () => search.next());
             } catch (e) {
                 this._putBack(original);
                 throw e;

@@ -464,7 +464,7 @@ export class MachineSession {
     _asReplay(run) {
         const frameCount = this._frameCount;
         try {
-            return this._soundChip.withoutCapturing(run);
+            return this._soundChip.withoutOutput(run);
         } finally {
             this._frameCount = frameCount;
         }

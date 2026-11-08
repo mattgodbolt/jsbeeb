@@ -427,6 +427,25 @@ export class SoundChip {
         this.lastRunEpoch = this.scheduler.epoch;
     }
 
+    /**
+     * Runs `run`, a replay of the machine's past, sending the host none of it. If it leaves the machine at another
+     * cycle, the chip as it stands goes to the host after it, so that the host sounds on from there.
+     */
+    withoutOutput(run) {
+        // Caught up either side, so that the cycles owed to the host are only those the machine runs forward.
+        this.catchUp();
+        const [onBuffer, onEvent, epoch] = [this._onBuffer, this._onEvent, this.scheduler.epoch];
+        this._onBuffer = () => {};
+        if (onEvent) this._onEvent = () => {};
+        try {
+            return run();
+        } finally {
+            this.catchUp();
+            [this._onBuffer, this._onEvent] = [onBuffer, onEvent];
+            if (this.scheduler.epoch !== epoch) this._emit("state", this.snapshotState());
+        }
+    }
+
     enable(e) {
         this.enabled = e;
     }
@@ -599,15 +618,13 @@ export class InstrumentedSoundChip extends SoundChip {
         super.advance(cycles);
     }
 
-    /** Runs `run`, a replay of the machine's past, leaving out of the capture what it writes and the cycles it takes. */
-    withoutCapturing(run) {
-        // Caught up either side, so that the cycles owed to the chip are only those the machine runs forward.
+    /** As SoundChip.withoutOutput, also leaving out of the capture what the replay writes and the cycles it takes. */
+    withoutOutput(run) {
         this.catchUp();
         const [writes, totalCycles] = [this._capturedWrites.length, this._totalCycles];
         try {
-            return run();
+            return super.withoutOutput(run);
         } finally {
-            this.catchUp();
             this._capturedWrites.length = writes;
             this._totalCycles = totalCycles;
         }
@@ -638,7 +655,7 @@ export class FakeSoundChip {
 
     render() {}
 
-    withoutCapturing(run) {
+    withoutOutput(run) {
         return run();
     }
 
