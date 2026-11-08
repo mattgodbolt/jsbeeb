@@ -1004,7 +1004,7 @@ describe("MachineSession history", () => {
 
     afterEach(() => session.destroy());
 
-    // Typed keys go in part way through an instruction, which no replay crosses, so history starts once CALL is in.
+    // History starts once CALL is in, so that it holds the looping program and not the typing.
     async function loopingWithHistory(sizes) {
         session.writeMemory(LoopAt, Program);
         session.writeMemory(SubroutineAt, Subroutine);
