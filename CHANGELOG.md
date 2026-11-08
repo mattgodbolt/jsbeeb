@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.19.1](https://github.com/mattgodbolt/jsbeeb/compare/v2.19.0...v2.19.1) (2026-11-08)
+
+
+### Bug Fixes
+
+* the Atom's snapshot no longer carries whether a paste holds the keyboard ([#1805](https://github.com/mattgodbolt/jsbeeb/issues/1805)) ([f759a1d](https://github.com/mattgodbolt/jsbeeb/commit/f759a1d5fcd9d2d59e5e2fd38366f108f5a6770f))
+* typed keys go in between instructions, so step back replays across a paste ([#1799](https://github.com/mattgodbolt/jsbeeb/issues/1799)) ([ca08d28](https://github.com/mattgodbolt/jsbeeb/commit/ca08d283e361cd3de825b373c8377b014503f550))
+
 ## [2.19.0](https://github.com/mattgodbolt/jsbeeb/compare/v2.18.0...v2.19.0) (2026-11-02)
 
 
