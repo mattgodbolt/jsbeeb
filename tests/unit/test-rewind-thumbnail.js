@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { previewFrame, renderThumbnails } from "../../src/web/rewind-thumbnail.js";
 import { ReplayHistory } from "../../src/replay.js";
 import { TEST_6502 } from "../../src/models.js";
-import { loadBytes, machineShowingFrames } from "./helpers.js";
+import { loadBytes, machineShowingFrames, stubCanvases } from "./helpers.js";
 
 const ProgramAt = 0x2000;
 // STA &3000; JMP &2000
@@ -25,13 +25,13 @@ async function historyRunning() {
 }
 
 describe("previewFrame", () => {
-    it("runs past breakpoints and watches to a whole frame, leaving them stopping real runs", async () => {
+    it("runs past breakpoints and watches to a whole frame, kept from being cleared, leaving them stopping real runs", async () => {
         const { cpu, history, snapshots } = await historyRunning();
         // Turned off by a flag, not remove(), which would rebuild the look tables and hide a preview that failed to.
         let breaking = true;
         cpu.debugInstruction.add(() => breaking);
         cpu.debugWrite.add(() => true);
-        const clear = cpu.video.clearPaintBuffer;
+        const clear = vi.spyOn(cpu.video, "clearPaintBuffer");
         cpu.restoreState(snapshots[0]);
         const startFrame = cpu.video.frameCount;
 
@@ -39,6 +39,7 @@ describe("previewFrame", () => {
 
         expect(cpu.video.frameCount).toBe(startFrame + 2);
         expect(cpu.video.clearPaintBuffer).toBe(clear);
+        expect(clear).not.toHaveBeenCalled();
         expect(cpu.execute(1000)).toBe(false);
         breaking = false;
         expect(cpu.execute(1000)).toBe(false);
@@ -46,15 +47,7 @@ describe("previewFrame", () => {
 });
 
 describe("renderThumbnails", () => {
-    beforeEach(() => {
-        const context = { createImageData: (w, h) => ({ data: new Uint8Array(w * h * 4) }), putImageData() {} };
-        const realCreateElement = document.createElement.bind(document);
-        vi.spyOn(document, "createElement").mockImplementation((tag) => {
-            const element = realCreateElement(tag);
-            if (tag === "canvas") element.getContext = () => ({ ...context, drawImage() {} });
-            return element;
-        });
-    });
+    beforeEach(stubCanvases);
 
     afterEach(() => vi.restoreAllMocks());
 

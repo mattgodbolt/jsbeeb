@@ -338,3 +338,19 @@ export async function machineShowingFrames(model) {
     });
     return cpu;
 }
+
+/** jsdom draws nothing on a canvas; this gives each a context that takes the calls a thumbnail makes. */
+export function stubCanvases() {
+    const realCreateElement = document.createElement.bind(document);
+    vi.spyOn(document, "createElement").mockImplementation((tag) => {
+        const element = realCreateElement(tag);
+        if (tag === "canvas") {
+            element.getContext = () => ({
+                createImageData: (width, height) => ({ data: new Uint8Array(width * height * 4) }),
+                putImageData: () => {},
+                drawImage: () => {},
+            });
+        }
+        return element;
+    });
+}

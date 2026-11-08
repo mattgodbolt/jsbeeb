@@ -7,7 +7,7 @@ const FramebufferWidth = 1024;
 const FramebufferHeight = 625;
 const VisiblePixels = FramebufferWidth * FramebufferHeight;
 // As far as a preview runs if no vsync comes, as with the CRTC programmed to give none.
-const LongestPreviewSeconds = 1;
+const LongestPreviewSeconds = 0.1;
 const FramesPerSecond = 50;
 
 // Reusable offscreen canvas and ImageData for captureThumbnail to avoid
@@ -51,8 +51,9 @@ function captureThumbnail(fb32) {
  * (see InputLog's replay) until a complete top-to-bottom frame is in fb32. As a replay, no breakpoint or watch cuts
  * it short and nothing it prints or speaks reaches the host.
  *
- * A snapshot may be mid-frame, so it runs through two vsyncs: the first completes the partial frame and clears fb32
- * as usual; through the second, clearing is suppressed so that fb32 keeps the completed frame.
+ * A snapshot may be mid-frame, so it runs until the CRTC has ended the display of a second field (where the frame
+ * count goes up), with clearing suppressed once the first has ended, so that fb32 holds the whole of the field
+ * after it.
  */
 export function previewFrame(history, snapshot) {
     const { cpu } = history;
