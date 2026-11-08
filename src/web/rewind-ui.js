@@ -58,8 +58,8 @@ export const RewindKeys = [
 const keyName = (e) => (e.altKey && !e.ctrlKey && e.code.startsWith("Key") ? `Alt-${e.code.slice(3)}` : e.key);
 
 /**
- * The rewind window: a filmstrip of the machine's last seconds, from which it can go back to any of them. The
- * machine is held while it is open.
+ * The rewind window: a filmstrip of the machine's last seconds, any of which it previews on the screen and can go
+ * back to. The machine is held while it is open.
  */
 export class RewindUI {
     /**
