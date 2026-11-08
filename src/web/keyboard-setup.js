@@ -49,12 +49,11 @@ export class KeyboardSetup {
      * @param {object} opts.actions what each shortcut does, supplied late-bound:
      *   toggleFast, openRewind, openPrinter, openMedia, paste, onAnyKeyDown
      * @param {import("./accessibility-switches.js").AccessibilitySwitches} opts.accessibilitySwitches
-     * @param {import("../typist.js").Typist} opts.typist the machine's own, which `loop` runs the machine through
      * @param {import("./emulation-loop.js").EmulationLoop} opts.loop
      * @param {import("./debug.js").Debugger} opts.dbgr
      * @param {import("./panel-keys.js").PanelKeys} opts.keys the panels' keys, answered while the machine is stopped
      */
-    constructor({ actions, accessibilitySwitches, processor, typist, loop, dbgr, keys, keyLayout }) {
+    constructor({ actions, accessibilitySwitches, processor, loop, dbgr, keys, keyLayout }) {
         this.loop = loop;
         this.keys = keys;
         keys.register({
@@ -65,7 +64,6 @@ export class KeyboardSetup {
         });
         const keyboard = (this.keyboard = new Keyboard({
             processor,
-            typist,
             inputEnabledFunction: inKeyboardSink,
             shortcutsBlockedFunction: () => !!document.activeElement?.closest(ShortcutSinks),
             runningFunction: () => loop.isRunning(),
@@ -73,6 +71,7 @@ export class KeyboardSetup {
             keyLayout,
         }));
         keyboard.addEventListener("notice", showNotice);
+        loop.typist = keyboard.machineTypist;
 
         const runners = {
             toggleDebugger: () => dbgr.toggleDebugger(),

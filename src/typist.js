@@ -1,30 +1,17 @@
 import { BBC } from "./keymap.js";
-import { cycleCount } from "./lockstep.js";
 
 const RepeatedKeyGapMs = 30;
 const StoppedPollMs = 100;
 
-// Counted in the cycles Typist.execute runs, so the delays stay in emulated time whatever the CPU multiplier is,
-// and each key change goes in between instructions, where the replay's InputLog records it as any key press.
-function cycleTimer(processor, callback) {
-    let cyclesLeft = Infinity;
+// The processor's scheduler is polled with peripheral cycles, so the delays stay in real time whatever the CPU
+// multiplier is, and the CPU stays on its fast path while the text arrives. A task fires part way through an
+// instruction, so it only stops the processor; the key changes when the run loop calls deliverPending.
+function schedulerTimer(processor, callback) {
+    const task = processor.scheduler.newTask(callback);
     return {
-        start(ms) {
-            cyclesLeft = Math.ceil((ms * processor.peripheralCyclesPerSecond * processor.cpuMultiplier) / 1000);
-        },
-        cancel() {
-            cyclesLeft = Infinity;
-        },
-        running: () => cyclesLeft !== Infinity,
-        get cyclesLeft() {
-            return cyclesLeft;
-        },
-        ran(cycles) {
-            cyclesLeft -= cycles;
-            if (cyclesLeft > 0) return;
-            cyclesLeft = Infinity;
-            callback();
-        },
+        start: (ms) => task.schedule((ms * processor.peripheralCyclesPerSecond) / 1000),
+        cancel: () => task.cancel(),
+        running: () => task.scheduled(),
     };
 }
 
@@ -90,7 +77,7 @@ export class Typist {
      * @param {object} processor
      * @param {{input: object, isRunning: function(): boolean}} [through] an input, as `Keyboard.setInput` takes, to
      *   press the keys through one by one as someone typing would, timed by the wall clock while `isRunning` says
-     *   the machine runs; without one they go straight into the matrix, timed by the cycles `execute` runs
+     *   the machine runs; without one they go straight into the matrix, timed by the processor's scheduler
      */
     constructor(processor, through) {
         this.processor = processor;
@@ -100,30 +87,29 @@ export class Typist {
         this._shiftKey = processor.model.keys.SHIFT;
         this._keys = [];
         this._lastKey = undefined;
-        this._ranTo = 0;
-        const deliver = () => this._deliver();
-        this._timer = through ? wallClockTimer(deliver, through.isRunning) : cycleTimer(processor, deliver);
+        this._pending = false;
+        this._stoppedByOther = false;
+        this._stopsAtDue = 0;
+        this._timer = through
+            ? wallClockTimer(() => this._deliver(), through.isRunning)
+            : schedulerTimer(processor, () => this._due());
     }
 
     /**
-     * Runs the processor for `cycles`, as its own execute does, stopping between instructions to change each key
-     * that comes due on the way.
+     * Changes the keys that came due while the processor ran, which stopped it at the end of the instruction they
+     * came due in. Returns whether the run should go on: false if nothing was due, or if something else (a
+     * breakpoint, a watch) stopped the processor in that instruction too.
      */
-    execute(cycles) {
-        const { processor } = this;
-        // Gone back (a step back, a rewind, a hard reset), the text typed since then is undone, and what is left of
-        // it would go in with those characters missing, so it is dropped.
-        if (this.isTyping && cycleCount(processor) < this._ranTo) this._abandon();
-        let left = cycles;
-        for (;;) {
-            const run = Math.min(left, this._timer.cyclesLeft);
-            const from = cycleCount(processor);
-            const running = processor.execute(run);
-            left -= run;
-            this._ranTo = cycleCount(processor);
-            this._timer.ran(this._ranTo - from);
-            if (!running || left <= 0) return running;
+    deliverPending() {
+        if (!this._pending) {
+            // A restored snapshot has cancelled the scheduler task, so the text left to type is undone and
+            // stranded: the matrix it was typed into is gone.
+            if (this._keys.length > 0 && !this._timer.running()) this._abandon();
+            return false;
         }
+        this._pending = false;
+        this._deliver();
+        return !this._stoppedByOther && this.processor.stops === this._stopsAtDue;
     }
 
     /**
@@ -147,13 +133,13 @@ export class Typist {
 
         this._keys = keys;
         this._lastKey = undefined;
-        this._ranTo = cycleCount(this.processor);
         // The first press gets the release gap too, as the key before it may have gone up just now.
         this._timer.start(this.processor.model.pasteReleaseGapMs);
     }
 
     cancel() {
         if (!this.isTyping) return;
+        this._pending = false;
         this._releaseLastKey();
         this._abandon();
     }
@@ -166,7 +152,15 @@ export class Typist {
     }
 
     get isTyping() {
-        return this._keys.length > 0 || this._timer.running();
+        return this._keys.length > 0 || this._timer.running() || this._pending;
+    }
+
+    _due() {
+        const { processor } = this;
+        this._stoppedByOther = processor.halted;
+        processor.stop();
+        this._stopsAtDue = processor.stops;
+        this._pending = true;
     }
 
     _releaseLastKey() {

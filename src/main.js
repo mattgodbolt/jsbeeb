@@ -25,7 +25,6 @@ import { EmulationLoop, RunMode } from "./web/emulation-loop.js";
 import { RunControls } from "./web/run-controls.js";
 import { exposeConsoleSurface } from "./web/console-surface.js";
 import { KeyboardSetup } from "./web/keyboard-setup.js";
-import { Typist } from "./typist.js";
 import { TouchKeyboard } from "./web/touch-keyboard.js";
 import { labelPageShortcuts } from "./web/shortcuts.js";
 import { AccessibilitySwitches } from "./web/accessibility-switches.js";
@@ -241,10 +240,8 @@ const machine = new Machine({
 const processor = machine.processor;
 panelArrangement.followMachine(() => machineMoment(processor));
 
-const typist = new Typist(processor);
 const loop = new EmulationLoop({
     processor,
-    typist,
     display,
     audioHandler,
     dbgr,
@@ -273,7 +270,6 @@ const { keyboard } = new KeyboardSetup({
     },
     accessibilitySwitches,
     processor,
-    typist,
     loop,
     dbgr,
     keys: panelKeys,

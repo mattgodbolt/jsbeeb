@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { Keyboard } from "../../src/web/keyboard.js";
-import { Typist } from "../../src/typist.js";
 import { ATOM, stringToATOMKeys } from "../../src/keymap-atom.js";
 import { BBC, keyCodes, userKeymap } from "../../src/keymap.js";
 import { fakeKeyboardProcessor } from "../helpers/fake-keyboard-processor.js";
@@ -17,7 +16,6 @@ const keyEvent = (code, key = "", extra = {}) => ({
 
 describe("Keyboard", () => {
     let keyboard;
-    let typist;
     let mockProcessor;
     let mockSysvia;
     let mockInputEnabledFunction;
@@ -34,10 +32,8 @@ describe("Keyboard", () => {
         running = false;
         resetInputMethod = vi.fn();
 
-        typist = new Typist(mockProcessor);
         keyboard = new Keyboard({
             processor: mockProcessor,
-            typist,
             inputEnabledFunction: mockInputEnabledFunction,
             runningFunction: () => running,
             resetInputMethodFunction: resetInputMethod,
@@ -47,7 +43,8 @@ describe("Keyboard", () => {
 
     test("cancels a paste into the machine when its input changes, giving the keyboard back", () => {
         keyboard.sendRawKeyboard([BBC.A, BBC.B], false);
-        typist.execute(1);
+        mockProcessor.scheduler.polltime(1);
+        keyboard.machineTypist.deliverPending();
         keyboard.setInput({ keyDown: vi.fn(), keyUp: vi.fn(), keyRaw: vi.fn(), setReset: vi.fn(), clearKeys: vi.fn() });
         expect(keyboard.isPasting).toBe(false);
         expect(mockSysvia.keyToggleRaw.mock.calls).toEqual([[BBC.A], [BBC.A]]);
@@ -99,7 +96,7 @@ describe("Keyboard", () => {
                     [BBC.SHIFT, false],
                 ]);
                 expect(keyboard.isPasting).toBe(false);
-                typist.execute(mockProcessor.peripheralCyclesPerSecond);
+                mockProcessor.scheduler.polltime(mockProcessor.peripheralCyclesPerSecond);
                 expect(mockSysvia.keyToggleRaw).not.toHaveBeenCalled();
                 expect(mockSysvia.disableKeyboard).not.toHaveBeenCalled();
             });
@@ -124,7 +121,8 @@ describe("Keyboard", () => {
             test("pastes into the machine again once the session is over", () => {
                 keyboard.setInput(null);
                 keyboard.sendRawKeyboard([BBC.A], false);
-                typist.execute(1);
+                mockProcessor.scheduler.polltime(1);
+                keyboard.machineTypist.deliverPending();
                 expect(mockSysvia.keyToggleRaw).toHaveBeenCalledWith(BBC.A);
                 expect(input.keyRaw).not.toHaveBeenCalled();
             });
@@ -549,7 +547,6 @@ describe("Keyboard Atom adapter", () => {
 
         keyboard = new Keyboard({
             processor: mockProcessor,
-            typist: new Typist(mockProcessor),
             inputEnabledFunction: () => false,
             runningFunction: () => true,
             keyLayout: "physical",

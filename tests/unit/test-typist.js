@@ -7,17 +7,23 @@ import { fakeKeyboardProcessor } from "../helpers/fake-keyboard-processor.js";
 
 function typistFor(modelName) {
     const processor = fakeKeyboardProcessor(modelName);
-    const { model, keyboardInterface: keyboard, peripheralCyclesPerSecond } = processor;
+    const { model, scheduler, keyboardInterface: keyboard } = processor;
     keyboard.capsLockLight = true;
     const typist = new Typist(processor);
-    const fire = () => typist.execute(1);
-    const tick = (ms) => typist.execute((ms * peripheralCyclesPerSecond) / 1000);
+    // What a run loop does: the scheduler fires part way through an instruction, then the key goes in after it.
+    const runFor = (cycles) => {
+        processor.halted = false;
+        scheduler.polltime(cycles);
+        return typist.deliverPending();
+    };
+    const fire = () => runFor(1);
+    const tick = (ms) => runFor((ms * processor.peripheralCyclesPerSecond) / 1000);
     const toggles = () => keyboard.keyToggleRaw.mock.calls.map(([key]) => key);
     const finish = () => {
         for (let ticks = 0; typist.isTyping && ticks < 100; ++ticks) tick(model.pasteKeyDelayMs);
         expect(typist.isTyping).toBe(false);
     };
-    return { typist, processor, keyboard, fire, tick, toggles, finish, model };
+    return { typist, processor, scheduler, keyboard, runFor, fire, tick, toggles, finish, model };
 }
 
 describe("Typist", () => {
@@ -96,28 +102,6 @@ describe("Typist", () => {
             expect(typist.isTyping).toBe(false);
         });
 
-        it("holds each key for its delay in emulated time, whatever the CPU multiplier", () => {
-            const { typist, processor, fire, tick, toggles } = typistFor("B-DFS1.2");
-            processor.cpuMultiplier = 3;
-            typist.type([BBC.A], false);
-            fire();
-            tick(50);
-            expect(toggles()).toEqual([BBC.A]);
-            tick(2 * 50);
-            expect(toggles()).toEqual([BBC.A, BBC.A]);
-        });
-
-        it("drops the rest of the text and gives the keyboard back once the machine has gone back", () => {
-            const { typist, processor, keyboard, fire, tick, toggles } = typistFor("B-DFS1.2");
-            typist.type([BBC.A, BBC.B, BBC.C], false);
-            fire();
-            processor.currentCycles -= 1;
-            tick(500);
-            expect(toggles()).toEqual([BBC.A]);
-            expect(keyboard.enableKeyboard).toHaveBeenCalled();
-            expect(typist.isTyping).toBe(false);
-        });
-
         it("typing again replaces what was in flight", () => {
             const { typist, fire, toggles } = typistFor("B-DFS1.2");
             typist.type([BBC.A, BBC.B, BBC.C], false);
@@ -125,6 +109,48 @@ describe("Typist", () => {
             typist.type([BBC.X], false);
             fire();
             expect(toggles()).toEqual([BBC.A, BBC.A, BBC.X]);
+        });
+    });
+
+    describe("between instructions", () => {
+        it("stops the processor when a key comes due and changes it when told to deliver", () => {
+            const { typist, processor, scheduler, toggles, tick } = typistFor("B-DFS1.2");
+            typist.type([BBC.A], false);
+            scheduler.polltime(1);
+            expect(processor.halted).toBe(true);
+            expect(toggles()).toEqual([]);
+            expect(typist.isTyping).toBe(true);
+            expect(typist.deliverPending()).toBe(true);
+            expect(toggles()).toEqual([BBC.A]);
+            expect(typist.deliverPending()).toBe(false);
+            tick(50);
+            expect(toggles()).toEqual([BBC.A, BBC.A]);
+        });
+
+        it.each([
+            ["before", true],
+            ["after", false],
+        ])("changes the key but says the run should not go on if something else stops it %s", (_, before) => {
+            const { typist, processor, scheduler, toggles } = typistFor("B-DFS1.2");
+            typist.type([BBC.A], false);
+            processor.halted = false;
+            if (before) processor.stop();
+            scheduler.polltime(1);
+            if (!before) processor.stop();
+            expect(typist.deliverPending()).toBe(false);
+            expect(toggles()).toEqual([BBC.A]);
+        });
+
+        it("drops the text left to type when a restored snapshot has cancelled the scheduler", () => {
+            const { typist, scheduler, keyboard, fire, toggles } = typistFor("B-DFS1.2");
+            typist.type([BBC.A, BBC.B], false);
+            fire();
+            keyboard.enableKeyboard.mockClear();
+            scheduler.cancelAll();
+            expect(typist.deliverPending()).toBe(false);
+            expect(typist.isTyping).toBe(false);
+            expect(keyboard.enableKeyboard).toHaveBeenCalled();
+            expect(toggles()).toEqual([BBC.A]);
         });
     });
 

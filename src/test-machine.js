@@ -129,7 +129,9 @@ export class TestMachine {
                 const todo = Math.max(0, Math.min(left, MaxCyclesPerIter));
                 if (todo) {
                     try {
-                        stopped = !this.typist.execute(todo);
+                        let ran = cpu.execute(todo);
+                        while (this.typist.deliverPending() && !ran) ran = cpu.execute(0);
+                        stopped = !ran;
                     } catch (e) {
                         cpu.targetCycles = cpu.currentCycles;
                         reject(e);
@@ -274,9 +276,9 @@ export class TestMachine {
 
     /**
      * Types the text at the machine, then a RETURN unless it already ends in
-     * one, running the CPU until the last key is up. The keys go in as the
-     * machine runs, so a breakpoint that stops the CPU part way leaves the rest
-     * to be typed when it runs again.
+     * one, running the CPU until the last key is up. The keys arrive from the
+     * scheduler, so a breakpoint that stops the CPU part way leaves the rest to
+     * be typed when it runs again.
      */
     async type(text) {
         const lines = text.replace(/\r\n?/g, "\n");

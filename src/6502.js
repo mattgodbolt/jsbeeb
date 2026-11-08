@@ -779,6 +779,7 @@ export class Cpu6502 extends Base6502 {
         this.oldPcIndex = 0;
         this.resetLine = true;
         this.resetsAndLoads = 0;
+        this.stops = 0;
         /** @type {import("./replay.js").InputLog | null} */
         this.inputLog = null;
         this.cpuMultiplier = this.config.cpuMultiplier;
@@ -1887,6 +1888,7 @@ export class Cpu6502 extends Base6502 {
 
     stop() {
         this.halted = true;
+        ++this.stops;
     }
 
     /**
