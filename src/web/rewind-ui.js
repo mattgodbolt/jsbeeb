@@ -51,6 +51,8 @@ export class RewindUI {
         this.snapshots = [];
 
         this._onKeyDown = this._onKeyDown.bind(this);
+        // Whatever a keypress would do, as the debugger's keys answer it, would act on a machine that is held.
+        this._onKeyPress = (e) => e.stopPropagation();
         this.closeBtn.addEventListener("click", () => this.close());
         this.commitBtn.addEventListener("click", () => this.commit());
         // Focus left on a button would keep the keys from the machine once it runs again.
@@ -116,6 +118,7 @@ export class RewindUI {
             this.panel.hidden = false;
             // Use capture phase so keys don't leak to the emulator's keyboard handler
             document.addEventListener("keydown", this._onKeyDown, true);
+            document.addEventListener("keypress", this._onKeyPress, true);
 
             this.selectedIndex = this.snapshots.length - 1;
             this._preview(this.selectedIndex);
@@ -186,6 +189,7 @@ export class RewindUI {
         this.filmstrip.innerHTML = "";
         this.snapshots = [];
         document.removeEventListener("keydown", this._onKeyDown, true);
+        document.removeEventListener("keypress", this._onKeyPress, true);
         this.resumeLoop?.();
         this.resumeLoop = null;
     }
