@@ -1342,6 +1342,21 @@ describe("Debugger", () => {
                 ]);
             });
 
+            it.each([
+                [
+                    "in a shared session",
+                    () => (stoppedLoop.lockstep = {}),
+                    "The trace is not available in a shared session.",
+                ],
+                ["with no history", () => {}, "There is no history to trace here."],
+            ])("says the trace cannot be made %s", async (_, set, says) => {
+                set();
+                if (stoppedLoop.lockstep) stepBackHere();
+                dbgr.trace.floating.open();
+                await pressAndSettle("n");
+                expect(document.querySelector("#trace-panel .trace-status").textContent).toBe(says);
+            });
+
             it("goes back one instruction on p, and on P back over the call just returned from, as things were there", () => {
                 stepBackHere();
                 const xAtCall = x();
