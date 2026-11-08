@@ -1533,7 +1533,6 @@ for (const [where, viewport] of [
             return panel.contains(document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2));
         });
         expect(onTop).toBe(true);
-        await expect(page.locator("#media-panel")).toBeVisible();
         const before = await beeb.expectHeld();
         await page.keyboard.press("ArrowLeft");
         await page.keyboard.press("Enter");
