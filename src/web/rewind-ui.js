@@ -7,7 +7,7 @@ import { noteFeature } from "./analytics.js";
 import { Shortcuts } from "./shortcuts.js";
 import { keyCodes } from "../keymap.js";
 
-// The rest would act on a machine that is only showing a preview, or are the machine's own keys.
+// The rest would act on a machine that is only showing a preview.
 const ShortcutsWhileOpen = new Set(["toggleRewind", "toggleFast", "openPrinter"]);
 const ShortcutCodesWhileOpen = new Set(
     Shortcuts.filter(({ run }) => ShortcutsWhileOpen.has(run)).map(({ key }) => keyCodes[key]),
