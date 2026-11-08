@@ -149,24 +149,25 @@ describe("RewindUI", () => {
         });
 
         it.each([
-            ["A", { key: "a", code: "KeyA" }, "kept"],
-            ["Alt-W, as Option-W types it on a Mac", { key: "∑", code: "KeyW", altKey: true }, "passed on"],
-            ["Alt-T", { key: "t", code: "KeyT", altKey: true }, "passed on"],
-            ["Alt-B", { key: "b", code: "KeyB", altKey: true }, "passed on"],
-            ["Alt-D", { key: "d", code: "KeyD", altKey: true }, "kept"],
-            ["Alt-P", { key: "p", code: "KeyP", altKey: true }, "kept"],
-            ["Alt-M", { key: "m", code: "KeyM", altKey: true }, "kept"],
-            ["Alt-C", { key: "c", code: "KeyC", altKey: true }, "kept"],
-            ["Alt-1", { key: "1", code: "Digit1", altKey: true }, "kept"],
-            ["AltGr-W", { key: "w", code: "KeyW", altKey: true, ctrlKey: true }, "kept"],
-        ])("%s, while open, is %s", (_, init, fate) => {
+            ["A", "keydown", { key: "a", code: "KeyA" }, "kept"],
+            ["N's keypress, which the debugger's keys answer", "keypress", { key: "n" }, "kept"],
+            ["Alt-W, as Option-W types it on a Mac", "keydown", { key: "∑", code: "KeyW", altKey: true }, "passed on"],
+            ["Alt-T", "keydown", { key: "t", code: "KeyT", altKey: true }, "passed on"],
+            ["Alt-B", "keydown", { key: "b", code: "KeyB", altKey: true }, "passed on"],
+            ["Alt-D", "keydown", { key: "d", code: "KeyD", altKey: true }, "kept"],
+            ["Alt-P", "keydown", { key: "p", code: "KeyP", altKey: true }, "kept"],
+            ["Alt-M", "keydown", { key: "m", code: "KeyM", altKey: true }, "kept"],
+            ["Alt-C", "keydown", { key: "c", code: "KeyC", altKey: true }, "kept"],
+            ["Alt-1", "keydown", { key: "1", code: "Digit1", altKey: true }, "kept"],
+            ["AltGr-W", "keydown", { key: "w", code: "KeyW", altKey: true, ctrlKey: true }, "kept"],
+        ])("%s, while open, is %s", (_, type, init, fate) => {
             const ui = make();
             captured(1);
             ui.open();
             const reached = vi.fn();
-            document.addEventListener("keydown", reached);
-            document.dispatchEvent(new KeyboardEvent("keydown", { ...init, cancelable: true }));
-            document.removeEventListener("keydown", reached);
+            document.addEventListener(type, reached);
+            document.dispatchEvent(new KeyboardEvent(type, { ...init, cancelable: true }));
+            document.removeEventListener(type, reached);
             expect(reached).toHaveBeenCalledTimes(fate === "passed on" ? 1 : 0);
         });
     });
