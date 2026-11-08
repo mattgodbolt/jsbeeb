@@ -120,13 +120,17 @@ export class CallStackPanel {
         while (!step.done) {
             this._show(step.value, Searching);
             await new Promise((resolve) => setTimeout(resolve, 0));
-            // A machine that has moved on is searched afresh as the panel is next drawn.
-            if (this._searching !== searching || this._moment() !== this._shownAt) return;
+            if (this._searching !== searching) return;
+            // Left for update(), which a run or a move the panel's refresh sees comes to.
+            if (!this._isStopped() || this._moment() !== this._shownAt) {
+                this._forget();
+                return;
+            }
             step = searching.next();
         }
         this._searching = null;
         const found = step.value;
-        // Moved without a cycle passing, as by a key or an edit, which the panel is not drawn again for.
+        // Moved by a key or an edit, which leaves the moment update() compares as it was.
         if (found.movedOn) {
             this._shownAt = null;
             this.update();

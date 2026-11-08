@@ -434,7 +434,7 @@ class LastWrite {
  * Where a step back out lands: the latest instruction that entered a routine, a JSR or BRK or one an interrupt was
  * taken after, whose stack is shallower than here and than at every instruction after it. Each window keeps only
  * the instructions shallower than every one after them in it, the only ones it could be, each with where it was
- * and the routine it entered, if any, and before the first instruction after a TXS, a mark of the stack moving there.
+ * and the routine it entered, if any, and, where a TXS moved the stack deeper, a mark of where it moved it to.
  */
 class OutLanding {
     constructor(cpu) {

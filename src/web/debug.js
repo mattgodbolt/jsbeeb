@@ -1231,6 +1231,8 @@ export class Debugger {
         const running = this._loop.isRunning();
         for (const [run, button] of Object.entries(this._buttons)) button.disabled = running !== (run === "stop");
         if (!running) this._showStepBack();
+        // Stopping takes no cycles, so the panel's refresh would not see it.
+        if (this.callStack.floating.isOpen) this.callStack.update();
     }
 
     _stepBackRefusal() {

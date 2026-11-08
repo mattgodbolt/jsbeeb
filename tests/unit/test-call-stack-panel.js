@@ -120,11 +120,13 @@ describe("CallStackPanel", () => {
         ],
         ["the panel closes", () => panel.floating.close()],
         ["the machine steps", () => cpu.execute(1)],
+        ["the machine is set running, before the panel is drawn again", () => (stopped = false)],
     ])("ends its search once %s, and searches afresh where it is next shown stopped", async (_, interrupt) => {
         await open({ found: { frames: [Inner], accounted: true, txsAt: null, stoppedBy: null } });
         interrupt();
         await searched();
         expect(resumed).toBe(0);
+        stopped = true;
         panel.floating.open();
         panel.update();
         expect(searches).toHaveLength(2);

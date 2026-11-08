@@ -239,6 +239,16 @@ describe("Debugger", () => {
         [...watchMenu().querySelectorAll("button")].find((choice) => choice.textContent === text).click();
 
     describe("the panels", () => {
+        it("has the call stack shown again as the machine stops, which takes no cycles", () => {
+            dbgr.callStack.floating.open();
+            const endLine = () => document.querySelector("#callstack-panel .cs-end").textContent;
+            for (const running of [true, false]) {
+                stoppedLoop.running = running;
+                stoppedLoop.dispatchEvent(new Event("running"));
+            }
+            expect(endLine()).toMatch(/no history to search/);
+        });
+
         it("centres the disassembly on what it moves to at any height, and keeps a stopped one's row through a resize", () => {
             const rowHeight = 16;
             const highlightRow = () => disRows().indexOf(currentRow());

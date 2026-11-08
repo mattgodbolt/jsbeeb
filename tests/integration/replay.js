@@ -47,6 +47,8 @@ const PrintForever = [0x20, 0xee, 0xff, 0x4c, 0x00, 0x30];
 const Oswrch = 0xffee;
 const IrqVector = 0xfffe;
 const StepsInside = 3;
+const TimerNops = 8;
+const MovedStack = 0xe0;
 const Irq1v = 0x0204;
 const HandlerAddress = 0x3100;
 // LDA &FC; RTI: the OS's IRQ entry keeps A in &FC. Its source left alone, the interrupt is taken again at once.
@@ -467,6 +469,24 @@ describe.each([
         expectFrames(frames, machine);
         expect(machineNow(machine)).toEqual(before);
         expect(painted).not.toHaveBeenCalled();
+    });
+
+    it("goes back no further than a TXS an interrupt was taken straight after", async () => {
+        const machine = await booted(model);
+        // CLI's effect waits an instruction, so the User VIA timer's interrupt, set going under SEI, comes straight
+        // after the TXS.
+        const timerSoon = [0xa9, 0xc0, 0x8d, 0x6e, 0xfe, 0xa9, 0x02, 0x8d, 0x64, 0xfe, 0xa9, 0x00, 0x8d, 0x65, 0xfe];
+        const txsAt = ScratchAddress + 1 + timerSoon.length + TimerNops + 3;
+        const code = [0x78, ...timerSoon, ...Array(TimerNops).fill(0xea), 0xa2, MovedStack, 0x58, 0x9a];
+        [...code, 0x4c, (txsAt + 1) & 0xff, (txsAt + 1) >> 8].forEach((byte, i) =>
+            machine.writebyte(ScratchAddress + i, byte),
+        );
+        const history = historyFromHere(machine);
+        await machine.type("CALL &3000");
+        await machine.runUntilAddress(machine.readword(IrqVector), 1);
+        singleStep(machine.processor);
+        const { frames, txsAt: movedBy } = finished(history.callStack());
+        expect([frames.at(-1), movedBy]).toEqual([expect.objectContaining({ kind: "IRQ", site: txsAt + 1 }), txsAt]);
     });
 });
 
