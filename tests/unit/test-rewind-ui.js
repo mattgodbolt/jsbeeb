@@ -207,6 +207,7 @@ describe("RewindUI", () => {
             ["Enter, running on", RunMode.running, () => key("Enter"), false],
             ["the go back button", RunMode.running, () => document.getElementById("rewind-commit").click(), false],
             ["Enter in the debugger, showing it there", RunMode.debugging, () => key("Enter"), true],
+            ["Enter with Alt held", RunMode.running, () => key("Enter", { code: "Enter", altKey: true }), false],
             [
                 "Alt-S, stopping in the debugger there",
                 RunMode.running,
