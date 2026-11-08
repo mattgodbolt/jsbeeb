@@ -105,7 +105,8 @@ export class RewindUI {
             minSize: MinPanelSize,
             arrangement,
         });
-        // Its close button; Escape goes to the key handler, wherever the focus is.
+        // Every close comes here, but only its close button's while the panel is still open: _closePanel marks it
+        // closed before closing the window. Escape goes to the key handler, wherever the focus is.
         this.floating.addEventListener("close", () => this.cancel());
         this._actions = {
             earlier: () => this.selectSnapshot(this.selectedIndex - 1),

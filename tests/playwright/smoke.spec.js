@@ -1522,9 +1522,10 @@ for (const [where, viewport] of [
         await beeb.runFor(RewindHistoryMs);
         await page.keyboard.press("Alt+M");
         await expect(page.locator("#media-panel")).toBeVisible();
-        // Gives the keyboard back from the search box the media window focuses.
-        await page.keyboard.press("Escape");
+        // Gives the keyboard back from the search box the media window focuses; Escape there would close the window.
+        await page.evaluate(() => document.activeElement.blur());
         await page.keyboard.press("Alt+W");
+        await expect(page.locator("#media-panel")).toBeVisible();
         const rewind = page.locator("#rewind-panel");
         await expect(rewind).toBeVisible();
         const onTop = await rewind.evaluate((panel) => {
@@ -1532,6 +1533,7 @@ for (const [where, viewport] of [
             return panel.contains(document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2));
         });
         expect(onTop).toBe(true);
+        await expect(page.locator("#media-panel")).toBeVisible();
         const before = await beeb.expectHeld();
         await page.keyboard.press("ArrowLeft");
         await page.keyboard.press("Enter");
