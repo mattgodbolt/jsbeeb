@@ -7,12 +7,12 @@ import { noteFeature } from "./analytics.js";
 import { FloatingPanel } from "./floating-panel.js";
 import { EndEdge } from "./panel-layout.js";
 import { keyLine } from "./panel-keys.js";
-import { Shortcuts } from "./shortcuts.js";
+import { Shortcuts, shortcutLabel } from "./shortcuts.js";
 import { keyCodes } from "../keymap.js";
 
-// Tall enough for a row of thumbnails and the line of keys under them, so that the default place, kept clear of the
-// lights, is never one that cuts them off.
-const MinPanelSize = { w: 240, h: 230 };
+// Tall enough for a row of thumbnails and, at this width or more, the line of keys under them, so that the default
+// place, kept clear of the lights, is never one that cuts them off.
+const MinPanelSize = { w: 480, h: 230 };
 const StretchedAcross = { anchor: "stretch" };
 
 // The rest would act on a machine the loop holds while the screen shows a preview.
@@ -53,8 +53,8 @@ export const RewindKeys = [
     },
 ];
 
-// AltGr is Ctrl with Alt, and types a character rather than naming a shortcut.
-const keyName = (e) => (e.altKey && !e.ctrlKey ? `Alt-${e.code.replace(/^Key/, "")}` : e.key);
+// AltGr is Ctrl with Alt, and types a character rather than naming a shortcut; Alt with any other key is that key.
+const keyName = (e) => (e.altKey && !e.ctrlKey && e.code.startsWith("Key") ? `Alt-${e.code.slice(3)}` : e.key);
 
 /**
  * The rewind window: a filmstrip of the machine's last seconds, from which it can go back to any of them. The
@@ -93,7 +93,7 @@ export class RewindUI {
         this.panel = document.getElementById("rewind-panel");
         this.filmstrip = document.getElementById("rewind-filmstrip");
         this.openBtn = document.getElementById("rewind-open");
-        this.panel.querySelector(".panel-keys").textContent = keyLine(RewindKeys);
+        this.panel.querySelector(".panel-keys").textContent = shortcutLabel(keyLine(RewindKeys));
         this.floating = new FloatingPanel({
             panel: this.panel,
             id: "rewind",
@@ -104,7 +104,7 @@ export class RewindUI {
             minSize: MinPanelSize,
             arrangement,
         });
-        // Its close button, or Escape within it.
+        // Its close button; Escape goes to the key handler, wherever the focus is.
         this.floating.addEventListener("close", () => this.cancel());
         this._actions = {
             earlier: () => this.selectSnapshot(this.selectedIndex - 1),
