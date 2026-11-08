@@ -1229,7 +1229,7 @@ export class Debugger {
         }
     }
 
-    /** Runs the CPU as the loop does, so a typed key that stops it at an instruction's end goes in rather than ending a step. */
+    /** Runs the CPU as the loop does, delivering a typed key that stops it, which a step must not read as a stop. */
     _execute(cycles) {
         const typist = this._loop?.typist;
         let ran = this.cpu.execute(cycles);

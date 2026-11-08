@@ -4,7 +4,7 @@ const RepeatedKeyGapMs = 30;
 const StoppedPollMs = 100;
 
 // The processor's scheduler is polled with peripheral cycles, so the delays stay in real time whatever the CPU
-// multiplier is. A task fires part way through an instruction, so it only stops the processor; the key changes when the run loop calls deliverPending.
+// multiplier is. A task fires part way through an instruction, so it only stops the processor (see deliverPending).
 function schedulerTimer(processor, callback) {
     const task = processor.scheduler.newTask(callback);
     return {
