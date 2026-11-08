@@ -6,7 +6,7 @@ const StoppedPollMs = 100;
 // Delays are counted in the scheduler's peripheral cycles, so they stay in emulated time whatever the CPU multiplier
 // is. A hook between instructions makes the key change, and is attached only while there is text to type, so only
 // a paste leaves the CPU's fast path.
-function instructionTimer(processor, deliver, abandon) {
+function instructionTimer(processor, deliver) {
     let dueEpoch = null;
     let hook = null;
     let loadsAtStart = 0;
@@ -15,9 +15,7 @@ function instructionTimer(processor, deliver, abandon) {
             loadsAtStart = processor.resetsAndLoads;
             dueEpoch = processor.scheduler.epoch + (ms * processor.peripheralCyclesPerSecond) / 1000;
             hook ??= processor.debugInstruction.add(() => {
-                if (timer.stranded()) {
-                    abandon();
-                } else if (processor.scheduler.epoch >= dueEpoch) {
+                if (timer.stranded() || processor.scheduler.epoch >= dueEpoch) {
                     dueEpoch = null;
                     deliver();
                     if (dueEpoch === null) timer.cancel();
@@ -31,7 +29,7 @@ function instructionTimer(processor, deliver, abandon) {
             hook = null;
         },
         running: () => dueEpoch !== null,
-        stranded: () => dueEpoch !== null && processor.resetsAndLoads !== loadsAtStart,
+        stranded: () => processor.resetsAndLoads !== loadsAtStart,
     };
     return timer;
 }
@@ -110,9 +108,7 @@ export class Typist {
         this._keys = [];
         this._lastKey = undefined;
         const deliver = () => this._deliver();
-        this._timer = through
-            ? wallClockTimer(deliver, through.isRunning)
-            : instructionTimer(processor, deliver, () => this._abandon());
+        this._timer = through ? wallClockTimer(deliver, through.isRunning) : instructionTimer(processor, deliver);
     }
 
     /**
@@ -163,6 +159,7 @@ export class Typist {
     }
 
     _deliver() {
+        if (this._timer.stranded()) return this._abandon();
         this._releaseLastKey();
 
         if (this._keys.length === 0) {

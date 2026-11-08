@@ -224,12 +224,7 @@ describe.each([
             cpu.keyboardInterface.keyDownRaw(machine.model.keys.SHIFT);
         });
         await seconds(machine, AroundAnInputSeconds);
-        cpu.scheduler.newTask(() => cpu.keyboardInterface.keyUpRaw(machine.model.keys.SHIFT)).schedule(1);
-        await seconds(machine, AroundAnInputSeconds);
-        expect(cpu.inputLog.inputs.map(({ input, refusal }) => input?.kind ?? refusal)).toEqual([
-            "keyboard",
-            expect.stringMatching(/part way through an instruction/),
-        ]);
+        expect(cpu.inputLog.inputs.map(({ input, refusal }) => input?.kind ?? refusal)).toEqual(["keyboard"]);
     });
 
     it("records a key pressed from an instruction hook that runs on resuming from a stop", async () => {

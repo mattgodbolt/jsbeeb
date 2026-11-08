@@ -130,8 +130,8 @@ describe("Typist", () => {
         });
 
         it.each([
-            ["between ticks", false],
-            ["a tick that a restore has gone back before", true],
+            ["the scheduler's epoch not moved back", false],
+            ["the scheduler's epoch moved back", true],
         ])(
             "drops the text left to type, and gives the keyboard back, once a snapshot has been restored or the machine reset: %s",
             (_, wentBack) => {

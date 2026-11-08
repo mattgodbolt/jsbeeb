@@ -707,11 +707,7 @@ class DebugHook {
     }
 }
 
-/**
- * The hook called before each instruction. It remembers which handlers it stopped the machine at, so none is called
- * twice for one instruction, and `dispatching` is true while they run, between instructions, where the input log can
- * take an input.
- */
+/** Called before each instruction; `dispatching` is true while its handlers run, when the input log can take an input. */
 class InstructionHook extends DebugHook {
     constructor(cpu, functionName) {
         super(cpu, functionName);
