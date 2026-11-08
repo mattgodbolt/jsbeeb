@@ -313,7 +313,8 @@ What the worker keeps, and when it changes:
 - The built scripts and styles, every ROM, the images, fonts and sounds are kept when a version installs. The
   Teletext data, the Econet data and the benchmarks are not.
 - A disc or tape served from this site is kept the first time it is used, so a game played once can be played
-  offline. These are never evicted, and a changed one is served from the old copy once before the new one takes over. Discs from any other site (Bitshifters, GitHub, archive.org, Google Drive) always come from the network.
+  offline. These are never evicted, and a changed one is served from the old copy once before the new one takes
+  over. Discs from any other site (Bitshifters, GitHub, archive.org, Google Drive) always come from the network.
 - A new version installs in the background and then waits. The page shows an "A new version of jsbeeb is ready"
   notice, and only its Reload button switches to the new version, because switching reloads the page and would lose a
   running machine. A tab that stays open is checked for a new version whenever it comes back into view.
