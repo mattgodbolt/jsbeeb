@@ -38,6 +38,7 @@ export class RewindUI {
         this.panel = document.getElementById("rewind-panel");
         this.filmstrip = document.getElementById("rewind-filmstrip");
         this.closeBtn = document.getElementById("rewind-close");
+        this.commitBtn = document.getElementById("rewind-commit");
         this.openBtn = document.getElementById("rewind-open");
 
         this.isOpen = false;
@@ -48,6 +49,11 @@ export class RewindUI {
 
         this._onKeyDown = this._onKeyDown.bind(this);
         this.closeBtn.addEventListener("click", () => this.close());
+        this.commitBtn.addEventListener("click", () => this.commit());
+        // Focus left on a button would keep the keys from the machine once it runs again.
+        this.panel.addEventListener("mousedown", (e) => {
+            if (e.target.closest("button")) e.preventDefault();
+        });
         this.openBtn.addEventListener("click", (e) => {
             e.preventDefault();
             this.open();

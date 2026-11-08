@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { RewindUI } from "../../src/web/rewind-ui.js";
 import { ReplayHistory } from "../../src/replay.js";
 import { fake6502 } from "../../src/fake6502.js";
-import { domFromIndexHtml, sentEvents, teardownDom } from "./helpers.js";
+import { domFromIndexHtml, pressKeepsFocus, sentEvents, teardownDom } from "./helpers.js";
 
 const FakeContext = {
     createImageData: () => ({ data: new Uint8Array(1024 * 625 * 4) }),
@@ -170,12 +170,15 @@ describe("RewindUI", () => {
     });
 
     describe("closing", () => {
-        it("commits the chosen snapshot on Enter and runs on from it", () => {
+        it.each([
+            ["Enter", () => key("Enter")],
+            ["the go back button", () => document.getElementById("rewind-commit").click()],
+        ])("commits the chosen snapshot on %s and runs on from it", (_, goBack) => {
             const ui = make();
             const snapshots = captured(2);
             ui.open();
             key("ArrowLeft");
-            key("Enter");
+            goBack();
             expect(lastRestored()).toEqual(snapshots[0]);
             expect(panel().hidden).toBe(true);
             expect(thumbs()).toHaveLength(0);
@@ -191,6 +194,13 @@ describe("RewindUI", () => {
             expect(lastRestored()).toEqual({ live: true });
             expect(panel().hidden).toBe(true);
             expect(resume).toHaveBeenCalledTimes(1);
+        });
+
+        it("keeps its buttons from focus, which would keep the keys from the machine", () => {
+            make();
+            for (const id of ["rewind-commit", "rewind-close"]) {
+                expect(pressKeepsFocus(document.getElementById(id))).toBe(true);
+            }
         });
 
         it("cancels from the close button", () => {
