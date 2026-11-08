@@ -95,7 +95,7 @@ jobs:
           EOF
 
       - name: Run Claude Code for Issue Triage
-        uses: anthropics/claude-code-base-action@beta
+        uses: anthropics/claude-code-action/base-action@v1
         with:
           # Pin the model explicitly: the action's own default has pointed at a
           # retired model in the past, which 404s every run.
