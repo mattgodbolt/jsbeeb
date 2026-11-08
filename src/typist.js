@@ -103,7 +103,7 @@ export class Typist {
     deliverPending() {
         // A restored snapshot has cancelled the scheduler task and replaced the matrix, so the text left to type
         // is stranded.
-        if (this._stranded || (this._pending && this.processor.resetsAndLoads !== this._loadsAtDue)) {
+        if (this._stranded) {
             this._pending = false;
             this._abandon();
             return false;
@@ -147,7 +147,8 @@ export class Typist {
     }
 
     get _stranded() {
-        return this._keys.length > 0 && !this._timer.running() && !this._pending;
+        if (this._pending) return this.processor.resetsAndLoads !== this._loadsAtDue;
+        return this.isTyping && !this._timer.running();
     }
 
     _abandon() {
@@ -158,7 +159,7 @@ export class Typist {
     }
 
     get isTyping() {
-        return this._keys.length > 0 || this._timer.running() || this._pending;
+        return this._keys.length > 0 || this._timer.running() || this._pending || this._lastKey !== undefined;
     }
 
     _due() {

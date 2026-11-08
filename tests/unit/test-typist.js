@@ -159,12 +159,33 @@ describe("Typist", () => {
             expect(toggles()).toHaveLength(pressed);
         });
 
+        it("gives the keyboard back when a restore comes between the last key going down and up", () => {
+            const { typist, scheduler, keyboard, fire } = typistFor("B-DFS1.2");
+            typist.type([BBC.A], false);
+            fire();
+            keyboard.enableKeyboard.mockClear();
+            scheduler.cancelAll();
+            expect(typist.deliverPending()).toBe(false);
+            expect(keyboard.enableKeyboard).toHaveBeenCalled();
+            expect(typist.isTyping).toBe(false);
+        });
+
         it("does not release a key that a restored snapshot has already let go of", () => {
             const { typist, scheduler, fire, toggles } = typistFor("B-DFS1.2");
             typist.type([BBC.A, BBC.B], false);
             fire();
             scheduler.cancelAll();
             typist.type([BBC.C], false);
+            expect(toggles()).toEqual([BBC.A]);
+        });
+
+        it("does not release a key when cancelled after a restore that came before it was delivered", () => {
+            const { typist, processor, scheduler, toggles, tick } = typistFor("B-DFS1.2");
+            typist.type([BBC.A, BBC.B], false);
+            tick(50);
+            scheduler.polltime(processor.peripheralCyclesPerSecond);
+            ++processor.resetsAndLoads;
+            typist.cancel();
             expect(toggles()).toEqual([BBC.A]);
         });
     });
