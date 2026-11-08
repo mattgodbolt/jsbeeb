@@ -3,12 +3,22 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { RewindUI } from "../../src/web/rewind-ui.js";
 import { previewFrame } from "../../src/web/rewind-thumbnail.js";
+import { PanelArrangement } from "../../src/web/floating-panel.js";
 import { ReplayHistory, snapshotCycle } from "../../src/replay.js";
 import { cycleCount, stateHash } from "../../src/lockstep.js";
 import { TEST_6502 } from "../../src/models.js";
 import { RunMode } from "../../src/web/emulation-loop.js";
 import { keyCodes } from "../../src/keymap.js";
-import { domFromIndexHtml, loadBytes, machineShowingFrames, sentEvents, stubCanvases, teardownDom } from "./helpers.js";
+import {
+    bareFloatingPanel,
+    domFromIndexHtml,
+    loadBytes,
+    machineShowingFrames,
+    pressKeepsFocus,
+    sentEvents,
+    stubCanvases,
+    teardownDom,
+} from "./helpers.js";
 
 const ProgramAt = 0x2000;
 // INC &70; JMP &2000
@@ -24,6 +34,7 @@ describe("RewindUI", () => {
     let resume;
     let loop;
     let history;
+    let arrangement;
 
     beforeEach(async () => {
         domFromIndexHtml("rewind-open", "rewind-panel");
@@ -35,11 +46,12 @@ describe("RewindUI", () => {
         resume = vi.fn();
         loop = Object.assign(new EventTarget(), { hold: vi.fn(() => resume), stop: vi.fn() });
         history = new ReplayHistory(cpu);
+        arrangement = new PanelArrangement(() => window.localStorage);
     });
 
     afterEach(teardownDom);
 
-    const make = () => new RewindUI({ loop, history });
+    const make = () => new RewindUI({ loop, history, arrangement });
     const panel = () => document.getElementById("rewind-panel");
     const thumbs = () => [...document.querySelectorAll(".rewind-thumb")];
     const selectedIndex = () => Number(document.querySelector(".rewind-thumb.selected").dataset.index);
@@ -86,6 +98,19 @@ describe("RewindUI", () => {
             expect(cycleCount(cpu)).toBeGreaterThan(at(ui.snapshots[2]));
             expect(paint).toHaveBeenCalled();
             expect(history.snapshots()).toEqual(kept);
+        });
+
+        it("opens in front of a window already open, with its keys on its own line and a close button that keeps the focus", () => {
+            const ui = make();
+            captured(1);
+            bareFloatingPanel(arrangement, "media", "Media", null).open();
+            ui.open();
+            const media = document.getElementById("media-panel");
+            expect(Number(panel().style.zIndex)).toBeGreaterThan(Number(media.style.zIndex));
+            expect(panel().querySelector(".panel-keys").textContent).toBe(
+                "Left/Right choose · Enter go back · Alt-S go back and debug · Escape cancel",
+            );
+            expect(pressKeepsFocus(document.getElementById("rewind-close"))).toBe(true);
         });
 
         it("lets go and stays closed if the machine cannot be snapshotted", () => {

@@ -17,6 +17,7 @@ export const LayoutVersion = 1;
 /** Every panel there is or will be. Saved entries under any other id are dropped. */
 export const PanelIds = [
     "media",
+    "rewind",
     "session",
     "watches",
     "disc",

@@ -20,6 +20,7 @@ describe("Help", () => {
             "Disassembly",
             "Memory",
             "BASIC",
+            "Rewind",
         ]);
     });
 

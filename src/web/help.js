@@ -5,6 +5,7 @@ import { MemoryKeys, ToolbarKeys } from "./debug.js";
 import { DisassemblyKeys } from "./disassembly-view.js";
 import { PauseKeys } from "./keyboard-setup.js";
 import { helpRow, helpRows } from "./panel-keys.js";
+import { RewindKeys } from "./rewind-ui.js";
 import { Shortcuts } from "./shortcuts.js";
 
 /** Help's blocks on its debugging tab, one for each window's keys; a window with keys of its own adds itself here. */
@@ -14,6 +15,7 @@ const KeyTables = [
     ["Disassembly", DisassemblyKeys],
     ["Memory", MemoryKeys],
     ["BASIC", BasicKeys],
+    ["Rewind", RewindKeys],
 ];
 const StartTab = "#help-start";
 const DebuggingTab = "#help-debugging";

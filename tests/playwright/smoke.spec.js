@@ -33,6 +33,8 @@ const OsScreenMode = 0x355;
 // only after the frame count has gone up three times.
 const FramesToClearModeSeven = 3;
 const RgbBits = 0xffffff;
+// Long enough for the rewind history to hold two seconds, so there is one to go back to.
+const RewindHistoryMs = 2500;
 // [register, value, what the panel then says] for the system VIA: PCR with independent edges then outputs, ACR
 // shifting out by T2 then counting pulses, and IC32's keyboard enable cleared, so port A selects a key.
 const SysViaModeWrites = [
@@ -1503,5 +1505,39 @@ for (const [wasm, drain] of [
         await beeb.expectScreenText("BASIC");
         expect(await page.evaluate(() => window.processor.video.drain.kind)).toBe(drain);
         await expect.poll(() => page.evaluate(drawnSoFar, RgbBits)).toBe(true);
+    });
+}
+
+for (const [where, viewport] of [
+    ["a desktop", { width: 1280, height: 800 }],
+    ["a phone", { width: 412, height: 915 }],
+]) {
+    test(`rewind opens in front of the media window and goes back to the moment chosen, on ${where}`, async ({
+        beeb,
+        page,
+    }) => {
+        await page.setViewportSize(viewport);
+        await beeb.open();
+        await beeb.expectScreenText(">");
+        await beeb.runFor(RewindHistoryMs);
+        await page.keyboard.press("Alt+M");
+        await expect(page.locator("#media-panel")).toBeVisible();
+        // Gives the keyboard back from the search box the media window focuses.
+        await page.keyboard.press("Escape");
+        await page.keyboard.press("Alt+W");
+        const rewind = page.locator("#rewind-panel");
+        await expect(rewind).toBeVisible();
+        const onTop = await rewind.evaluate((panel) => {
+            const box = panel.getBoundingClientRect();
+            return panel.contains(document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2));
+        });
+        expect(onTop).toBe(true);
+        const before = await beeb.expectHeld();
+        await page.keyboard.press("ArrowLeft");
+        await page.keyboard.press("Enter");
+        await expect(rewind).toBeHidden();
+        const after = await beeb.cycles();
+        expect(after).toBeLessThan(before);
+        await beeb.expectRunningPast(after);
     });
 }
