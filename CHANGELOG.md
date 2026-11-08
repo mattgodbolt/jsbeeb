@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.20.0](https://github.com/mattgodbolt/jsbeeb/compare/v2.19.1...v2.20.0) (2026-11-08)
+
+
+### Features
+
+* installable app and offline shell via a web manifest and service worker, with display-mode analytics ([#1812](https://github.com/mattgodbolt/jsbeeb/issues/1812)) ([ba79c8f](https://github.com/mattgodbolt/jsbeeb/commit/ba79c8fd0322432efb6da4056a4bdcda78b63463))
+* redraw the owl as a vector and render every icon from it ([#1808](https://github.com/mattgodbolt/jsbeeb/issues/1808)) ([a24fa97](https://github.com/mattgodbolt/jsbeeb/commit/a24fa978ebb35047f3e27776087bdaedfffdba65))
+
 ## [2.19.1](https://github.com/mattgodbolt/jsbeeb/compare/v2.19.0...v2.19.1) (2026-11-08)
 
 
