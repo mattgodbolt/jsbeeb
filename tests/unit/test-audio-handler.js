@@ -192,7 +192,9 @@ describe("AudioHandler", () => {
                 handler.soundChip.scheduler.epoch = epoch;
                 handler.flushChipEvents();
                 handler.flushChipEvents();
-                expect(posted.splice(0)).toEqual([
+                const sent = posted.splice(0);
+                expect(sent[0].events[0].value.registers[0]).not.toBe(0);
+                expect(sent).toEqual([
                     {
                         command: "produced",
                         upTo: epoch,
@@ -401,7 +403,9 @@ describe("AudioHandler", () => {
                 context.resume = resume;
             }
 
-            expect(() => handler.checkStatus()).not.toThrow();
+            const page = document.body.innerHTML;
+            handler.checkStatus();
+            expect(document.body.innerHTML).toBe(page);
             await handler.tryResume();
 
             expect(resume).toHaveBeenCalledOnce();
