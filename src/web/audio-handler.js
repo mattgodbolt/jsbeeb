@@ -18,6 +18,11 @@ const StallSpikeHeight = 20;
 const UnfocusedLatencyMs = 200;
 
 export class AudioHandler {
+    /**
+     * @param {object} options
+     * @param {HTMLElement} [options.warningNode] where to say that the audio is suspended or could not start; without
+     * one the handler says nothing, and `failure` is the only report of a failure
+     */
     constructor({
         warningNode,
         statsNode,
@@ -35,9 +40,11 @@ export class AudioHandler {
         this.isAtom = isAtom;
         this.audioLatencyMs = audioLatencyMs ?? DefaultTargetLatencyMs;
         this.windowFocused = document.hasFocus();
-        this.warningNode = warningNode;
+        this.warningNode = warningNode ?? null;
         this.noAudio = false;
-        toggle(this.warningNode, false);
+        /** Why there is no sound, or null. */
+        this.failure = null;
+        if (this.warningNode) toggle(this.warningNode, false);
         this.stats = {};
         this.eventCounts = { stall: 0, skip: 0, leadMinMs: Infinity };
         this._chipEvents = [];
@@ -84,7 +91,7 @@ export class AudioHandler {
         /** How the sound came up, `ok` or `unavailable`, once its output is set up or known never to be. */
         this.ready = setup.then(() => (this.noAudio || !this.audioContext ? "unavailable" : "ok"));
 
-        this.warningNode.addEventListener("mousedown", () => this.tryResume());
+        this.warningNode?.addEventListener("mousedown", () => this.tryResume());
 
         this.audioContextM5000 = null;
         this._music5000workletnode = null;
@@ -92,6 +99,8 @@ export class AudioHandler {
     }
 
     _warnNoWorklet() {
+        this.failure = "No audio worklet API was found";
+        if (!this.warningNode) return;
         const localhost = new URL(window.location);
         localhost.hostname = "localhost";
         this.warningNode.classList.add("alert-dismissible");
@@ -226,7 +235,10 @@ export class AudioHandler {
     _audioUnavailable(error) {
         console.error("Unable to initialise audio", error);
         this.noAudio = true;
-        this.warningNode.textContent = `There will be no sound: the audio system could not be started (${error?.message ?? error}). Reloading the page may help.`;
+        const reason = error?.message ?? error;
+        this.failure = `The audio system could not be started (${reason})`;
+        if (!this.warningNode) return;
+        this.warningNode.textContent = `There will be no sound: the audio system could not be started (${reason}). Reloading the page may help.`;
         fadeIn(this.warningNode);
     }
 
@@ -241,6 +253,19 @@ export class AudioHandler {
     // emulator has got, so the worklet knows its lead even when nothing changed.
     flushChipEvents() {
         if (!this._jsAudioNode) return;
+        // A suspended worklet does not drain its port, so nothing is sent to it; the chip's registers go across whole
+        // when it runs, in place of the events it missed.
+        if (this.audioContext.state !== "running") {
+            this._chipEvents = [];
+            this._chipStateStale = true;
+            return;
+        }
+        if (this._chipStateStale) {
+            this._chipStateStale = false;
+            this._chipEvents = [
+                { cycle: this.soundChip.scheduler.epoch, kind: "state", value: this.soundChip.snapshotState() },
+            ];
+        }
         this._jsAudioNode.port.postMessage({
             command: "produced",
             upTo: this.soundChip.scheduler.epoch,
@@ -261,12 +286,13 @@ export class AudioHandler {
     }
 
     _onBufferMusic5000(buffer) {
+        if (this.audioContextM5000?.state !== "running") return;
         if (this._music5000workletnode)
             this._music5000workletnode.port.postMessage({ command: "samples", samples: buffer });
     }
 
     checkStatus() {
-        if (this.noAudio) return;
+        if (this.noAudio || !this.warningNode) return;
         if (!this.audioContext && !this.audioContextM5000) return;
         const suspended =
             (this.audioContext && this.audioContext.state === "suspended") ||

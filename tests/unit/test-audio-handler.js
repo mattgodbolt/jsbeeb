@@ -99,6 +99,7 @@ describe("AudioHandler", () => {
 
             expect(warningShown()).toBe(true);
             expect(warning().textContent).toContain("No audio worklet API");
+            expect(handler.failure).toBe("No audio worklet API was found");
             await expect(handler.ready).resolves.toBe("unavailable");
         });
 
@@ -170,6 +171,31 @@ describe("AudioHandler", () => {
 
             expect(posted).toEqual([
                 { command: "produced", upTo: 4000, events: [{ cycle: 0, kind: "poke", value: 0x8d }] },
+            ]);
+        });
+
+        it("sends nothing to a suspended worklet, then the chip's registers once it runs", async () => {
+            const handler = makeHandler();
+            const posted = await chipPosts();
+            for (const context of contexts) context.state = "suspended";
+
+            handler.soundChip.poke(0x8d);
+            handler.flushChipEvents();
+            handler.flushChipEvents();
+            expect(posted).toEqual([]);
+
+            for (const context of contexts) context.state = "running";
+            handler.soundChip.scheduler.epoch = 5000;
+            handler.flushChipEvents();
+            handler.flushChipEvents();
+
+            expect(posted).toEqual([
+                {
+                    command: "produced",
+                    upTo: 5000,
+                    events: [{ cycle: 5000, kind: "state", value: handler.soundChip.snapshotState() }],
+                },
+                { command: "produced", upTo: 5000, events: [] },
             ]);
         });
 
@@ -260,6 +286,20 @@ describe("AudioHandler", () => {
             expect(music5000.port.posted).toEqual([{ command: "samples", samples: block }]);
         });
 
+        it("ships no Music 5000 samples to a worklet that is suspended", async () => {
+            const handler = makeHandler({ hasMusic5000: true });
+            const music5000 = await worklet("music5000");
+            const block = new Float64Array(256);
+
+            contexts[1].state = "suspended";
+            handler._onBufferMusic5000(block);
+            expect(music5000.port.posted).toEqual([]);
+
+            contexts[1].state = "running";
+            handler._onBufferMusic5000(block);
+            expect(music5000.port.posted).toEqual([{ command: "samples", samples: block }]);
+        });
+
         it("fades the warning out once the audio is running again", () => {
             const handler = makeHandler();
 
@@ -287,6 +327,7 @@ describe("AudioHandler", () => {
             await vi.waitFor(() => expect(warningShown()).toBe(true));
             expect(warning().textContent).toContain("no sound");
             expect(warning().textContent).toContain("Blocked by an extension");
+            expect(handler.failure).toBe("The audio system could not be started (Blocked by an extension)");
             handler.checkStatus();
             expect(warningShown()).toBe(true);
             await expect(handler.ready).resolves.toBe("unavailable");
@@ -299,6 +340,55 @@ describe("AudioHandler", () => {
 
             await vi.waitFor(() => expect(toasts()).toEqual([expect.stringContaining("Music 5000 will be silent")]));
             expect(warningShown()).toBe(false);
+        });
+    });
+
+    describe("without a warning node", () => {
+        const noWarningNode = { warningNode: undefined };
+        const rejectModule = async () => {
+            throw new Error("Blocked by an extension");
+        };
+
+        beforeEach(() => vi.spyOn(console, "error").mockImplementation(() => {}));
+
+        it("has no failure while the audio comes up", async () => {
+            stubAudio();
+            const handler = makeHandler(noWarningNode);
+
+            await expect(handler.ready).resolves.toBe("ok");
+            expect(handler.failure).toBe(null);
+        });
+
+        it("reports a missing audio worklet API as its failure", async () => {
+            stubAudio({ hasWorklet: false });
+            const handler = makeHandler(noWarningNode);
+
+            expect(handler.failure).toBe("No audio worklet API was found");
+            await expect(handler.ready).resolves.toBe("unavailable");
+        });
+
+        it("reports a worklet module that fails to load as its failure", async () => {
+            stubAudio({ addModule: rejectModule });
+            const handler = makeHandler(noWarningNode);
+
+            await expect(handler.ready).resolves.toBe("unavailable");
+            expect(handler.failure).toBe("The audio system could not be started (Blocked by an extension)");
+        });
+
+        it("shows nothing when the audio is suspended, and resumes on tryResume", async () => {
+            stubAudio();
+            const handler = makeHandler(noWarningNode);
+            const resume = vi.fn(async () => {});
+            for (const context of contexts) {
+                context.state = "suspended";
+                context.resume = resume;
+            }
+
+            handler.checkStatus();
+            await handler.tryResume();
+
+            expect(warning().textContent).toContain(SuspendedText);
+            expect(resume).toHaveBeenCalledOnce();
         });
     });
 
