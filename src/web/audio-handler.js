@@ -42,12 +42,13 @@ export class AudioHandler {
         this.windowFocused = document.hasFocus();
         this.warningNode = warningNode ?? null;
         this.noAudio = false;
-        /** Why there is no sound, or null. */
+        /** Why there is no sound, set before `ready` resolves, or null; a context that is only suspended is not one. */
         this.failure = null;
         if (this.warningNode) toggle(this.warningNode, false);
         this.stats = {};
         this.eventCounts = { stall: 0, skip: 0, leadMinMs: Infinity };
         this._chipEvents = [];
+        this._chipStateStale = false;
         this._channelMutes = null;
         if (statsNode) {
             this._initStats(statsNode).catch((error) => {

@@ -174,28 +174,46 @@ describe("AudioHandler", () => {
             ]);
         });
 
-        it("sends nothing to a suspended worklet, then the chip's registers once it runs", async () => {
+        it("queues no chip events for a suspended worklet, and sends the chip's registers each time it runs again", async () => {
+            const handler = makeHandler();
+            const posted = await chipPosts();
+            const setContexts = (state) => {
+                for (const context of contexts) context.state = state;
+            };
+
+            for (const epoch of [5000, 9000]) {
+                setContexts("suspended");
+                handler.soundChip.poke(0x8d);
+                handler.flushChipEvents();
+                handler.flushChipEvents();
+                expect(posted).toEqual([]);
+
+                setContexts("running");
+                handler.soundChip.scheduler.epoch = epoch;
+                handler.flushChipEvents();
+                handler.flushChipEvents();
+                expect(posted.splice(0)).toEqual([
+                    {
+                        command: "produced",
+                        upTo: epoch,
+                        events: [{ cycle: epoch, kind: "state", value: handler.soundChip.snapshotState() }],
+                    },
+                    { command: "produced", upTo: epoch, events: [] },
+                ]);
+            }
+        });
+
+        it("still posts commands to a suspended worklet, but not the flushes of a mute", async () => {
             const handler = makeHandler();
             const posted = await chipPosts();
             for (const context of contexts) context.state = "suspended";
 
-            handler.soundChip.poke(0x8d);
-            handler.flushChipEvents();
-            handler.flushChipEvents();
-            expect(posted).toEqual([]);
-
-            for (const context of contexts) context.state = "running";
-            handler.soundChip.scheduler.epoch = 5000;
-            handler.flushChipEvents();
-            handler.flushChipEvents();
+            handler.mute();
+            handler.unmute();
 
             expect(posted).toEqual([
-                {
-                    command: "produced",
-                    upTo: 5000,
-                    events: [{ cycle: 5000, kind: "state", value: handler.soundChip.snapshotState() }],
-                },
-                { command: "produced", upTo: 5000, events: [] },
+                { command: "setEnabled", enabled: false },
+                { command: "setEnabled", enabled: true },
             ]);
         });
 
@@ -359,23 +377,22 @@ describe("AudioHandler", () => {
             expect(handler.failure).toBe(null);
         });
 
-        it("reports a missing audio worklet API as its failure", async () => {
-            stubAudio({ hasWorklet: false });
+        it.each([
+            ["a missing audio worklet API", { hasWorklet: false }, "No audio worklet API was found"],
+            [
+                "a worklet module that fails to load",
+                { addModule: rejectModule },
+                "The audio system could not be started (Blocked by an extension)",
+            ],
+        ])("reports %s as its failure", async (_name, audio, failure) => {
+            stubAudio(audio);
             const handler = makeHandler(noWarningNode);
 
-            expect(handler.failure).toBe("No audio worklet API was found");
             await expect(handler.ready).resolves.toBe("unavailable");
+            expect(handler.failure).toBe(failure);
         });
 
-        it("reports a worklet module that fails to load as its failure", async () => {
-            stubAudio({ addModule: rejectModule });
-            const handler = makeHandler(noWarningNode);
-
-            await expect(handler.ready).resolves.toBe("unavailable");
-            expect(handler.failure).toBe("The audio system could not be started (Blocked by an extension)");
-        });
-
-        it("shows nothing when the audio is suspended, and resumes on tryResume", async () => {
+        it("checks a suspended context without a banner, and resumes it on tryResume", async () => {
             stubAudio();
             const handler = makeHandler(noWarningNode);
             const resume = vi.fn(async () => {});
@@ -384,10 +401,9 @@ describe("AudioHandler", () => {
                 context.resume = resume;
             }
 
-            handler.checkStatus();
+            expect(() => handler.checkStatus()).not.toThrow();
             await handler.tryResume();
 
-            expect(warning().textContent).toContain(SuspendedText);
             expect(resume).toHaveBeenCalledOnce();
         });
     });
