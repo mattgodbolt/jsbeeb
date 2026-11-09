@@ -412,10 +412,11 @@ describe("AudioHandler", () => {
         });
     });
 
-    it("shows no warning when there is no audio at all, and is ready as unavailable", async () => {
+    it("shows no warning when there is no audio at all, says why, and is ready as unavailable", async () => {
         const handler = makeHandler();
 
         expect(warningShown()).toBe(false);
+        expect(handler.failure).toBe("This browser has no Web Audio");
         await expect(handler.ready).resolves.toBe("unavailable");
     });
 

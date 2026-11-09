@@ -78,6 +78,7 @@ export class AudioHandler {
                 this._audioUnavailable(error),
             );
         } else {
+            if (!this.audioContext) this.failure = "This browser has no Web Audio";
             if (this.audioContext && !this.audioContext.audioWorklet) {
                 this.audioContext = null;
                 this.noAudio = true;
