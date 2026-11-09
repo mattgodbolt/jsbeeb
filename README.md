@@ -220,11 +220,11 @@ A save state dropped on the page is restored too.
 
 The emulator continuously captures snapshots into a 30-slot rewind buffer (~1 per second). Open the rewind scrubber from **State > Rewind** or press **Alt-W** to browse recent states as a visual filmstrip:
 
-- **Left/Right arrows**: navigate between snapshots (the main screen updates live)
-- **Click** a thumbnail to jump to that point
+- **Left/Right arrows**, or a **click** on a thumbnail: choose a moment, which the main screen previews; the machine
+  stays where it is until you go back
 - **Enter**: go back to the chosen moment and close the panel; the seconds after it are forgotten
 - **Alt-S**: go back to the chosen moment and stop in the debugger there
-- **Escape** or **Alt-W**: cancel and restore the original state
+- **Escape** or **Alt-W**: close the panel without going back, leaving the machine where it is
 
 While it is open, `Alt-T` and `Alt-B` also still work; the other shortcuts, and every key for the emulated machine,
 are ignored.
