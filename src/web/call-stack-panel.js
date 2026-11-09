@@ -88,7 +88,7 @@ export class CallStackPanel {
             this._show([], WhileRunning);
             return;
         }
-        const moment = this._moment();
+        const moment = cpuMoment(this._cpu);
         if (moment === this._shownAt) return;
         this._forget();
         this._shownAt = moment;
@@ -100,12 +100,6 @@ export class CallStackPanel {
     /** Names the frames shown again, as the names the debugger knows change. */
     renamed() {
         for (const { name, address, bank } of this._named) this._name(name, address, bank);
-    }
-
-    // Where the machine is, as a search depends on it: the stack pointer and program counter can be edited in place.
-    _moment() {
-        const { s, pc } = this._cpu;
-        return `${cpuMoment(this._cpu)}:${s}:${pc}`;
     }
 
     _forget() {
@@ -121,8 +115,8 @@ export class CallStackPanel {
             this._show(step.value, Searching);
             await new Promise((resolve) => setTimeout(resolve, 0));
             if (this._searching !== searching) return;
-            // Left for update(), which a run or a move the panel's refresh sees comes to.
-            if (!this._isStopped() || this._moment() !== this._shownAt) {
+            // Dropped without searching again: the panel's refresh calls update() on a run or a move.
+            if (!this._isStopped() || cpuMoment(this._cpu) !== this._shownAt) {
                 this._forget();
                 return;
             }

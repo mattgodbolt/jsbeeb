@@ -468,7 +468,7 @@ class OutLanding {
         this._entered(pc);
         const height = this._height(this.cpu.s);
         const cycle = cycleCount(this.cpu);
-        this._movedBy(cycle, height);
+        this._movedBy(height);
         const { flow, mnemonic } = this.cpu.disassembler.describeOpcode(opcode);
         if (mnemonic === "TXS") this.txs = { at: pc, height };
         const kind = flow === "call" ? "JSR" : flow === "interrupt" ? "BRK" : null;
@@ -480,15 +480,14 @@ class OutLanding {
         this._entered(returnsTo);
         const height = this._height((this.cpu.s + InterruptPushes) & 0xff);
         const { cycle } = this.shallower.at(-1);
-        this._movedBy(cycle, height);
+        this._movedBy(height);
         this._keep({ cycle, height, kind: taken.toUpperCase(), site: returnsTo, siteBank: this._bankAt(returnsTo) });
     }
 
     // Marks where the TXS just run, if any, moved the stack to, `height`, should that be deeper than it was: frames
     // above a stack moved up stay as they were, and those its moving up drops are dropped as a return would drop them.
-    _movedBy(cycle, height) {
-        if (this.txs !== null && height < this.txs.height)
-            this._keep({ cycle, height, kind: null, txsAt: this.txs.at });
+    _movedBy(height) {
+        if (this.txs !== null && height < this.txs.height) this._keep({ height, kind: null, txsAt: this.txs.at });
         this.txs = null;
     }
 
@@ -545,10 +544,10 @@ class CallStack extends OutLanding {
     inWindow() {
         // The machine stands where the window ends, before the instruction after its last.
         this._entered(this.cpu.pc);
-        this._movedBy(cycleCount(this.cpu), this._height(this.cpu.s));
+        this._movedBy(this._height(this.cpu.s));
         for (const kept of this.shallower.toReversed()) {
             if (kept.height < this.highestAfter) continue;
-            if (kept.txsAt !== undefined) return { txsAt: kept.height === this.emptyHeight ? null : kept.txsAt };
+            if (kept.txsAt !== undefined) return { txsAt: kept.txsAt };
             if (kept.kind && kept.height > this.highestAfter) {
                 const { kind, cycle, site, siteBank, routine, routineBank } = kept;
                 this.frames.push({ kind, cycle, site, siteBank, routine, routineBank });
