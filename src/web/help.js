@@ -8,7 +8,8 @@ import { helpRow, helpRows } from "./panel-keys.js";
 import { RewindKeys } from "./rewind-ui.js";
 import { Shortcuts } from "./shortcuts.js";
 
-/** Help's blocks on its debugging tab, one for each window's keys; a window with keys of its own adds itself here. */
+/** Help's blocks on its debugging tab, one for each window's keys; a debug window with keys of its own adds
+ * itself here. */
 const KeyTables = [
     ["Paused", PauseKeys],
     ["Debugger", ToolbarKeys],
