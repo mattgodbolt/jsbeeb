@@ -26,8 +26,9 @@ const AtSpeed = 0.9999;
  * Plays the spin and seek noises for a set of drives.
  * @param {DiscDrive[]} drives
  * @param {import("./ddnoise.js").DdNoise|import("./ddnoise.js").FakeDdNoise} ddNoise
+ * @param {function(): boolean} replaying the CPU's `replaying`, which asReplay sets
  */
-export function attachDriveNoise(drives, ddNoise) {
+export function attachDriveNoise(drives, ddNoise, replaying) {
     let numSpinning = 0;
     const updateSpinStatus = () => {
         if (numSpinning) ddNoise.spinUp();
@@ -42,8 +43,12 @@ export function attachDriveNoise(drives, ddNoise) {
             numSpinning--;
             setTimeout(updateSpinStatus, SpinDebounceMs);
         });
-        drive.addEventListener("seekStart", (evt) => ddNoise.seekStart(evt.steps, evt.stepMs));
-        drive.addEventListener("seekEnd", (evt) => ddNoise.seekEnd(evt.steps));
+        drive.addEventListener("seekStart", (evt) => {
+            if (!replaying()) ddNoise.seekStart(evt.steps, evt.stepMs);
+        });
+        drive.addEventListener("seekEnd", (evt) => {
+            if (!replaying()) ddNoise.seekEnd(evt.steps);
+        });
     }
 }
 

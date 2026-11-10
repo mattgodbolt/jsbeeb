@@ -75,10 +75,10 @@ export class Acia extends EventTarget {
         if (on !== this.motorOn) this.inputLog?.refuse("the cassette motor starting or stopping");
         if (on && !this.motorOn) {
             this.runTape();
-            this.relayNoise.motorOn();
+            if (!this.cpu.replaying) this.relayNoise.motorOn();
         } else if (!on && this.motorOn) {
             this.stopRunning();
-            this.relayNoise.motorOff();
+            if (!this.cpu.replaying) this.relayNoise.motorOff();
         }
         this.motorOn = on;
     }

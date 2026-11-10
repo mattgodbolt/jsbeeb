@@ -47,7 +47,7 @@ describe("KeyboardSetup", () => {
         document.body.innerHTML = "";
         actions = {
             toggleFast: vi.fn(),
-            openRewind: vi.fn(),
+            toggleRewind: vi.fn(),
             openPrinter: vi.fn(),
             openMedia: vi.fn(),
             paste: vi.fn(),
@@ -101,7 +101,7 @@ describe("KeyboardSetup", () => {
     describe("the shortcuts", () => {
         it.each([
             ["Alt-T", keyCodes.T, {}, "toggleFast", []],
-            ["Alt-W", keyCodes.W, {}, "openRewind", []],
+            ["Alt-W", keyCodes.W, {}, "toggleRewind", []],
             ["Alt-B", keyCodes.B, {}, "openPrinter", []],
             ["Alt-M", keyCodes.M, {}, "openMedia", [0]],
             ["Alt-Shift-M", keyCodes.M, { shift: true }, "openMedia", [1]],
