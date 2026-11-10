@@ -158,6 +158,7 @@ describe("RewindUI", () => {
             ["Alt-W, as Option-W types it on a Mac", "keydown", { key: "∑", code: "KeyW", altKey: true }, "passed on"],
             ["Alt-T", "keydown", { key: "t", code: "KeyT", altKey: true }, "passed on"],
             ["Alt-B", "keydown", { key: "b", code: "KeyB", altKey: true }, "passed on"],
+            ["Alt-S, which rewind answers itself", "keydown", { key: "s", code: "KeyS", altKey: true }, "kept"],
             ["Alt-D", "keydown", { key: "d", code: "KeyD", altKey: true }, "kept"],
             ["Alt-P", "keydown", { key: "p", code: "KeyP", altKey: true }, "kept"],
             ["Alt-M", "keydown", { key: "m", code: "KeyM", altKey: true }, "kept"],
@@ -229,7 +230,7 @@ describe("RewindUI", () => {
             frame();
             cpu.video.fb32.fill(Marker);
             const [before, kept] = [machineNow(), history.snapshots()];
-            ui.open();
+            ui.toggle();
             key("ArrowLeft");
             press(ui);
             expect(machineNow()).toEqual(before);
