@@ -241,6 +241,18 @@ describe("Debugger", () => {
         [...watchMenu().querySelectorAll("button")].find((choice) => choice.textContent === text).click();
 
     describe("the panels", () => {
+        it("has the call stack shown again once the machine has stopped, which takes no cycles", async () => {
+            stoppedLoop.running = true;
+            dbgr.callStack.floating.open();
+            const endLine = () => document.querySelector("#callstack-panel .cs-end").textContent;
+            expect(endLine()).toMatch(/shows while the machine is stopped/);
+            stoppedLoop.running = false;
+            stoppedLoop.dispatchEvent(new Event("running"));
+            expect(endLine()).toMatch(/shows while the machine is stopped/);
+            await Promise.resolve();
+            expect(endLine()).toMatch(/no history to search/);
+        });
+
         it("centres the disassembly on what it moves to at any height, and keeps a stopped one's row through a resize", () => {
             const rowHeight = 16;
             const highlightRow = () => disRows().indexOf(currentRow());
@@ -332,6 +344,7 @@ describe("Debugger", () => {
         it("are listed for a menu of panels by their titles, with the watches", () => {
             expect(arrangement.listed().map((floating) => floating.title)).toEqual([
                 "Breakpoints",
+                "Call stack",
                 "Debugger toolbar",
                 "Disassembly",
                 "Memory",

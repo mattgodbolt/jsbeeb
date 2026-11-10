@@ -1150,6 +1150,60 @@ small {
   line-height: 1;
 }
 
+#callstack-panel {
+  width: min(580px, 90vw);
+  font-family: monospace;
+  font-size: 9pt;
+}
+
+#callstack-panel .panel-body {
+  overflow-x: auto;
+}
+
+#callstack-panel td {
+  padding: 1px 4px;
+  white-space: nowrap;
+}
+
+#callstack-panel .cs-kind {
+  color: #aaaaaa;
+}
+
+#callstack-panel .cs-routine,
+#callstack-panel .cs-routine .txt-btn {
+  color: #f0d080;
+}
+
+#callstack-panel .cs-site,
+#callstack-panel .txt-btn {
+  color: #cccccc;
+  font-family: inherit;
+  text-decoration-color: rgba(255, 255, 255, 0.45);
+}
+
+#callstack-panel .cs-name {
+  display: inline-block;
+  max-width: 22ch;
+  margin-left: 1ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+}
+
+#callstack-panel .cs-name:empty {
+  display: none;
+}
+
+#callstack-panel .cs-bank {
+  margin-left: 1ch;
+  color: #888888;
+}
+
+#callstack-panel .cs-end {
+  color: #888888;
+  padding: 1px 4px;
+}
+
 .decoded-panel {
   font-family: monospace;
   font-size: 9pt;

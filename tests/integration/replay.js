@@ -49,6 +49,8 @@ const PrintForever = [0x20, 0xee, 0xff, 0x4c, 0x00, 0x30];
 const Oswrch = 0xffee;
 const IrqVector = 0xfffe;
 const StepsInside = 3;
+const TimerNops = 8;
+const MovedStack = 0xe0;
 const Irq1v = 0x0204;
 const HandlerAddress = 0x3100;
 // LDA &FC; RTI: the OS's IRQ entry keeps A in &FC. Its source left alone, the interrupt is taken again at once.
@@ -430,6 +432,71 @@ describe.each([
     });
 });
 
+describe.each([
+    ["a B", "B-DFS1.2"],
+    ["a Master", "Master"],
+])("Finding the call stack on %s", (_, model) => {
+    it.each([
+        [
+            "from inside the OS's write character call, out to BASIC's CALL in its own bank",
+            async (machine) => {
+                await machine.runUntilAddress(Oswrch, 1);
+                for (let i = 1; i < StepsInside; i++) singleStep(machine.processor);
+            },
+            (frames, machine) => {
+                expect(frames).toContainEqual(
+                    expect.objectContaining({ kind: "JSR", site: ScratchAddress, routine: Oswrch }),
+                );
+                expect(frames.at(-1).routineBank).toBe(machine.processor.pagedBank);
+            },
+        ],
+        [
+            "from inside an interrupt handler",
+            async (machine) => {
+                await machine.runUntilAddress(machine.readword(IrqVector), 1);
+                singleStep(machine.processor);
+            },
+            ([innermost], machine) =>
+                expect(innermost).toMatchObject({ kind: "IRQ", routine: machine.readword(IrqVector) }),
+        ],
+    ])("%s, painting none of it, leaving the machine and its picture alone", async (_, stop, expectFrames) => {
+        const machine = await booted(model);
+        PrintForever.forEach((byte, i) => machine.writebyte(ScratchAddress + i, byte));
+        const history = historyFromHere(machine);
+        await machine.type("A%=88:CALL &3000");
+        history.taken(machine.processor.snapshotState(), null);
+        await seconds(machine, CursorBlinkSeconds);
+        await stop(machine);
+        const { video } = machine.processor;
+        const painted = vi.fn();
+        video.paint_ext = painted;
+        const before = machineNow(machine);
+        const { frames, accounted } = finished(history.callStack());
+        expect(accounted).toBe(true);
+        expectFrames(frames, machine);
+        expect(machineNow(machine)).toEqual(before);
+        expect(painted).not.toHaveBeenCalled();
+    });
+
+    it("goes back no further than a TXS an interrupt was taken straight after", async () => {
+        const machine = await booted(model);
+        // CLI's effect waits an instruction, so the User VIA timer's interrupt, set going under SEI, comes straight
+        // after the TXS.
+        const timerSoon = [0xa9, 0xc0, 0x8d, 0x6e, 0xfe, 0xa9, 0x02, 0x8d, 0x64, 0xfe, 0xa9, 0x00, 0x8d, 0x65, 0xfe];
+        const txsAt = ScratchAddress + 1 + timerSoon.length + TimerNops + 3;
+        const code = [0x78, ...timerSoon, ...Array(TimerNops).fill(0xea), 0xa2, MovedStack, 0x58, 0x9a];
+        [...code, 0x4c, (txsAt + 1) & 0xff, (txsAt + 1) >> 8].forEach((byte, i) =>
+            machine.writebyte(ScratchAddress + i, byte),
+        );
+        const history = historyFromHere(machine);
+        await machine.type("CALL &3000");
+        await machine.runUntilAddress(machine.readword(IrqVector), 1);
+        singleStep(machine.processor);
+        const { frames, txsAt: movedBy } = finished(history.callStack());
+        expect([frames.at(-1), movedBy]).toEqual([expect.objectContaining({ kind: "IRQ", site: txsAt + 1 }), txsAt]);
+    });
+});
+
 describe("Reverse continuing", () => {
     it.each([
         ["an instruction breakpoint", { kind: "execute", start: Oswrch }],
@@ -622,7 +689,10 @@ describe("Replaying sends the host none of the machine's sound", () => {
 
     it.each([
         ["stepping back, which lands", (history) => expect(history.stepBack(false)).toBeNull()],
-        ["searching back, which puts the machine back", (history) => finished(history.lastWrite(ScratchAddress))],
+        [
+            "searching back, which puts the machine back",
+            (history) => finished(history.lastWrite(ScratchAddress, PagedView)),
+        ],
     ])("after %s, sends the sound chip as it stands before the machine sounds on", async (_, replay) => {
         const onEvent = vi.fn();
         const machine = await booted("B-DFS1.2", { soundChip: new SoundChip(null, { onEvent }) });

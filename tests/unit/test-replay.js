@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { finished, ReplayHistory, snapshotCycle } from "../../src/replay.js";
-import { cycleCount } from "../../src/lockstep.js";
+import { cpuMoment, cycleCount } from "../../src/lockstep.js";
 import { snapshotToJSON } from "../../src/snapshot.js";
 import { fake6502 } from "../../src/fake6502.js";
 import { findModel } from "../../src/models.js";
@@ -52,6 +52,15 @@ const OtherPagingHalf = 256;
 const QuarterSecond = 500000;
 const EmptyStack = 0xff;
 const JmpTo = (at) => [0x4c, at & 0xff, at >>> 8];
+const JsrTo = (at) => [0x20, at & 0xff, at >>> 8];
+const StackAt = (s) => [0xa2, s, 0x9a];
+const TxsAt = CallAt + 2;
+const OuterAt = CallAt + StackAt(0).length;
+const InnerAt = 0x2100;
+const SpinAt = 0x2200;
+const MovedStack = 0xf0;
+const CallFrame = (site, routine) =>
+    expect.objectContaining({ kind: "JSR", site, routine, siteBank: undefined, routineBank: undefined });
 
 // A tape that plays forever, giving the PPIA nothing.
 const SilentTape = { poll: () => 1000, rewind: () => {} };
@@ -145,8 +154,10 @@ describe("Finding the last write to a byte", () => {
         // As an instruction fetched where the Master's ACCCON E bit maps shadow RAM would leave it.
         cpu.memStatOffset = OtherPagingHalf;
         const before = snapshotToJSON(cpu.snapshotState());
+        const moment = cpuMoment(cpu);
         const { write, searched, stoppedBy } = finished(history.lastWrite(Written, PagedView));
         expect(snapshotToJSON(cpu.snapshotState())).toEqual(before);
+        expect(cpuMoment(cpu)).toBe(moment);
         expect(cpu.memStatOffset).toBe(OtherPagingHalf);
         expect(stoppedBy).toBe(expected.stoppedBy);
         if (expected.write === null) {
@@ -221,6 +232,15 @@ describe("Finding the last write to a byte", () => {
             (history) => history.lastWrite(Written, PagedView),
             /The search cannot go back past a refusal the test made/,
         ],
+        [
+            "for the call stack past a refusal in the newest stretch",
+            (history) => {
+                takeAndRun(history);
+                history.log.refuse(TestRefusal);
+            },
+            (history) => history.callStack(),
+            /The search cannot go back past a refusal the test made/,
+        ],
         ["of ROM", takeAndRun, (history) => history.lastWrite(RomAddress, PagedView), /That is ROM/],
         [
             "of a sideways ROM bank",
@@ -261,8 +281,17 @@ describe("Finding the last write to a byte", () => {
         expect(history.stepBackTo(cycle(cpu, before))).toMatch(why);
     });
 
-    it("stops, as it was left between stretches, once the machine has moved on", async () => {
-        const cpu = await machineAt(WriterAt, {});
+    it.each([
+        ["run on", (cpu) => runFor(cpu, SomeCycles)],
+        [
+            "had a device register written",
+            (cpu) => {
+                cpu.inputLog.record({ kind: "write", address: UserViaDdrb, value: EditedValue });
+                cpu.writemem(UserViaDdrb, EditedValue);
+            },
+        ],
+    ])("stops, as it was left between stretches, once the machine has %s", async (_, moveOn) => {
+        const cpu = await machineAt(WriterAt, { model: findModel("B-DFS1.2") });
         loadBytes(cpu, WriterAt, WriteThenIdle);
         const history = new ReplayHistory(cpu);
         writeAndIdle(cpu);
@@ -274,8 +303,10 @@ describe("Finding the last write to a byte", () => {
         const search = history.lastWrite(Written, PagedView);
         expect(search.next().done).toBe(false);
         expect(snapshotToJSON(cpu.snapshotState())).toEqual(before);
-        runFor(cpu, SomeCycles);
+        moveOn(cpu);
+        const movedOn = snapshotToJSON(cpu.snapshotState());
         expect(search.next().value.refusal).toMatch(/moved on/);
+        expect(snapshotToJSON(cpu.snapshotState())).toEqual(movedOn);
     });
 });
 
@@ -372,5 +403,87 @@ describe("ReplayHistory", () => {
         cpu.breakpoints.add({ kind: "write", start: Written });
         expect(finished(history.reverseContinue())).toBeNull();
         expect([cpu.pc, cycleCount(cpu)]).toEqual([IdleAt, afterWrite]);
+    });
+});
+
+describe("Finding the call stack", () => {
+    // From CallAt: S set to `s`, JSR InnerAt, which does JSR SpinAt, which spins.
+    async function nestedCalls(s) {
+        const cpu = await machineAt(CallAt, {});
+        loadBytes(cpu, CallAt, [...StackAt(s), ...JsrTo(InnerAt)]);
+        loadBytes(cpu, InnerAt, JsrTo(SpinAt));
+        loadBytes(cpu, SpinAt, JmpTo(SpinAt));
+        return { cpu, history: new ReplayHistory(cpu) };
+    }
+
+    const inner = CallFrame(InnerAt, SpinAt);
+    const outer = CallFrame(OuterAt, InnerAt);
+    it.each([
+        [
+            "back to where the stack was empty",
+            EmptyStack,
+            take,
+            { frames: [inner, outer], accounted: true, txsAt: null },
+        ],
+        ["back to a TXS that moved it", MovedStack, take, { frames: [inner, outer], accounted: true, txsAt: TxsAt }],
+        [
+            "as far back as the history goes, which the outer call is before",
+            EmptyStack,
+            () => {},
+            { frames: [inner], accounted: false, stoppedBy: null },
+        ],
+        [
+            "back to a refusal",
+            EmptyStack,
+            (history) => {
+                take(history);
+                singleStep(history.cpu);
+                history.log.refuse(TestRefusal);
+            },
+            { frames: [inner], accounted: false, stoppedBy: TestRefusal },
+        ],
+    ])("is found %s, the innermost first, leaving the machine be", async (_, s, setUp, expected) => {
+        const { cpu, history } = await nestedCalls(s);
+        setUp(history);
+        runTo(cpu, InnerAt);
+        takeAndRun(history);
+        const before = snapshotToJSON(cpu.snapshotState());
+        const moment = cpuMoment(cpu);
+        const search = history.callStack();
+        const shownBetween = [];
+        let step;
+        while (!(step = search.next()).done) {
+            shownBetween.push([...step.value]);
+            expect(snapshotToJSON(cpu.snapshotState())).toEqual(before);
+        }
+        expect(step.value).toEqual(expect.objectContaining(expected));
+        expect(shownBetween[0]).toEqual([inner]);
+        expect(snapshotToJSON(cpu.snapshotState())).toEqual(before);
+        expect(cpuMoment(cpu)).toBe(moment);
+    });
+
+    it.each([
+        [
+            "deeper, the stack moved where the newest stretch ends",
+            0xe0,
+            { frames: [], accounted: true, txsAt: SpinAt + 2 },
+        ],
+        ["higher, dropping the frame it moved above", 0xfd, { frames: [outer], accounted: true, txsAt: null }],
+    ])("goes back past a TXS that moved the stack only if it moved it %s", async (_, s, expected) => {
+        const { cpu, history } = await nestedCalls(EmptyStack);
+        loadBytes(cpu, SpinAt, [...StackAt(s), ...JmpTo(SpinAt + StackAt(s).length)]);
+        take(history);
+        runTo(cpu, SpinAt + StackAt(s).length);
+        expect(finished(history.callStack())).toEqual(expect.objectContaining(expected));
+    });
+
+    it("is empty, at once, with the stack empty", async () => {
+        const { cpu, history } = await nestedCalls(EmptyStack);
+        takeAndRun(history);
+        cpu.s = EmptyStack;
+        expect(history.callStack().next()).toEqual({
+            done: true,
+            value: expect.objectContaining({ frames: [], accounted: true }),
+        });
     });
 });
