@@ -520,7 +520,10 @@ export class Debugger {
             unavailable: () => (this._loop.lockstep ? NoTraceInSession : this._history ? null : NoHistoryToTrace),
             stopped: () => this._loop.mode === RunMode.debugging,
             nameOf: (address) => this._names.address(address, this.cpu.pc)?.name,
-            showCode: (address) => this._showCode(address, undefined),
+            showCode: (address) => {
+                this._paging.disassembly.view = PagedView;
+                this._showCode(address, undefined);
+            },
         });
         this._bindToolbar();
         this._bindKeys(keys);
@@ -1087,7 +1090,7 @@ export class Debugger {
         return viewsFor(this.cpu.model).includes(view) ? view : undefined;
     }
 
-    /** Opens the disassembly at `address`, in sideways `bank` if one is given, or else as paged. */
+    /** Opens the disassembly at `address`, in sideways `bank` if one is given, or else in the view it has. */
     _showCode(address, bank) {
         this._showPinned(this._paging.disassembly, bank, address);
         this.panels.disassembly.open();

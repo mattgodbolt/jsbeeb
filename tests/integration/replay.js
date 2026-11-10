@@ -748,6 +748,7 @@ describe("Replaying sends the host none of the machine's sound", () => {
         await seconds(machine, ForwardWindowSeconds);
 
         const events = onEvent.mock.calls.map(([event]) => event);
+        expect(events.slice(0, replayed).filter(({ kind }) => kind !== "state")).toEqual([]);
         const soundsOn = events.findIndex(({ kind }, i) => i >= replayed && kind !== "state");
         const resync = events.findLastIndex(({ kind }, i) => i < soundsOn && kind === "state");
         expect(soundsOn - resync).toBe(1);

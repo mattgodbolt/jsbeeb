@@ -1334,8 +1334,12 @@ describe("Debugger", () => {
                 expect(traced()).toEqual(["2000"]);
                 await pressAndSettle("n");
                 expect(traced()).toEqual(["2000", "3000"]);
+                goTo("goto-dis-addr-form", `$8000\`${bankView(UnpagedBank)}`);
                 document.querySelector("#trace-panel [data-address]").click();
                 expect(addrOf(currentRow())).toBe("2000");
+                expect(document.querySelector("#disassembly-panel .paging-picker").classList).not.toContain(
+                    "overridden",
+                );
                 stoppedLoop.go();
                 stoppedLoop.dispatchEvent(new Event("running"));
                 expect([document.querySelector("#trace-panel .trace-status").textContent, traced()]).toEqual([
