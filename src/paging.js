@@ -22,6 +22,10 @@ const ShadowEnd = 0x8000;
 const AndyOffset = 0;
 const LynneOffset = 0x8000;
 
+// As the CPU's memStat marks a page: a write to ROM changes nothing, and one to neither reaches a device.
+export const RamStat = 1;
+export const RomStat = 2;
+
 const CopyrightPointerOffset = 7;
 const TitleOffset = 9;
 const Copyright = "(C)";
@@ -101,6 +105,22 @@ export function peekViewed(cpu, view, address) {
     address &= 0xffff;
     const offset = viewedOffset(cpu, view, address);
     return offset === undefined ? cpu.peekmem(address) : cpu.ramRomOs[offset];
+}
+
+/**
+ * What a write must reach to change the byte `view` shows at `address`: its memStat (RAM, ROM or a device register)
+ * and where it is in `cpu.ramRomOs`, as the CPU pages it now where the view reads as paged.
+ * @returns {{stat: number, offset: number}}
+ */
+export function viewedByte(cpu, view, address) {
+    address &= 0xffff;
+    const offset = viewedOffset(cpu, view, address);
+    if (offset !== undefined) {
+        const bank = viewedBank(view);
+        return { stat: bank === undefined || cpu.model.swram[bank] ? RamStat : RomStat, offset };
+    }
+    const page = cpu.memStatOffset + (address >>> 8);
+    return { stat: cpu.memStat[page], offset: cpu.memLook[page] + address };
 }
 
 /** Whether `view` shows something at `address` other than what the CPU would read there now. */

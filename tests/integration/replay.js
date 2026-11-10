@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { finished, ReplayHistory, snapshotCycle } from "../../src/replay.js";
+import { PagedView } from "../../src/paging.js";
 import { createSnapshot, restoreSnapshot, snapshotFromJSON, snapshotToJSON } from "../../src/snapshot.js";
 import { Video } from "../../src/video.js";
 import { AtomSoundChip, SoundChip } from "../../src/soundchip.js";
@@ -369,7 +370,7 @@ describe.each([
         const painted = vi.fn();
         video.paint_ext = painted;
         const before = machineNow(machine);
-        const { write, stoppedBy } = finished(history.lastWrite(ScratchAddress));
+        const { write, stoppedBy } = finished(history.lastWrite(ScratchAddress, PagedView));
         expect([write, stoppedBy]).toEqual([null, null]);
         expect(machineNow(machine)).toEqual(before);
         expect(painted).not.toHaveBeenCalled();

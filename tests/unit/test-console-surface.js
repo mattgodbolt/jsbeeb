@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { exposeConsoleSurface } from "../../src/web/console-surface.js";
 import { hd } from "../../src/hex.js";
+import { PagedView } from "../../src/paging.js";
 import { fake6502 } from "../../src/fake6502.js";
 import { romless, ViaRegister } from "./helpers.js";
 
@@ -60,7 +61,7 @@ describe("exposeConsoleSurface", () => {
         target.stop(true);
         expect(loop.stop).toHaveBeenCalledWith(true);
         target.whoWrote(0x70);
-        expect(dbgr.whoWrote).toHaveBeenCalledWith(0x70);
+        expect(dbgr.whoWrote).toHaveBeenCalledWith(0x70, PagedView);
         for (const notAnAddress of ["&70", 0x10000, -1]) {
             expect(() => target.whoWrote(notAnAddress)).toThrow(/an address from 0 to 0xffff/);
         }

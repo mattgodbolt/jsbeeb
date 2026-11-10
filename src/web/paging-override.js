@@ -19,6 +19,12 @@ const FixedViews = {
     [ShadowView]: { label: "shadow RAM", title: "Shadow RAM at &3000 to &7FFF, whatever ACCCON pages there" },
 };
 
+/** What `view` is called in a panel's picker, such as "shadow RAM" or "bank 4". */
+export function viewLabel(view) {
+    const bank = viewedBank(view);
+    return bank === undefined ? FixedViews[view].label : `bank ${bankName(bank)}`;
+}
+
 /**
  * One panel's choice of which memory it shows where the paging has a choice, picked from a menu by its header's
  * title: what the CPU has paged, or a view of one bank or RAM (see paging.js). It reads through the view without
@@ -96,7 +102,7 @@ export class PagingOverride {
         if (bank === undefined) return FixedViews[view];
         const contents = describeBank(this._cpu, bank);
         return {
-            label: `bank ${bankName(bank)}`,
+            label: viewLabel(view),
             contents,
             title: `Sideways bank ${bankName(bank)} at &8000 to &BFFF: ${contents}`,
         };

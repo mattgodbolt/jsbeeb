@@ -17,7 +17,7 @@ import { sheilaAddress, machineSheilaBlocks } from "../sheila.js";
 import { BreakpointsPanel } from "./breakpoints-panel.js";
 import { bindGotoForm, externalLink, FittedRows, labelHtml, powerOfTwoColumnsThatFit } from "./debug-dom.js";
 import { DisassemblyView } from "./disassembly-view.js";
-import { PagingOverride } from "./paging-override.js";
+import { PagingOverride, viewLabel } from "./paging-override.js";
 import {
     bankName,
     bankView,
@@ -27,6 +27,7 @@ import {
     screenView,
     SidewaysEnd,
     SidewaysStart,
+    viewDiffers,
     viewedBank,
     viewsFor,
 } from "../paging.js";
@@ -438,7 +439,7 @@ export class Debugger {
             peek,
             resolve: (text) => this._resolveWatch(text),
             arrangement,
-            searchWrites: (address) => this.whoWrote(address),
+            searchWrites: (address, view) => this.whoWrote(address, view),
         });
         this._searching = null;
         // Fetches the index, and the sets matching memory now, so names typed while the machine runs can resolve.
@@ -487,7 +488,7 @@ export class Debugger {
             resolve: (text) => this._resolveViewed(this._paging.disassembly, text),
             showing: (sets) => this._credit(this._credits.disassembly, this._namesIn(this._paging.disassembly), sets),
             showMemory: (address) => this._memoryView.update(address),
-            offerWatch: (e, address, name) => this._offerWatch(e, address, name, this._paging.disassembly),
+            offerWatch: (e, address, name) => this._offerWatch(e, address, name, this._paging.disassembly.view),
             runToCursor: this._actions.runToCursor,
             refit: () =>
                 this._redraw(() =>
@@ -541,7 +542,7 @@ export class Debugger {
             if (!byte) return;
             const address = Number(byte.dataset.addr);
             const named = this._paging.memory.differs(address) ? undefined : this._names.address(address, this.cpu.pc);
-            this._offerWatch(e, address, named?.name, this._paging.memory);
+            this._offerWatch(e, address, named?.name, this._paging.memory.view);
         });
         document.getElementById("memory").addEventListener("click", (e) => {
             if (!e.target.matches(".mem_bytes [data-addr]") || this._loop.mode !== RunMode.debugging) return;
@@ -721,11 +722,10 @@ export class Debugger {
         floating.open();
     }
 
-    // Who wrote a byte is offered only while stopped, of the memory the CPU writes to, which `paging` may not show.
-    _offerWatch(e, address, name, paging) {
+    _offerWatch(e, address, name, view) {
         e.preventDefault();
-        const searchable = !this._loop.isRunning() && !paging.differs(address);
-        this.watches.offer({ address, label: name ?? `$${hexword(address)}` }, e.clientX, e.clientY, searchable);
+        const offered = { address, label: name ?? `$${hexword(address)}`, view };
+        this.watches.offer(offered, e.clientX, e.clientY, !this._loop.isRunning());
     }
 
     _makePanel(own) {
@@ -1378,15 +1378,16 @@ export class Debugger {
     }
 
     /**
-     * Finds what last wrote the byte at `address`, as the CPU pages it now, by searching back through the history
+     * Finds what last wrote the byte `view` shows at `address` by searching back through the history
      * step back keeps (see ReplayHistory's lastWrite), and says so, offering to step back to the instruction while
      * the machine is where the search left it. It stops the machine in the debugger first. The search lets the page
      * go on between stretches of the history; a later search ends one still going. Resolves to what lastWrite
      * returns, or null if a later search ended it.
      */
-    async whoWrote(address) {
+    async whoWrote(address, view) {
         if (this._loop.mode !== RunMode.debugging) this._loop.stop(true);
-        const where = `$${hexword(address)}`;
+        const elsewhere = viewDiffers(this.cpu, view, address) ? ` in ${viewLabel(view)}` : "";
+        const where = `$${hexword(address)}${elsewhere}`;
         const title = `Who wrote ${where}`;
         const unavailable = this._loop.lockstep ? NoSearchInSession : this._history ? null : NoHistoryToSearch;
         if (unavailable) {
@@ -1394,7 +1395,7 @@ export class Debugger {
             return { refusal: unavailable };
         }
         const found = await this._runSearch(
-            this._history.lastWrite(address),
+            this._history.lastWrite(address, view),
             `Searching back for the last write to ${where}.`,
             title,
             () => true,
