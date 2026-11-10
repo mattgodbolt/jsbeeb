@@ -323,6 +323,7 @@ const inputs = new AnalogueInputs({
     settings,
     audioHandler,
     takeScreenClick: (x, y) => dbgr.showScreenByteAt(x, y),
+    takeScreenMenu: (e, x, y) => dbgr.offerScreenByteAt(e, x, y),
 });
 if (settings.microphoneChannel !== undefined) {
     // We need to use setTimeout to make sure this runs after the page has loaded

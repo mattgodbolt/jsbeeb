@@ -1606,6 +1606,28 @@ describe("Debugger", () => {
                     expect(pc()).toBe("2002");
                 });
 
+                it("finds who wrote the byte drawn where the stopped screen is right-clicked, in the shadow RAM it is drawn from", async () => {
+                    cpu = fake6502(romless("Master"), { video });
+                    await cpu.initialise();
+                    cpu.pc = 0x2000;
+                    dbgr.setCpu(cpu);
+                    // ACCCON X, so $22 goes to shadow RAM's $3000, then ACCCON D alone: the video shows shadow RAM.
+                    load(0x2000, [0xa9, 0x04, 0x8d, 0x34, 0xfe, 0xa9, 0x22, 0x8d, 0x00, 0x30]);
+                    load(0x200a, [0xa9, 0x01, 0x8d, 0x34, 0xfe, 0xea]);
+                    stepBackHere();
+                    for (let i = 0; i < 6; ++i) keyPress("n");
+                    vi.spyOn(video, "addressShownAt").mockReturnValue(0x3000);
+                    dbgr.offerScreenByteAt(new MouseEvent("contextmenu", { cancelable: true }), 0.25, 0.25);
+                    pickFromMenu("Who wrote this?");
+                    await vi.waitFor(() =>
+                        expect(toasts()).toContainEqual(
+                            expect.stringMatching(
+                                /\$3000 in shadow RAM was last written \$22 by the instruction at \$2007/,
+                            ),
+                        ),
+                    );
+                });
+
                 it.each([
                     ["memory", () => memByte(SidewaysStart)],
                     ["disassembly", () => currentRow().querySelector(".dis_addr")],
