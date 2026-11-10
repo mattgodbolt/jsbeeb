@@ -105,8 +105,8 @@ describe("addArchiveSources", () => {
 
     it("describes a listed GitHub disc by its reference, with the machine it needs", async () => {
         const describer = register().describers.get("github");
-        expect(await describer("mattgodbolt/nm/ninja_music.ssd")).toMatchObject({
-            title: "Ninja Massacre music",
+        expect(await describer("mattgodbolt/starglider-beeb/starglider.ssd")).toMatchObject({
+            title: "Starglider",
             requires: MachineRequirements.Master,
         });
         expect(await describer("mattgodbolt/frogman@classic/frogman_rebuilt.ssd")).toMatchObject({

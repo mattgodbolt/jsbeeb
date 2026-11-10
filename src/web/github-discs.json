@@ -185,16 +185,6 @@
     "type": "Game"
   },
   {
-    "repo": "mattgodbolt/nm",
-    "path": "ninja_music.ssd",
-    "title": "Ninja Massacre music",
-    "publisher": "Matt Godbolt",
-    "authors": "Music by David Whittaker",
-    "year": 2026,
-    "type": "Music",
-    "machine": "Master"
-  },
-  {
     "repo": "mattgodbolt/onslaught",
     "path": "original-disc.ssd",
     "title": "Onslaught",
@@ -208,7 +198,7 @@
     "path": "redshift.ssd",
     "title": "REDSHIFT",
     "publisher": "Matt Godbolt",
-    "authors": "Matt Godbolt and Claude",
+    "authors": "Designed and written by Claude, an AI, with Matt Godbolt",
     "year": 2026,
     "type": "Game"
   },
