@@ -69,12 +69,16 @@ describe("SoundChip advance", () => {
     });
 });
 
-describe("SoundChip withoutOutput", () => {
+describe("SoundChip replaying", () => {
     it("sends none of what a replay rendered, then or in a later buffer", () => {
         const buffers = [];
         const { chip, scheduler } = makeSoundChip(() => buffers.push(true));
         const cyclesPerBuffer = SoundBufferSamples / chip.samplesPerCycle;
-        chip.withoutOutput(() => scheduler.polltime(cyclesPerBuffer * 1.5));
+        let replaying = true;
+        chip.replaying = () => replaying;
+        scheduler.polltime(cyclesPerBuffer * 1.5);
+        chip.catchUp();
+        replaying = false;
         scheduler.polltime(cyclesPerBuffer - 1);
         chip.catchUp();
         expect(buffers).toEqual([]);

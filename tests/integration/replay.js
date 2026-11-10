@@ -604,7 +604,7 @@ describe("Replaying sends the host none of the machine's sound", () => {
     it.each([
         ["stepping back, which lands", (history) => expect(history.stepBack(false)).toBeNull()],
         ["searching back, which puts the machine back", (history) => finished(history.lastWrite(ScratchAddress))],
-    ])("after %s, has sent the sound chip as it stands last", async (_, replay) => {
+    ])("after %s, sends the sound chip as it stands before the machine sounds on", async (_, replay) => {
         const onEvent = vi.fn();
         const machine = await booted("B-DFS1.2", { soundChip: new SoundChip(null, { onEvent }) });
         for (const line of RisingTone) await machine.type(line);
@@ -614,11 +614,14 @@ describe("Replaying sends the host none of the machine's sound", () => {
         onEvent.mockClear();
 
         replay(history);
+        const { registers, volume } = cpu.soundChip.snapshotState();
+        const replayed = onEvent.mock.calls.length;
+        await seconds(machine, ForwardWindowSeconds);
 
         const events = onEvent.mock.calls.map(([event]) => event);
-        const lastResync = events.findLastIndex(({ kind }) => kind === "state");
-        expect(events.slice(lastResync)).toEqual([
-            { cycle: cpu.scheduler.epoch, kind: "state", value: cpu.soundChip.snapshotState() },
-        ]);
+        const soundsOn = events.findIndex(({ kind }, i) => i >= replayed && kind !== "state");
+        const resync = events.findLastIndex(({ kind }, i) => i < soundsOn && kind === "state");
+        expect(soundsOn - resync).toBe(1);
+        expect(events[resync].value).toMatchObject({ registers, volume });
     });
 });

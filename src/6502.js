@@ -85,17 +85,6 @@ export function packSidewaysRam(banks, into) {
  */
 export const NoReplayHooks = Object.freeze({ instruction: null, read: null, write: null, interrupt: null });
 
-/** Runs `run` with each `[object, method]` of `calls` doing nothing in its place. */
-export function withoutCalling(calls, run) {
-    const kept = calls.map(([object, method]) => object[method]);
-    for (const [object, method] of calls) object[method] = () => {};
-    try {
-        return run();
-    } finally {
-        calls.forEach(([object, method], i) => (object[method] = kept[i]));
-    }
-}
-
 /** One bit per device that can drive the NMI line; the CPU takes the OR of them all. */
 export const NmiSource = Object.freeze({
     fdc: 0x01,
@@ -867,6 +856,7 @@ export class Cpu6502 extends Base6502 {
         this.adconverter = new Adc(this.sysvia, this.scheduler);
         this.touchScreen = new TouchScreen(this.scheduler, this.model.cyclesPerSecond);
         this.soundChip.setScheduler(this.scheduler);
+        this.soundChip.replaying = () => this.replaying;
         this.fdc = new this.model.Fdc(this, this.ddNoise, this.scheduler);
     }
 
@@ -1932,8 +1922,7 @@ export class Cpu6502 extends Base6502 {
     /**
      * Runs `run` as a replay of time the machine has run already, or is only previewing: every debug hook detached
      * and `hooks` attached in their place (see NoReplayHooks), and `replaying` set, so that output devices send the
-     * host nothing it has had or will have from the run itself; the sound chip, the drives' seeks and the cassette
-     * relay are silenced outright for it (see SoundChip.withoutOutput).
+     * host nothing it has had or will have from the run itself.
      */
     asReplay({ instruction, read, write, interrupt }, run) {
         const attached = [this._debugInstruction, this._debugRead, this._debugWrite, this._debugInterrupt];
@@ -1945,14 +1934,8 @@ export class Cpu6502 extends Base6502 {
         ];
         this.replaying = true;
         this.refreshLook();
-        const noises = [
-            [this.ddNoise, "seekStart"],
-            [this.ddNoise, "seekEnd"],
-            [this.relayNoise, "motorOn"],
-            [this.relayNoise, "motorOff"],
-        ];
         try {
-            return this.soundChip.withoutOutput(() => withoutCalling(noises, run));
+            return run();
         } finally {
             [this._debugInstruction, this._debugRead, this._debugWrite, this._debugInterrupt] = attached;
             this.replaying = false;

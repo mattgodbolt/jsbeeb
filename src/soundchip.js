@@ -51,6 +51,9 @@ export class SoundChip {
     constructor(onBuffer, { onEvent = null } = {}) {
         this._onBuffer = onBuffer;
         this._onEvent = onEvent;
+        /** Whether the machine is replaying time the host has heard already, or is only previewing: the CPU's. */
+        this.replaying = () => false;
+        this._hostBehind = false;
         // 4MHz input signal. Internal divide-by-8
         this.soundchipFreq = 4000000.0 / 8;
         const sampleRate = this.soundchipFreq;
@@ -126,7 +129,23 @@ export class SoundChip {
     }
 
     _emit(kind, value) {
-        if (this._onEvent) this._onEvent({ cycle: this.scheduler.epoch, kind, value });
+        this._send({ cycle: this.scheduler.epoch, kind, value });
+    }
+
+    /**
+     * Sends `event` to the host unless the machine is replaying. After a replay held some back, the chip as it stands
+     * goes first, so that the host sounds on from where the replay left the machine.
+     */
+    _send(event) {
+        if (!this._onEvent) return;
+        if (this.replaying()) {
+            this._hostBehind = true;
+            return;
+        }
+        if (this._hostBehind && event.kind !== "state")
+            this._onEvent({ cycle: this.scheduler.epoch, kind: "state", value: this.snapshotState() });
+        this._hostBehind = false;
+        this._onEvent(event);
     }
 
     /** Applies an event from another chip's onEvent, at the cycle this chip is rendering. */
@@ -289,6 +308,7 @@ export class SoundChip {
 
     advance(cycles) {
         if (this._onEvent) return;
+        const replaying = this.replaying();
         const num = cycles * this.samplesPerCycle + this.residual;
         let rounded = num | 0;
         this.residual = num - rounded;
@@ -312,10 +332,12 @@ export class SoundChip {
             rounded -= numSamplesToGenerate;
 
             if (this.position === SoundBufferSamples) {
-                this._onBuffer(this.buffer);
+                if (!replaying) this._onBuffer(this.buffer);
                 this.position = 0;
             }
         }
+        // What a replay rendered is not left in the buffer for a later send either.
+        if (replaying) this.position = 0;
     }
 
     poke(value) {
@@ -425,27 +447,6 @@ export class SoundChip {
         }
         this.noisePoked();
         this.lastRunEpoch = this.scheduler.epoch;
-    }
-
-    /**
-     * Runs `run`, a replay of the machine's past, sending the host none of it. If it leaves the machine at another
-     * cycle, the chip as it stands goes to the host after it, so that the host sounds on from there.
-     */
-    withoutOutput(run) {
-        // Caught up either side, so that the cycles owed to the host are only those the machine runs forward.
-        this.catchUp();
-        const [onBuffer, onEvent, epoch] = [this._onBuffer, this._onEvent, this.scheduler.epoch];
-        this._onBuffer = () => {};
-        if (onEvent) this._onEvent = () => {};
-        try {
-            return run();
-        } finally {
-            this.catchUp();
-            // What the replay rendered is not sent later either; a restore drops a part-filled buffer the same way.
-            this.position = 0;
-            [this._onBuffer, this._onEvent] = [onBuffer, onEvent];
-            if (this.scheduler.epoch !== epoch) this._emit("state", this.snapshotState());
-        }
     }
 
     enable(e) {
@@ -574,7 +575,7 @@ export class AtomSoundChip extends SoundChip {
         const cycles = microCycle + seconds / this.secondsPerCycle;
         const bit = value ? 1.0 : 0.0;
         this.speakerBit = bit;
-        if (this._onEvent) this._onEvent({ cycle: cycles, kind: "bit", value: bit });
+        if (this._onEvent) this._send({ cycle: cycles, kind: "bit", value: bit });
         else this.bitChange.push({ bit, cycles });
     }
 }
@@ -620,13 +621,15 @@ export class InstrumentedSoundChip extends SoundChip {
         super.advance(cycles);
     }
 
-    /** As SoundChip.withoutOutput, also leaving out of the capture what the replay writes and the cycles it takes. */
-    withoutOutput(run) {
+    /** Runs `run`, a replay of the machine's past, leaving out of the capture what it writes and the cycles it takes. */
+    withoutCapturing(run) {
+        // Caught up either side, so that the cycles owed to the chip are only those the machine runs forward.
         this.catchUp();
         const [writes, totalCycles] = [this._capturedWrites.length, this._totalCycles];
         try {
-            return super.withoutOutput(run);
+            return run();
         } finally {
+            this.catchUp();
             this._capturedWrites.length = writes;
             this._totalCycles = totalCycles;
         }
@@ -657,7 +660,7 @@ export class FakeSoundChip {
 
     render() {}
 
-    withoutOutput(run) {
+    withoutCapturing(run) {
         return run();
     }
 
