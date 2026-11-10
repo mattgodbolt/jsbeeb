@@ -1,5 +1,6 @@
 import { hd } from "../hex.js";
 import { debounce } from "../debounce.js";
+import { PagedView } from "../paging.js";
 
 const LastAddress = 0xffff;
 
@@ -18,7 +19,7 @@ export function exposeConsoleSurface(target, { loop, processor, video, audioHand
     target.whoWrote = (address) => {
         if (!Number.isInteger(address) || address < 0 || address > LastAddress)
             throw new Error(`whoWrote takes an address from 0 to 0xffff, not ${address}`);
-        return dbgr.whoWrote(address);
+        return dbgr.whoWrote(address, PagedView);
     };
     target.soundChip = audioHandler.soundChip;
     target.processor = processor;
