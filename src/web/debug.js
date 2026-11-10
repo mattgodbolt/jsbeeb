@@ -1170,7 +1170,9 @@ export class Debugger {
         });
     }
 
-    /** As showScreenByteAt, but offers the memory panel's menu for the byte; a right click not taken is the browser's. */
+    /**
+     * As showScreenByteAt, but offers the memory panel's menu for the byte; a right click not taken is the browser's.
+     */
     offerScreenByteAt(e, x, y) {
         return this._atScreenByte(x, y, (address, view) => this._offerWatch(e, address, undefined, view));
     }
