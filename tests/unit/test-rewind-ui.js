@@ -149,17 +149,25 @@ describe("RewindUI", () => {
             expect(machineNow()).toEqual(before);
         });
 
-        it("walks the filmstrip with the arrow keys, stopping at the ends", () => {
+        it("walks the filmstrip with the arrow keys, held or not, stopping at the ends", () => {
             const ui = make();
             captured(2);
             ui.open();
-            key("ArrowLeft");
+            key("ArrowLeft", { repeat: true });
             expect(selectedIndex()).toBe(0);
             key("ArrowLeft");
             expect(selectedIndex()).toBe(0);
             key("ArrowRight");
             key("ArrowRight");
             expect(selectedIndex()).toBe(1);
+        });
+
+        it("stays open while the Alt-W that opened it is held", () => {
+            const ui = make();
+            captured(1);
+            ui.open();
+            key("w", { code: "KeyW", altKey: true, repeat: true });
+            expect(panel().hidden).toBe(false);
         });
 
         it.each([

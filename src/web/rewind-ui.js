@@ -28,8 +28,8 @@ const ShortcutCodesWhileOpen = new Set(
  */
 export const RewindKeys = [
     { combo: "Left Right", label: "choose", description: "Choose an earlier or later moment" },
-    { key: "ArrowLeft", run: "earlier" },
-    { key: "ArrowRight", run: "later" },
+    { key: "ArrowLeft", run: "earlier", repeats: true },
+    { key: "ArrowRight", run: "later", repeats: true },
     {
         combo: "Enter",
         key: "Enter",
@@ -313,6 +313,8 @@ export class RewindUI {
         const row = RewindKeys.find(({ key }) => key === keyName(e));
         if (!row) return;
         e.preventDefault();
+        // Alt-W held to open the window would otherwise close it again at the first repeat.
+        if (e.repeat && !row.repeats) return;
         this._actions[row.run]();
     }
 }
