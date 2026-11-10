@@ -24,7 +24,7 @@ const ShortcutCodesWhileOpen = new Set(
 /**
  * The keys the rewind window answers while it is open, in the shape of the Shortcuts table (see panel-keys.js),
  * whichever window has the focus, as the machine is held and gets no keys meanwhile. Keys are named as `keyName`
- * names them.
+ * names them; only a row with `repeats` acts on a held key.
  */
 export const RewindKeys = [
     { combo: "Left Right", label: "choose", description: "Choose an earlier or later moment" },
