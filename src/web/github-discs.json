@@ -36,6 +36,16 @@
     "type": "Game"
   },
   {
+    "repo": "ebenupton/solid-elite-6502-second-processor",
+    "path": "solid-elite-tube.ssd",
+    "title": "Solid Elite (6502 Second Processor)",
+    "publisher": "Eben Upton",
+    "authors": "Ian Bell and David Braben (original game); port by Eben Upton, built on Mark Moxon's documented source",
+    "year": 2026,
+    "type": "Game",
+    "machine": "MasterTurbo"
+  },
+  {
     "repo": "ebenupton/solid-elite-bbc-master",
     "path": "solid-elite-bbc-master.ssd",
     "title": "Solid Elite",
@@ -109,5 +119,15 @@
     "authors": "Rich Talbot-Watkins and Matt Godbolt",
     "year": 1993,
     "type": "Game"
+  },
+  {
+    "repo": "waitingforvsync/waitingforvsync.github.io",
+    "path": "beeb/criticalmass.ssd",
+    "title": "Critical Mass",
+    "publisher": "Rich Talbot-Watkins",
+    "authors": "Eli Piilonen (Marble Merger, the PICO-8 original); BBC Micro version by Rich Talbot-Watkins",
+    "year": 2026,
+    "type": "Game",
+    "url": "https://github.com/waitingforvsync/criticalmass"
   }
 ]
