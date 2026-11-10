@@ -16,7 +16,7 @@ const MinPanelSize = { w: 480, h: 230 };
 const StretchedAcross = { anchor: "stretch" };
 
 // The rest would act on a machine the loop holds while the screen shows a preview.
-const ShortcutsWhileOpen = new Set(["toggleRewind", "toggleFast", "openPrinter"]);
+const ShortcutsWhileOpen = new Set(["toggleFast", "openPrinter"]);
 const ShortcutCodesWhileOpen = new Set(
     Shortcuts.filter(({ run }) => ShortcutsWhileOpen.has(run)).map(({ key }) => keyCodes[key]),
 );
@@ -44,13 +44,9 @@ export const RewindKeys = [
         label: "go back and debug",
         description: "Go back to the chosen moment and stop in the debugger there",
     },
-    {
-        combo: "Escape",
-        key: "Escape",
-        run: "cancel",
-        label: "cancel",
-        description: "Close, leaving the machine where it was",
-    },
+    { combo: "Escape Alt-W", label: "cancel", description: "Close, leaving the machine where it was" },
+    { key: "Escape", run: "cancel" },
+    { key: "Alt-W", run: "cancel" },
 ];
 
 // Alt with a letter is named by its key code, as "Alt-S", so that the Mac's Option characters count. AltGr is Ctrl
@@ -220,11 +216,6 @@ export class RewindUI {
         this.video.fb32.set(this.picture);
         this.video.paint();
         this._closePanel();
-    }
-
-    toggle() {
-        if (this.isOpen) this.cancel();
-        else this.open();
     }
 
     /**

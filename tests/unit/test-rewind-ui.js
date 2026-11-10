@@ -94,7 +94,7 @@ describe("RewindUI", () => {
         it("shows its keys on its own line", () => {
             make();
             expect(panel().querySelector(".panel-keys").textContent).toBe(
-                "Left/Right choose · Enter go back · Alt-S go back and debug · Escape cancel",
+                "Left/Right choose · Enter go back · Alt-S go back and debug · Escape/Alt-W cancel",
             );
         });
 
@@ -165,7 +165,6 @@ describe("RewindUI", () => {
         it.each([
             ["A", "keydown", { key: "a", code: "KeyA" }, "kept"],
             ["N's keypress, which the debugger's keys answer", "keypress", { key: "n" }, "kept"],
-            ["Alt-W, as Option-W types it on a Mac", "keydown", { key: "∑", code: "KeyW", altKey: true }, "passed on"],
             ["Alt-T", "keydown", { key: "t", code: "KeyT", altKey: true }, "passed on"],
             ["Alt-B", "keydown", { key: "b", code: "KeyB", altKey: true }, "passed on"],
             ["Alt-S, which rewind answers itself", "keydown", { key: "s", code: "KeyS", altKey: true }, "kept"],
@@ -234,16 +233,16 @@ describe("RewindUI", () => {
         it.each([
             ["Escape", () => key("Escape")],
             ["the close button", () => document.getElementById("rewind-close").click()],
-            ["a second toggle, as Alt-W opens and closes it", (ui) => ui.toggle()],
+            ["Alt-W, as Option-W types it on a Mac", () => key("∑", { code: "KeyW", altKey: true })],
         ])("cancels on %s, leaving the machine, its picture and step back's history as they were", (_, press) => {
             const ui = make();
             captured(2);
             frame();
             cpu.video.fb32.fill(Marker);
             const [before, kept] = [machineNow(), history.snapshots()];
-            ui.toggle();
+            ui.open();
             key("ArrowLeft");
-            press(ui);
+            press();
             expect(machineNow()).toEqual(before);
             expect(history.snapshots()).toEqual(kept);
             expect(panel().hidden).toBe(true);
