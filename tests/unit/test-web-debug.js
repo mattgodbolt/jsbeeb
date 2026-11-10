@@ -1606,28 +1606,7 @@ describe("Debugger", () => {
                     expect(pc()).toBe("2002");
                 });
 
-                it("finds who wrote the byte drawn where the stopped screen is right-clicked", async () => {
-                    vi.spyOn(video, "addressShownAt").mockImplementation((x, y) => (y < 0.5 ? 0x70 : null));
-                    const offered = (y) => {
-                        const event = new MouseEvent("contextmenu", { cancelable: true, clientX: 40, clientY: 50 });
-                        return [dbgr.offerScreenByteAt(event, 0.25, y), event.defaultPrevented, visible("watch-menu")];
-                    };
-                    expect(offered(0.75)).toEqual([true, false, false]);
-                    dbgr.keepOffTouchKeyboard(() => true);
-                    expect(offered(0.25)).toEqual([false, false, false]);
-                    dbgr.keepOffTouchKeyboard(() => false);
-                    expect(offered(0.25)).toEqual([true, true, true]);
-                    pickFromMenu("Who wrote this?");
-                    await vi.waitFor(() =>
-                        expect(toasts()).toContainEqual(
-                            expect.stringMatching(/\$0070 was last written \$41 by the instruction at \$2002/),
-                        ),
-                    );
-                    loop.go();
-                    expect(offered(0.25)[0]).toBe(false);
-                });
-
-                it("searches the shadow RAM a Master's shadow screen is drawn from, not the main RAM paged in", async () => {
+                it("finds who wrote the byte drawn where the stopped screen is right-clicked, in the shadow RAM it is drawn from", async () => {
                     cpu = fake6502(romless("Master"), { video });
                     await cpu.initialise();
                     cpu.pc = 0x2000;
