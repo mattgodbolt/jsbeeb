@@ -3479,3 +3479,70 @@ div.smoothie-chart-tooltip {
 .config-section > .row + .row {
   margin-top: 10px;
 }
+
+#trace-panel {
+  width: min(600px, 90vw);
+  height: min(360px, 60vh);
+  font-family: monospace;
+  font-size: 9pt;
+}
+
+#trace-panel .panel-body {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+}
+
+#trace-panel .trace-status {
+  color: #aaaaaa;
+  padding: 2px 4px;
+}
+
+#trace-panel .trace-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+#trace-panel th {
+  position: sticky;
+  top: 0;
+  background: #222222;
+  color: #aaaaaa;
+  font-weight: normal;
+}
+
+#trace-panel th,
+#trace-panel td {
+  padding: 0 4px;
+  white-space: nowrap;
+}
+
+#trace-panel .trace-ago {
+  color: #888888;
+  text-align: right;
+}
+
+#trace-panel .trace-address {
+  color: #f0d080;
+  cursor: pointer;
+}
+
+#trace-panel .trace-address:hover {
+  text-decoration: underline;
+}
+
+#trace-panel .trace-name {
+  max-width: 16ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #80d0d0;
+}
+
+#trace-panel .trace-instruction {
+  min-width: 16ch;
+}
+
+#trace-panel .trace-interrupt .trace-instruction {
+  color: #f08080;
+}
