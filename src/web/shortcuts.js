@@ -22,7 +22,7 @@ export const Shortcuts = [
     {
         combo: "Alt-W",
         key: "W",
-        run: "toggleRewind",
+        run: "openRewind",
         description: "Rewind: pick an earlier moment to go back to, or close it and carry on",
     },
     { combo: "Alt-M", key: "M", run: "openMediaDrive", description: "Media window, aimed at drive 0" },

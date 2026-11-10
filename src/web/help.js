@@ -5,9 +5,11 @@ import { MemoryKeys, ToolbarKeys } from "./debug.js";
 import { DisassemblyKeys } from "./disassembly-view.js";
 import { PauseKeys } from "./keyboard-setup.js";
 import { helpRow, helpRows } from "./panel-keys.js";
+import { RewindKeys } from "./rewind-ui.js";
 import { Shortcuts } from "./shortcuts.js";
 
-/** Help's blocks on its debugging tab, one for each window's keys; a window with keys of its own adds itself here. */
+/** Help's blocks on its debugging tab, one for each window's keys; a debug window with keys of its own adds
+ * itself here. */
 const KeyTables = [
     ["Paused", PauseKeys],
     ["Debugger", ToolbarKeys],
@@ -21,6 +23,7 @@ const DebuggingTab = "#help-debugging";
 /** Fills Help's tables of keys from the tables that bind them. */
 export function fillHelp() {
     document.getElementById("shortcuts-help").append(...Shortcuts.map((row) => helpRow([row.combo], row.description)));
+    document.getElementById("rewind-keys-help").append(...helpRows(RewindKeys));
     document.getElementById("debug-keys-help").append(
         ...KeyTables.map(([title, table]) => {
             const block = document.createElement("section");

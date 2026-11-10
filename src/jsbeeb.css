@@ -872,31 +872,6 @@ small {
   pointer-events: auto;
 }
 
-/* Rewind scrubber panel */
-#rewind-panel {
-  position: fixed;
-  bottom: 40px;
-  left: 0;
-  right: 0;
-  background: rgba(0, 0, 0, 0.85);
-  border-top: 1px solid #555;
-  z-index: 10;
-  padding: 8px 12px;
-}
-
-.rewind-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 6px;
-}
-
-.rewind-title {
-  color: #ccc;
-  font-size: 12px;
-  font-weight: bold;
-}
-
 .rewind-filmstrip {
   display: flex;
   gap: 6px;
@@ -3334,6 +3309,23 @@ div.smoothie-chart-tooltip {
     width: auto;
     border: 0;
     border-radius: 0;
+  }
+
+  /* A sheet across the bottom, over the touch keyboard, which the held machine has no use for. */
+  #rewind-panel {
+    inset: auto 0 0;
+    width: auto;
+    background: #000;
+    border-width: 1px 0 0;
+    border-radius: 0;
+  }
+
+  #rewind-panel .panel-header {
+    cursor: default;
+  }
+
+  #rewind-panel .panel-resize {
+    display: none;
   }
 
   .media-header {

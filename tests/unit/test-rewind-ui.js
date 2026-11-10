@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { RewindUI } from "../../src/web/rewind-ui.js";
 import { previewFrame } from "../../src/web/rewind-thumbnail.js";
+import { PanelArrangement } from "../../src/web/floating-panel.js";
 import { ReplayHistory, snapshotCycle } from "../../src/replay.js";
 import { cycleCount, stateHash } from "../../src/lockstep.js";
 import { TEST_6502 } from "../../src/models.js";
@@ -24,6 +25,7 @@ describe("RewindUI", () => {
     let resume;
     let loop;
     let history;
+    let arrangement;
 
     beforeEach(async () => {
         domFromIndexHtml("rewind-open", "rewind-panel");
@@ -35,11 +37,12 @@ describe("RewindUI", () => {
         resume = vi.fn();
         loop = Object.assign(new EventTarget(), { hold: vi.fn(() => resume), stop: vi.fn() });
         history = new ReplayHistory(cpu);
+        arrangement = new PanelArrangement(() => window.localStorage);
     });
 
     afterEach(teardownDom);
 
-    const make = () => new RewindUI({ loop, history });
+    const make = () => new RewindUI({ loop, history, arrangement });
     const panel = () => document.getElementById("rewind-panel");
     const thumbs = () => [...document.querySelectorAll(".rewind-thumb")];
     const selectedIndex = () => Number(document.querySelector(".rewind-thumb.selected").dataset.index);
@@ -86,6 +89,13 @@ describe("RewindUI", () => {
             expect(cycleCount(cpu)).toBeGreaterThan(at(ui.snapshots[2]));
             expect(paint).toHaveBeenCalled();
             expect(history.snapshots()).toEqual(kept);
+        });
+
+        it("shows its keys on its own line", () => {
+            make();
+            expect(panel().querySelector(".panel-keys").textContent).toBe(
+                "Left/Right choose · Enter go back · Alt-S go back and debug · Escape/Alt-W cancel",
+            );
         });
 
         it("lets go and stays closed if the machine cannot be snapshotted", () => {
@@ -139,11 +149,11 @@ describe("RewindUI", () => {
             expect(machineNow()).toEqual(before);
         });
 
-        it("walks the filmstrip with the arrow keys, stopping at the ends", () => {
+        it("walks the filmstrip with the arrow keys, held or not, stopping at the ends", () => {
             const ui = make();
             captured(2);
             ui.open();
-            key("ArrowLeft");
+            key("ArrowLeft", { repeat: true });
             expect(selectedIndex()).toBe(0);
             key("ArrowLeft");
             expect(selectedIndex()).toBe(0);
@@ -152,10 +162,17 @@ describe("RewindUI", () => {
             expect(selectedIndex()).toBe(1);
         });
 
+        it("stays open while the Alt-W that opened it is held", () => {
+            const ui = make();
+            captured(1);
+            ui.open();
+            key("w", { code: "KeyW", altKey: true, repeat: true });
+            expect(panel().hidden).toBe(false);
+        });
+
         it.each([
             ["A", "keydown", { key: "a", code: "KeyA" }, "kept"],
             ["N's keypress, which the debugger's keys answer", "keypress", { key: "n" }, "kept"],
-            ["Alt-W, as Option-W types it on a Mac", "keydown", { key: "∑", code: "KeyW", altKey: true }, "passed on"],
             ["Alt-T", "keydown", { key: "t", code: "KeyT", altKey: true }, "passed on"],
             ["Alt-B", "keydown", { key: "b", code: "KeyB", altKey: true }, "passed on"],
             ["Alt-S, which rewind answers itself", "keydown", { key: "s", code: "KeyS", altKey: true }, "kept"],
@@ -181,6 +198,7 @@ describe("RewindUI", () => {
         it.each([
             ["Enter, running on", RunMode.running, () => key("Enter"), false],
             ["Enter in the debugger, showing it there", RunMode.debugging, () => key("Enter"), true],
+            ["Enter with Alt held", RunMode.running, () => key("Enter", { code: "Enter", altKey: true }), false],
             [
                 "Alt-S, stopping in the debugger there",
                 RunMode.running,
@@ -223,16 +241,16 @@ describe("RewindUI", () => {
         it.each([
             ["Escape", () => key("Escape")],
             ["the close button", () => document.getElementById("rewind-close").click()],
-            ["a second toggle, as Alt-W opens and closes it", (ui) => ui.toggle()],
+            ["Alt-W, as Option-W types it on a Mac", () => key("∑", { code: "KeyW", altKey: true })],
         ])("cancels on %s, leaving the machine, its picture and step back's history as they were", (_, press) => {
             const ui = make();
             captured(2);
             frame();
             cpu.video.fb32.fill(Marker);
             const [before, kept] = [machineNow(), history.snapshots()];
-            ui.toggle();
+            ui.open();
             key("ArrowLeft");
-            press(ui);
+            press();
             expect(machineNow()).toEqual(before);
             expect(history.snapshots()).toEqual(kept);
             expect(panel().hidden).toBe(true);

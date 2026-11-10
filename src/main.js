@@ -265,7 +265,7 @@ const onAnyKeyDown = () => {
 const { keyboard } = new KeyboardSetup({
     actions: {
         toggleFast: () => loop.toggleFastAsPossible(),
-        toggleRewind: () => rewindUI.toggle(),
+        openRewind: () => rewindUI.open(),
         openPrinter: () => frontPanel.checkPrinterWindow(),
         openMedia: (target) => mediaWindow.openFor(target),
         paste: (text) => keyboard.sendRawKeyboard(autoBoot.stringToMachineKeys(text), true),
@@ -341,7 +341,7 @@ const frontPanel = new FrontPanel({ processor, model, printer, loop });
 // ------------------------------------------------------------------------
 
 const replayHistory = new ReplayHistory(processor);
-const rewindUI = new RewindUI({ loop, history: replayHistory });
+const rewindUI = new RewindUI({ loop, history: replayHistory, arrangement: panelArrangement });
 rewindUI.updateButtonState();
 dbgr.attachStepBack(replayHistory);
 

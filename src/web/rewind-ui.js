@@ -4,28 +4,69 @@ import { copySnapshot } from "../6502.js";
 import { PageHistory } from "../replay.js";
 import { RewindCaptureInterval, RunMode } from "./emulation-loop.js";
 import { noteFeature } from "./analytics.js";
-import { Shortcuts } from "./shortcuts.js";
+import { FloatingPanel } from "./floating-panel.js";
+import { EndEdge } from "./panel-layout.js";
+import { keyLine } from "./panel-keys.js";
+import { Shortcuts, shortcutLabel } from "./shortcuts.js";
 import { keyCodes } from "../keymap.js";
 
+// Tall enough for a row of thumbnails and, at this width or more, the line of keys under them, so that the default
+// place, kept clear of the lights, is never one that cuts them off.
+const MinPanelSize = { w: 600, h: 230 };
+const StretchedAcross = { anchor: "stretch" };
+
 // The rest would act on a machine the loop holds while the screen shows a preview.
-const ShortcutsWhileOpen = new Set(["toggleRewind", "toggleFast", "openPrinter"]);
+const ShortcutsWhileOpen = new Set(["toggleFast", "openPrinter"]);
 const ShortcutCodesWhileOpen = new Set(
     Shortcuts.filter(({ run }) => ShortcutsWhileOpen.has(run)).map(({ key }) => keyCodes[key]),
 );
 
 /**
- * The rewind panel: a filmstrip of the machine's last seconds, any of which it previews on the screen and can go
+ * The keys the rewind window answers while it is open, in the shape of the Shortcuts table (see panel-keys.js),
+ * whichever window has the focus, as the machine is held and gets no keys meanwhile. Keys are named as `keyName`
+ * names them; only a row with `repeats` acts on a held key.
+ */
+export const RewindKeys = [
+    { combo: "Left Right", label: "choose", description: "Choose an earlier or later moment" },
+    { key: "ArrowLeft", run: "earlier", repeats: true },
+    { key: "ArrowRight", run: "later", repeats: true },
+    {
+        combo: "Enter",
+        key: "Enter",
+        run: "commit",
+        label: "go back",
+        description: "Go back to the chosen moment, forgetting the seconds after it",
+    },
+    {
+        combo: "Alt-S",
+        key: "Alt-S",
+        run: "commitAndStop",
+        label: "go back and debug",
+        description: "Go back to the chosen moment and stop in the debugger there",
+    },
+    { combo: "Escape Alt-W", label: "cancel", description: "Close, leaving the machine where it was" },
+    { key: "Escape", run: "cancel" },
+    { key: "Alt-W", run: "cancel" },
+];
+
+// Alt with a letter is named by its key code, as "Alt-S", so that the Mac's Option characters count. AltGr is Ctrl
+// with Alt, and types a character rather than naming a shortcut; Alt with any other key is that key.
+const keyName = (e) => (e.altKey && !e.ctrlKey && e.code.startsWith("Key") ? `Alt-${e.code.slice(3)}` : e.key);
+
+/**
+ * The rewind window: a filmstrip of the machine's last seconds, any of which it previews on the screen and can go
  * back to. The machine is held while it is open.
  */
 export class RewindUI {
     /**
      * @param {object} options
      * @param {object} options.loop - the emulation loop: says when to capture, and is held while the panel is open
+     * @param {import("./floating-panel.js").PanelArrangement} options.arrangement - what places the window
      * @param {import("../replay.js").ReplayHistory} options.history - what the debugger steps back through, told of
      * every snapshot kept and when they are all forgotten, and telling of a step back that leaves the newer ones
      * a future the machine no longer has; the panel previews and goes back through it too
      */
-    constructor({ loop, history }) {
+    constructor({ loop, history, arrangement }) {
         this.rewindBuffer = new RewindBuffer(PageHistory.seconds);
         // The last few frames, newest last; the rewind history is copied from them.
         this.frames = new RewindBuffer(PageHistory.recent);
@@ -48,8 +89,28 @@ export class RewindUI {
 
         this.panel = document.getElementById("rewind-panel");
         this.filmstrip = document.getElementById("rewind-filmstrip");
-        this.closeBtn = document.getElementById("rewind-close");
         this.openBtn = document.getElementById("rewind-open");
+        this.panel.querySelector(".panel-keys").textContent = shortcutLabel(keyLine(RewindKeys));
+        this.floating = new FloatingPanel({
+            panel: this.panel,
+            id: "rewind",
+            title: null,
+            menuGroup: null,
+            group: null,
+            place: () => ({ x: StretchedAcross, y: EndEdge }),
+            minSize: MinPanelSize,
+            arrangement,
+        });
+        // Every close comes here, but only its close button's while the panel is still open: _closePanel marks it
+        // closed before closing the window. Escape goes to the key handler, wherever the focus is.
+        this.floating.addEventListener("close", () => this.cancel());
+        this._actions = {
+            earlier: () => this.selectSnapshot(this.selectedIndex - 1),
+            later: () => this.selectSnapshot(this.selectedIndex + 1),
+            commit: () => this.commit(false),
+            commitAndStop: () => this.commit(true),
+            cancel: () => this.cancel(),
+        };
 
         this.isOpen = false;
         this.resumeLoop = null;
@@ -60,7 +121,6 @@ export class RewindUI {
         this._onKeyDown = this._onKeyDown.bind(this);
         // Whatever a keypress would do, as the debugger's keys answer it, would act on a machine that is held.
         this._onKeyPress = (e) => e.stopPropagation();
-        this.closeBtn.addEventListener("click", () => this.close());
         this.openBtn.addEventListener("click", (e) => {
             e.preventDefault();
             this.open();
@@ -93,7 +153,7 @@ export class RewindUI {
 
     /** Forget everything captured, as on a hard reset or as a guest takes the host's machine. */
     reset() {
-        this.close();
+        this.cancel();
         this.forgetAll();
     }
 
@@ -119,8 +179,8 @@ export class RewindUI {
             this._populateFilmstrip(
                 this._aside(() => renderThumbnails(this.history, this.snapshots, RewindCaptureInterval)),
             );
-            this.panel.hidden = false;
-            // Use capture phase so keys don't leak to the emulator's keyboard handler
+            this.floating.open();
+            // In the capture phase, so that the machine's keyboard handler never sees them.
             document.addEventListener("keydown", this._onKeyDown, true);
             document.addEventListener("keypress", this._onKeyPress, true);
 
@@ -128,7 +188,6 @@ export class RewindUI {
             this._preview(this.selectedIndex);
             this._updateSelectionHighlight();
             this.filmstrip.scrollLeft = this.filmstrip.scrollWidth;
-            noteFeature(this.panel, "open");
         } catch (e) {
             this._closePanel();
             throw e;
@@ -159,16 +218,6 @@ export class RewindUI {
         this._closePanel();
     }
 
-    /** Alias for cancel — closing the panel without explicit commit cancels. */
-    close() {
-        this.cancel();
-    }
-
-    toggle() {
-        if (this.isOpen) this.cancel();
-        else this.open();
-    }
-
     /**
      * Chooses the snapshot at `index`, showing it on the screen and in the filmstrip; the machine stays where it is.
      * @param {number} index - index into the snapshots array
@@ -191,7 +240,7 @@ export class RewindUI {
 
     _closePanel() {
         this.isOpen = false;
-        this.panel.hidden = true;
+        this.floating.close();
         this.filmstrip.innerHTML = "";
         this.snapshots = [];
         this.picture = null;
@@ -260,43 +309,12 @@ export class RewindUI {
 
     _onKeyDown(e) {
         if (e.altKey && !e.ctrlKey && ShortcutCodesWhileOpen.has(e.code)) return;
-        // By key code, so that the Mac's Option characters count.
-        if (e.altKey && !e.ctrlKey && e.code === "KeyS") {
-            e.preventDefault();
-            e.stopPropagation();
-            this.commit(true);
-            return;
-        }
-        switch (e.key) {
-            case "Escape":
-                e.preventDefault();
-                e.stopPropagation();
-                this.cancel();
-                break;
-            case "Enter":
-                e.preventDefault();
-                e.stopPropagation();
-                this.commit(false);
-                break;
-            case "ArrowLeft":
-                e.preventDefault();
-                e.stopPropagation();
-                if (this.selectedIndex > 0) {
-                    this.selectSnapshot(this.selectedIndex - 1);
-                }
-                break;
-            case "ArrowRight":
-                e.preventDefault();
-                e.stopPropagation();
-                if (this.selectedIndex < this.snapshots.length - 1) {
-                    this.selectSnapshot(this.selectedIndex + 1);
-                }
-                break;
-            default:
-                // Block keys from reaching the emulator but allow browser
-                // shortcuts (Tab, accessibility keys, etc.) to work normally
-                e.stopPropagation();
-                break;
-        }
+        e.stopPropagation();
+        const row = RewindKeys.find(({ key }) => key === keyName(e));
+        if (!row) return;
+        e.preventDefault();
+        // Alt-W held to open the window would otherwise close it again at the first repeat.
+        if (e.repeat && !row.repeats) return;
+        this._actions[row.run]();
     }
 }

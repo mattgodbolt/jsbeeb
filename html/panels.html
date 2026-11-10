@@ -1,9 +1,19 @@
-<div id="rewind-panel" data-feature="rewind" hidden>
-  <div class="rewind-header">
-    <button id="rewind-close" class="btn btn-sm btn-outline-light" title="Close (Escape or Alt-W)">Close</button>
-    <span class="rewind-title">Rewind</span>
+<div id="rewind-panel" data-feature="rewind" hidden role="dialog" aria-labelledby="rewind-title">
+  <div class="panel-header" title="Drag to move">
+    <span class="panel-title" id="rewind-title">Rewind</span>
+    <button
+      type="button"
+      id="rewind-close"
+      class="btn btn-sm btn-outline-light panel-close"
+      title="Close (Escape or Alt-W)"
+    >
+      Close
+    </button>
   </div>
-  <div class="rewind-filmstrip" id="rewind-filmstrip"></div>
+  <div class="panel-body">
+    <div class="rewind-filmstrip" id="rewind-filmstrip"></div>
+    <div class="panel-keys"></div>
+  </div>
 </div>
 <div id="session-pane" hidden role="dialog" aria-labelledby="session-pane-title">
   <div class="panel-header" title="Drag to move">
