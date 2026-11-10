@@ -1,5 +1,42 @@
 [
   {
+    "repo": "bitshifters/bitshifters.github.io",
+    "path": "content/wip/ddd2-wip.ssd",
+    "title": "Dare Devil Denis 2 (work in progress)",
+    "publisher": "Bitshifters",
+    "authors": "Visions Software (Dare Devil Denis, 1984); four-player sequel by Kieran Connell",
+    "year": 2026,
+    "type": "Game",
+    "url": "https://github.com/kieranhj/ddd2"
+  },
+  {
+    "repo": "bitshifters/bitshifters.github.io",
+    "path": "content/wip/isometrikum-wip.ssd",
+    "title": "Isometrikum (work in progress)",
+    "publisher": "Bitshifters",
+    "authors": "Vanity (Amstrad CPC original by Hicks, Beb and Tom et Jerry, 2018); BBC Micro port by Kieran Connell",
+    "year": 2026,
+    "type": "Demo"
+  },
+  {
+    "repo": "bitshifters/bitshifters.github.io",
+    "path": "content/wip/physics-wip.ssd",
+    "title": "2D Physics (work in progress)",
+    "publisher": "Bitshifters",
+    "authors": "Kieran Connell",
+    "year": 2026,
+    "type": "Demo"
+  },
+  {
+    "repo": "bitshifters/bitshifters.github.io",
+    "path": "content/wip/puzzle-beeble-wip.ssd",
+    "title": "Puzzle Beeble (work in progress)",
+    "publisher": "Bitshifters",
+    "authors": "Taito (Puzzle Bobble, original game); port by Kieran Connell",
+    "year": 2026,
+    "type": "Game"
+  },
+  {
     "repo": "ebenupton/2048",
     "path": "2048.ssd",
     "title": "2048",
@@ -54,6 +91,15 @@
     "year": 2026,
     "type": "Game",
     "machine": "Master"
+  },
+  {
+    "repo": "kieranhj/thrust-disassembly",
+    "path": "thrust.ssd",
+    "title": "Thrust",
+    "publisher": "Kieran Connell",
+    "authors": "Jeremy C. Smith (original game, Superior Software); rebuilt from Kieran Connell's disassembly",
+    "year": 1986,
+    "type": "Game"
   },
   {
     "repo": "mattgodbolt/beeb-scorched-earth",
@@ -122,6 +168,16 @@
   },
   {
     "repo": "waitingforvsync/waitingforvsync.github.io",
+    "path": "beeb/chasehq.ssd",
+    "title": "Chase H.Q. (work in progress)",
+    "publisher": "Rich Talbot-Watkins",
+    "authors": "Taito (original game, 1988); BBC Micro port by Rich Talbot-Watkins, from Ocean's Amstrad CPC version",
+    "year": 2026,
+    "type": "Game",
+    "url": "https://github.com/waitingforvsync/chasehq-beeb"
+  },
+  {
+    "repo": "waitingforvsync/waitingforvsync.github.io",
     "path": "beeb/criticalmass.ssd",
     "title": "Critical Mass",
     "publisher": "Rich Talbot-Watkins",
@@ -129,5 +185,23 @@
     "year": 2026,
     "type": "Game",
     "url": "https://github.com/waitingforvsync/criticalmass"
+  },
+  {
+    "repo": "waitingforvsync/waitingforvsync.github.io",
+    "path": "beeb/exolon.ssd",
+    "title": "Exolon (work in progress)",
+    "publisher": "Rich Talbot-Watkins",
+    "authors": "Raffaele Cecco (original game, Hewson, 1987); BBC Micro port by Rich Talbot-Watkins",
+    "year": 2026,
+    "type": "Game"
+  },
+  {
+    "repo": "waitingforvsync/waitingforvsync.github.io",
+    "path": "beeb/teddy.ssd",
+    "title": "Teddy Boy (work in progress)",
+    "publisher": "Rich Talbot-Watkins",
+    "authors": "Sega (Teddy Boy Blues, Sega Master System, 1985); BBC Micro port by Rich Talbot-Watkins",
+    "year": 2026,
+    "type": "Game"
   }
 ]
