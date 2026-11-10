@@ -897,6 +897,10 @@ small {
   font-weight: bold;
 }
 
+#rewind-commit {
+  margin-left: auto;
+}
+
 .rewind-filmstrip {
   display: flex;
   gap: 6px;
