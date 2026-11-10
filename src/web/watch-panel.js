@@ -1,4 +1,5 @@
 import { hexword } from "../hex.js";
+import { RamStat, RomStat } from "../paging.js";
 import { formatWatch, parseCondition, WatchFormats, writeStops } from "../watches.js";
 import { FloatingPanel, MenuGroup } from "./floating-panel.js";
 import { StartEdge } from "./panel-layout.js";
@@ -7,9 +8,6 @@ import { placePopup, popupBehaviour, setText, textButton } from "./dom-utils.js"
 
 const MinPanelSize = { w: 200, h: 80 };
 const RowCells = 5;
-// As the CPU's memStat marks a page: a write to ROM changes nothing, and one to neither reaches a device.
-const RamStat = 1;
-const RomStat = 2;
 const AddressSpace = 0x10000;
 const MaxAddress = AddressSpace - 1;
 const DeviceNote = "A device register stops it on every write to it, never on a change the device makes itself.";
@@ -26,7 +24,8 @@ export class WatchPanel {
      * @param {(address: number) => number} options.peek - reads without side effects
      * @param {(text: string) => {address: number, label: string} | undefined} options.resolve
      * @param {import("./floating-panel.js").PanelArrangement} options.arrangement
-     * @param {(address: number) => void} options.searchWrites - finds what last wrote the byte at `address`
+     * @param {(address: number, view: import("../paging.js").PagingView) => void} options.searchWrites - finds what
+     *     last wrote the byte `view` shows at `address`
      */
     constructor({ peek, resolve, arrangement, searchWrites }) {
         this._peek = peek;
@@ -41,7 +40,7 @@ export class WatchPanel {
         this._list = this.panel.querySelector(".watch-list");
         this._empty = this.panel.querySelector(".watch-empty");
         this._menu = document.getElementById("watch-menu");
-        /** @type {{address: number, label: string} | null} */
+        /** @type {Offered | null} */
         this._offered = null;
         for (const format of WatchFormats) {
             const choice = textButton("watch-menu-choice", `Watch ${format.name}`, format.description);
@@ -59,7 +58,7 @@ export class WatchPanel {
         );
         this._searchWrites.addEventListener("click", () => {
             this._showPopup(null);
-            searchWrites(this._offered.address);
+            searchWrites(this._offered.address, this._offered.view);
         });
         this._menu.append(this._searchWrites);
 
@@ -168,9 +167,9 @@ export class WatchPanel {
     }
 
     /**
-     * Offers a menu of formats to watch `what` in, at the window position `x`, `y`, and if `searchable` to find
-     * what last wrote it.
-     * @param {{address: number, label: string}} what
+     * Offers a menu of formats to watch `what` in, as the CPU pages it, at the window position `x`, `y`, and if
+     * `searchable` to find what last wrote the byte its view shows.
+     * @param {Offered} what
      * @param {number} x
      * @param {number} y
      * @param {boolean} searchable
@@ -329,4 +328,11 @@ export class WatchPanel {
  * @property {number[][]} ranges - the first and last address each of them covers
  * @property {() => void} disarm
  * @property {import("../watches.js").WatchCondition | null} condition - what the new value must be to stop it
+ */
+
+/**
+ * @typedef {object} Offered
+ * @property {number} address
+ * @property {string} label
+ * @property {import("../paging.js").PagingView} view - the view its byte was offered from
  */

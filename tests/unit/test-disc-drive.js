@@ -442,7 +442,7 @@ describe("drive noise", () => {
             new DiscDrive(0, scheduler, BbcCyclesPerSecond),
             new DiscDrive(1, scheduler, BbcCyclesPerSecond),
         ];
-        attachDriveNoise(drives, ddNoise);
+        attachDriveNoise(drives, ddNoise, () => false);
         return { drives, calls };
     }
 

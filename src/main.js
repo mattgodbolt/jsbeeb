@@ -265,7 +265,7 @@ const onAnyKeyDown = () => {
 const { keyboard } = new KeyboardSetup({
     actions: {
         toggleFast: () => loop.toggleFastAsPossible(),
-        openRewind: () => rewindUI.open(),
+        toggleRewind: () => rewindUI.toggle(),
         openPrinter: () => frontPanel.checkPrinterWindow(),
         openMedia: (target) => mediaWindow.openFor(target),
         paste: (text) => keyboard.sendRawKeyboard(autoBoot.stringToMachineKeys(text), true),

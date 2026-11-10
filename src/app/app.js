@@ -260,6 +260,7 @@ const template = (panels) => [
             { type: "separator" },
             {
                 label: "Rewind...",
+                ...(!isMac && { accelerator: "Alt+W", registerAccelerator: false }),
                 click: sendAction("rewind"),
             },
             { type: "separator" },
