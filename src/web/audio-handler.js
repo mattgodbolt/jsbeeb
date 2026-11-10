@@ -254,7 +254,11 @@ export class AudioHandler {
     // Ships the chip's state changes since the last call, and how far the
     // emulator has got, so the worklet knows its lead even when nothing changed.
     flushChipEvents() {
-        if (!this._jsAudioNode) return;
+        if (!this._jsAudioNode) {
+            // Until the worklet is built its events wait for it, but one that could not be built never takes them.
+            if (this.noAudio) this._chipEvents = [];
+            return;
+        }
         // A suspended worklet does not drain its port, so nothing is sent to it; the chip's registers go across whole
         // when it runs, in place of the events it missed.
         if (this.audioContext.state !== "running") {
