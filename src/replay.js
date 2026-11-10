@@ -752,7 +752,8 @@ export class ReplayHistory extends EventTarget {
      */
     *_searchingAway(seeker, original) {
         const { cpu } = this;
-        const [now, nowHash] = [cycleCount(cpu), stateHash(cpu)];
+        // A write to a device register takes no cycles and is not in the hash, but the log records it.
+        const [now, nowHash, lastInput] = [cycleCount(cpu), stateHash(cpu), this.log.inputs.at(-1)];
         const search = this._searchBack(seeker);
         for (;;) {
             let step;
@@ -765,7 +766,9 @@ export class ReplayHistory extends EventTarget {
             if (step.done) return step.value;
             this._putBack(original);
             yield;
-            if (cycleCount(cpu) !== now || stateHash(cpu) !== nowHash) return { movedOn: true };
+            if (cycleCount(cpu) !== now || stateHash(cpu) !== nowHash || this.log.inputs.at(-1) !== lastInput) {
+                return { movedOn: true };
+            }
         }
     }
 

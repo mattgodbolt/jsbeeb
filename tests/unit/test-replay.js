@@ -281,8 +281,17 @@ describe("Finding the last write to a byte", () => {
         expect(history.stepBackTo(cycle(cpu, before))).toMatch(why);
     });
 
-    it("stops, as it was left between stretches, once the machine has moved on", async () => {
-        const cpu = await machineAt(WriterAt, {});
+    it.each([
+        ["run on", (cpu) => runFor(cpu, SomeCycles)],
+        [
+            "had a device register written",
+            (cpu) => {
+                cpu.inputLog.record({ kind: "write", address: UserViaDdrb, value: EditedValue });
+                cpu.writemem(UserViaDdrb, EditedValue);
+            },
+        ],
+    ])("stops, as it was left between stretches, once the machine has %s", async (_, moveOn) => {
+        const cpu = await machineAt(WriterAt, { model: findModel("B-DFS1.2") });
         loadBytes(cpu, WriterAt, WriteThenIdle);
         const history = new ReplayHistory(cpu);
         writeAndIdle(cpu);
@@ -294,8 +303,10 @@ describe("Finding the last write to a byte", () => {
         const search = history.lastWrite(Written, PagedView);
         expect(search.next().done).toBe(false);
         expect(snapshotToJSON(cpu.snapshotState())).toEqual(before);
-        runFor(cpu, SomeCycles);
+        moveOn(cpu);
+        const movedOn = snapshotToJSON(cpu.snapshotState());
         expect(search.next().value.refusal).toMatch(/moved on/);
+        expect(snapshotToJSON(cpu.snapshotState())).toEqual(movedOn);
     });
 });
 
