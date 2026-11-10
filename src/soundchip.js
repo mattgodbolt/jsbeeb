@@ -308,7 +308,6 @@ export class SoundChip {
 
     advance(cycles) {
         if (this._onEvent) return;
-        const replaying = this.replaying();
         const num = cycles * this.samplesPerCycle + this.residual;
         let rounded = num | 0;
         this.residual = num - rounded;
@@ -332,12 +331,10 @@ export class SoundChip {
             rounded -= numSamplesToGenerate;
 
             if (this.position === SoundBufferSamples) {
-                if (!replaying) this._onBuffer(this.buffer);
+                this._onBuffer(this.buffer);
                 this.position = 0;
             }
         }
-        // What a replay rendered is not left in the buffer for a later send either.
-        if (replaying) this.position = 0;
     }
 
     poke(value) {

@@ -579,16 +579,34 @@ describe("Replaying an Atom's writes to its MMC card", () => {
 
 describe("Replaying sends the host none of the machine's sound", () => {
     it.each([
-        ["the sound chip's changes", (cpu, onEvent) => onEvent, (cpu) => cpu.soundChip.poke(ChannelZeroLoudest)],
+        [
+            "the sound chip's changes",
+            "B-DFS1.2",
+            (cpu, onEvent) => onEvent,
+            (cpu) => cpu.soundChip.poke(ChannelZeroLoudest),
+        ],
+        [
+            "the Atom speaker's clicks",
+            "Atom",
+            (cpu, onEvent) => onEvent,
+            (cpu) => cpu.soundChip.speakerGenerator.pushBit(1, 0, 0),
+        ],
         [
             "a drive's seek",
+            "B-DFS1.2",
             (cpu) => vi.spyOn(cpu.ddNoise, "seekStart"),
             (cpu) => cpu.fdc.drives[0].notifySeekAmount(SeekTracks, SeekStepMs),
         ],
-        ["the cassette relay's click", (cpu) => vi.spyOn(cpu.relayNoise, "motorOn"), (cpu) => cpu.acia.setMotor(true)],
-    ])("leaves out %s, which a run sends", async (_, heard, make) => {
+        [
+            "the cassette relay's click",
+            "B-DFS1.2",
+            (cpu) => vi.spyOn(cpu.relayNoise, "motorOn"),
+            (cpu) => cpu.acia.setMotor(true),
+        ],
+    ])("leaves out %s, which a run sends", async (_, model, heard, make) => {
         const onEvent = vi.fn();
-        const machine = await booted("B-DFS1.2", { soundChip: new SoundChip(null, { onEvent }) });
+        const soundChip = model === "Atom" ? new AtomSoundChip(null, { onEvent }) : new SoundChip(null, { onEvent });
+        const machine = await booted(model, { soundChip });
         const cpu = machine.processor;
         const before = cpu.snapshotState();
         const sent = heard(cpu, onEvent);

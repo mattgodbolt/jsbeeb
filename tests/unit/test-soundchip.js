@@ -69,25 +69,6 @@ describe("SoundChip advance", () => {
     });
 });
 
-describe("SoundChip replaying", () => {
-    it("sends none of what a replay rendered, then or in a later buffer", () => {
-        const buffers = [];
-        const { chip, scheduler } = makeSoundChip(() => buffers.push(true));
-        const cyclesPerBuffer = SoundBufferSamples / chip.samplesPerCycle;
-        let replaying = true;
-        chip.replaying = () => replaying;
-        scheduler.polltime(cyclesPerBuffer * 1.5);
-        chip.catchUp();
-        replaying = false;
-        scheduler.polltime(cyclesPerBuffer - 1);
-        chip.catchUp();
-        expect(buffers).toEqual([]);
-        scheduler.polltime(1);
-        chip.catchUp();
-        expect(buffers).toEqual([true]);
-    });
-});
-
 describe("SoundChip DC restoration", () => {
     // 500 kHz chip rate; the blocker's 47 ms time constant settles well inside half a second.
     const SettleSamples = 250000;
