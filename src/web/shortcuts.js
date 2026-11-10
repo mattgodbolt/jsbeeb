@@ -19,7 +19,12 @@ export const Shortcuts = [
     { combo: "Alt-P", key: "P", run: "togglePause", description: "Pause or resume, without the debugger" },
     { combo: "Alt-T", key: "T", run: "toggleFast", description: "Turbo (as fast as possible), or back to real speed" },
     { combo: "Alt-B", key: "B", run: "openPrinter", description: "Open the printer output" },
-    { combo: "Alt-W", key: "W", run: "openRewind", description: "Rewind: pick an earlier moment to go back to" },
+    {
+        combo: "Alt-W",
+        key: "W",
+        run: "toggleRewind",
+        description: "Rewind: pick an earlier moment to go back to, or close it and carry on",
+    },
     { combo: "Alt-M", key: "M", run: "openMediaDrive", description: "Media window, aimed at drive 0" },
     { combo: "Alt-Shift-M", description: "Media window, aimed at drive 1" },
     { combo: "Alt-C", key: "C", run: "openMediaTape", description: "Media window, aimed at the cassette" },
