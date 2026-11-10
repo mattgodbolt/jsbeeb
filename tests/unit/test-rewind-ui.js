@@ -157,15 +157,27 @@ describe("RewindUI", () => {
             expect(selectedIndex()).toBe(1);
         });
 
-        it("keeps every key from reaching the emulator while open", () => {
+        it.each([
+            ["A", { key: "a", code: "KeyA" }, "kept"],
+            ["Alt-W, as Option-W types it on a Mac", { key: "∑", code: "KeyW", altKey: true }, "passed on"],
+            ["Alt-T", { key: "t", code: "KeyT", altKey: true }, "passed on"],
+            ["Alt-B", { key: "b", code: "KeyB", altKey: true }, "passed on"],
+            ["Alt-S", { key: "s", code: "KeyS", altKey: true }, "kept"],
+            ["Alt-D", { key: "d", code: "KeyD", altKey: true }, "kept"],
+            ["Alt-P", { key: "p", code: "KeyP", altKey: true }, "kept"],
+            ["Alt-M", { key: "m", code: "KeyM", altKey: true }, "kept"],
+            ["Alt-C", { key: "c", code: "KeyC", altKey: true }, "kept"],
+            ["Alt-1", { key: "1", code: "Digit1", altKey: true }, "kept"],
+            ["AltGr-W", { key: "w", code: "KeyW", altKey: true, ctrlKey: true }, "kept"],
+        ])("%s, while open, is %s", (_, init, fate) => {
             const ui = make();
             captured(1);
             ui.open();
-            const leaked = vi.fn();
-            document.addEventListener("keydown", leaked);
-            key("a");
-            expect(leaked).not.toHaveBeenCalled();
-            document.removeEventListener("keydown", leaked);
+            const reached = vi.fn();
+            document.addEventListener("keydown", reached);
+            document.dispatchEvent(new KeyboardEvent("keydown", { ...init, cancelable: true }));
+            document.removeEventListener("keydown", reached);
+            expect(reached).toHaveBeenCalledTimes(fate === "passed on" ? 1 : 0);
         });
     });
 
@@ -188,6 +200,17 @@ describe("RewindUI", () => {
             ui.open();
             key("ArrowLeft");
             key("Escape");
+            expect(lastRestored()).toEqual({ live: true });
+            expect(panel().hidden).toBe(true);
+            expect(resume).toHaveBeenCalledTimes(1);
+        });
+
+        it("cancels on a second toggle, as Alt-W opens and closes it", () => {
+            const ui = make();
+            captured(2);
+            ui.toggle();
+            key("ArrowLeft");
+            ui.toggle();
             expect(lastRestored()).toEqual({ live: true });
             expect(panel().hidden).toBe(true);
             expect(resume).toHaveBeenCalledTimes(1);
