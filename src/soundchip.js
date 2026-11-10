@@ -51,6 +51,9 @@ export class SoundChip {
     constructor(onBuffer, { onEvent = null } = {}) {
         this._onBuffer = onBuffer;
         this._onEvent = onEvent;
+        /** The CPU's `replaying`, which asReplay sets. */
+        this.replaying = () => false;
+        this._hostBehind = false;
         // 4MHz input signal. Internal divide-by-8
         this.soundchipFreq = 4000000.0 / 8;
         const sampleRate = this.soundchipFreq;
@@ -126,7 +129,23 @@ export class SoundChip {
     }
 
     _emit(kind, value) {
-        if (this._onEvent) this._onEvent({ cycle: this.scheduler.epoch, kind, value });
+        this._send({ cycle: this.scheduler.epoch, kind, value });
+    }
+
+    /**
+     * Sends `event` to the host unless the machine is replaying. After a replay held some back, the chip as it stands
+     * goes first, so that the host sounds on from where the replay left the machine.
+     */
+    _send(event) {
+        if (!this._onEvent) return;
+        if (this.replaying()) {
+            this._hostBehind = true;
+            return;
+        }
+        if (this._hostBehind && event.kind !== "state")
+            this._onEvent({ cycle: this.scheduler.epoch, kind: "state", value: this.snapshotState() });
+        this._hostBehind = false;
+        this._onEvent(event);
     }
 
     /** Applies an event from another chip's onEvent, at the cycle this chip is rendering. */
@@ -553,7 +572,7 @@ export class AtomSoundChip extends SoundChip {
         const cycles = microCycle + seconds / this.secondsPerCycle;
         const bit = value ? 1.0 : 0.0;
         this.speakerBit = bit;
-        if (this._onEvent) this._onEvent({ cycle: cycles, kind: "bit", value: bit });
+        if (this._onEvent) this._send({ cycle: cycles, kind: "bit", value: bit });
         else this.bitChange.push({ bit, cycles });
     }
 }

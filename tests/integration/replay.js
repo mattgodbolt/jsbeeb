@@ -9,6 +9,7 @@ import { bootedTestMachine, mode7Text } from "./helpers.js";
 import { singleStep } from "../helpers/single-step.js";
 import { executeUntilFrame } from "../../src/web/rewind-thumbnail.js";
 import { WFNFile } from "../../src/mmc.js";
+import { NoReplayHooks } from "../../src/6502.js";
 
 const FbWidth = 1024;
 const FbHeight = 768;
@@ -55,6 +56,11 @@ const LoopJump = ScratchAddress + 3;
 const TextCursorX = 0x0318;
 const ForwardWindows = 3;
 const ForwardWindowSeconds = 0.007;
+// Channel 1 rising in pitch, a note every twentieth of a second, for ever.
+const RisingTone = ["10 FOR P%=1 TO 255 STEP 8:SOUND 1,-15,P%,1:NEXT:GOTO 10", "RUN"];
+const ChannelZeroLoudest = 0x90;
+const SeekTracks = 10;
+const SeekStepMs = 6;
 const AtomPauseThenSaveToTheCard = ["10 F.I=1TO50;WAIT;N.", '20 *SAVE "NEW" 2900 2A00'];
 
 async function booted(model, options) {
@@ -568,5 +574,72 @@ describe("Replaying an Atom's writes to its MMC card", () => {
         replay({ cpu, machine, history, start, saved });
 
         expect(cardOf(cpu)).toEqual({ before, after }[expected]);
+    });
+});
+
+describe("Replaying sends the host none of the machine's sound", () => {
+    it.each([
+        [
+            "the sound chip's changes",
+            "B-DFS1.2",
+            (cpu, onEvent) => onEvent,
+            (cpu) => cpu.soundChip.poke(ChannelZeroLoudest),
+        ],
+        [
+            "the Atom speaker's clicks",
+            "Atom",
+            (cpu, onEvent) => onEvent,
+            (cpu) => cpu.soundChip.speakerGenerator.pushBit(1, 0, 0),
+        ],
+        [
+            "a drive's seek",
+            "B-DFS1.2",
+            (cpu) => vi.spyOn(cpu.ddNoise, "seekStart"),
+            (cpu) => cpu.fdc.drives[0].notifySeekAmount(SeekTracks, SeekStepMs),
+        ],
+        [
+            "the cassette relay's click",
+            "B-DFS1.2",
+            (cpu) => vi.spyOn(cpu.relayNoise, "motorOn"),
+            (cpu) => cpu.acia.setMotor(true),
+        ],
+    ])("leaves out %s, which a run sends", async (_, model, heard, make) => {
+        const onEvent = vi.fn();
+        const soundChip = model === "Atom" ? new AtomSoundChip(null, { onEvent }) : new SoundChip(null, { onEvent });
+        const machine = await booted(model, { soundChip });
+        const cpu = machine.processor;
+        const before = cpu.snapshotState();
+        const sent = heard(cpu, onEvent);
+        sent.mockClear();
+        cpu.asReplay(NoReplayHooks, () => make(cpu));
+        expect(sent).not.toHaveBeenCalled();
+        cpu.restoreState(before);
+        sent.mockClear();
+        make(cpu);
+        expect(sent).toHaveBeenCalled();
+    });
+
+    it.each([
+        ["stepping back, which lands", (history) => expect(history.stepBack(false)).toBeNull()],
+        ["searching back, which puts the machine back", (history) => finished(history.lastWrite(ScratchAddress))],
+    ])("after %s, sends the sound chip as it stands before the machine sounds on", async (_, replay) => {
+        const onEvent = vi.fn();
+        const machine = await booted("B-DFS1.2", { soundChip: new SoundChip(null, { onEvent }) });
+        for (const line of RisingTone) await machine.type(line);
+        const history = historyFromHere(machine);
+        await seconds(machine, CursorBlinkSeconds);
+        const cpu = machine.processor;
+        onEvent.mockClear();
+
+        replay(history);
+        const { registers, volume } = cpu.soundChip.snapshotState();
+        const replayed = onEvent.mock.calls.length;
+        await seconds(machine, ForwardWindowSeconds);
+
+        const events = onEvent.mock.calls.map(([event]) => event);
+        const soundsOn = events.findIndex(({ kind }, i) => i >= replayed && kind !== "state");
+        const resync = events.findLastIndex(({ kind }, i) => i < soundsOn && kind === "state");
+        expect(soundsOn - resync).toBe(1);
+        expect(events[resync].value).toMatchObject({ registers, volume });
     });
 });

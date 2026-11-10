@@ -1820,6 +1820,6 @@ export class IntelFdc extends DiscController {
 export class NoiseAwareIntelFdc extends IntelFdc {
     constructor(cpu, ddNoise, scheduler) {
         super(cpu, scheduler, undefined);
-        attachDriveNoise(this.drives, ddNoise);
+        attachDriveNoise(this.drives, ddNoise, () => cpu.replaying);
     }
 }
