@@ -111,6 +111,24 @@
     "type": "Game"
   },
   {
+    "repo": "mattgodbolt/cauldron-2-beeb",
+    "path": "cauldron2.ssd",
+    "title": "Cauldron II",
+    "publisher": "Matt Godbolt",
+    "authors": "Palace Software (original game); port by Matt Godbolt and Claude",
+    "year": 2026,
+    "type": "Game"
+  },
+  {
+    "repo": "mattgodbolt/cauldron-beeb",
+    "path": "cauldron.ssd",
+    "title": "Cauldron (work in progress)",
+    "publisher": "Matt Godbolt",
+    "authors": "Palace Software (original game); port by Matt Godbolt and Claude",
+    "year": 2026,
+    "type": "Game"
+  },
+  {
     "repo": "mattgodbolt/chuckie-egg-2-beeb",
     "path": "chuckie-egg-2.ssd",
     "title": "Chuckie Egg 2",
@@ -127,6 +145,16 @@
     "authors": "Spoof of Visions Software's Daredevil Dennis; written with Claude Code",
     "year": 2026,
     "type": "Game"
+  },
+  {
+    "repo": "mattgodbolt/freescape-beeb",
+    "path": "freescape.ssd",
+    "title": "Driller (work in progress)",
+    "publisher": "Matt Godbolt",
+    "authors": "Incentive Software (original game); Freescape engine for the Master by Matt Godbolt and Claude",
+    "year": 2026,
+    "type": "Game",
+    "machine": "Master"
   },
   {
     "repo": "mattgodbolt/frogman",
@@ -149,6 +177,15 @@
   },
   {
     "repo": "mattgodbolt/nm",
+    "path": "ninja-massacre.ssd",
+    "title": "Ninja Massacre",
+    "publisher": "Matt Godbolt",
+    "authors": "Adam Waring, music by David Whittaker (original game, Codemasters); port by Matt Godbolt and Claude",
+    "year": 2026,
+    "type": "Game"
+  },
+  {
+    "repo": "mattgodbolt/nm",
     "path": "ninja_music.ssd",
     "title": "Ninja Massacre music",
     "publisher": "Matt Godbolt",
@@ -165,6 +202,25 @@
     "authors": "Rich Talbot-Watkins and Matt Godbolt",
     "year": 1993,
     "type": "Game"
+  },
+  {
+    "repo": "mattgodbolt/redshift-beeb",
+    "path": "redshift.ssd",
+    "title": "REDSHIFT",
+    "publisher": "Matt Godbolt",
+    "authors": "Matt Godbolt and Claude",
+    "year": 2026,
+    "type": "Game"
+  },
+  {
+    "repo": "mattgodbolt/starglider-beeb",
+    "path": "starglider.ssd",
+    "title": "Starglider",
+    "publisher": "Matt Godbolt",
+    "authors": "Argonaut Software (original game); port by Matt Godbolt and Claude, with Argonaut's blessing",
+    "year": 2026,
+    "type": "Game",
+    "machine": "Master"
   },
   {
     "repo": "waitingforvsync/waitingforvsync.github.io",
