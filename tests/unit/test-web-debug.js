@@ -1628,16 +1628,23 @@ describe("Debugger", () => {
                     );
                 });
 
-                it("searches the byte the memory panel's view shows, naming a view the CPU has not paged in", async () => {
-                    goTo("goto-mem-addr-form", `$8000\`${bankView(UnpagedBank)}`);
-                    rightClick(memByte(SidewaysStart));
-                    pickFromMenu("Who wrote this?");
-                    await vi.waitFor(() =>
-                        expect(toasts()).toContainEqual(
-                            expect.stringMatching(/Nothing wrote \$8000 in bank 7 in the last 7 cycles/),
-                        ),
-                    );
-                });
+                it.each([
+                    ["memory", () => memByte(SidewaysStart)],
+                    ["disassembly", () => currentRow().querySelector(".dis_addr")],
+                ])(
+                    "searches the byte the %s panel's view shows, naming a view the CPU has not paged in",
+                    async (panel, byte) => {
+                        goTo(`goto-${panel === "memory" ? "mem" : "dis"}-addr-form`, `$8000\`${bankView(UnpagedBank)}`);
+                        rightClick(byte());
+                        expect(watchMenu().querySelector(".watch-menu-choice:last-child").hidden).toBe(false);
+                        pickFromMenu("Who wrote this?");
+                        await vi.waitFor(() =>
+                            expect(toasts()).toContainEqual(
+                                expect.stringMatching(/Nothing wrote \$8000 in bank 7 in the last 7 cycles/),
+                            ),
+                        );
+                    },
+                );
 
                 it("ends a search when the machine is run on, leaving the run to its stop", async () => {
                     let checks = 0;
