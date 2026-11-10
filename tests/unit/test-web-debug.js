@@ -1805,10 +1805,22 @@ describe("Debugger", () => {
                 expect(cpu.pc).toBe(0x2000);
             });
 
-            it("forgets the run when the machine's state is replaced", () => {
+            it.each([
+                ["its state is replaced", () => dbgr.replacingState()],
+                [
+                    "it goes back, as rewind takes it",
+                    () => {
+                        const history = new ReplayHistory(cpu);
+                        const snapshot = cpu.snapshotState();
+                        history.taken(snapshot, null);
+                        dbgr.attachStepBack(history);
+                        history.landAt(snapshot);
+                    },
+                ],
+            ])("forgets the run when the machine %s", (_, replace) => {
                 goTo("run-to-line-form", "400");
                 expect(loop.running).toBe(true);
-                dbgr.replacingState();
+                replace();
                 expect(cpu.onFastPath).toBe(true);
             });
         });

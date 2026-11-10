@@ -341,7 +341,7 @@ const frontPanel = new FrontPanel({ processor, model, printer, loop });
 // ------------------------------------------------------------------------
 
 const replayHistory = new ReplayHistory(processor);
-const rewindUI = new RewindUI({ processor, video, loop, history: replayHistory });
+const rewindUI = new RewindUI({ loop, history: replayHistory });
 rewindUI.updateButtonState();
 dbgr.attachStepBack(replayHistory);
 

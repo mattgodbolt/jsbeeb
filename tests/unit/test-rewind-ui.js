@@ -2,75 +2,64 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { RewindUI } from "../../src/web/rewind-ui.js";
-import { ReplayHistory } from "../../src/replay.js";
-import { fake6502 } from "../../src/fake6502.js";
-import { domFromIndexHtml, sentEvents, teardownDom } from "./helpers.js";
+import { previewFrame } from "../../src/web/rewind-thumbnail.js";
+import { ReplayHistory, snapshotCycle } from "../../src/replay.js";
+import { cycleCount, stateHash } from "../../src/lockstep.js";
+import { TEST_6502 } from "../../src/models.js";
+import { RunMode } from "../../src/web/emulation-loop.js";
+import { keyCodes } from "../../src/keymap.js";
+import { domFromIndexHtml, loadBytes, machineShowingFrames, sentEvents, stubCanvases, teardownDom } from "./helpers.js";
 
-const FakeContext = {
-    createImageData: () => ({ data: new Uint8Array(1024 * 625 * 4) }),
-    putImageData: () => {},
-    drawImage: () => {},
-};
+const ProgramAt = 0x2000;
+// INC &70; JMP &2000
+const CountForever = [0xe6, 0x70, 0x4c, 0x00, 0x20];
+const FrameCycles = 40000;
+// A picture no frame draws.
+const Marker = 0x12345678;
+// Compared pixel by pixel, as a failing toEqual on a whole frame takes minutes to describe the difference.
+const samePicture = (a, b) => a.length === b.length && a.every((pixel, i) => pixel === b[i]);
 
 describe("RewindUI", () => {
-    let video;
-    let processor;
+    let cpu;
     let resume;
     let loop;
     let history;
 
-    beforeEach(() => {
+    beforeEach(async () => {
         domFromIndexHtml("rewind-open", "rewind-panel");
         Element.prototype.scrollIntoView = vi.fn();
-        const realCreateElement = document.createElement.bind(document);
-        vi.spyOn(document, "createElement").mockImplementation((tag) => {
-            const element = realCreateElement(tag);
-            if (tag === "canvas") element.getContext = () => FakeContext;
-            return element;
-        });
-        video = {
-            fb32: new Uint32Array(1024 * 625),
-            frameCount: 0,
-            clearPaintBuffer: () => {},
-            renderPending: () => {},
-            paint: vi.fn(),
-        };
-        processor = {
-            snapshotState: vi.fn(() => ({ live: true })),
-            restoreState: vi.fn(),
-            asReplay: (_hooks, run) => run(),
-            execute: vi.fn(() => {
-                video.frameCount++;
-            }),
-        };
+        stubCanvases();
+        cpu = await machineShowingFrames(TEST_6502);
+        loadBytes(cpu, ProgramAt, CountForever);
+        cpu.pc = ProgramAt;
         resume = vi.fn();
-        loop = Object.assign(new EventTarget(), { hold: vi.fn(() => resume), replacingState: vi.fn() });
-        history = new ReplayHistory(fake6502());
+        loop = Object.assign(new EventTarget(), { hold: vi.fn(() => resume), stop: vi.fn() });
+        history = new ReplayHistory(cpu);
     });
 
     afterEach(teardownDom);
 
-    const make = () => new RewindUI({ processor, video, loop, history });
+    const make = () => new RewindUI({ loop, history });
     const panel = () => document.getElementById("rewind-panel");
     const thumbs = () => [...document.querySelectorAll(".rewind-thumb")];
     const selectedIndex = () => Number(document.querySelector(".rewind-thumb.selected").dataset.index);
-    const lastRestored = () => processor.restoreState.mock.calls.at(-1)[0];
-    const key = (name) => document.dispatchEvent(new KeyboardEvent("keydown", { key: name, cancelable: true }));
+    const key = (name, options) =>
+        document.dispatchEvent(new KeyboardEvent("keydown", { key: name, cancelable: true, ...options }));
+    const machineNow = () => ({ cycle: cycleCount(cpu), hash: stateHash(cpu), picture: cpu.video.fb32.slice() });
 
-    const frameSnapshot = (i) => ({ snapshot: i, ram: new Uint8Array([i]), swram: new Uint8Array([i]) });
-    const frame = (snapshot) => {
-        processor.snapshotState.mockReturnValueOnce(snapshot);
+    // The loop running a frame and asking for its capture, once a RewindUI is listening.
+    const frame = () => {
+        cpu.execute(FrameCycles);
         loop.dispatchEvent(new Event("frame-capture"));
     };
-    // The loop asking for captures, once a RewindUI is listening: a frame, then a rewind capture of it.
-    const captured = (count) => {
-        const snapshots = Array.from({ length: count }, (_, i) => frameSnapshot(i));
-        for (const snapshot of snapshots) {
-            frame(snapshot);
+    // Each a frame, then a rewind capture of it; returns the hash of the machine at each.
+    const captured = (count) =>
+        Array.from({ length: count }, () => {
+            frame();
             loop.dispatchEvent(new Event("rewind-capture"));
-        }
-        return snapshots;
-    };
+            return stateHash(cpu);
+        });
+    const at = (snapshot) => snapshotCycle(cpu, snapshot);
 
     describe("opening", () => {
         it("does nothing when nothing has been captured", () => {
@@ -79,12 +68,14 @@ describe("RewindUI", () => {
             expect(loop.hold).not.toHaveBeenCalled();
         });
 
-        it("pauses, fills the filmstrip with ages, and lands on now", () => {
-            make();
-            const snapshots = captured(3);
+        it("holds the machine, fills the filmstrip with ages, and previews now, keeping step back's history", () => {
+            const ui = make();
+            captured(3);
+            frame();
+            const kept = history.snapshots();
+            const paint = vi.spyOn(cpu.video, "paint");
             document.getElementById("rewind-open").click();
             expect(loop.hold).toHaveBeenCalledWith("the rewind panel");
-            expect(loop.replacingState).toHaveBeenCalled();
             expect(panel().hidden).toBe(false);
             expect(thumbs().map((thumb) => thumb.querySelector(".rewind-thumb-label").textContent)).toEqual([
                 "-2s",
@@ -92,20 +83,20 @@ describe("RewindUI", () => {
                 "now",
             ]);
             expect(selectedIndex()).toBe(2);
-            expect(lastRestored()).toEqual(snapshots[2]);
-            expect(video.paint).toHaveBeenCalled();
+            expect(cycleCount(cpu)).toBeGreaterThan(at(ui.snapshots[2]));
+            expect(paint).toHaveBeenCalled();
+            expect(history.snapshots()).toEqual(kept);
         });
 
         it("lets go and stays closed if the machine cannot be snapshotted", () => {
             const ui = make();
             captured(1);
-            processor.snapshotState.mockImplementation(() => {
+            vi.spyOn(cpu, "snapshotState").mockImplementation(() => {
                 throw new Error("no snapshot");
             });
             expect(() => ui.open()).toThrow("no snapshot");
             expect(panel().hidden).toBe(true);
             expect(resume).toHaveBeenCalledTimes(1);
-            expect(processor.restoreState).not.toHaveBeenCalled();
         });
 
         it("opens once no matter how often it is asked", () => {
@@ -135,13 +126,17 @@ describe("RewindUI", () => {
     });
 
     describe("choosing a snapshot", () => {
-        it("previews a clicked thumbnail without moving the machine on", () => {
+        it("previews a clicked thumbnail by replaying on from it, then puts the machine back where it is", () => {
             const ui = make();
-            const snapshots = captured(3);
+            captured(3);
             ui.open();
+            const before = machineNow();
+            const shownAt = [];
+            vi.spyOn(cpu.video, "paint").mockImplementation(() => shownAt.push(cycleCount(cpu)));
             thumbs()[0].click();
             expect(selectedIndex()).toBe(0);
-            expect(lastRestored()).toEqual(snapshots[0]);
+            expect(shownAt.some((cycle) => cycle > at(ui.snapshots[0]) && cycle < at(ui.snapshots[2]))).toBe(true);
+            expect(machineNow()).toEqual(before);
         });
 
         it("walks the filmstrip with the arrow keys, stopping at the ends", () => {
@@ -158,70 +153,136 @@ describe("RewindUI", () => {
         });
 
         it.each([
-            ["A", { key: "a", code: "KeyA" }, "kept"],
-            ["Alt-W, as Option-W types it on a Mac", { key: "∑", code: "KeyW", altKey: true }, "passed on"],
-            ["Alt-T", { key: "t", code: "KeyT", altKey: true }, "passed on"],
-            ["Alt-B", { key: "b", code: "KeyB", altKey: true }, "passed on"],
-            ["Alt-S", { key: "s", code: "KeyS", altKey: true }, "kept"],
-            ["Alt-D", { key: "d", code: "KeyD", altKey: true }, "kept"],
-            ["Alt-P", { key: "p", code: "KeyP", altKey: true }, "kept"],
-            ["Alt-M", { key: "m", code: "KeyM", altKey: true }, "kept"],
-            ["Alt-C", { key: "c", code: "KeyC", altKey: true }, "kept"],
-            ["Alt-1", { key: "1", code: "Digit1", altKey: true }, "kept"],
-            ["AltGr-W", { key: "w", code: "KeyW", altKey: true, ctrlKey: true }, "kept"],
-        ])("%s, while open, is %s", (_, init, fate) => {
+            ["A", "keydown", { key: "a", code: "KeyA" }, "kept"],
+            ["N's keypress, which the debugger's keys answer", "keypress", { key: "n" }, "kept"],
+            ["Alt-W, as Option-W types it on a Mac", "keydown", { key: "∑", code: "KeyW", altKey: true }, "passed on"],
+            ["Alt-T", "keydown", { key: "t", code: "KeyT", altKey: true }, "passed on"],
+            ["Alt-B", "keydown", { key: "b", code: "KeyB", altKey: true }, "passed on"],
+            ["Alt-S, which rewind answers itself", "keydown", { key: "s", code: "KeyS", altKey: true }, "kept"],
+            ["Alt-D", "keydown", { key: "d", code: "KeyD", altKey: true }, "kept"],
+            ["Alt-P", "keydown", { key: "p", code: "KeyP", altKey: true }, "kept"],
+            ["Alt-M", "keydown", { key: "m", code: "KeyM", altKey: true }, "kept"],
+            ["Alt-C", "keydown", { key: "c", code: "KeyC", altKey: true }, "kept"],
+            ["Alt-1", "keydown", { key: "1", code: "Digit1", altKey: true }, "kept"],
+            ["AltGr-W", "keydown", { key: "w", code: "KeyW", altKey: true, ctrlKey: true }, "kept"],
+        ])("%s, while open, is %s", (_, type, init, fate) => {
             const ui = make();
             captured(1);
             ui.open();
             const reached = vi.fn();
-            document.addEventListener("keydown", reached);
-            document.dispatchEvent(new KeyboardEvent("keydown", { ...init, cancelable: true }));
-            document.removeEventListener("keydown", reached);
+            document.addEventListener(type, reached);
+            document.dispatchEvent(new KeyboardEvent(type, { ...init, cancelable: true }));
+            document.removeEventListener(type, reached);
             expect(reached).toHaveBeenCalledTimes(fate === "passed on" ? 1 : 0);
         });
     });
 
     describe("closing", () => {
-        it("commits the chosen snapshot on Enter and runs on from it", () => {
+        it.each([
+            ["Enter, running on", RunMode.running, () => key("Enter"), false],
+            ["Enter in the debugger, showing it there", RunMode.debugging, () => key("Enter"), true],
+            [
+                "Alt-S, stopping in the debugger there",
+                RunMode.running,
+                () => key("ß", { code: "KeyS", altKey: true }),
+                true,
+            ],
+        ])(
+            "goes back to the chosen snapshot on %s, showing it, forgetting everything newer",
+            (_, mode, press, stops) => {
+                loop.mode = mode;
+                const ui = make();
+                const hashes = captured(3);
+                frame();
+                cpu.video.fb32.fill(Marker);
+                const marked = cpu.video.fb32.slice();
+                ui.open();
+                const strip = ui.snapshots;
+                key("ArrowLeft");
+                const now = history.original();
+                previewFrame(history, strip[1]);
+                cpu.video.renderPending();
+                const drawn = cpu.video.fb32.slice();
+                history.putBack(now);
+                loop.stop.mockImplementation(() => expect(resume).toHaveBeenCalled());
+                press();
+                const chosen = strip[1];
+                expect([cycleCount(cpu), stateHash(cpu)]).toEqual([at(chosen), hashes[1]]);
+                expect(samePicture(cpu.video.fb32, drawn)).toBe(true);
+                expect(samePicture(drawn, marked)).toBe(false);
+                expect(ui.rewindBuffer.getAll()).toEqual(strip.slice(0, 2));
+                expect(ui.frames.getAll().filter((snapshot) => at(snapshot) > at(chosen))).toEqual([]);
+                expect(Math.max(...history.snapshots().map(at))).toBe(at(chosen));
+                expect(panel().hidden).toBe(true);
+                expect(thumbs()).toHaveLength(0);
+                expect(resume).toHaveBeenCalledTimes(1);
+                expect(loop.stop.mock.calls).toEqual(stops ? [[true]] : []);
+            },
+        );
+
+        it.each([
+            ["Escape", () => key("Escape")],
+            ["the close button", () => document.getElementById("rewind-close").click()],
+            ["a second toggle, as Alt-W opens and closes it", (ui) => ui.toggle()],
+        ])("cancels on %s, leaving the machine, its picture and step back's history as they were", (_, press) => {
             const ui = make();
-            const snapshots = captured(2);
-            ui.open();
+            captured(2);
+            frame();
+            cpu.video.fb32.fill(Marker);
+            const [before, kept] = [machineNow(), history.snapshots()];
+            ui.toggle();
             key("ArrowLeft");
-            key("Enter");
-            expect(lastRestored()).toEqual(snapshots[0]);
+            press(ui);
+            expect(machineNow()).toEqual(before);
+            expect(history.snapshots()).toEqual(kept);
             expect(panel().hidden).toBe(true);
-            expect(thumbs()).toHaveLength(0);
             expect(resume).toHaveBeenCalledTimes(1);
         });
 
-        it("cancels back to the state from before it opened on Escape", () => {
+        it.each([
+            ["cancelling", () => key("Escape")],
+            ["going back", () => key("Enter")],
+        ])("takes a key pressed while open where the machine is, and keeps it held on %s", (_, close) => {
+            const ui = make();
+            captured(3);
+            frame();
+            ui.open();
+            ui.selectSnapshot(1);
+            cpu.keyboardInterface.keyDown(keyCodes.A);
+            close();
+            expect(cpu.sysvia.hasAnyKeyDown()).toBe(true);
+            expect(history.refusal()).toBeNull();
+            expect(history.stepBack(false)).toBeNull();
+        });
+
+        it("closes, leaving the machine to its new state, when the state is replaced while it is open", () => {
             const ui = make();
             captured(2);
             ui.open();
-            key("ArrowLeft");
-            key("Escape");
-            expect(lastRestored()).toEqual({ live: true });
+            loop.dispatchEvent(new Event("replacing-state"));
             expect(panel().hidden).toBe(true);
             expect(resume).toHaveBeenCalledTimes(1);
+            expect(ui.rewindBuffer.length).toBe(0);
         });
 
-        it("cancels on a second toggle, as Alt-W opens and closes it", () => {
+        it("closes when the debugger steps back while it is open", () => {
+            const ui = make();
+            captured(3);
+            frame();
+            ui.open();
+            expect(history.stepBack(false)).toBeNull();
+            expect(panel().hidden).toBe(true);
+            expect(resume).toHaveBeenCalledTimes(1);
+            expect(ui.snapshots).toEqual([]);
+        });
+
+        it("takes AltGr-S, which types a character, for no key of its own", () => {
             const ui = make();
             captured(2);
-            ui.toggle();
-            key("ArrowLeft");
-            ui.toggle();
-            expect(lastRestored()).toEqual({ live: true });
-            expect(panel().hidden).toBe(true);
-            expect(resume).toHaveBeenCalledTimes(1);
-        });
-
-        it("cancels from the close button", () => {
-            const ui = make();
-            captured(1);
             ui.open();
-            document.getElementById("rewind-close").click();
-            expect(panel().hidden).toBe(true);
+            key("ś", { code: "KeyS", altKey: true, ctrlKey: true });
+            expect(panel().hidden).toBe(false);
+            expect(loop.stop).not.toHaveBeenCalled();
         });
 
         it("stops listening for keys once closed", () => {
@@ -229,9 +290,9 @@ describe("RewindUI", () => {
             captured(2);
             ui.open();
             key("Escape");
-            processor.restoreState.mockClear();
+            const before = machineNow();
             key("ArrowLeft");
-            expect(processor.restoreState).not.toHaveBeenCalled();
+            expect(machineNow()).toEqual(before);
         });
 
         it("lets go of its hold when it is reset", () => {
@@ -269,54 +330,34 @@ describe("RewindUI", () => {
     describe("capturing", () => {
         it("snapshots each frame into the slot of the oldest once the frames are full", () => {
             const ui = make();
-            const snapshots = Array.from({ length: 4 }, (_, i) => frameSnapshot(i));
-            snapshots.forEach(frame);
-            expect(processor.snapshotState.mock.calls.map(([options]) => options.into)).toEqual([
-                null,
-                null,
-                null,
-                snapshots[0],
-            ]);
-            expect(ui.frames.getAll()).toEqual(snapshots.slice(1));
+            const snapshot = vi.spyOn(cpu, "snapshotState");
+            for (let i = 0; i < 4; i++) frame();
+            const taken = snapshot.mock.results.map(({ value }) => value);
+            expect(snapshot.mock.calls.map(([options]) => options.into)).toEqual([null, null, null, taken[0]]);
+            expect(ui.frames.getAll()).toEqual(taken.slice(1));
         });
 
         it("keeps a copy of the newest frame in the rewind history, in the storage of the one it replaces", () => {
             const ui = make();
             captured(30);
             const firstKept = ui.rewindBuffer.getAll()[0];
-            frame(frameSnapshot(99));
-            loop.dispatchEvent(new Event("rewind-capture"));
+            captured(1);
             const newest = ui.rewindBuffer.peek();
-            expect(newest).toEqual(frameSnapshot(99));
+            expect(newest).toEqual(ui.frames.peek());
             expect(newest.ram).toBe(firstKept.ram);
             expect(newest.ram).not.toBe(ui.frames.peek().ram);
-        });
-
-        it("forgets the frames, but not the rewind history, when the machine's state is replaced", () => {
-            const ui = make();
-            captured(2);
-            loop.dispatchEvent(new Event("replacing-state"));
-            expect(ui.frames.length).toBe(0);
-            expect(ui.rewindBuffer.length).toBe(2);
         });
 
         it.each([
             ["the machine's state is replaced", () => loop.dispatchEvent(new Event("replacing-state"))],
             ["it is reset", (ui) => ui.reset()],
-            [
-                "the panel closes, its previews having run the machine",
-                (ui) => {
-                    ui.open();
-                    key("Escape");
-                },
-            ],
-        ])("gives step back every snapshot in either ring, until %s", (_, forget) => {
+        ])("gives step back every snapshot in either ring, and forgets them all when %s", (_, forget) => {
             const ui = make();
             captured(31);
             const held = new Set([...ui.frames.getAll(), ...ui.rewindBuffer.getAll()]);
             expect(new Set(history.snapshots())).toEqual(held);
             forget(ui);
-            expect(history.snapshots()).toEqual([]);
+            expect([ui.frames.length, ui.rewindBuffer.length, history.snapshots()]).toEqual([0, 0, []]);
         });
 
         it("forgets from both rings the snapshots a step back left in the future", () => {

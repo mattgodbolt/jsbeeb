@@ -1,13 +1,14 @@
 import { NoReplayHooks } from "../6502.js";
+import { snapshotCycle } from "../replay.js";
 
 const ThumbnailWidth = 160;
 const ThumbnailHeight = 128;
 const FramebufferWidth = 1024;
 const FramebufferHeight = 625;
 const VisiblePixels = FramebufferWidth * FramebufferHeight;
-const CyclesPerChunk = 8000;
-// Safety limit to prevent infinite loops if video state is broken
-const MaxChunks = 100;
+// As far as a preview runs if the display never ends, as with the CRTC's R6 programmed past R4.
+const LongestPreviewSeconds = 0.1;
+const FramesPerSecond = 50;
 
 // Reusable offscreen canvas and ImageData for captureThumbnail to avoid
 // allocating a full 1024x625 buffer per thumbnail.
@@ -46,77 +47,54 @@ function captureThumbnail(fb32) {
 }
 
 /**
- * Execute cycles until a complete top-to-bottom frame is in fb32, as a replay, so that no breakpoint or watch cuts
- * the preview short and nothing it prints or speaks reaches the host.
+ * Puts the machine at `snapshot`, one of `history`'s, and replays on from it with the inputs the host gave it then
+ * (see InputLog's replay) until a complete top-to-bottom frame is in fb32. As a replay, no breakpoint or watch cuts
+ * it short and nothing it prints or speaks reaches the host.
  *
- * Snapshots may be mid-frame, so we run through two vsyncs:
- * 1. First vsync completes the partial frame and clears fb32 normally.
- * 2. Second vsync rasterises a full frame; we suppress clearPaintBuffer
- *    so fb32 retains the completed frame for capture.
+ * A snapshot may be mid-frame, so it runs until the CRTC has ended the display of a second field (where the frame
+ * count goes up), with clearing suppressed once the first has ended, so that fb32 holds the whole of the field
+ * after it.
  */
-function executeUntilFrame(processor, video) {
-    processor.asReplay(NoReplayHooks, () => {
-        const startFrame = video.frameCount;
-
-        // Phase 1: run to first vsync (completes partial frame, clears fb32)
-        for (let i = 0; i < MaxChunks; i++) {
-            if (processor.execute(CyclesPerChunk) === false) break;
-            if (video.frameCount !== startFrame) break;
+export function previewFrame(history, snapshot) {
+    const { cpu } = history;
+    const { video } = cpu;
+    let firstFrame = null;
+    let secondFrame = null;
+    const clear = video.clearPaintBuffer;
+    const wholeFrame = () => {
+        firstFrame ??= video.frameCount;
+        if (secondFrame === null && video.frameCount !== firstFrame) {
+            secondFrame = video.frameCount;
+            video.clearPaintBuffer = () => {};
         }
-
-        // Phase 2: run to second vsync with clear suppressed (full frame in fb32)
-        const secondFrame = video.frameCount;
-        const origClear = video.clearPaintBuffer;
-        video.clearPaintBuffer = function () {};
-        try {
-            for (let i = 0; i < MaxChunks; i++) {
-                if (processor.execute(CyclesPerChunk) === false) return;
-                if (video.frameCount !== secondFrame) return;
-            }
-        } finally {
-            video.clearPaintBuffer = origClear;
-        }
-    });
+        return secondFrame !== null && video.frameCount !== secondFrame;
+    };
+    try {
+        const from = snapshotCycle(cpu, snapshot);
+        history.log.replay(snapshot, from + cpu.model.cyclesPerSecond * LongestPreviewSeconds, false, {
+            ...NoReplayHooks,
+            instruction: wholeFrame,
+        });
+    } finally {
+        video.clearPaintBuffer = clear;
+    }
 }
 
 /**
- * Generate thumbnail canvases for all snapshots in a rewind buffer.
- *
- * While the emulator is paused:
- * 1. Saves the current state
- * 2. For each snapshot (oldest first), restores it, runs until a full
- *    frame has been rasterised, and captures a downscaled thumbnail
- * 3. Restores the original state
- *
- * @param {object} processor - the Cpu6502 instance
- * @param {object[]} snapshots - array of snapshots (oldest first)
- * @param {object} video - the Video instance (used to access fb32)
- * @param {number} captureInterval - rewind capture interval in frames (~50)
- * @param {object} [savedState] - pre-saved state to restore after rendering (avoids double snapshot)
+ * Generates a thumbnail canvas for each of `snapshots`, oldest first, each previewed as `previewFrame` does. Leaves
+ * the machine where the last preview ran to.
+ * @param {import("../replay.js").ReplayHistory} history - whose snapshots they are
+ * @param {object[]} snapshots - the snapshots, oldest first
+ * @param {number} captureInterval - frames between snapshots
  * @returns {{canvas: HTMLCanvasElement, index: number, ageSeconds: number}[]}
  */
-export function renderThumbnails(processor, snapshots, video, captureInterval, savedState) {
-    if (snapshots.length === 0) return [];
-
-    if (!savedState) savedState = processor.snapshotState();
-    const framesPerSecond = 50;
-    const results = [];
-
-    try {
-        for (let i = 0; i < snapshots.length; i++) {
-            processor.restoreState(snapshots[i]);
-            executeUntilFrame(processor, video);
-            video.renderPending();
-            const canvas = captureThumbnail(video.fb32);
-            const stepsFromNewest = snapshots.length - 1 - i;
-            const ageSeconds = Math.round((stepsFromNewest * captureInterval) / framesPerSecond);
-            results.push({ canvas, index: i, ageSeconds });
-        }
-    } finally {
-        processor.restoreState(savedState);
-    }
-
-    return results;
+export function renderThumbnails(history, snapshots, captureInterval) {
+    const { video } = history.cpu;
+    return snapshots.map((snapshot, index) => {
+        previewFrame(history, snapshot);
+        video.renderPending();
+        const stepsFromNewest = snapshots.length - 1 - index;
+        const ageSeconds = Math.round((stepsFromNewest * captureInterval) / FramesPerSecond);
+        return { canvas: captureThumbnail(video.fb32), index, ageSeconds };
+    });
 }
-
-export { executeUntilFrame };

@@ -634,17 +634,18 @@ export class ReplayHistory extends EventTarget {
         return { found: null, snapshot: null, reached: to, stoppedBy: null };
     }
 
-    _original() {
+    /** The machine as it stands, with what the host holds and its picture, for `putBack`. */
+    original() {
         const { cpu } = this;
         const { memStatOffset } = cpu;
         return { state: cpu.snapshotState(), host: hostInputs(cpu), picture: cpu.video.fb32.slice(), memStatOffset };
     }
 
     /**
-     * Puts the machine, the host's inputs and the picture back as `_original` kept them, with the half of the paging
+     * Puts the machine, the host's inputs and the picture back as `original` kept them, with the half of the paging
      * tables the last instruction's fetch chose, which a snapshot leaves out.
      */
-    _putBack({ state, host, picture, memStatOffset }) {
+    putBack({ state, host, picture, memStatOffset }) {
         const { cpu } = this;
         this.log.withoutRecording(() => {
             restoreHostInputs(cpu, host);
@@ -678,11 +679,11 @@ export class ReplayHistory extends EventTarget {
             try {
                 step = withoutPainting(cpu.video, () => search.next());
             } catch (e) {
-                this._putBack(original);
+                this.putBack(original);
                 throw e;
             }
             if (step.done) return step.value;
-            this._putBack(original);
+            this.putBack(original);
             yield;
             if (cycleCount(cpu) !== now || stateHash(cpu) !== nowHash) return { movedOn: true };
         }
@@ -700,7 +701,7 @@ export class ReplayHistory extends EventTarget {
         const refused = this.refusal();
         if (refused) return refused;
         const now = cycleCount(this.cpu);
-        const original = this._original();
+        const original = this.original();
         const { movedOn, found, snapshot, reached, stoppedBy } = yield* this._searchingAway(seeker, original);
         if (movedOn) return MovedOn;
         let landed = false;
@@ -712,7 +713,7 @@ export class ReplayHistory extends EventTarget {
             this._landedAt(found, original.host);
             return null;
         } finally {
-            if (!landed) this._putBack(original);
+            if (!landed) this.putBack(original);
         }
     }
 
@@ -789,17 +790,28 @@ export class ReplayHistory extends EventTarget {
         const target = viewedByte(cpu, view, address);
         if (target.stat === RomStat) return { refusal: IsRom };
         const now = cycleCount(cpu);
-        const original = this._original();
+        const original = this.original();
         const { movedOn, found, reached, stoppedBy } = yield* this._searchingAway(
             new LastWrite(cpu, log, address, target),
             original,
         );
         if (movedOn) return { refusal: MovedOn };
-        this._putBack(original);
+        this.putBack(original);
         if (stoppedBy && reached === now) {
             return { refusal: stoppedBy === Unrepeated ? NotRepeatedHere : `${CannotSearchPast} ${stoppedBy}.` };
         }
         return { write: found, searched: now - reached, stoppedBy };
+    }
+
+    /**
+     * Puts the machine at `snapshot`, one of those kept, holding what the host held then, and lands there as a step
+     * back does, forgetting everything newer and changing what the machine holds to what the host holds now.
+     */
+    landAt(snapshot) {
+        const holding = hostInputs(this.cpu);
+        const cycle = snapshotCycle(this.cpu, snapshot);
+        this.log.replay(snapshot, cycle, true, NoReplayHooks);
+        this._landedAt(cycle, holding);
     }
 
     // What came after `cycle` was a future the machine has left, and runs from here make their own.

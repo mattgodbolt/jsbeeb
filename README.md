@@ -220,13 +220,18 @@ A save state dropped on the page is restored too.
 
 The emulator continuously captures snapshots into a 30-slot rewind buffer (~1 per second). Open the rewind scrubber from **State > Rewind** or press **Alt-W** to browse recent states as a visual filmstrip:
 
-- **Left/Right arrows**: navigate between snapshots (the main screen updates live)
-- **Click** a thumbnail to jump to that point
-- **Enter**: commit selection and close the panel
-- **Escape** or **Alt-W**: cancel and restore the original state
+- **Left/Right arrows**, or a **click** on a thumbnail: choose a moment, which the main screen previews; the machine
+  stays where it is until you go back
+- **Enter**: go back to the chosen moment and close the panel; the seconds after it are forgotten
+- **Alt-S**: go back to the chosen moment and stop in the debugger there
+- **Escape** or **Alt-W**: close the panel without going back, leaving the machine where it is
 
-While it is open, `Alt-T` and `Alt-B` still work; the other shortcuts, and every key for the emulated machine, are
-ignored.
+While it is open, `Alt-T` and `Alt-B` also still work; the other shortcuts, and every key for the emulated machine,
+are ignored.
+
+Rewind and the debugger's step back share one history, so opening rewind and cancelling leaves step back able to go
+as far back as before, and a preview replays the keys that were held at the time. Loading a saved state starts the
+history afresh.
 
 ### Joystick Support
 
