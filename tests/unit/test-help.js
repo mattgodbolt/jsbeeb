@@ -25,7 +25,7 @@ describe("Help", () => {
             "Left RightChoose an earlier or later moment",
             "EnterGo back to the chosen moment, forgetting the seconds after it",
             "Alt-SGo back to the chosen moment and stop in the debugger there",
-            "EscapeClose, leaving the machine where it was",
+            "Escape Alt-WClose, leaving the machine where it was",
         ]);
     });
 
