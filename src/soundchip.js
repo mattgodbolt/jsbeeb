@@ -51,7 +51,7 @@ export class SoundChip {
     constructor(onBuffer, { onEvent = null } = {}) {
         this._onBuffer = onBuffer;
         this._onEvent = onEvent;
-        /** Whether the machine is replaying time the host has heard already, or is only previewing: the CPU's. */
+        /** The CPU's `replaying`, which asReplay sets. */
         this.replaying = () => false;
         this._hostBehind = false;
         // 4MHz input signal. Internal divide-by-8
