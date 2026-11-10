@@ -12,7 +12,7 @@ import { keyCodes } from "../keymap.js";
 
 // Tall enough for a row of thumbnails and, at this width or more, the line of keys under them, so that the default
 // place, kept clear of the lights, is never one that cuts them off.
-const MinPanelSize = { w: 480, h: 230 };
+const MinPanelSize = { w: 600, h: 230 };
 const StretchedAcross = { anchor: "stretch" };
 
 // The rest would act on a machine the loop holds while the screen shows a preview.
