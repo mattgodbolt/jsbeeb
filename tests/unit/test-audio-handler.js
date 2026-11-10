@@ -359,9 +359,20 @@ describe("AudioHandler", () => {
             await expect(handler.ready).resolves.toBe("unavailable");
 
             handler.soundChip.poke(0x8d);
+            expect(handler._chipEvents).toHaveLength(1);
             handler.flushChipEvents();
 
             expect(handler._chipEvents).toEqual([]);
+        });
+
+        it("keeps chip events while the worklet is still being built, for it to take", () => {
+            stubAudio({ addModule: () => new Promise(() => {}) });
+            const handler = makeHandler();
+
+            handler.soundChip.poke(0x8d);
+            handler.flushChipEvents();
+
+            expect(handler._chipEvents).toHaveLength(1);
         });
 
         it("toasts about the Music 5000 and leaves the banner down", async () => {
