@@ -17,7 +17,7 @@ import { BitshiftersArchive } from "./bitshifters.js";
 import { BbcDiscArchive } from "./bbcdiscs.js";
 import { Video } from "./video.js";
 import { findModel } from "./models.js";
-import { requireBank } from "./paging.js";
+import { PagedView, requireBank } from "./paging.js";
 import { hexbyte, hexword } from "./hex.js";
 import { copySnapshot } from "./6502.js";
 import { ReplayHistory, finished, snapshotCycle } from "./replay.js";
@@ -519,7 +519,7 @@ export class MachineSession {
     whoWrote(address) {
         const refusal = this._replayRefusal();
         if (refusal) return { refusal };
-        return this._asReplay(() => finished(this._history.lastWrite(address)));
+        return this._asReplay(() => finished(this._history.lastWrite(address, PagedView)));
     }
 
     /**

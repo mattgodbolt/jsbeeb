@@ -1,5 +1,24 @@
 # Changelog
 
+## [2.21.1](https://github.com/mattgodbolt/jsbeeb/compare/v2.21.0...v2.21.1) (2026-11-10)
+
+
+### Bug Fixes
+
+* AudioHandler keeps no chip events once its audio could not be set up ([#1827](https://github.com/mattgodbolt/jsbeeb/issues/1827)) ([84b601a](https://github.com/mattgodbolt/jsbeeb/commit/84b601a9f298ede6b4a95e62df5ff8f0f4cea3f2))
+
+## [2.21.0](https://github.com/mattgodbolt/jsbeeb/compare/v2.20.0...v2.21.0) (2026-11-10)
+
+
+### Features
+
+* AudioHandler needs no warning node, and queues no events for a suspended worklet ([#1824](https://github.com/mattgodbolt/jsbeeb/issues/1824)) ([2d6b3dd](https://github.com/mattgodbolt/jsbeeb/commit/2d6b3ddb459dabe487a18a066553295a2ab9218b))
+
+
+### Bug Fixes
+
+* Alt-W now closes rewind as well as opening it, and the harmless shortcuts work while it is open ([#1816](https://github.com/mattgodbolt/jsbeeb/issues/1816)) ([5e541c3](https://github.com/mattgodbolt/jsbeeb/commit/5e541c3de04b7ea00bcfbae0be6a1bf2b2446649))
+
 ## [2.20.0](https://github.com/mattgodbolt/jsbeeb/compare/v2.19.1...v2.20.0) (2026-11-08)
 
 

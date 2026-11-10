@@ -852,6 +852,7 @@ export class Cpu6502 extends Base6502 {
         this.adconverter = new Adc(this.sysvia, this.scheduler);
         this.touchScreen = new TouchScreen(this.scheduler, this.model.cyclesPerSecond);
         this.soundChip.setScheduler(this.scheduler);
+        this.soundChip.replaying = () => this.replaying;
         this.fdc = new this.model.Fdc(this, this.ddNoise, this.scheduler);
     }
 
