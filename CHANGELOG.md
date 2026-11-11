@@ -1,5 +1,19 @@
 # Changelog
 
+## [2.22.0](https://github.com/mattgodbolt/jsbeeb/compare/v2.21.1...v2.22.0) (2026-11-11)
+
+
+### Features
+
+* list games and works in progress by Matt, Rich, Kieran, Eben and the Bitshifters among the GitHub discs ([#1830](https://github.com/mattgodbolt/jsbeeb/issues/1830)) ([6491bb4](https://github.com/mattgodbolt/jsbeeb/commit/6491bb46a467706ef526a96bf87fa307a0f00f48))
+* offer the on-screen keyboard, closed, where a touch screen sits beside a trackpad ([#1834](https://github.com/mattgodbolt/jsbeeb/issues/1834)) ([7bc75a1](https://github.com/mattgodbolt/jsbeeb/commit/7bc75a1bd4225de948b9eb9ecc3462a50c9346fe))
+
+
+### Bug Fixes
+
+* replays send the host none of the sound they re-run ([#1814](https://github.com/mattgodbolt/jsbeeb/issues/1814)) ([3046bf1](https://github.com/mattgodbolt/jsbeeb/commit/3046bf1d90398990ada2f33db0058970a0227021))
+* who wrote searches the byte the memory or disassembly panel's view shows ([#1826](https://github.com/mattgodbolt/jsbeeb/issues/1826)) ([b7b09c0](https://github.com/mattgodbolt/jsbeeb/commit/b7b09c06e0a33914ed6edfd99947b0ecc31d1863))
+
 ## [2.21.1](https://github.com/mattgodbolt/jsbeeb/compare/v2.21.0...v2.21.1) (2026-11-10)
 
 
