@@ -359,6 +359,11 @@ jsbeeb can also run as a standalone desktop application using Electron. Prebuilt
 Fedora/RHEL `.rpm` and a Windows installer) are attached to each
 [GitHub release](https://github.com/mattgodbolt/jsbeeb/releases), or you can build your own:
 
+The Electron app can send MIDI to a host MIDI output. First enable **6850 MIDI interface at &FC00** under Additional
+peripherals (below VideoNuLA) and restart the machine. Then, in **Settings**, focus the **Host MIDI output** dropdown
+below that option to connect and choose an output. The host MIDI controls are unavailable until the emulated interface
+is fitted. The interface transmits standard 31.25 kbit/s MIDI output; MIDI input is not implemented.
+
 ### Running in Development
 
 ```sh

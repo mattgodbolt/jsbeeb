@@ -79,6 +79,7 @@ const StockFittings = {
     coProcessor: false,
     hasMusic5000: false,
     hasTeletextAdaptor: false,
+    hasMidiInterface: false,
     hasEconet: false,
     hasVideoNula: false,
 };

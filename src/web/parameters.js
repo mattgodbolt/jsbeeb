@@ -27,6 +27,10 @@ const KeyLayoutOptions = [
     { value: "natural", text: "Natural: you get the character you type" },
     { value: "gaming", text: "Gaming: handy for games like Zalaga" },
 ];
+const MidiAddressOptions = [0xfc00, 0xfc08, 0xfc80, 0xfcf0].map((value) => ({
+    value,
+    text: `&${value.toString(16).toUpperCase()}`,
+}));
 const microphoneChannelText = (channel) => (channel === undefined ? "Disabled" : `Channel ${channel}`);
 
 const AfterglowDefaults = Object.fromEntries(persistenceSettings().map(({ setting, default: ms }) => [setting, ms]));
@@ -179,6 +183,32 @@ export const Parameters = {
             label: "VideoNuLA (4096-colour palette)",
             restart: true,
             enabledWhen: ({ model }) => !findModel(model).isAtom,
+        },
+    },
+    hasMidiInterface: {
+        type: ParamTypes.BOOL,
+        takenFromHost: true,
+        default: false,
+        field: {
+            type: "check",
+            group: Peripherals,
+            label: "6850 MIDI interface",
+            restart: true,
+            enabledWhen: ({ model }) => !findModel(model).isAtom,
+        },
+    },
+    midiAddress: {
+        type: ParamTypes.INT,
+        takenFromHost: true,
+        stored: true,
+        default: 0xfc00,
+        valid: isOption(MidiAddressOptions),
+        field: {
+            type: "menu",
+            label: "MIDI interface address",
+            restart: true,
+            enabledWhen: ({ hasMidiInterface, model }) => hasMidiInterface && !findModel(model).isAtom,
+            options: MidiAddressOptions,
         },
     },
     audioOutput: {
