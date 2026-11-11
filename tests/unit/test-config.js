@@ -58,7 +58,16 @@ describe("what needs a restart", () => {
             Object.keys(Parameters)
                 .filter((name) => Parameters[name].field?.restart)
                 .sort(),
-        ).toEqual(["coProcessor", "hasEconet", "hasMusic5000", "hasTeletextAdaptor", "hasVideoNula", "model"]);
+        ).toEqual([
+            "coProcessor",
+            "hasEconet",
+            "hasMidiInterface",
+            "hasMusic5000",
+            "hasTeletextAdaptor",
+            "hasVideoNula",
+            "midiAddress",
+            "model",
+        ]);
     });
 });
 
@@ -67,6 +76,7 @@ describe("Config", () => {
     let changed;
     let restartRequired;
     let config;
+    let midiOutput;
 
     const modelDropdownText = () => menuText("bbc-model-dropdown");
     const restartPendingShown = () => !document.getElementById("restart-pending").classList.contains("d-none");
@@ -84,7 +94,8 @@ describe("Config", () => {
         changed = vi.fn();
         settings.addEventListener("change", (event) => changed(event.detail));
         restartRequired = vi.fn();
-        config = new Config(settings);
+        midiOutput = { setSelectionEnabled: vi.fn() };
+        config = new Config(settings, midiOutput);
         config.addEventListener("restart-required", restartRequired);
     });
 
@@ -136,6 +147,30 @@ describe("Config", () => {
             expect(changed).toHaveBeenCalledWith({ model: "Master", hasMusic5000: true });
             expect(settings.hasMusic5000).toBe(true);
             expect(settings.urlState.params.hasMusic5000).toBe(true);
+        });
+
+        it("offers the four MIDI addresses and applies a selection on close", () => {
+            expect(settings.midiAddress).toBe(0xfc00);
+            openDialog();
+            document.getElementById("hasMidiInterface").click();
+            document.querySelector('.midi-address-menu a[data-value="64520"]').click();
+            expect(settings.midiAddress).toBe(0xfc00);
+            closeDialog();
+            expect(lastSaved()).toEqual({ hasMidiInterface: true, midiAddress: 0xfc08 });
+            expect(settings.midiAddress).toBe(0xfc08);
+            expect(settings.urlState.params.midiAddress).toBe(0xfc08);
+            expect(restartRequired).toHaveBeenCalledTimes(1);
+        });
+
+        it("disables host output selection when the MIDI interface is unchecked", () => {
+            openDialog();
+            const midiInterface = document.getElementById("hasMidiInterface");
+
+            expect(midiOutput.setSelectionEnabled).toHaveBeenLastCalledWith(false);
+            midiInterface.click();
+            expect(midiOutput.setSelectionEnabled).toHaveBeenLastCalledWith(true);
+            midiInterface.click();
+            expect(midiOutput.setSelectionEnabled).toHaveBeenLastCalledWith(false);
         });
     });
 
@@ -394,6 +429,20 @@ describe("the Settings form", () => {
                 value: true,
                 disabled: false,
             },
+            {
+                id: "hasMidiInterface",
+                label: "6850 MIDI interface",
+                type: "checkbox",
+                value: false,
+                disabled: false,
+            },
+            {
+                id: "midiAddressDropdown",
+                label: "MIDI interface address:",
+                type: "button",
+                value: "&FC00",
+                disabled: true,
+            },
             { id: "audioOutputDropdown", label: "Sound output:", type: "button", value: "Line out", disabled: false },
             { id: "speakerAmount", label: "Speaker character:", type: "range", value: "0.5", disabled: true },
             {
@@ -420,6 +469,17 @@ describe("the Settings form", () => {
         ]);
     });
 
+    it("places host MIDI output controls beneath the MIDI fitting, after VideoNuLA", () => {
+        configFrom("");
+        const nula = document.getElementById("hasVideoNula").closest(".form-check");
+        const midi = document.getElementById("hasMidiInterface").closest(".form-check");
+        const output = document.getElementById("midi-output-settings");
+
+        expect(nula.compareDocumentPosition(midi) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(midi.parentElement).toBe(output.parentElement);
+        expect(midi.compareDocumentPosition(output) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
     it("gives every menu its options, each carrying the value it picks", () => {
         configFrom("");
         const menu = (id) =>
@@ -429,6 +489,12 @@ describe("the Settings form", () => {
             }));
         expect(menu("keyLayoutDropdown").map(({ data }) => data.value)).toEqual(["physical", "natural", "gaming"]);
         expect(menu("displayModeDropdown").map(({ data }) => data.value)).toEqual(["rgb", "pal", "xbr"]);
+        expect(menu("midiAddressDropdown")).toEqual([
+            { text: "&FC00", data: { value: "64512" } },
+            { text: "&FC08", data: { value: "64520" } },
+            { text: "&FC80", data: { value: "64640" } },
+            { text: "&FCF0", data: { value: "64752" } },
+        ]);
         expect(menu("audioOutputDropdown")).toEqual([
             { text: "Internal speaker", data: { output: "speaker" } },
             { text: "Line out", data: { output: "board" } },

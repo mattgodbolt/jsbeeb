@@ -1,0 +1,28 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Start jsbeeb",
+      "type": "npm",
+      "script": "start",
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "jsbeeb",
+        "pattern": {
+          "regexp": "^$"
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "^> jsbeeb@.* start",
+          "endsPattern": "http://localhost:5173/"
+        }
+      }
+    },
+    {
+      "label": "Run jsbeeb (Electron)",
+      "type": "npm",
+      "script": "electron",
+      "problemMatcher": []
+    }
+  ]
+}

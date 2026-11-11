@@ -67,19 +67,40 @@ describe("benchmark page", () => {
     });
 
     describe("misfitting", () => {
-        const workload = { name: "elite", fittings: { hasMusic5000: false, hasVideoNula: false } };
+        const workload = {
+            name: "elite",
+            fittings: { hasMusic5000: false, hasTeletextAdaptor: false, hasMidiInterface: false, hasVideoNula: false },
+        };
 
         it("passes a machine fitted as the workload is", () => {
-            expect(misfitting(workload, { hasMusic5000: false, hasVideoNula: false, cpuMultiplier: 2 })).toBeNull();
+            expect(
+                misfitting(workload, {
+                    hasMusic5000: false,
+                    hasTeletextAdaptor: false,
+                    hasMidiInterface: false,
+                    hasVideoNula: false,
+                    cpuMultiplier: 2,
+                }),
+            ).toBeNull();
         });
 
         it("names each fitting the machine has otherwise, as the URL sets it", () => {
-            expect(misfitting(workload, { hasMusic5000: false, hasVideoNula: true })).toBe(
-                "The elite workload runs with hasVideoNula=false; set that in the URL",
-            );
-            expect(misfitting(workload, { hasMusic5000: true, hasVideoNula: true })).toBe(
-                "The elite workload runs with hasMusic5000=false, hasVideoNula=false; set those in the URL",
-            );
+            expect(
+                misfitting(workload, {
+                    hasMusic5000: false,
+                    hasTeletextAdaptor: false,
+                    hasMidiInterface: false,
+                    hasVideoNula: true,
+                }),
+            ).toBe("The elite workload runs with hasVideoNula=false; set that in the URL");
+            expect(
+                misfitting(workload, {
+                    hasMusic5000: true,
+                    hasTeletextAdaptor: false,
+                    hasMidiInterface: false,
+                    hasVideoNula: true,
+                }),
+            ).toBe("The elite workload runs with hasMusic5000=false, hasVideoNula=false; set those in the URL");
         });
     });
 

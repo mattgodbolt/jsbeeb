@@ -16,6 +16,13 @@
         <div id="restart-pending" class="alert alert-warning py-1 px-2 small d-none" role="status">
           The model and peripherals shown here take effect when the emulator next restarts.
         </div>
+        <div class="config-section" id="midi-output-settings">
+          <label for="midi-output-select" class="form-label">Host MIDI output</label>
+          <select class="form-select w-100" id="midi-output-select" disabled>
+            <option value="">No MIDI Interface</option>
+          </select>
+          <div id="midi-output-status" class="mt-2 small text-muted" role="status"></div>
+        </div>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
