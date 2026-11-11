@@ -1198,7 +1198,7 @@ test.describe("with a touch screen beside a trackpad", () => {
         page,
     }) => {
         const keys = page.locator('#touch-keyboard .tk-layer[data-name="main"]');
-        const toggle = page.locator("#touch-keyboard-toggle");
+        const toggle = page.getByTitle("Show the on-screen keyboard");
         await beeb.open();
         await expect(toggle).toBeVisible();
         await expect(keys).toBeHidden();

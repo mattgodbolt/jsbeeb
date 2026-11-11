@@ -268,10 +268,7 @@ const padKey = (key, meaning, cls) => {
     return k(legend.label, key, legend, { meaning, cls: `${legend.cls ?? ""} ${cls}` });
 };
 
-/**
- * How the keyboard starts, "open" or "closed", or null where it is not offered. A touch screen beside a trackpad, as
- * on some laptops and Chromebooks, gets it closed behind its button.
- */
+/** How the keyboard starts, "open" or "closed", or null where it is not offered. */
 export const touchKeyboardStart = (forced, matches) => {
     if (forced || matches(TouchQuery) || matches(NarrowScreenQuery)) return "open";
     return matches(AnyTouchQuery) ? "closed" : null;
