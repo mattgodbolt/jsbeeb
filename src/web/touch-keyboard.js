@@ -385,7 +385,8 @@ export class TouchKeyboard {
         });
         new ResizeObserver(() => this.show()).observe(this.root);
         const stored = window.localStorage[StorageKey];
-        this.setOpen(stored ? stored === "true" : start === "open");
+        this.open = stored ? stored === "true" : start === "open";
+        this.show();
     }
 
     build(openMedia) {
