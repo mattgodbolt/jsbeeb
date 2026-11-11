@@ -12,7 +12,7 @@ import {
     PadPresets,
     placeGroups,
     PromptGroups,
-    wantsTouchKeyboard,
+    touchKeyboardStart,
 } from "../../src/web/touch-keyboard.js";
 
 const allKeys = [FunctionRow, ...Object.values(Layers).flat()].flat().filter((def) => def.key);
@@ -59,12 +59,15 @@ describe("touch keyboard", () => {
         expect(Layers.more.length).toBe(Layers.main.length);
     });
 
-    it("is offered on a touch screen or a narrow window, or when asked for", () => {
-        const never = () => false;
-        expect(wantsTouchKeyboard(false, never)).toBe(false);
-        expect(wantsTouchKeyboard(false, (query) => query.includes("coarse"))).toBe(true);
-        expect(wantsTouchKeyboard(false, (query) => query.includes("max-width"))).toBe(true);
-        expect(wantsTouchKeyboard(true, never)).toBe(true);
+    it.each([
+        ["nothing asks for it", false, [], null],
+        ["asked for", true, [], "open"],
+        ["a touch screen is the main pointer", false, ["(pointer: coarse)", "(any-pointer: coarse)"], "open"],
+        ["the window is narrow", false, ["(max-width: 700px)"], "open"],
+        ["a touch screen sits beside a trackpad", false, ["(any-pointer: coarse)"], "closed"],
+        ["asked for beside a trackpad", true, ["(any-pointer: coarse)"], "open"],
+    ])("starts as it should when %s", (_, forced, matching, start) => {
+        expect(touchKeyboardStart(forced, (query) => matching.includes(query))).toBe(start);
     });
 
     describe("pad presets", () => {
