@@ -39,6 +39,7 @@ describe("Settings", () => {
                 speechOutput: false,
                 displayMode: "rgb",
                 audioOutput: "speaker",
+                midiAddress: 0xfc00,
                 speakerAmount: 1,
                 palPersistenceMs: 40,
                 rgbPersistenceMs: 25,
@@ -49,6 +50,7 @@ describe("Settings", () => {
             urlState = fakeUrlState(
                 "?keyLayout=Natural&tubeCpuMultiplier=2.5&microphoneChannel=2&coProcessor&hasEconet&hasMusic5000" +
                     "&hasTeletextAdaptor&hasVideoNula&mouseJoystickEnabled&speechOutput&displayMode=xbr&audioOutput=off" +
+                    "&midiAddress=64640" +
                     "&speakerAmount=0&palPersistenceMs=0&rgbPersistenceMs=100",
             );
             expect(make()).toMatchObject({
@@ -64,6 +66,7 @@ describe("Settings", () => {
                 speechOutput: true,
                 displayMode: "xbr",
                 audioOutput: "off",
+                midiAddress: 0xfc80,
                 speakerAmount: 0,
                 palPersistenceMs: 0,
                 rgbPersistenceMs: 100,
@@ -71,13 +74,21 @@ describe("Settings", () => {
         });
 
         it("prefers a usable URL value to storage, and storage to an unusable one", () => {
-            for (const [name, value] of Object.entries({ keyLayout: "gaming", displayMode: "pal", audioOutput: "off" }))
+            for (const [name, value] of Object.entries({
+                keyLayout: "gaming",
+                displayMode: "pal",
+                audioOutput: "off",
+                midiAddress: "64752",
+            }))
                 window.localStorage[name] = value;
-            urlState = fakeUrlState("?keyLayout&displayMode=&audioOutput=loud&tubeCpuMultiplier=0&hasEconet=false");
+            urlState = fakeUrlState(
+                "?keyLayout&displayMode=&audioOutput=loud&midiAddress=64513&tubeCpuMultiplier=0&hasEconet=false",
+            );
             expect(make()).toMatchObject({
                 keyLayout: "gaming",
                 displayMode: "pal",
                 audioOutput: "off",
+                midiAddress: 0xfcf0,
                 tubeCpuMultiplier: 1,
                 hasEconet: false,
             });
@@ -115,10 +126,13 @@ describe("Settings", () => {
     describe("setting a value", () => {
         it("adopts it, keeps it in storage and writes the URL", () => {
             const settings = make();
-            settings.set({ audioOutput: "board" });
+            settings.set({ audioOutput: "board", midiAddress: 0xfc08 });
             expect(settings.audioOutput).toBe("board");
+            expect(settings.midiAddress).toBe(0xfc08);
             expect(window.localStorage.audioOutput).toBe("board");
+            expect(window.localStorage.midiAddress).toBe("64520");
             expect(urlState.params.audioOutput).toBe("board");
+            expect(urlState.params.midiAddress).toBe(0xfc08);
             expect(urlState.updateUrl).toHaveBeenCalledTimes(1);
         });
 

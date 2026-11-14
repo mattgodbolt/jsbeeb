@@ -16,6 +16,7 @@ const settings = (overrides = {}) => ({
     model: { name: "B-DFS1.2" },
     hasMusic5000: false,
     hasTeletextAdaptor: false,
+    hasMidiInterface: false,
     hasEconet: false,
     fittedRoms: [],
     ...overrides,
@@ -48,6 +49,16 @@ describe("buildEmulationConfig", () => {
     it("fits a tube only when a co-processor was asked for", () => {
         expect(build().tube).toBeNull();
         expect(build({ settings: settings({ coProcessor: true }) }).tube).toBeTruthy();
+    });
+
+    it("does not fit the BBC MIDI interface to an Atom", () => {
+        const atomSettings = settings({ hasMidiInterface: true, model: findModel("Atom-Tape") });
+        expect(build({ settings: atomSettings }).hasMidiInterface).toBe(false);
+    });
+
+    it("hands the selected MIDI address to the processor", () => {
+        const built = build({ settings: settings({ hasMidiInterface: true, midiAddress: 0xfc80 }) });
+        expect(built).toMatchObject({ hasMidiInterface: true, midiAddress: 0xfc80 });
     });
 });
 

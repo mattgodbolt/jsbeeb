@@ -1653,12 +1653,17 @@ describe("SessionGuest", () => {
         expect(channel.messages("bye")).toHaveLength(1);
     });
 
-    const differentValue = (name) =>
-        ({
-            [ParamTypes.BOOL]: !StockTakenFromHost[name],
-            [ParamTypes.INT]: 7,
-            [ParamTypes.FLOAT]: 2.5,
-        })[Parameters[name].type];
+    const differentValue = (name) => {
+        const parameter = Parameters[name];
+        return (
+            parameter.field?.options?.find(({ value }) => value !== StockTakenFromHost[name])?.value ??
+            {
+                [ParamTypes.BOOL]: !StockTakenFromHost[name],
+                [ParamTypes.INT]: 7,
+                [ParamTypes.FLOAT]: 2.5,
+            }[parameter.type]
+        );
+    };
     const allDifferent = Object.fromEntries(TakenFromHostNames.map((name) => [name, differentValue(name)]));
 
     it.each([
