@@ -41,6 +41,7 @@ describe("TouchScreen", () => {
     it.each([
         ["point mode", "M1?", true, [...Centre, EndOfReport]],
         ["point mode, not touched", "M1?", false, [...NotTouched, ...NotTouched, EndOfReport]],
+        ["size mode", "M2?", true, [...Centre, EndOfReport]],
         ["multiple mode", "M3?", true, [...MultipleCentre, EndOfReport]],
         ["data dump mode, which is not emulated", "M0?", true, []],
         ["a continuous mode, which waits for its poll", "M131?", true, []],
@@ -73,9 +74,11 @@ describe("TouchScreen", () => {
     });
 
     it.each([
-        ["the top left corner", 0, 0, [0x40, 0x40, 0x45, 0x4a]],
-        ["the bottom right corner", 1, 1, [0x47, 0x48, 0x40, 0x40]],
-    ])("scales %s of the screen to the 120 by 90 grid", (_, x, y, expected) => {
+        ["just inside the grid's top left", 0.113, 0.114, [0x40, 0x40, 0x45, 0x49]],
+        ["just inside the grid's bottom right", 0.852, 0.945, [0x47, 0x47, 0x40, 0x40]],
+        ["outside the grid's top left", 0, 0, [0x40, 0x40, 0x45, 0x4a]],
+        ["outside the grid's bottom right", 1, 1, [0x47, 0x48, 0x40, 0x40]],
+    ])("scales a touch %s to the 120 by 90 grid", (_, x, y, expected) => {
         touchScreen.onMouse(x, y, true);
         transmit(touchScreen, "M1?");
 
@@ -89,6 +92,18 @@ describe("TouchScreen", () => {
 
         scheduler.polltime(pollCycles);
         expect(readAll(touchScreen)).toEqual([...Centre, EndOfReport]);
+        scheduler.polltime(pollCycles);
+        expect(readAll(touchScreen)).toEqual([...NotTouched, ...NotTouched, EndOfReport]);
+    });
+
+    it.each([
+        ["before the guest selects a mode", (screen) => transmit(screen, "M129.")],
+        ["before the guest changes mode", (screen) => transmit(screen, "M131.M129.")],
+    ])("forgets a press made %s", (_, selectMode) => {
+        touchScreen.onMouse(0.5, 0.5, true);
+        touchScreen.onMouse(0.5, 0.5, false);
+        selectMode(touchScreen);
+
         scheduler.polltime(pollCycles);
         expect(readAll(touchScreen)).toEqual([...NotTouched, ...NotTouched, EndOfReport]);
     });
@@ -147,6 +162,18 @@ describe("TouchScreen", () => {
 
             restored.scheduler.polltime(1);
             expect(readAll(restored.touchScreen)).toEqual([...NotTouched, ...NotTouched, EndOfReport]);
+        });
+
+        it("forgets a press made after the snapshot was taken", () => {
+            transmit(touchScreen, "M129.");
+            const state = { scheduler: scheduler.snapshotState(), touchScreen: touchScreen.snapshotState() };
+            touchScreen.onMouse(0.5, 0.5, true);
+            touchScreen.onMouse(0.5, 0.5, false);
+            scheduler.restoreState(state.scheduler);
+            touchScreen.restoreState(state.touchScreen);
+
+            scheduler.polltime(pollCycles);
+            expect(readAll(touchScreen)).toEqual([...NotTouched, ...NotTouched, EndOfReport]);
         });
 
         it("keeps bytes that were queued but not yet sent", () => {

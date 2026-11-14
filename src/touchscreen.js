@@ -12,6 +12,7 @@ const GridTop = 0.113;
 const GridBottom = 0.946;
 
 const NotTouched = 0xff;
+const NibbleByte = 0x40;
 const EndOfReport = ".".charCodeAt(0);
 const ContinuousModeFlag = 0x80;
 const PointMode = 1;
@@ -23,6 +24,11 @@ const OutBufferSize = 64;
 function toTouchUnits(val, from, to, units) {
     const scaled = ((val - from) / (to - from)) * units;
     return Math.min(units, Math.max(0, scaled)) | 0;
+}
+
+function hasReport(mode) {
+    const request = mode & ~ContinuousModeFlag;
+    return request === PointMode || request === SizeMode || request === MultipleMode;
 }
 
 /**
@@ -76,6 +82,7 @@ export class TouchScreen {
         this.outBuffer.clear();
         for (const byte of state.outBuffer) this.outBuffer.put(byte);
         this.pollTask.restoreOffset(state.pollTaskOffset);
+        this.unreportedPress = null;
     }
 
     tryReceive(rts) {
@@ -93,7 +100,7 @@ export class TouchScreen {
             button ? toTouchUnits(y, GridBottom, GridTop, UnitsUp) : NotTouched,
         );
         if (!values) return;
-        const report = values.flatMap((value) => [0x40 | (value >>> 4), 0x40 | (value & 0x0f)]);
+        const report = values.flatMap((value) => [NibbleByte | (value >>> 4), NibbleByte | (value & 0x0f)]);
         report.push(EndOfReport);
         // While the guest holds RTS off, a report that would not fit whole is dropped rather than sent cut short.
         if (this.outBuffer.size + report.length > OutBufferSize) return;
@@ -107,13 +114,14 @@ export class TouchScreen {
 
     onMouse(x, y, button) {
         this.mouse = { x: x, y: y, button: button };
-        if (button) this.unreportedPress = this.mouse;
+        if (button && hasReport(this.mode)) this.unreportedPress = this.mouse;
     }
 
     onTransmit(val) {
         switch (String.fromCharCode(val)) {
             case "M":
                 this.mode = 0;
+                this.unreportedPress = null;
                 break;
             case "0":
             case "1":
@@ -133,7 +141,6 @@ export class TouchScreen {
                 if (!(this.mode & ContinuousModeFlag)) this.doRead();
                 break;
         }
-        const continuous = !!(this.mode & ContinuousModeFlag) && reportValues(this.mode, 0, 0) !== null;
-        this.pollTask.ensureScheduled(continuous, this.pollCycles);
+        this.pollTask.ensureScheduled(!!(this.mode & ContinuousModeFlag) && hasReport(this.mode), this.pollCycles);
     }
 }
