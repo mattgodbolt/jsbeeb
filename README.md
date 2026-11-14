@@ -272,9 +272,9 @@ mean the same thing.
 
 jsbeeb emulates the Microvitec Touchtech 501, the infrared touch screen that fitted over a monitor and talked to the
 BBC Micro over RS-423. There is nothing to switch on: once a program asks it for positions, holding the mouse button
-down over the emulated screen, or tapping it, touches the screen there. Point and multiple modes (1, 3, 129 and 131)
-are emulated, which covers Hybrid's Soundspace; size mode (2 and 130) reports the point without a size, and the data
-dump mode (0 and 128) sends nothing.
+down over the emulated screen touches the screen there. Point and multiple modes (1, 3, 129 and 131) are emulated,
+which covers Hybrid's Soundspace; size mode (2 and 130) reports the point without a size, and the data dump mode (0
+and 128) sends nothing.
 
 ## Getting Set Up to Run Locally
 

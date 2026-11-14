@@ -121,10 +121,8 @@ describe("TouchScreen", () => {
         transmit(touchScreen, "M131.");
 
         scheduler.polltime(10 * pollCycles);
-        const bytes = readAll(touchScreen);
-        const reportLength = MultipleCentre.length + 1;
-        expect(bytes.length % reportLength).toBe(0);
-        expect(bytes.filter((byte) => byte === EndOfReport).length).toBe(bytes.length / reportLength);
+        const report = [...MultipleCentre, EndOfReport];
+        expect(readAll(touchScreen)).toEqual([...report, ...report, ...report]);
     });
 
     describe("snapshots", () => {

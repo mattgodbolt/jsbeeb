@@ -114,7 +114,7 @@ export class TouchScreen {
 
     onMouse(x, y, button) {
         this.mouse = { x: x, y: y, button: button };
-        if (button && hasReport(this.mode)) this.unreportedPress = this.mouse;
+        if (button) this.unreportedPress = this.mouse;
     }
 
     onTransmit(val) {
