@@ -720,12 +720,17 @@ describe("Via shift register", () => {
         expect(shiftFlag()).toBe(0);
     });
 
-    it("should not restart a shift under way when SR is read", () => {
+    it.each([
+        ["mid-shift", Phi2FirstEdgeTicks + 5],
+        ["just before the last bit's rising edge", Phi2LastRisingEdgeTicks - 1],
+    ])("should leave the clock and the flag alone when SR is read %s", (_, readAt) => {
         startShift(AcrShiftModes.outUnderPhi2);
-        scheduler.polltime(Phi2FirstEdgeTicks + 5);
+        scheduler.polltime(readAt);
         via.read(SR);
-        scheduler.polltime(Phi2LastRisingEdgeTicks - Phi2FirstEdgeTicks - 5);
-        expect(shiftFlag()).toBe(ShiftInt);
+        scheduler.polltime(Phi2LastRisingEdgeTicks - readAt - 1);
+        expect([via.cb1, shiftFlag()]).toEqual([false, 0]);
+        scheduler.polltime(1);
+        expect([via.cb1, shiftFlag()]).toEqual([true, ShiftInt]);
     });
 
     it.each([
@@ -764,16 +769,6 @@ describe("Via shift register", () => {
         expect(via.cb1).toBe(true);
         scheduler.polltime(2 * Phi2LastRisingEdgeTicks);
         expect(shiftFlag()).toBe(0);
-    });
-
-    it("should leave the last bit's rising edge where it was when SR is read just before it", () => {
-        startShift(AcrShiftModes.outUnderPhi2);
-        scheduler.polltime(Phi2LastRisingEdgeTicks - 1);
-        via.read(SR);
-        expect(via.cb1).toBe(false);
-        scheduler.polltime(1);
-        expect(via.cb1).toBe(true);
-        expect(shiftFlag()).toBe(ShiftInt);
     });
 
     it("should keep shifting past eight bits when free running under T2", () => {
