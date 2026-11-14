@@ -247,7 +247,7 @@ class Via {
             return;
         }
         if (mode === ShiftDisabled) return;
-        if (this.shiftTask.scheduled() && this.shiftBits) {
+        if (this._shiftUnderWay()) {
             if (isWrite) this.shiftBits = BitsPerShift;
             return;
         }
@@ -260,6 +260,11 @@ class Via {
     _stopShiftClockAtRest() {
         if (this.shiftTask.scheduled()) this.cb1 = true;
         this.shiftTask.cancel();
+    }
+
+    // Once a shift in's last bit is in, its task waits only to set the flag.
+    _shiftUnderWay() {
+        return this.shiftTask.scheduled() && !(this.shiftBits === 0 && this.cb1);
     }
 
     _ticksToT2Underflow() {
@@ -315,7 +320,6 @@ class Via {
         }
     }
 
-    // Bit 7 goes out first and comes back round into bit 0.
     _shiftOut() {
         const bit = this.sr >>> 7;
         this.sr = ((this.sr << 1) | bit) & 0xff;
@@ -489,8 +493,7 @@ class Via {
                 if (this._t2ClocksShifter()) {
                     this.t2High = val;
                     this.t2c = (this.t2l & 0x1fe) + 1;
-                    if (this.shiftTask.scheduled() && this.shiftBits)
-                        this.shiftTask.reschedule(this._ticksToT2Underflow());
+                    if (this._shiftUnderWay()) this.shiftTask.reschedule(this._ticksToT2Underflow());
                 } else {
                     this.t2c = this.t2l + 1;
                     if (this.acr & 0x20) this.t2c -= 2;

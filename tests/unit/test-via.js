@@ -766,6 +766,24 @@ describe("Via shift register", () => {
         expect(shiftFlag()).toBe(0);
     });
 
+    it("should leave the last bit's rising edge where it was when SR is read just before it", () => {
+        startShift(AcrShiftModes.outUnderPhi2);
+        scheduler.polltime(Phi2LastRisingEdgeTicks - 1);
+        via.read(SR);
+        expect(via.cb1).toBe(false);
+        scheduler.polltime(1);
+        expect(via.cb1).toBe(true);
+        expect(shiftFlag()).toBe(ShiftInt);
+    });
+
+    it("should keep shifting past eight bits when free running under T2", () => {
+        startShift(AcrShiftModes.outFreeRunningT2, 0x81);
+        scheduler.polltime(20 * T2EdgeTicks);
+        expect(via.peek(SR)).toBe(0x06);
+        scheduler.polltime(T2EdgeTicks);
+        expect([via.cb1, via.peek(SR)]).toEqual([false, 0x0c]);
+    });
+
     it("should start another eight bits when SR is written after the flag is set", () => {
         startShift(AcrShiftModes.outUnderPhi2);
         scheduler.polltime(Phi2LastRisingEdgeTicks);
