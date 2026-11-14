@@ -17,10 +17,10 @@ function amxButtonsOf(domButtons) {
 }
 
 /**
- * The host's mouse driving the AMX mouse by how far it moves, not where it is. A click on the screen locks the pointer
- * to it, so the host's pointer never runs out of screen, and that click presses nothing. Where the browser refuses the
- * lock, or has no pointer lock (as on phones), movement over the screen drives the mouse all the same, and the next
- * click presses a button as it asks again. The buttons go up as the lock is let go, as the host's button may then come
+ * The host's mouse driving the AMX mouse by how far it moves over the screen, not where it is, locked or not. A click
+ * on the screen locks the pointer to it, so the host's pointer never runs out of screen, and that click presses
+ * nothing. Where the browser refuses the lock, or has none (as on phones), the next click presses a button as it asks
+ * again. The buttons go up as the lock is let go, as the host's button may then come
  * up anywhere.
  */
 export class AmxMouseInput {
