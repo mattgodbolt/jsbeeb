@@ -1,4 +1,5 @@
-const table = [19200, 9600, 4800, 2400, 1200, 300, 150, 75];
+// The rate each 3-bit field selects, as OS 1.20's *FX7 and *FX8 table at &E9AE sets them.
+const table = [19200, 1200, 4800, 150, 9600, 300, 2400, 75];
 
 export class Serial {
     constructor(acia) {
