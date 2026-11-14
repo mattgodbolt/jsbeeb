@@ -748,11 +748,14 @@ describe("Via shift register", () => {
         expect(via.cb1).toBe(true);
     });
 
-    it("should abandon a shift under way, with CB1 back at rest, when the mode changes", () => {
-        startShift(AcrShiftModes.outUnderPhi2);
+    it.each([
+        ["the mode changes", () => via.write(ACR, AcrShiftModes.disabled)],
+        ["the VIA is reset", () => via.reset()],
+    ])("should abandon a shift under way, with CB1 back at rest, when %s", (_, abandon) => {
+        startShift(AcrShiftModes.inUnderPhi2);
         scheduler.polltime(Phi2FirstEdgeTicks);
         expect(via.cb1).toBe(false);
-        via.write(ACR, AcrShiftModes.disabled);
+        abandon();
         expect(via.cb1).toBe(true);
         scheduler.polltime(2 * Phi2LastRisingEdgeTicks);
         expect(shiftFlag()).toBe(0);
