@@ -647,17 +647,21 @@ describe("peeking at the hardware", () => {
         expect(cpu.readmem(CrtcData)).toBe(StartAddressLow);
     });
 
-    it("shows the Music 5000's page select and wave RAM as a read does", () => {
+    it("reads the Music 5000's write-only wave RAM as an empty JIM page, and peeks it the same", () => {
         const model = findModel("B-DFS1.2");
-        const cpu = new model.Cpu(model, {
-            ...nullIo({ model }),
-            music5000: new Music5000(() => {}),
-            config: machineSpec({ hasMusic5000: true }),
-        });
+        const machine = (hasMusic5000) =>
+            new model.Cpu(model, {
+                ...nullIo({ model }),
+                music5000: new Music5000(() => {}),
+                config: machineSpec({ hasMusic5000 }),
+            });
+        const cpu = machine(true);
+        const withoutCard = machine(false);
         cpu.writemem(Music5000PageSelect, Music5000WaveRamPage);
         cpu.writemem(Music5000WaveRamByte, WaveByte);
         expect(cpu.peekmem(Music5000PageSelect)).toBe(Music5000WaveRamPage);
-        expect(cpu.peekmem(Music5000WaveRamByte)).toBe(cpu.readmem(Music5000WaveRamByte));
+        for (const addr of addressesFrom(JimStart, JimStart + 0x100))
+            expect(cpu.readmem(addr)).toBe(withoutCard.readmem(addr));
         expect(peeksUnlikeReads(cpu, Music5000PageSelect, JimStart + 0x100)).toEqual([]);
     });
 

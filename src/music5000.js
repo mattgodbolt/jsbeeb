@@ -97,12 +97,7 @@ export class Music5000 {
         }
     }
 
-    read(page, addr) {
-        // Bit0 unused
-        const offset = ((page & 0x0e) << 7) + addr;
-        return this.waveRam[offset];
-    }
-
+    // Write-only: nothing on the card drives the 1MHz bus data lines (Hybrid's 1984 schematic).
     write(page, addr, value) {
         // Bit0 unused
         const offset = ((page & 0x0e) << 7) + (addr & 0xff);
@@ -189,9 +184,6 @@ export class FakeMusic5000 {
     constructor() {
         this.reset = function () {};
         this.polltime = function () {};
-        this.read = function () {
-            return 0;
-        };
         this.write = function () {};
     }
 }
