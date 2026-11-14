@@ -108,6 +108,18 @@ describe("TouchScreen", () => {
         expect(readAll(touchScreen)).toEqual([...NotTouched, ...NotTouched, EndOfReport]);
     });
 
+    it("keeps a quick press for the first report there is room for", () => {
+        transmit(touchScreen, "M131.");
+        scheduler.polltime(3 * pollCycles);
+        touchScreen.onMouse(0.5, 0.5, true);
+        touchScreen.onMouse(0.5, 0.5, false);
+        scheduler.polltime(pollCycles);
+        readAll(touchScreen);
+
+        scheduler.polltime(pollCycles);
+        expect(readAll(touchScreen)).toEqual([...MultipleCentre, EndOfReport]);
+    });
+
     it("holds off sending until RTS is asserted", () => {
         touchScreen.onMouse(0.5, 0.5, true);
         transmit(touchScreen, "M1?");

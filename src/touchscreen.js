@@ -92,19 +92,22 @@ export class TouchScreen {
 
     doRead() {
         const touch = this.mouse.button ? this.mouse : (this.unreportedPress ?? this.mouse);
-        this.unreportedPress = null;
         const { x, y, button } = this.inputLog ? this.inputLog.sample("touch", touch) : touch;
         const values = reportValues(
             this.mode,
             button ? toTouchUnits(x, GridLeft, GridRight, UnitsAcross) : NotTouched,
             button ? toTouchUnits(y, GridBottom, GridTop, UnitsUp) : NotTouched,
         );
-        if (!values) return;
+        if (!values) {
+            this.unreportedPress = null;
+            return;
+        }
         const report = values.flatMap((value) => [NibbleByte | (value >>> 4), NibbleByte | (value & 0x0f)]);
         report.push(EndOfReport);
         // While the guest holds RTS off, a report that would not fit whole is dropped rather than sent cut short.
         if (this.outBuffer.size + report.length > OutBufferSize) return;
         for (const byte of report) this.outBuffer.put(byte);
+        this.unreportedPress = null;
     }
 
     poll() {
