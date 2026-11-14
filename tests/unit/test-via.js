@@ -7,7 +7,9 @@ import { ViaRegister } from "./helpers.js";
 
 const { ORB, ORA, DDRB, DDRA, T1CL, T1CH, T2CL, T2CH, SR, ACR, PCR, IFR, IER, ORAnh } = ViaRegister;
 const AcrT1Continuous = 0x40;
+const AcrShiftInT2 = 0x04;
 const AcrShiftOutFreeRunningT2 = 0x10;
+const AcrShiftOutT2 = 0x14;
 const AcrT2CountsPb6 = 0x20;
 const Pb6 = 0x40;
 const Timer1Int = 0x40;
@@ -505,7 +507,12 @@ describe("Via T2 clocking the shift register", () => {
         via.write(T2CH, high);
     }
 
-    it("should decrement T2 high once per low-latch-plus-two microseconds", () => {
+    it.each([
+        ["shifting in under T2", AcrShiftInT2],
+        ["shifting out free running under T2", AcrShiftOutFreeRunningT2],
+        ["shifting out under T2", AcrShiftOutT2],
+    ])("should decrement T2 high once per low-latch-plus-two microseconds when %s", (_, acr) => {
+        via.write(ACR, acr);
         const lowLatch = 10;
         start(lowLatch, 200);
         runMicroseconds(5 * (lowLatch + 2));
@@ -638,6 +645,232 @@ describe("Via T2 clocking the shift register", () => {
         expect(via.read(T2CH)).toBe(100);
         runMicroseconds(0x100);
         expect(via.read(T2CH)).toBe(99);
+    });
+});
+
+describe("Via shift register", () => {
+    const AcrShiftModes = {
+        disabled: 0x00,
+        inUnderT2: AcrShiftInT2,
+        inUnderPhi2: 0x08,
+        inUnderCb1: 0x0c,
+        outFreeRunningT2: AcrShiftOutFreeRunningT2,
+        outUnderT2: AcrShiftOutT2,
+        outUnderPhi2: 0x18,
+        outUnderCb1: 0x1c,
+    };
+    const ShiftInt = 0x04;
+    const T2LowLatch = 3;
+    const T2EdgeTicks = (T2LowLatch + 2) * TicksPerMicrosecond;
+    const Phi2FirstEdgeTicks = 2 * TicksPerMicrosecond;
+    const Phi2LastRisingEdgeTicks = Phi2FirstEdgeTicks + 15 * TicksPerMicrosecond;
+    const T2LastRisingEdgeTicks = 16 * T2EdgeTicks;
+
+    let via, scheduler, cpu;
+
+    beforeEach(() => {
+        scheduler = new Scheduler();
+        cpu = makeFakeCpu();
+        via = new UserVia(cpu, scheduler, makeFakeUserPortPeripheral());
+    });
+
+    function startShift(acr, value = 0) {
+        via.write(ACR, acr);
+        via.write(T2CL, T2LowLatch);
+        via.write(T2CH, 0x80);
+        via.write(SR, value);
+    }
+
+    const shiftFlag = () => via.peek(IFR) & ShiftInt;
+
+    it.each([
+        ["shift in under T2", AcrShiftModes.inUnderT2, T2LastRisingEdgeTicks + TicksPerMicrosecond],
+        ["shift in under φ2", AcrShiftModes.inUnderPhi2, Phi2LastRisingEdgeTicks + TicksPerMicrosecond],
+        ["shift out under T2", AcrShiftModes.outUnderT2, T2LastRisingEdgeTicks],
+        ["shift out under φ2", AcrShiftModes.outUnderPhi2, Phi2LastRisingEdgeTicks],
+    ])("should set the flag and interrupt after eight bits when it can %s", (_, acr, ticks) => {
+        via.write(IER, 0x80 | ShiftInt);
+        startShift(acr);
+        scheduler.polltime(ticks - 1);
+        expect(shiftFlag()).toBe(0);
+        expect(cpu.interrupt).toBeFalsy();
+        scheduler.polltime(1);
+        expect(shiftFlag()).toBe(ShiftInt);
+        expect(cpu.interrupt).toBeTruthy();
+    });
+
+    it.each([
+        ["disabled", AcrShiftModes.disabled],
+        ["free running under T2", AcrShiftModes.outFreeRunningT2],
+        ["clocked by CB1 that does not move", AcrShiftModes.inUnderCb1],
+    ])("should never set the flag when %s", (_, acr) => {
+        startShift(acr);
+        scheduler.polltime(4 * T2LastRisingEdgeTicks);
+        expect(shiftFlag()).toBe(0);
+    });
+
+    it.each([
+        ["reading", () => via.read(SR)],
+        ["writing", () => via.write(SR, 0)],
+    ])("should clear the flag on %s SR", (_, access) => {
+        startShift(AcrShiftModes.outUnderPhi2);
+        scheduler.polltime(Phi2LastRisingEdgeTicks);
+        expect(shiftFlag()).toBe(ShiftInt);
+        access();
+        expect(shiftFlag()).toBe(0);
+    });
+
+    it.each([
+        ["mid-shift", Phi2FirstEdgeTicks + 5],
+        ["just before the last bit's rising edge", Phi2LastRisingEdgeTicks - 1],
+    ])("should leave the clock and the flag alone when SR is read %s", (_, readAt) => {
+        startShift(AcrShiftModes.outUnderPhi2);
+        scheduler.polltime(readAt);
+        via.read(SR);
+        scheduler.polltime(Phi2LastRisingEdgeTicks - readAt - 1);
+        expect([via.cb1, shiftFlag()]).toEqual([false, 0]);
+        scheduler.polltime(1);
+        expect([via.cb1, shiftFlag()]).toEqual([true, ShiftInt]);
+    });
+
+    it.each([
+        ["CB1 has just risen", 3 * TicksPerMicrosecond, 8 * 2 * TicksPerMicrosecond],
+        ["CB1 has just fallen", 2 * TicksPerMicrosecond, (8 * 2 + 1) * TicksPerMicrosecond],
+    ])("should shift out all eight bits of a value written mid-shift when %s", (_, sinceFirstEdge, untilFlag) => {
+        const value = 0x5a;
+        startShift(AcrShiftModes.outUnderPhi2);
+        scheduler.polltime(Phi2FirstEdgeTicks + sinceFirstEdge);
+        via.write(SR, value);
+        scheduler.polltime(untilFlag - 1);
+        expect(shiftFlag()).toBe(0);
+        scheduler.polltime(1);
+        expect(shiftFlag()).toBe(ShiftInt);
+        expect(via.peek(SR)).toBe(value);
+    });
+
+    it("should time the next edge from a T2 high write mid-shift", () => {
+        startShift(AcrShiftModes.outUnderT2);
+        scheduler.polltime(T2EdgeTicks + 2);
+        via.write(T2CH, 0x80);
+        scheduler.polltime(T2EdgeTicks - 1);
+        expect(via.cb1).toBe(false);
+        scheduler.polltime(1);
+        expect(via.cb1).toBe(true);
+    });
+
+    it.each([
+        ["the mode changes", () => via.write(ACR, AcrShiftModes.disabled)],
+        ["the VIA is reset", () => via.reset()],
+    ])("should abandon a shift under way, with CB1 back at rest, when %s", (_, abandon) => {
+        startShift(AcrShiftModes.inUnderPhi2);
+        scheduler.polltime(Phi2FirstEdgeTicks);
+        expect(via.cb1).toBe(false);
+        abandon();
+        expect(via.cb1).toBe(true);
+        scheduler.polltime(2 * Phi2LastRisingEdgeTicks);
+        expect(shiftFlag()).toBe(0);
+    });
+
+    it("should keep shifting past eight bits when free running under T2", () => {
+        startShift(AcrShiftModes.outFreeRunningT2, 0x81);
+        scheduler.polltime(20 * T2EdgeTicks);
+        expect(via.peek(SR)).toBe(0x06);
+        scheduler.polltime(T2EdgeTicks);
+        expect([via.cb1, via.peek(SR)]).toEqual([false, 0x0c]);
+    });
+
+    it("should start another eight bits when SR is written after the flag is set", () => {
+        startShift(AcrShiftModes.outUnderPhi2);
+        scheduler.polltime(Phi2LastRisingEdgeTicks);
+        via.write(SR, 0);
+        scheduler.polltime(Phi2LastRisingEdgeTicks - 1);
+        expect(shiftFlag()).toBe(0);
+        scheduler.polltime(1);
+        expect(shiftFlag()).toBe(ShiftInt);
+    });
+
+    it("should put SR on CB2 from bit 7 on each falling CB1 edge, rotating it back round", () => {
+        const value = 0xa5;
+        const driven = [];
+        via.cb2changecallback = (level, output) => driven.push({ level, output });
+        startShift(AcrShiftModes.outUnderPhi2, value);
+        const seen = [];
+        scheduler.polltime(Phi2FirstEdgeTicks);
+        for (let bit = 0; bit < 8; ++bit) {
+            seen.push({ cb1: via.cb1, cb2: via.cb2, sr: via.peek(SR) });
+            scheduler.polltime(2 * TicksPerMicrosecond);
+        }
+        expect(seen).toEqual(
+            Array.from({ length: 8 }, (_, bit) => ({
+                cb1: false,
+                cb2: !!((value << bit) & 0x80),
+                sr: ((value << (bit + 1)) | (value >>> (7 - bit))) & 0xff,
+            })),
+        );
+        expect(via.cb1).toBe(true);
+        expect(driven).toEqual([true, false, true, false, true, false, true].map((level) => ({ level, output: true })));
+        expect(via.peek(IFR) & Cb1Int).toBe(0);
+    });
+
+    it("should shift CB2 into bit 0 on each rising CB1 edge", () => {
+        const value = 0x9c;
+        startShift(AcrShiftModes.inUnderPhi2);
+        scheduler.polltime(Phi2FirstEdgeTicks);
+        for (let bit = 7; bit >= 0; --bit) {
+            via.setcb2(!!((value >>> bit) & 1));
+            scheduler.polltime(2 * TicksPerMicrosecond);
+        }
+        expect(via.read(SR)).toBe(value);
+    });
+
+    it.each([
+        ["in on rising edges", AcrShiftModes.inUnderCb1, true],
+        ["out on falling edges", AcrShiftModes.outUnderCb1, false],
+    ])("should count eight CB1 clocks %s, restarting the count when SR is read", (_, acr, edge) => {
+        startShift(acr);
+        const clock = (count) => {
+            for (let i = 0; i < count; ++i) {
+                via.setcb1(!edge);
+                via.setcb1(edge);
+            }
+        };
+        clock(7);
+        via.read(SR);
+        clock(7);
+        expect(shiftFlag()).toBe(0);
+        clock(1);
+        expect(shiftFlag()).toBe(ShiftInt);
+    });
+
+    it("should carry a shift under way through a snapshot", () => {
+        via.write(IER, 0x80 | ShiftInt);
+        startShift(AcrShiftModes.outUnderT2, 0x3c);
+        scheduler.polltime(5 * T2EdgeTicks + 1);
+        const snapshot = via.snapshotState();
+
+        const restoredScheduler = new Scheduler();
+        restoredScheduler.restoreState(scheduler.snapshotState());
+        const restored = new UserVia(cpu, restoredScheduler, makeFakeUserPortPeripheral());
+        restored.restoreState(snapshot);
+        const remaining = T2LastRisingEdgeTicks - 5 * T2EdgeTicks - 1;
+        restoredScheduler.polltime(remaining - 1);
+        expect(restored.peek(IFR) & ShiftInt).toBe(0);
+        restoredScheduler.polltime(1);
+        expect(restored.peek(IFR) & ShiftInt).toBe(ShiftInt);
+        expect(restored.peek(SR)).toBe(0x3c);
+    });
+
+    it("should count a full eight CB1 clocks after restoring a snapshot from before shifting was saved", () => {
+        via.write(ACR, AcrShiftModes.inUnderCb1);
+        const { shiftBits: _bits, shiftTaskOffset: _offset, ...older } = via.snapshotState();
+        const restored = new UserVia(cpu, scheduler, makeFakeUserPortPeripheral());
+        restored.restoreState(older);
+        for (let clock = 0; clock < 8; ++clock) {
+            expect(restored.peek(IFR) & ShiftInt).toBe(0);
+            restored.setcb1(true);
+            restored.setcb1(false);
+        }
+        expect(restored.peek(IFR) & ShiftInt).toBe(ShiftInt);
     });
 });
 

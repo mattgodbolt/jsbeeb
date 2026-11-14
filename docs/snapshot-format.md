@@ -171,14 +171,14 @@ Scheduled tasks are not saved directly. Each component saves its task timing as 
 | `t1l`                | number       | Timer 1 Latch (doubled 2MHz ticks)                               |
 | `t2l`                | number       | Timer 2 Latch                                                    |
 | `t1c`                | number       | Timer 1 Counter                                                  |
-| `t2c`                | number       | Timer 2 Counter (just the low byte's count in shift mode 100)    |
+| `t2c`                | number       | Timer 2 Counter (the low byte alone while T2 clocks the SR)      |
 | `acr`                | number       | Auxiliary Control Register                                       |
 | `pcr`                | number       | Peripheral Control Register                                      |
 | `ifr`                | number       | Interrupt Flag Register                                          |
 | `ier`                | number       | Interrupt Enable Register                                        |
 | `t1hit`              | boolean      | Timer 1 has expired                                              |
 | `t2hit`              | boolean      | Timer 2 has expired                                              |
-| `t2High`             | number       | T2 high byte in shift mode 100; split from `t2c` when absent     |
+| `t2High`             | number       | T2 high byte while T2 clocks the SR; split from `t2c` if absent  |
 | `portapins`          | number       | Port A pin levels                                                |
 | `portbpins`          | number       | Port B pin levels                                                |
 | `ca1`                | boolean      | CA1 line level                                                   |
@@ -187,12 +187,16 @@ Scheduled tasks are not saved directly. Each component saves its task timing as 
 | `cb2`                | boolean      | CB2 line level                                                   |
 | `justhit`            | number       | Timer just-hit flags                                             |
 | `t1_pb7`             | number       | Timer 1 PB7 output state                                         |
+| `shiftBits`          | number       | Bits left in the shift register's count of eight                 |
 | `lastPolltime`       | number       | Last polltime epoch                                              |
 | `taskOffset`         | number\|null | Scheduled task offset from epoch (null if no task)               |
 | `ca2PulseTaskOffset` | number\|null | Offset at which a pulse-mode CA2 returns high (null if no pulse) |
 | `cb2PulseTaskOffset` | number\|null | Offset at which a pulse-mode CB2 returns high (null if no pulse) |
+| `shiftTaskOffset`    | number\|null | Next edge of an internal shift clock or its flag (null if none)  |
 
 `ca2PulseTaskOffset` and `cb2PulseTaskOffset` are absent from snapshots written before CA2/CB2 pulses had a width, and from imported snapshots; absent means no pulse is in flight.
+
+While an internal clock shifts, `cb1` is the clock's output level, and while it shifts out `cb2` is the last bit put out. `shiftBits` and `shiftTaskOffset` are absent from snapshots written before the shift register shifted, and from imported snapshots; absent means no shift is under way and a full count of eight.
 
 System VIA additionally includes:
 
