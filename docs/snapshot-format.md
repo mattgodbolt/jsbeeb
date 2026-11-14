@@ -67,7 +67,7 @@ Snapshots can be imported from other emulators. The `importedFrom` field in the 
 | `"b-em"`       | B-em snapshot (`.snp` file, v1 or v3)            |
 | `"beebem-uef"` | BeebEm UEF save state (`.uef` with 0x046C chunk) |
 
-Imported snapshots use the same `jsbeeb-snapshot` format (version 3) and do not include FDC, disc or touchscreen state (`state.fdc` and `state.touchScreen` will be absent).
+Imported snapshots use the same `jsbeeb-snapshot` format (version 3) and do not include FDC, disc, touchscreen or AMX mouse state (`state.fdc`, `state.touchScreen` and `state.amxMouse` will be absent).
 
 B-em snapshots include the full ROM contents in the `roms` field (256KB, all 16 banks). BeebEm UEF snapshots include only the sideways RAM banks they saved, in `swram` and `swramBankMask`.
 
@@ -419,14 +419,14 @@ The pointer position and button state are not saved: like the keyboard, they are
 
 ### AMX mouse (`state.amxMouse`)
 
-Present only when the AMX mouse was fitted. Absent means a fitted mouse starts still, as at power on.
+Present only when the AMX mouse was fitted. Absent means a fitted mouse drops any movement it had still to make.
 
-| Field             | Type                               | Description                                                              |
-| ----------------- | ---------------------------------- | ------------------------------------------------------------------------ |
-| `x`, `y`          | `{pending: number, phase: number}` | Quadrature steps still to make (right and up positive), and phase 0 to 3 |
-| `waitingForFlags` | boolean                            | The software has just cleared the CB1 and CB2 flags; the next step waits |
-| `yStepsNext`      | boolean                            | Whether the Y axis takes the next step while both have steps to make     |
-| `stepTaskOffset`  | number\|null                       | Step task offset (null when the mouse is still)                          |
+| Field            | Type                               | Description                                                                                                                    |
+| ---------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `x`, `y`         | `{pending: number, phase: number}` | Quadrature steps still to make (right and up positive), and phase 0 to 3                                                       |
+| `stepsWaited`    | number                             | Steps waited for the software to clear the CB1 and CB2 flags; still non-zero just after they clear, as the next step waits too |
+| `yStepsNext`     | boolean                            | Whether the Y axis takes the next step while both have steps to make                                                           |
+| `stepTaskOffset` | number\|null                       | Step task offset (null when the mouse is still)                                                                                |
 
 The levels on CB1 and CB2 are the user VIA's. The buttons are not saved: like the keyboard, they are host input.
 

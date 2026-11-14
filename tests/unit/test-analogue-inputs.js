@@ -155,12 +155,38 @@ describe("AnalogueInputs", () => {
             ]);
         });
 
-        it("presses buttons with every click where the browser will not lock the pointer", () => {
+        it.each([
+            ["reports a pointerlockerror", () => document.dispatchEvent(new Event("pointerlockerror"))],
+            [
+                "rejects the request",
+                () => {
+                    monitor.requestPointerLock = vi.fn(() => Promise.reject(new Error("refused")));
+                    send("mousedown", { buttons: 1 });
+                },
+            ],
+        ])("presses a button with each click after the browser %s, asking for the lock again", async (_, refuse) => {
             make();
-            document.dispatchEvent(new Event("pointerlockerror"));
+            refuse();
+            await Promise.resolve();
+            amxMouse.setButtons.mockClear();
+            monitor.requestPointerLock = vi.fn(async () => {});
             send("mousedown", { buttons: 2 });
-            expect(monitor.requestPointerLock).not.toHaveBeenCalled();
+            expect(monitor.requestPointerLock).toHaveBeenCalledTimes(1);
             expect(amxMouse.setButtons).toHaveBeenCalledWith(AmxButtons.right);
+        });
+
+        it("lets go of the buttons as the lock goes, and locks again with the next click", () => {
+            make();
+            lockTo(monitor);
+            document.dispatchEvent(new Event("pointerlockchange"));
+            send("mousedown", { buttons: 1 });
+            lockTo(null);
+            document.dispatchEvent(new Event("pointerlockchange"));
+            expect(amxMouse.setButtons).toHaveBeenLastCalledWith(0);
+            amxMouse.setButtons.mockClear();
+            send("mousedown", { buttons: 1 });
+            expect(monitor.requestPointerLock).toHaveBeenCalledTimes(1);
+            expect(amxMouse.setButtons).not.toHaveBeenCalled();
         });
 
         it("moves by how far the pointer moves across the screen, up as the pointer goes up, keeping what is left over", () => {

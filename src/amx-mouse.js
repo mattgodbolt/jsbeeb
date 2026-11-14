@@ -10,8 +10,10 @@ const ButtonsShift = 5;
 const ViaCb1Flag = 0x10;
 const ViaCb2Flag = 0x08;
 const PhaseMask = 3;
-// BeebEm's AMX_TRIGGER, in 2MHz ticks.
-const StepTicks = 250;
+// In 2MHz ticks. BeebEm spends 250 on each count; a count here is four steps.
+const StepTicks = 64;
+// Software that leaves a flag set this long, 5ms, is not reading the mouse, which drops what it has still to do.
+const StalledSteps = 156;
 
 // Stepping right or up goes up through the phases: (X1, X2) = (0, 0), (1, 0), (1, 1), (0, 1).
 const lineLevel = (phase) => phase === 1 || phase === 2;
@@ -24,6 +26,8 @@ export class AmxMouse {
         this.via = null;
         this.buttons = 0;
         this.held = false;
+        this.x = { pending: 0, phase: 0 };
+        this.y = { pending: 0, phase: 0 };
         this.setX1 = (level) => this.via.setcb1(level);
         this.setY1 = (level) => this.via.setcb2(level);
         this.stepTask = scheduler.newTask(() => this._step());
@@ -35,10 +39,11 @@ export class AmxMouse {
         this.via = via;
     }
 
+    /** Drops any movement still to make. The phases are where the mouse's wheels stand, which a reset leaves be. */
     reset() {
-        this.x = { pending: 0, phase: 0 };
-        this.y = { pending: 0, phase: 0 };
-        this.waitingForFlags = false;
+        this.x.pending = 0;
+        this.y.pending = 0;
+        this.stepsWaited = 0;
         this.yStepsNext = false;
         this.stepTask.cancel();
     }
@@ -73,22 +78,26 @@ export class AmxMouse {
         this.via.recalculatePortBPins();
     }
 
-    /** @param {boolean} held whether the mouse sits still with its buttons up whatever the host does */
+    /** @param {boolean} held whether the mouse takes no further movement and reads its buttons up, whatever the host does */
     hold(held) {
         this.held = held;
         this.via.recalculatePortBPins();
     }
 
     /**
-     * Each step moves one axis, taking turns while both have further to go, so that no edge on CB1 comes with one on
-     * CB2: J.G. Harston's driver reads only X when both flags are set. A step waits until the software has cleared
-     * both flags, and one step more so that it has read the direction lines by then, as BeebEm and b-em wait.
+     * Each step moves one axis, taking turns while both have further to go so that a diagonal goes diagonally. It waits until the software has cleared the CB1 and CB2 flags, as BeebEm and b-em
+     * wait, so that no edge on CB1 comes with one on CB2: J.G. Harston's driver reads only X when both flags are set.
+     * After an edge it waits a step more once they are clear, so that a driver that clears them before reading the
+     * direction lines (as AMX Design's does) has read them by then.
      */
     _step() {
         if (this.via.ifr & (ViaCb1Flag | ViaCb2Flag)) {
-            this.waitingForFlags = true;
-        } else if (this.waitingForFlags) {
-            this.waitingForFlags = false;
+            if (++this.stepsWaited > StalledSteps) {
+                this.reset();
+                return;
+            }
+        } else if (this.stepsWaited) {
+            this.stepsWaited = 0;
         } else if (this.y.pending && (this.yStepsNext || !this.x.pending)) {
             this._stepAxis(this.y, this.setY1);
             this.yStepsNext = false;
@@ -104,15 +113,19 @@ export class AmxMouse {
         const step = Math.sign(axis.pending);
         axis.pending -= step;
         axis.phase = (from + step) & PhaseMask;
-        if (lineLevel(from) !== lineLevel(axis.phase)) setLine(lineLevel(axis.phase));
-        else this.via.recalculatePortBPins();
+        if (lineLevel(from) === lineLevel(axis.phase)) {
+            this.via.recalculatePortBPins();
+            return;
+        }
+        setLine(lineLevel(axis.phase));
+        this.stepsWaited = 1;
     }
 
     snapshotState() {
         return {
             x: { ...this.x },
             y: { ...this.y },
-            waitingForFlags: this.waitingForFlags,
+            stepsWaited: this.stepsWaited,
             yStepsNext: this.yStepsNext,
             stepTaskOffset: this.stepTask.offset(),
         };
@@ -121,7 +134,7 @@ export class AmxMouse {
     restoreState(state) {
         this.x = { ...state.x };
         this.y = { ...state.y };
-        this.waitingForFlags = state.waitingForFlags;
+        this.stepsWaited = state.stepsWaited;
         this.yStepsNext = state.yStepsNext;
         this.stepTask.restoreOffset(state.stepTaskOffset);
     }

@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { AmxButtons, AmxMouse } from "../../src/amx-mouse.js";
 import { UserVia } from "../../src/via.js";
 import { Scheduler } from "../../src/scheduler.js";
+import { fake6502 } from "../../src/fake6502.js";
+import { findModel } from "../../src/models.js";
 import { expectSnapshotRoundTrips } from "../helpers/snapshot-round-trip.js";
 import { ViaRegister } from "./helpers.js";
 
@@ -15,6 +17,9 @@ const ButtonLines = 0xe0;
 const StepsPerCount = 4;
 const DriverPollTicks = 50;
 const OneSecondTicks = 2_000_000;
+const TicksPerMillisecond = 2000;
+// AMX Design's handler writes the flags to IFR to clear them, then reads port B.
+const ClearToReadTicks = 20;
 
 function fittedMouse() {
     const scheduler = new Scheduler();
@@ -25,15 +30,20 @@ function fittedMouse() {
 }
 
 /**
- * Software reading the mouse as AMX Design and J.G. Harston's driver do, polling rather than taking the interrupt:
- * each CB1 or CB2 flag is a count, its direction the X2 or Y2 line as port B is read to clear it.
+ * Software reading the mouse as J.G. Harston's driver does, polling rather than taking the interrupt: each CB1 or CB2
+ * flag is a count, its direction the X2 or Y2 line as port B is read to clear it. `clearingFirst` clears the flags
+ * through IFR before reading port B, as AMX Design's handler does.
  */
-function runDriver({ scheduler, via }, ticks) {
+function runDriver({ scheduler, via }, ticks, { clearingFirst = false } = {}) {
     const seen = { x: 0, y: 0, xDirections: new Set(), yDirections: new Set(), bothAtOnce: false };
     for (let ran = 0; ran < ticks; ran += DriverPollTicks) {
         scheduler.polltime(DriverPollTicks);
         const flags = via.read(IFR) & (Cb1Int | Cb2Int);
         if (!flags) continue;
+        if (clearingFirst) {
+            via.write(IFR, flags);
+            scheduler.polltime(ClearToReadTicks);
+        }
         const pins = via.read(ORB);
         seen.bothAtOnce ||= flags === (Cb1Int | Cb2Int);
         if (flags & Cb1Int) {
@@ -85,12 +95,21 @@ describe("AmxMouse", () => {
         expect({ x: [...xDirections], y: [...yDirections] }).toEqual({ x: [high], y: [high] });
     });
 
-    it("moves no further until the software has cleared the flags, losing nothing", () => {
+    it.each([
+        ["keeps", "a moment", 2 * TicksPerMillisecond, 10],
+        ["drops", "longer, as no software is reading it,", OneSecondTicks, 1],
+    ])("%s the rest of a move while the flags stay set for %s", (_, __, waitTicks, counts) => {
         const machine = fittedMouse();
         machine.mouse.move(40, 0);
-        machine.scheduler.polltime(OneSecondTicks);
+        machine.scheduler.polltime(waitTicks);
         expect(machine.via.read(IFR) & Cb1Int).toBe(Cb1Int);
-        expect(runDriver(machine, OneSecondTicks).x).toBe(10);
+        expect(runDriver(machine, OneSecondTicks).x).toBe(counts);
+    });
+
+    it("leaves the direction lines alone for a step after the flags clear, for a driver that reads them after", () => {
+        const machine = fittedMouse();
+        machine.mouse.move(-400, 0);
+        expect(runDriver(machine, OneSecondTicks, { clearingFirst: true }).x).toBe(-100);
     });
 
     it.each([
@@ -115,6 +134,11 @@ describe("AmxMouse", () => {
         expect(runDriver(machine, OneSecondTicks)).toMatchObject({ x: 0, y: 0 });
         mouse.hold(false);
         expect(via.read(ORB) & ButtonLines).toBe(ButtonLines & ~0x20);
+    });
+
+    it("is fitted to a BBC but not to an Atom", () => {
+        const fitted = (model) => fake6502(findModel(model), { hasAmxMouse: true }).amxMouse !== null;
+        expect([fitted("B-DFS1.2"), fitted("Master"), fitted("Atom")]).toEqual([true, true, false]);
     });
 
     it("forgets a move under way at power on", () => {

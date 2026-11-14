@@ -79,6 +79,7 @@ describe("Snapshot coordinator", () => {
                 () => {},
                 { hasTeletextAdaptor: true },
             ],
+            ["a snapshot with no AMX mouse state into a machine with one", () => {}, { hasAmxMouse: true }],
             [
                 "a snapshot from before a disc's written tracks were saved",
                 (s) => delete s.state.fdc.drives[0].disc.dirtyTracks,

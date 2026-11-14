@@ -3,8 +3,8 @@ import { AmxButtons } from "../amx-mouse.js";
 const CanvasPixelsAcross = 896;
 const PicturePixelsAcross = 640;
 const PictureGraphicsUnitsAcross = 1280;
-// J.G. Harston's driver moves its pointer four graphics units a count of four steps, so at one step a graphics unit its
-// pointer keeps up with the host's.
+// One step to a graphics unit: J.G. Harston's driver moves its pointer four units for each count, which is four steps.
+// The pointer then keeps up with the host's.
 const StepsAcrossScreen = (PictureGraphicsUnitsAcross * CanvasPixelsAcross) / PicturePixelsAcross;
 
 /** @returns {number} the AmxButtons a MouseEvent's `buttons` holds: primary 1, secondary 2, auxiliary 4. */
@@ -18,8 +18,9 @@ function amxButtonsOf(domButtons) {
 
 /**
  * The host's mouse driving the AMX mouse by how far it moves, not where it is. A click on the screen locks the pointer
- * to it, so the host's pointer never runs out of screen; until then, and wherever the browser will not lock it, its
- * movement over the screen drives the mouse all the same. The click that locks it is not a button press.
+ * to it, so the host's pointer never runs out of screen, and that click presses nothing. Where the browser refuses the
+ * lock, movement over the screen drives the mouse all the same, and the next click presses a button as it asks again.
+ * The buttons go up as the lock is let go, as the host's button may then come up anywhere.
  */
 export class AmxMouseInput {
     /**
@@ -35,9 +36,14 @@ export class AmxMouseInput {
         this.remainderX = 0;
         this.remainderY = 0;
         this.lockRefused = false;
+        const document = target.ownerDocument;
         target.addEventListener("contextmenu", (evt) => evt.preventDefault());
-        target.ownerDocument.addEventListener("pointerlockerror", () => {
+        document.addEventListener("pointerlockerror", () => {
             this.lockRefused = true;
+        });
+        document.addEventListener("pointerlockchange", () => {
+            if (this.locked) this.lockRefused = false;
+            else this.mouse.setButtons(0);
         });
     }
 
@@ -47,12 +53,16 @@ export class AmxMouseInput {
 
     /** @param {MouseEvent} evt a mousemove, mousedown or mouseup on `target` */
     onMouseEvent(evt) {
-        if (evt.type === "mousedown" && !this.locked && !this.lockRefused) {
-            this._lock();
+        if (evt.type === "mousemove") {
+            this._move(evt.movementX, evt.movementY);
             return;
         }
-        if (evt.type === "mousemove") this._move(evt.movementX, evt.movementY);
-        else this.mouse.setButtons(amxButtonsOf(evt.buttons));
+        if (evt.type === "mousedown" && !this.locked) {
+            const pressesToo = this.lockRefused;
+            this._lock();
+            if (!pressesToo) return;
+        }
+        this.mouse.setButtons(amxButtonsOf(evt.buttons));
     }
 
     _lock() {

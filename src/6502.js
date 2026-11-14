@@ -849,7 +849,7 @@ export class Cpu6502 extends Base6502 {
             isMaster: this.model.isMaster,
             initialLayout: this.keyLayout,
         });
-        this.amxMouse = this.config.hasAmxMouse ? new AmxMouse(this.scheduler) : null;
+        this.amxMouse = this.config.hasAmxMouse && !this.model.isAtom ? new AmxMouse(this.scheduler) : null;
         this.uservia = new via.UserVia(this, this.scheduler, this.amxMouse ?? this.config.userPort);
         this.amxMouse?.connect(this.uservia);
         this.acia = new Acia(this, this.soundChip.toneGenerator, this.scheduler, this.relayNoise);
