@@ -7,7 +7,9 @@ import { ViaRegister } from "./helpers.js";
 
 const { ORB, ORA, DDRB, DDRA, T1CL, T1CH, T2CL, T2CH, SR, ACR, PCR, IFR, IER, ORAnh } = ViaRegister;
 const AcrT1Continuous = 0x40;
+const AcrShiftInT2 = 0x04;
 const AcrShiftOutFreeRunningT2 = 0x10;
+const AcrShiftOutT2 = 0x14;
 const AcrT2CountsPb6 = 0x20;
 const Pb6 = 0x40;
 const Timer1Int = 0x40;
@@ -505,7 +507,12 @@ describe("Via T2 clocking the shift register", () => {
         via.write(T2CH, high);
     }
 
-    it("should decrement T2 high once per low-latch-plus-two microseconds", () => {
+    it.each([
+        ["shifting in under T2", AcrShiftInT2],
+        ["shifting out free running under T2", AcrShiftOutFreeRunningT2],
+        ["shifting out under T2", AcrShiftOutT2],
+    ])("should decrement T2 high once per low-latch-plus-two microseconds when %s", (_, acr) => {
+        via.write(ACR, acr);
         const lowLatch = 10;
         start(lowLatch, 200);
         runMicroseconds(5 * (lowLatch + 2));
@@ -644,11 +651,11 @@ describe("Via T2 clocking the shift register", () => {
 describe("Via shift register", () => {
     const AcrShiftModes = {
         disabled: 0x00,
-        inUnderT2: 0x04,
+        inUnderT2: AcrShiftInT2,
         inUnderPhi2: 0x08,
         inUnderCb1: 0x0c,
-        outFreeRunningT2: 0x10,
-        outUnderT2: 0x14,
+        outFreeRunningT2: AcrShiftOutFreeRunningT2,
+        outUnderT2: AcrShiftOutT2,
         outUnderPhi2: 0x18,
         outUnderCb1: 0x1c,
     };
@@ -721,6 +728,36 @@ describe("Via shift register", () => {
         expect(shiftFlag()).toBe(ShiftInt);
     });
 
+    it("should restart the count of eight, keeping the clock, when SR is written mid-shift", () => {
+        startShift(AcrShiftModes.outUnderPhi2);
+        scheduler.polltime(Phi2FirstEdgeTicks + 3 * TicksPerMicrosecond);
+        via.write(SR, 0);
+        scheduler.polltime(8 * 2 * TicksPerMicrosecond - 1);
+        expect(shiftFlag()).toBe(0);
+        scheduler.polltime(1);
+        expect(shiftFlag()).toBe(ShiftInt);
+    });
+
+    it("should time the next edge from a T2 high write mid-shift", () => {
+        startShift(AcrShiftModes.outUnderT2);
+        scheduler.polltime(T2EdgeTicks + 2);
+        via.write(T2CH, 0x80);
+        scheduler.polltime(T2EdgeTicks - 1);
+        expect(via.cb1).toBe(false);
+        scheduler.polltime(1);
+        expect(via.cb1).toBe(true);
+    });
+
+    it("should abandon a shift under way, with CB1 back at rest, when the mode changes", () => {
+        startShift(AcrShiftModes.outUnderPhi2);
+        scheduler.polltime(Phi2FirstEdgeTicks);
+        expect(via.cb1).toBe(false);
+        via.write(ACR, AcrShiftModes.disabled);
+        expect(via.cb1).toBe(true);
+        scheduler.polltime(2 * Phi2LastRisingEdgeTicks);
+        expect(shiftFlag()).toBe(0);
+    });
+
     it("should start another eight bits when SR is written after the flag is set", () => {
         startShift(AcrShiftModes.outUnderPhi2);
         scheduler.polltime(Phi2LastRisingEdgeTicks);
@@ -733,6 +770,8 @@ describe("Via shift register", () => {
 
     it("should put SR on CB2 from bit 7 on each falling CB1 edge, rotating it back round", () => {
         const value = 0xa5;
+        const driven = [];
+        via.cb2changecallback = (level, output) => driven.push({ level, output });
         startShift(AcrShiftModes.outUnderPhi2, value);
         const seen = [];
         scheduler.polltime(Phi2FirstEdgeTicks);
@@ -748,6 +787,8 @@ describe("Via shift register", () => {
             })),
         );
         expect(via.cb1).toBe(true);
+        expect(driven).toEqual([true, false, true, false, true, false, true].map((level) => ({ level, output: true })));
+        expect(via.peek(IFR) & Cb1Int).toBe(0);
     });
 
     it("should shift CB2 into bit 0 on each rising CB1 edge", () => {
@@ -778,17 +819,6 @@ describe("Via shift register", () => {
         expect(shiftFlag()).toBe(0);
         clock(1);
         expect(shiftFlag()).toBe(ShiftInt);
-    });
-
-    it.each([
-        ["in", AcrShiftModes.inUnderT2],
-        ["out", AcrShiftModes.outUnderT2],
-    ])("should count T2 in 8 bits while it clocks a shift %s", (_, acr) => {
-        via.write(ACR, acr);
-        via.write(T2CL, T2LowLatch);
-        via.write(T2CH, 200);
-        scheduler.polltime(5 * T2EdgeTicks);
-        expect(via.read(T2CH)).toBe(195);
     });
 
     it("should carry a shift under way through a snapshot", () => {

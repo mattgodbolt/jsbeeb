@@ -116,7 +116,7 @@ class Via {
         this.portapins = this.portbpins = IdlePins;
         this.ca2PulseTask.cancel();
         this.cb2PulseTask.cancel();
-        this.shiftTask.cancel();
+        this._stopShiftClockAtRest();
         this.shiftBits = BitsPerShift;
         this.updateNextTime();
     }
@@ -234,9 +234,11 @@ class Via {
 
     /**
      * Reading or writing SR clears its flag, restarts an external clock's count of eight, and starts an internally
-     * clocked shift unless one is under way. The free-running mode, once started, runs until the mode changes.
+     * clocked shift unless one is under way. A write to one under way restarts its count without moving its clock,
+     * and a read leaves it alone, as MAME's 6522via.cpp has it. The free-running mode, once started, runs until the
+     * mode changes.
      */
-    _accessShiftRegister() {
+    _accessShiftRegister(isWrite) {
         this.ifr &= ~INT_SR;
         this.updateIFR();
         const mode = this._shiftMode();
@@ -244,11 +246,20 @@ class Via {
             this.shiftBits = BitsPerShift;
             return;
         }
-        if (mode === ShiftDisabled || (this.shiftTask.scheduled() && this.shiftBits)) return;
+        if (mode === ShiftDisabled) return;
+        if (this.shiftTask.scheduled() && this.shiftBits) {
+            if (isWrite) this.shiftBits = BitsPerShift;
+            return;
+        }
         this.shiftBits = BitsPerShift;
         // CB1 is the shift clock's output, which rests high.
         this.cb1 = true;
         this.shiftTask.reschedule(this._t2ClocksShifter() ? this._ticksToT2Underflow() : Phi2FirstEdgeTicks);
+    }
+
+    _stopShiftClockAtRest() {
+        if (this.shiftTask.scheduled()) this.cb1 = true;
+        this.shiftTask.cancel();
     }
 
     _ticksToT2Underflow() {
@@ -398,7 +409,7 @@ class Via {
                 const wasShifting = this._t2ClocksShifter();
                 const wasCountingPulses = this._t2CountsPulses();
                 if ((this.acr ^ val) & AcrShiftMode) {
-                    this.shiftTask.cancel();
+                    this._stopShiftClockAtRest();
                     this.shiftBits = BitsPerShift;
                 }
                 this.acr = val;
@@ -430,7 +441,7 @@ class Via {
 
             case SR:
                 this.sr = val;
-                this._accessShiftRegister();
+                this._accessShiftRegister(true);
                 break;
 
             case T1LL:
@@ -532,7 +543,7 @@ class Via {
                 }
                 break;
             case SR:
-                this._accessShiftRegister();
+                this._accessShiftRegister(false);
                 break;
         }
         return this._registerValue(addr);
