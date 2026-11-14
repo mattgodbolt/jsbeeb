@@ -21,7 +21,26 @@ const ORB = 0x0,
     INT_CA1 = 0x02,
     INT_CA2 = 0x01,
     INT_CB1 = 0x10,
-    INT_CB2 = 0x08;
+    INT_CB2 = 0x08,
+    INT_SR = 0x04;
+
+// The shift register's modes, ACR bits 2 to 4. Bit 2 of the mode is set for the shifts out, and modes 3 and 7 take
+// their clock from CB1.
+const ShiftDisabled = 0,
+    ShiftInT2 = 1,
+    ShiftOutFreeRunningT2 = 4,
+    ShiftOutT2 = 5,
+    ShiftOut = 4,
+    AcrShiftModeShift = 2,
+    AcrShiftMode = 0x1c,
+    AcrShiftExternal = 0x0c;
+const T2ClockedShiftModes = (1 << ShiftInT2) | (1 << ShiftOutFreeRunningT2) | (1 << ShiftOutT2);
+const BitsPerShift = 8;
+const TicksPerViaCycle = 2;
+// The first edge of a φ2-clocked shift comes two cycles after the SR access, and a shift in sets its flag a cycle
+// after its last rising edge. Both from MAME's 6522via.cpp, as beebjit models only the free-running mode.
+const Phi2FirstEdgeTicks = 2 * TicksPerViaCycle;
+const ShiftInFlagDelayTicks = TicksPerViaCycle;
 
 // Pulse mode holds CA2/CB2 low for one 1MHz VIA cycle, here in the scheduler's 2MHz ticks.
 // Figures 3-4 and 3-6 of https://6502.org/documents/datasheets/wdc/wdc_w65c22s_mar_2004.pdf
@@ -74,8 +93,10 @@ class Via {
         this.cb2changecallback = null;
         this.justhit = 0;
         this.t1_pb7 = 0;
+        this.shiftBits = BitsPerShift;
 
         this.task = this.scheduler.newTask(() => this._onTimeout());
+        this.shiftTask = this.scheduler.newTask(() => this._onShiftEdge());
         this.ca2PulseTask = this.scheduler.newTask(() => this.setca2(true));
         this.cb2PulseTask = this.scheduler.newTask(() => this.setcb2(true));
         this.lastPolltime = 0;
@@ -95,11 +116,17 @@ class Via {
         this.portapins = this.portbpins = IdlePins;
         this.ca2PulseTask.cancel();
         this.cb2PulseTask.cancel();
+        this.shiftTask.cancel();
+        this.shiftBits = BitsPerShift;
         this.updateNextTime();
     }
 
+    _shiftMode() {
+        return (this.acr & AcrShiftMode) >>> AcrShiftModeShift;
+    }
+
     _t2ClocksShifter() {
-        return (this.acr & 0x1c) === 0x10;
+        return !!((T2ClockedShiftModes >>> this._shiftMode()) & 1);
     }
 
     _t2CountsPulses() {
@@ -205,6 +232,92 @@ class Via {
         return newT2c;
     }
 
+    /**
+     * Reading or writing SR clears its flag, restarts an external clock's count of eight, and starts an internally
+     * clocked shift unless one is under way. The free-running mode, once started, runs until the mode changes.
+     */
+    _accessShiftRegister() {
+        this.ifr &= ~INT_SR;
+        this.updateIFR();
+        const mode = this._shiftMode();
+        if ((this.acr & AcrShiftExternal) === AcrShiftExternal) {
+            this.shiftBits = BitsPerShift;
+            return;
+        }
+        if (mode === ShiftDisabled || (this.shiftTask.scheduled() && this.shiftBits)) return;
+        this.shiftBits = BitsPerShift;
+        // CB1 is the shift clock's output, which rests high.
+        this.cb1 = true;
+        this.shiftTask.reschedule(this._t2ClocksShifter() ? this._ticksToT2Underflow() : Phi2FirstEdgeTicks);
+    }
+
+    _ticksToT2Underflow() {
+        return this.t2c + 3 + (this.t2c > -3 ? 0 : this._t2ShiftPeriod());
+    }
+
+    /**
+     * An edge of an internal shift clock: T2's low byte reaching FF, as beebjit's via_shift_fired, or each φ2 cycle.
+     * Bits go out on CB2 on the falling edge and come in from CB2 on the rising one, as in the 6522 datasheets.
+     */
+    _onShiftEdge() {
+        this._catchUp();
+        if (!this.shiftBits) {
+            this._raiseShiftFlag();
+            return;
+        }
+        const rising = !this.cb1;
+        this.cb1 = rising;
+        const mode = this._shiftMode();
+        if (!rising) {
+            if (mode & ShiftOut) this._shiftOut();
+        } else {
+            if (!(mode & ShiftOut)) this._shiftIn();
+            if (!--this.shiftBits) {
+                if (mode !== ShiftOutFreeRunningT2) {
+                    if (mode & ShiftOut) this._raiseShiftFlag();
+                    else this.shiftTask.schedule(ShiftInFlagDelayTicks);
+                    return;
+                }
+                this.shiftBits = BitsPerShift;
+            }
+        }
+        this.shiftTask.schedule(this._t2ClocksShifter() ? this._ticksToT2Underflow() : TicksPerViaCycle);
+    }
+
+    /** Modes 3 and 7: an external clock on CB1 shifts in on its rising edges and out on its falling ones. */
+    _clockShiftFromCb1(rising) {
+        if (this.acr & (ShiftOut << AcrShiftModeShift)) {
+            if (rising) return;
+            this._shiftOut();
+        } else {
+            if (!rising) return;
+            this._shiftIn();
+        }
+        if (!--this.shiftBits) {
+            this.shiftBits = BitsPerShift;
+            this._raiseShiftFlag();
+        }
+    }
+
+    // Bit 7 goes out first and comes back round into bit 0.
+    _shiftOut() {
+        const bit = this.sr >>> 7;
+        this.sr = ((this.sr << 1) | bit) & 0xff;
+        const level = !!bit;
+        if (level === this.cb2) return;
+        this.cb2 = level;
+        if (this.cb2changecallback) this.cb2changecallback(level, true);
+    }
+
+    _shiftIn() {
+        this.sr = ((this.sr << 1) | (this.cb2 ? 1 : 0)) & 0xff;
+    }
+
+    _raiseShiftFlag() {
+        this.ifr |= INT_SR;
+        this.updateIFR();
+    }
+
     updateIFR() {
         if (this.ifr & this.ier & 0x7f) {
             this.ifr |= 0x80;
@@ -284,6 +397,10 @@ class Via {
             case ACR: {
                 const wasShifting = this._t2ClocksShifter();
                 const wasCountingPulses = this._t2CountsPulses();
+                if ((this.acr ^ val) & AcrShiftMode) {
+                    this.shiftTask.cancel();
+                    this.shiftBits = BitsPerShift;
+                }
                 this.acr = val;
                 if (this.justhit & 1 && !(val & 0x40)) this.t1hit = true;
                 const isShifting = this._t2ClocksShifter();
@@ -313,6 +430,7 @@ class Via {
 
             case SR:
                 this.sr = val;
+                this._accessShiftRegister();
                 break;
 
             case T1LL:
@@ -355,6 +473,8 @@ class Via {
                 if (this._t2ClocksShifter()) {
                     this.t2High = val;
                     this.t2c = (this.t2l & 0x1fe) + 1;
+                    if (this.shiftTask.scheduled() && this.shiftBits)
+                        this.shiftTask.reschedule(this._ticksToT2Underflow());
                 } else {
                     this.t2c = this.t2l + 1;
                     if (this.acr & 0x20) this.t2c -= 2;
@@ -410,6 +530,9 @@ class Via {
                     this.ifr &= ~TIMER2INT;
                     this.updateIFR();
                 }
+                break;
+            case SR:
+                this._accessShiftRegister();
                 break;
         }
         return this._registerValue(addr);
@@ -562,8 +685,10 @@ class Via {
             cb2: this.cb2,
             justhit: this.justhit,
             t1_pb7: this.t1_pb7,
+            shiftBits: this.shiftBits,
             lastPolltime: this.lastPolltime,
             taskOffset: this.task.offset(),
+            shiftTaskOffset: this.shiftTask.offset(),
             ca2PulseTaskOffset: this.ca2PulseTask.offset(),
             cb2PulseTaskOffset: this.cb2PulseTask.offset(),
         };
@@ -598,11 +723,13 @@ class Via {
         this.cb2 = state.cb2;
         this.justhit = state.justhit;
         this.t1_pb7 = state.t1_pb7;
+        this.shiftBits = state.shiftBits ?? BitsPerShift;
         this.lastPolltime = state.lastPolltime;
         this.updateIFR();
         this.task.restoreOffset(state.taskOffset);
         this.ca2PulseTask.restoreOffset(state.ca2PulseTaskOffset);
         this.cb2PulseTask.restoreOffset(state.cb2PulseTaskOffset);
+        this.shiftTask.restoreOffset(state.shiftTaskOffset);
     }
 
     setca1(level) {
@@ -646,6 +773,7 @@ class Via {
             }
         }
         this.cb1 = level;
+        if ((this.acr & AcrShiftExternal) === AcrShiftExternal) this._clockShiftFromCb1(level);
     }
 
     setcb2(level) {
