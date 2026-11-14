@@ -808,6 +808,18 @@ describe("Via shift register", () => {
         expect(restored.peek(IFR) & ShiftInt).toBe(ShiftInt);
         expect(restored.peek(SR)).toBe(0x3c);
     });
+
+    it("should shift a full eight bits after restoring a snapshot from before shifting was saved", () => {
+        via.write(ACR, AcrShiftModes.outUnderPhi2);
+        const { shiftBits: _bits, shiftTaskOffset: _offset, ...older } = via.snapshotState();
+        const restored = new UserVia(cpu, scheduler, makeFakeUserPortPeripheral());
+        restored.restoreState(older);
+        restored.write(SR, 0);
+        scheduler.polltime(Phi2LastRisingEdgeTicks - 1);
+        expect(restored.peek(IFR) & ShiftInt).toBe(0);
+        scheduler.polltime(1);
+        expect(restored.peek(IFR) & ShiftInt).toBe(ShiftInt);
+    });
 });
 
 describe("Via T2 toggling PB6 pulse counting", () => {
