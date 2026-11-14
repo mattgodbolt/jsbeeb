@@ -80,7 +80,13 @@ const insideExecute = (cpu) => !cpu.halted && cpu.currentCycles < cpu.targetCycl
 
 function hostInputs(cpu) {
     const { gamepad, mouse } = cpu.sysvia.fireButtons();
-    return { keyboard: cpu.keyboardInterface.keyboardState(), gamepad, mouse, resetting: !cpu.resetLine };
+    return {
+        keyboard: cpu.keyboardInterface.keyboardState(),
+        gamepad,
+        mouse,
+        amxButtons: cpu.amxMouse?.buttons ?? 0,
+        resetting: !cpu.resetLine,
+    };
 }
 
 /** What the host holds once `input` has gone in, from `host`, what it held before. */
@@ -95,6 +101,8 @@ function withInput(host, input) {
                 ...host,
                 mouse: host.mouse.map((pressed, button) => (button === input.button ? input.pressed : pressed)),
             };
+        case "amxButtons":
+            return { ...host, amxButtons: input.buttons };
         case "break":
             return { ...host, resetting: input.down };
         default:
@@ -114,15 +122,17 @@ function hostChanges(from, to) {
     to.mouse.forEach((pressed, button) => {
         if (pressed !== from.mouse[button]) changes.push({ kind: "joystickButton", button, pressed });
     });
+    if (from.amxButtons !== to.amxButtons) changes.push({ kind: "amxButtons", buttons: to.amxButtons });
     if (from.resetting !== to.resetting) changes.push({ kind: "break", down: to.resetting });
     return changes;
 }
 
 // Before the machine's own restore, as restoreSessionSnapshot puts the keys back, so that its VIA scans these.
-function restoreHostInputs(cpu, { keyboard, gamepad, mouse, resetting }) {
+function restoreHostInputs(cpu, { keyboard, gamepad, mouse, amxButtons, resetting }) {
     cpu.keyboardInterface.restoreKeyboard(keyboard);
     cpu.sysvia.setGamepadFire(...gamepad);
     mouse.forEach((pressed, button) => cpu.sysvia.setJoystickButton(button, pressed));
+    cpu.amxMouse?.setButtons(amxButtons);
     cpu.setReset(resetting);
 }
 
@@ -178,8 +188,9 @@ export class InputLog {
 
     _devices() {
         const { cpu } = this;
-        const { keyboardInterface, sysvia, adconverter, touchScreen, acia, fdc } = cpu;
-        return [cpu, keyboardInterface, sysvia, adconverter, touchScreen, sysvia.cmos, acia, ...fdc.drives];
+        const { keyboardInterface, sysvia, adconverter, touchScreen, amxMouse, acia, fdc } = cpu;
+        const devices = [cpu, keyboardInterface, sysvia, adconverter, touchScreen, sysvia.cmos, acia, ...fdc.drives];
+        return amxMouse ? [...devices, amxMouse] : devices;
     }
 
     /** Stops every device the host reaches recording into this log, so that nothing keeps it growing. */

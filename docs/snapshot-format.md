@@ -417,6 +417,19 @@ touchscreen keeps whatever state it currently holds, unpolled, exactly as before
 
 The pointer position and button state are not saved: like the keyboard, they are host input and are refreshed by the next mouse event.
 
+### AMX mouse (`state.amxMouse`)
+
+Present only when the AMX mouse was fitted. Absent means a fitted mouse starts still, as at power on.
+
+| Field             | Type                               | Description                                                              |
+| ----------------- | ---------------------------------- | ------------------------------------------------------------------------ |
+| `x`, `y`          | `{pending: number, phase: number}` | Quadrature steps still to make (right and up positive), and phase 0 to 3 |
+| `waitingForFlags` | boolean                            | The software has just cleared the CB1 and CB2 flags; the next step waits |
+| `yStepsNext`      | boolean                            | Whether the Y axis takes the next step while both have steps to make     |
+| `stepTaskOffset`  | number\|null                       | Step task offset (null when the mouse is still)                          |
+
+The levels on CB1 and CB2 are the user VIA's. The buttons are not saved: like the keyboard, they are host input.
+
 ### Teletext adaptor (`state.teletextAdaptor`)
 
 Present only when the Acorn teletext adaptor was fitted. Absent means the adaptor, if one is fitted now, keeps its current state, the same fallback as a v1 snapshot's missing FDC. Because absence is already the well-defined case, adding this field did not need a format version bump: v3 readers that predate it ignore it, and readers that know it treat an older v3 snapshot as "adaptor state unchanged".

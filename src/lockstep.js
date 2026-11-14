@@ -95,6 +95,12 @@ export function applyInput(cpu, input) {
         case "joystickButton":
             cpu.sysvia.setJoystickButton(input.button, input.pressed);
             break;
+        case "amxMove":
+            cpu.amxMouse.move(input.dx, input.dy);
+            break;
+        case "amxButtons":
+            cpu.amxMouse.setButtons(input.buttons);
+            break;
         case "reset":
             cpu.reset(false);
             break;

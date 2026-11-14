@@ -5,6 +5,7 @@ import { Tube } from "./tube.js";
 import { Adc } from "./adc.js";
 import { Scheduler } from "./scheduler.js";
 import { TouchScreen } from "./touchscreen.js";
+import { AmxMouse } from "./amx-mouse.js";
 import { TeletextAdaptor } from "./teletext_adaptor.js";
 import { Filestore } from "./filestore.js";
 import { FakeRelayNoise } from "./relaynoise.js";
@@ -848,7 +849,9 @@ export class Cpu6502 extends Base6502 {
             isMaster: this.model.isMaster,
             initialLayout: this.keyLayout,
         });
-        this.uservia = new via.UserVia(this, this.scheduler, this.config.userPort);
+        this.amxMouse = this.config.hasAmxMouse ? new AmxMouse(this.scheduler) : null;
+        this.uservia = new via.UserVia(this, this.scheduler, this.amxMouse ?? this.config.userPort);
+        this.amxMouse?.connect(this.uservia);
         this.acia = new Acia(this, this.soundChip.toneGenerator, this.scheduler, this.relayNoise);
         this.serial = new Serial(this.acia);
         this.keyboardInterface = this.sysvia;
@@ -1572,6 +1575,7 @@ export class Cpu6502 extends Base6502 {
             fdc: this.fdc.snapshotState(),
             teletextAdaptor: this.teletextAdaptor ? this.teletextAdaptor.snapshotState() : undefined,
             tube: this.hasTube ? this.tube.snapshotState({ includeRoms, into: into?.tube }) : undefined,
+            ...(this.amxMouse && { amxMouse: this.amxMouse.snapshotState() }),
         };
     }
 
@@ -1646,6 +1650,10 @@ export class Cpu6502 extends Base6502 {
         // Touchscreen state, added without a version bump. Absent from an older snapshot, whose
         // touchscreen keeps its current state, unpolled.
         if (state.touchScreen) this.touchScreen.restoreState(state.touchScreen);
+        if (this.amxMouse) {
+            if (state.amxMouse) this.amxMouse.restoreState(state.amxMouse);
+            else this.amxMouse.reset();
+        }
 
         // FDC state (v2+). If absent (v1 snapshot), FDC keeps its current state, and the saved
         // level is the only record of its line.
@@ -1721,6 +1729,7 @@ export class Cpu6502 extends Base6502 {
         this.adconverter.reset();
 
         this.touchScreen.reset();
+        this.amxMouse?.reset();
     }
 
     // Universal CPU state reset. Shared by all machine types.

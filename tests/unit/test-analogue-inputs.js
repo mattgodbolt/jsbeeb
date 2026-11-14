@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AnalogueInputs } from "../../src/web/analogue-inputs.js";
+import { AmxButtons } from "../../src/amx-mouse.js";
 import { Settings } from "../../src/web/settings.js";
 import { domFromIndexHtml, fakeUrlState, teardownDom, toasts } from "./helpers.js";
 
@@ -114,6 +115,69 @@ describe("AnalogueInputs", () => {
             mouse("mousemove");
             expect(deps.takeScreenClick).toHaveBeenCalledTimes(1);
             expect(deps.processor.touchScreen.onMouse).toHaveBeenCalledTimes(1);
+        });
+    });
+
+    describe("the AMX mouse", () => {
+        const ScreenWidth = 896;
+        let amxMouse;
+        let monitor;
+
+        const send = (type, { buttons = 0, movementX = 0, movementY = 0 } = {}) => {
+            const event = new MouseEvent(type, { bubbles: true, cancelable: true, buttons });
+            Object.defineProperties(event, { movementX: { value: movementX }, movementY: { value: movementY } });
+            monitor.dispatchEvent(event);
+        };
+        const lockTo = (element) =>
+            Object.defineProperty(document, "pointerLockElement", { value: element, configurable: true });
+
+        beforeEach(() => {
+            amxMouse = { move: vi.fn(), setButtons: vi.fn() };
+            deps.processor.amxMouse = amxMouse;
+            monitor = document.getElementById("cub-monitor");
+            monitor.requestPointerLock = vi.fn(async () => lockTo(monitor));
+            vi.spyOn(deps.screenCanvas, "getBoundingClientRect").mockReturnValue({ width: ScreenWidth });
+        });
+
+        afterEach(() => lockTo(null));
+
+        it("locks the pointer with the first click, which presses nothing, and presses buttons after", () => {
+            make();
+            send("mousedown", { buttons: 1 });
+            expect(monitor.requestPointerLock).toHaveBeenCalledTimes(1);
+            expect(amxMouse.setButtons).not.toHaveBeenCalled();
+            lockTo(monitor);
+            send("mouseup");
+            send("mousedown", { buttons: 1 | 2 | 4 });
+            expect(amxMouse.setButtons.mock.calls).toEqual([
+                [0],
+                [AmxButtons.left | AmxButtons.right | AmxButtons.middle],
+            ]);
+        });
+
+        it("presses buttons with every click where the browser will not lock the pointer", () => {
+            make();
+            document.dispatchEvent(new Event("pointerlockerror"));
+            send("mousedown", { buttons: 2 });
+            expect(monitor.requestPointerLock).not.toHaveBeenCalled();
+            expect(amxMouse.setButtons).toHaveBeenCalledWith(AmxButtons.right);
+        });
+
+        it("moves by how far the pointer moves across the screen, up as the pointer goes up, keeping what is left over", () => {
+            make();
+            for (let i = 0; i < 3; ++i) send("mousemove", { movementX: 0.2, movementY: -0.2 });
+            send("mousemove", { movementX: -ScreenWidth / 2 });
+            expect(amxMouse.move.mock.calls).toEqual([
+                [1, 1],
+                [-895, 0],
+            ]);
+        });
+
+        it("takes nothing from the mouse where the machine has none", () => {
+            delete deps.processor.amxMouse;
+            make();
+            send("mousedown", { buttons: 1 });
+            expect(monitor.requestPointerLock).not.toHaveBeenCalled();
         });
     });
 

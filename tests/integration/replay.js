@@ -11,6 +11,7 @@ import { singleStep } from "../helpers/single-step.js";
 import { executeUntilFrame } from "../../src/web/rewind-thumbnail.js";
 import { WFNFile } from "../../src/mmc.js";
 import { NoReplayHooks } from "../../src/6502.js";
+import { AmxButtons } from "../../src/amx-mouse.js";
 
 const FbWidth = 1024;
 const FbHeight = 768;
@@ -145,7 +146,7 @@ const atomPrinted = (machine, text) => {
 const catalogued = (machine) => mode7Text(machine).includes("Drive 0");
 
 // What each runs once a key is pressed: on the B a disc access, on the Master its clock read too, and on the Atom a
-// line printed. Only the BBCs read the FIRE buttons and the analogue port.
+// line printed. Only the BBCs read the FIRE buttons and the analogue port, and take the AMX mouse.
 describe.each([
     ["a B", "B-DFS1.2", WaitThenCatalogue, catalogued, true],
     ["a Master", "Master", WaitThenClockAndCatalogue, catalogued, true],
@@ -182,6 +183,12 @@ describe.each([
                       (cpu) => cpu.adconverter.setChannelSource(0, driftingSource()),
                       () => {},
                   ],
+                  ["the AMX mouse's movement", (cpu) => cpu.amxMouse.move(40, -24), () => {}],
+                  [
+                      "the AMX mouse's buttons",
+                      (cpu) => cpu.amxMouse.setButtons(AmxButtons.left | AmxButtons.right),
+                      (cpu) => cpu.amxMouse.setButtons(0),
+                  ],
               ]
             : []),
         [
@@ -193,7 +200,7 @@ describe.each([
             () => {},
         ],
     ])("replays %s exactly", async (_, press, release) => {
-        const machine = await booted(model);
+        const machine = await booted(model, { hasAmxMouse: readsBbcInputs });
         const cpu = machine.processor;
         const history = historyFromHere(machine);
         await seconds(machine, AroundAnInputSeconds);
