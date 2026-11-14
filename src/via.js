@@ -272,24 +272,29 @@ class Via {
      */
     _onShiftEdge() {
         this._catchUp();
-        if (!this.shiftBits) {
+        if (!this.shiftBits && this.cb1) {
             this._raiseShiftFlag();
             return;
         }
         const rising = !this.cb1;
         this.cb1 = rising;
         const mode = this._shiftMode();
-        if (!rising) {
-            if (mode & ShiftOut) this._shiftOut();
-        } else {
-            if (!(mode & ShiftOut)) this._shiftIn();
-            if (!--this.shiftBits) {
+        if (mode & ShiftOut) {
+            if (!rising) {
+                this._shiftOut();
+                --this.shiftBits;
+            } else if (!this.shiftBits) {
                 if (mode !== ShiftOutFreeRunningT2) {
-                    if (mode & ShiftOut) this._raiseShiftFlag();
-                    else this.shiftTask.schedule(ShiftInFlagDelayTicks);
+                    this._raiseShiftFlag();
                     return;
                 }
                 this.shiftBits = BitsPerShift;
+            }
+        } else if (rising) {
+            this._shiftIn();
+            if (!--this.shiftBits) {
+                this.shiftTask.schedule(ShiftInFlagDelayTicks);
+                return;
             }
         }
         this.shiftTask.schedule(this._t2ClocksShifter() ? this._ticksToT2Underflow() : TicksPerViaCycle);
