@@ -23,6 +23,8 @@ const NOT_FREQ_DISABLE = 0xfe;
 const REG_SET_NORMAL = 0;
 const REG_SET_ALT = 1;
 
+// Nothing on the card drives the 1MHz bus data lines, so the host cannot read its page select or wave RAM
+// (Hybrid's 1984 schematic).
 export class Music5000 {
     constructor(onBuffer) {
         this._onBufferMusic5000 = onBuffer;
@@ -97,7 +99,6 @@ export class Music5000 {
         }
     }
 
-    // Write-only: nothing on the card drives the 1MHz bus data lines (Hybrid's 1984 schematic).
     write(page, addr, value) {
         // Bit0 unused
         const offset = ((page & 0x0e) << 7) + (addr & 0xff);

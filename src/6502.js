@@ -1035,9 +1035,6 @@ export class Cpu6502 extends Base6502 {
             case 0xfc10:
                 if (this.hasTeletextAdaptor) return this.teletextAdaptor.read(addr - 0xfc10);
                 break;
-            case 0xfcfc:
-                if (addr === 0xfcff && this.hasMusic5000) return this.music5000PageSel;
-                break;
             case 0xfe00:
             case 0xfe04:
                 return this.crtc.read(addr);
@@ -1202,9 +1199,6 @@ export class Cpu6502 extends Base6502 {
         switch (addr & ~0x0003) {
             case 0xfc10:
                 if (this.hasTeletextAdaptor) return UnpeekableDevice;
-                break;
-            case 0xfcfc:
-                if (addr === 0xfcff && this.hasMusic5000) return this.music5000PageSel;
                 break;
             case 0xfe00:
             case 0xfe04:
