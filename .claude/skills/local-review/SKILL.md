@@ -69,9 +69,9 @@ remaining blocking finding has been declined with a reason and the reviewer, hav
 reason, has nothing new to add. A should-fix finding taken in the final round is not re-reviewed;
 that is the trade against an endless loop.
 
-Four rounds at most. A blocking finding still open after the fourth report, whether the session
+Ten rounds at most. A blocking finding still open after the tenth report, whether the session
 would fix it or decline it, goes to the user with both positions rather than to GitHub: a fix made
-after the last round would be pushed unreviewed, and a change that has not converged in four rounds
+after the last round would be pushed unreviewed, and a change that has not converged in ten rounds
 is saying something about its design.
 
 ## 6. Push, then open or update
