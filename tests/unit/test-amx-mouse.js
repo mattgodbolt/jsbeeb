@@ -35,7 +35,7 @@ function fittedMouse() {
  * through IFR before reading port B, as AMX Design's handler does.
  */
 function runDriver({ scheduler, via }, ticks, { clearingFirst = false } = {}) {
-    const seen = { x: 0, y: 0, xDirections: new Set(), yDirections: new Set(), bothAtOnce: false };
+    const seen = { x: 0, y: 0, axes: "", xDirections: new Set(), yDirections: new Set(), bothAtOnce: false };
     for (let ran = 0; ran < ticks; ran += DriverPollTicks) {
         scheduler.polltime(DriverPollTicks);
         const flags = via.read(IFR) & (Cb1Int | Cb2Int);
@@ -48,10 +48,12 @@ function runDriver({ scheduler, via }, ticks, { clearingFirst = false } = {}) {
         seen.bothAtOnce ||= flags === (Cb1Int | Cb2Int);
         if (flags & Cb1Int) {
             seen.x += pins & X2 ? 1 : -1;
+            seen.axes += "x";
             seen.xDirections.add(!!(pins & X2));
         }
         if (flags & Cb2Int) {
             seen.y += pins & Y2 ? 1 : -1;
+            seen.axes += "y";
             seen.yDirections.add(!!(pins & Y2));
         }
     }
@@ -80,6 +82,12 @@ describe("AmxMouse", () => {
         for (const [dx, dy] of moves) machine.mouse.move(dx, dy);
         const seen = runDriver(machine, OneSecondTicks);
         expect({ x: seen.x, y: seen.y, bothAtOnce: seen.bothAtOnce }).toEqual({ x, y, bothAtOnce: false });
+    });
+
+    it("takes turns between the axes on a diagonal", () => {
+        const machine = fittedMouse();
+        machine.mouse.move(24, 24);
+        expect(runDriver(machine, OneSecondTicks).axes).toBe("xy".repeat(6));
     });
 
     it.each([
@@ -136,18 +144,19 @@ describe("AmxMouse", () => {
         expect(via.read(ORB) & ButtonLines).toBe(ButtonLines & ~0x20);
     });
 
-    it("is fitted to a BBC but not to an Atom", () => {
+    it("is fitted to a BBC's user port, in place of the switch interface, but not to an Atom", () => {
         const fitted = (model) => fake6502(findModel(model), { hasAmxMouse: true }).amxMouse !== null;
         expect([fitted("B-DFS1.2"), fitted("Master"), fitted("Atom")]).toEqual([true, true, false]);
+        const cpu = fake6502(findModel("B-DFS1.2"), { hasAmxMouse: true });
+        cpu.amxMouse.setButtons(AmxButtons.left);
+        expect(cpu.uservia.read(ORB) & ButtonLines).toBe(ButtonLines & ~0x20);
     });
 
-    it("forgets a move under way at power on", () => {
-        const machine = fittedMouse();
-        machine.mouse.move(40, 40);
-        machine.scheduler.polltime(OneSecondTicks / 1000);
-        machine.via.reset();
-        machine.mouse.reset();
-        expect(runDriver(machine, OneSecondTicks)).toMatchObject({ x: 0, y: 0 });
+    it("forgets a move under way as the machine powers on", () => {
+        const cpu = fake6502(findModel("B-DFS1.2"), { hasAmxMouse: true });
+        cpu.amxMouse.move(40, 40);
+        cpu.resetPeripherals();
+        expect(cpu.amxMouse.snapshotState()).toMatchObject({ x: { pending: 0 }, y: { pending: 0 } });
     });
 
     it("snapshots a move part way through", async () => {
@@ -160,7 +169,7 @@ describe("AmxMouse", () => {
             },
             (mouse) => {
                 mouse.move(9, -7);
-                scheduler.polltime(OneSecondTicks / 1000);
+                scheduler.polltime(TicksPerMillisecond);
             },
         );
     });

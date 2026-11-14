@@ -12,8 +12,11 @@ const ViaCb2Flag = 0x08;
 const PhaseMask = 3;
 // In 2MHz ticks. BeebEm spends 250 on each count; a count here is four steps.
 const StepTicks = 64;
-// Software that leaves a flag set this long, 5ms, is not reading the mouse, which drops what it has still to do.
-const StalledSteps = 156;
+const TicksPerMillisecond = 2000;
+// Software that leaves a flag set this long is taken not to be reading the mouse, which drops what it has still to do.
+// Both drivers read it from the interrupt, well within this.
+const StalledMilliseconds = 5;
+const StalledSteps = Math.round((StalledMilliseconds * TicksPerMillisecond) / StepTicks);
 
 // Stepping right or up goes up through the phases: (X1, X2) = (0, 0), (1, 0), (1, 1), (0, 1).
 const lineLevel = (phase) => phase === 1 || phase === 2;
@@ -78,17 +81,21 @@ export class AmxMouse {
         this.via.recalculatePortBPins();
     }
 
-    /** @param {boolean} held whether the mouse takes no further movement and reads its buttons up, whatever the host does */
+    /**
+     * @param {boolean} held whether the mouse takes no further movement and reads its buttons up, whatever the host
+     *     does
+     */
     hold(held) {
         this.held = held;
         this.via.recalculatePortBPins();
     }
 
     /**
-     * Each step moves one axis, taking turns while both have further to go so that a diagonal goes diagonally. It waits until the software has cleared the CB1 and CB2 flags, as BeebEm and b-em
-     * wait, so that no edge on CB1 comes with one on CB2: J.G. Harston's driver reads only X when both flags are set.
-     * After an edge it waits a step more once they are clear, so that a driver that clears them before reading the
-     * direction lines (as AMX Design's does) has read them by then.
+     * Each step moves one axis, taking turns while both have further to go so that a diagonal goes diagonally. It
+     * waits until the software has cleared the CB1 and CB2 flags, as BeebEm and b-em wait, so that no edge on CB1 comes
+     * with one on CB2: J.G. Harston's driver reads only X when both flags are set. After an edge it waits a step more
+     * once they are clear, so that a driver that clears them before reading the direction lines (as AMX Design's does)
+     * has read them by then.
      */
     _step() {
         if (this.via.ifr & (ViaCb1Flag | ViaCb2Flag)) {

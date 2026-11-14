@@ -189,7 +189,7 @@ describe("AnalogueInputs", () => {
             expect(amxMouse.setButtons).not.toHaveBeenCalled();
         });
 
-        it("moves by how far the pointer moves across the screen, up as the pointer goes up, keeping what is left over", () => {
+        it("moves as far as the pointer moves across the screen, up as it goes up, keeping what is left over", () => {
             make();
             for (let i = 0; i < 3; ++i) send("mousemove", { movementX: 0.2, movementY: -0.2 });
             send("mousemove", { movementX: -ScreenWidth / 2 });
@@ -197,6 +197,13 @@ describe("AnalogueInputs", () => {
                 [1, 1],
                 [-895, 0],
             ]);
+        });
+
+        it("presses a button with each click where the browser has no pointer lock", () => {
+            delete monitor.requestPointerLock;
+            make();
+            send("mousedown", { buttons: 4 });
+            expect(amxMouse.setButtons).toHaveBeenCalledWith(AmxButtons.middle);
         });
 
         it("takes nothing from the mouse where the machine has none", () => {

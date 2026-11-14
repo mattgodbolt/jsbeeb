@@ -19,8 +19,9 @@ function amxButtonsOf(domButtons) {
 /**
  * The host's mouse driving the AMX mouse by how far it moves, not where it is. A click on the screen locks the pointer
  * to it, so the host's pointer never runs out of screen, and that click presses nothing. Where the browser refuses the
- * lock, movement over the screen drives the mouse all the same, and the next click presses a button as it asks again.
- * The buttons go up as the lock is let go, as the host's button may then come up anywhere.
+ * lock, or has no pointer lock (as on phones), movement over the screen drives the mouse all the same, and the next
+ * click presses a button as it asks again. The buttons go up as the lock is let go, as the host's button may then come
+ * up anywhere.
  */
 export class AmxMouseInput {
     /**
@@ -35,7 +36,7 @@ export class AmxMouseInput {
         this.screenCanvas = screenCanvas;
         this.remainderX = 0;
         this.remainderY = 0;
-        this.lockRefused = false;
+        this.lockRefused = !target.requestPointerLock;
         const document = target.ownerDocument;
         target.addEventListener("contextmenu", (evt) => evt.preventDefault());
         document.addEventListener("pointerlockerror", () => {
@@ -67,13 +68,15 @@ export class AmxMouseInput {
 
     _lock() {
         // Older browsers return nothing and report a refusal as pointerlockerror; newer ones reject as well.
-        this.target.requestPointerLock()?.catch(() => {
+        this.target.requestPointerLock?.()?.catch(() => {
             this.lockRefused = true;
         });
     }
 
     _move(movementX, movementY) {
-        const stepsPerPixel = StepsAcrossScreen / this.screenCanvas.getBoundingClientRect().width;
+        const { width } = this.screenCanvas.getBoundingClientRect();
+        if (!width) return;
+        const stepsPerPixel = StepsAcrossScreen / width;
         const x = this.remainderX + movementX * stepsPerPixel;
         const y = this.remainderY - movementY * stepsPerPixel;
         const dx = Math.trunc(x);
