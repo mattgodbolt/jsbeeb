@@ -1,6 +1,8 @@
 import { Fifo } from "./binary.js";
 
-const PollHz = 8; // Made up
+// The 501's manual gives no rate, only "a constant stream" at 9600 baud. Soundspace parses at most about 44 reports
+// a second; feeding it faster queues stale positions, so this stays well under that.
+const PollHz = 25;
 
 // The Touchtech 501 reports 0-120 across and 0-90 up the screen. The edges are those ranges' ends on the canvas,
 // as fractions of it, fitted to where Soundspace's shipped calibration expects its 40 by 25 screen to be.
