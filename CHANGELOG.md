@@ -1,5 +1,30 @@
 # Changelog
 
+## [2.22.0](https://github.com/mattgodbolt/jsbeeb/compare/v2.21.1...v2.22.0) (2026-11-15)
+
+
+### Features
+
+* a Call stack panel in the debugger, found by replaying the history ([#1822](https://github.com/mattgodbolt/jsbeeb/issues/1822)) ([7840da9](https://github.com/mattgodbolt/jsbeeb/commit/7840da9d2125b5017d855f7193a756f2ad8b0fe9))
+* a Trace panel of the instructions run before a stop, from a forward replay of the history ([#1818](https://github.com/mattgodbolt/jsbeeb/issues/1818)) ([e7ba986](https://github.com/mattgodbolt/jsbeeb/commit/e7ba98613977b87d1601edd0793e947cb2fc2322))
+* emulate the AMX mouse on the user port ([#1844](https://github.com/mattgodbolt/jsbeeb/issues/1844)) ([0506adb](https://github.com/mattgodbolt/jsbeeb/commit/0506adbe2824917d0971805b9dbde005215abb9e))
+* list games and works in progress by Matt, Rich, Kieran, Eben and the Bitshifters among the GitHub discs ([#1830](https://github.com/mattgodbolt/jsbeeb/issues/1830)) ([6491bb4](https://github.com/mattgodbolt/jsbeeb/commit/6491bb46a467706ef526a96bf87fa307a0f00f48))
+* offer the on-screen keyboard, closed, where a touch screen sits beside a trackpad ([#1834](https://github.com/mattgodbolt/jsbeeb/issues/1834)) ([7bc75a1](https://github.com/mattgodbolt/jsbeeb/commit/7bc75a1bd4225de948b9eb9ecc3462a50c9346fe))
+* rewind is a floating window, raised over the others, with its keys in Help ([#1820](https://github.com/mattgodbolt/jsbeeb/issues/1820)) ([7f19df6](https://github.com/mattgodbolt/jsbeeb/commit/7f19df6393a62fd39fa0c800dfbc5c9bf768de67))
+* right-click the stopped screen to find who wrote the byte drawn there ([#1817](https://github.com/mattgodbolt/jsbeeb/issues/1817)) ([0540da6](https://github.com/mattgodbolt/jsbeeb/commit/0540da66060fe8beb74ea728bf90900b0a49b131))
+
+
+### Bug Fixes
+
+* a "Go back here" button commits rewind, so it works without a keyboard ([#1815](https://github.com/mattgodbolt/jsbeeb/issues/1815)) ([836f36f](https://github.com/mattgodbolt/jsbeeb/commit/836f36fc4355d244843fc310cd22d604f3d04e17))
+* emulate the 6522 VIA shift register ([#1841](https://github.com/mattgodbolt/jsbeeb/issues/1841)) ([1b5cb8e](https://github.com/mattgodbolt/jsbeeb/commit/1b5cb8e6ae8e02184c19f94e30b6694ba2cbd69a))
+* map the serial ULA's rate fields to the baud rates the OS sets ([#1851](https://github.com/mattgodbolt/jsbeeb/issues/1851)) ([a7c536c](https://github.com/mattgodbolt/jsbeeb/commit/a7c536c42243bdce11bfaf7ad9fc435419a58a0f))
+* replays send the host none of the sound they re-run ([#1814](https://github.com/mattgodbolt/jsbeeb/issues/1814)) ([3046bf1](https://github.com/mattgodbolt/jsbeeb/commit/3046bf1d90398990ada2f33db0058970a0227021))
+* rewind keeps step back's history, and going back forgets the seconds after it ([#1819](https://github.com/mattgodbolt/jsbeeb/issues/1819)) ([1435057](https://github.com/mattgodbolt/jsbeeb/commit/14350571695e2f7f33a642bf1537ad1aa2934552))
+* Soundspace's touchscreen, with the Touchtech 501's multiple mode ([#1843](https://github.com/mattgodbolt/jsbeeb/issues/1843)) ([4098a08](https://github.com/mattgodbolt/jsbeeb/commit/4098a0804a5c56b81275fe41a6b764fffb156a44))
+* the Music 5000's registers read as the empty bus, as the real card's do ([#1842](https://github.com/mattgodbolt/jsbeeb/issues/1842)) ([9a7b4a9](https://github.com/mattgodbolt/jsbeeb/commit/9a7b4a9f4ab89a9b380a005ec90b9e1fa50fc880))
+* who wrote searches the byte the memory or disassembly panel's view shows ([#1826](https://github.com/mattgodbolt/jsbeeb/issues/1826)) ([b7b09c0](https://github.com/mattgodbolt/jsbeeb/commit/b7b09c06e0a33914ed6edfd99947b0ecc31d1863))
+
 ## [2.21.1](https://github.com/mattgodbolt/jsbeeb/compare/v2.21.0...v2.21.1) (2026-11-10)
 
 
