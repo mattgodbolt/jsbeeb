@@ -529,6 +529,8 @@ The FDC type depends on the model: Intel 8271 for BBC B models, WD1770 for Maste
 
 `_currentDrive` is derived from `controlRegister` drive select bits on restore.
 
+A `state` of 19 comes from a snapshot saved while a read address waited a byte after its last DRQ, a state the controller no longer has; on restore the command finishes, raising INTRQ after the usual 32 µs.
+
 ### Disc drive (`state.fdc.drives[n]`)
 
 | Field             | Type         | Description                                                       |
