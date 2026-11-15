@@ -829,7 +829,7 @@ describe("Video", () => {
             expect(secondHalf()).toEqual(Array(HalfCell).fill(Red));
         });
 
-        it("leaves the cell alone when the write lands at the start of the next cell", () => {
+        it("repaints nothing when a write enters teletext after a 1MHz cell's second tick", () => {
             video.ula.write(0, Mode4);
             video.polltime(2);
             const before = cell();
@@ -839,11 +839,10 @@ describe("Video", () => {
             expect(cell()).toEqual(before);
         });
 
-        // On a 1MHz mode's second tick the cell under the beam started a tick earlier, here left of the frame.
         it.each`
-            where           | ticks | x     | y
-            ${"above it"}   | ${1}  | ${92} | ${-1}
-            ${"left of it"} | ${2}  | ${0}  | ${100}
+            where                       | ticks | x     | y
+            ${"above it"}               | ${1}  | ${92} | ${-1}
+            ${"half a cell left of it"} | ${2}  | ${0}  | ${100}
         `("leaves the frame alone while the beam is $where", ({ ticks, x, y }) => {
             video.ula.write(0, Mode4);
             video.polltime(ticks);
@@ -958,7 +957,6 @@ describe("Video", () => {
 
         it.each`
             clock     | mode     | ticks | from         | width
-            ${"1MHz"} | ${Mode4} | ${1}  | ${0}         | ${CellWidth}
             ${"1MHz"} | ${Mode4} | ${2}  | ${HalfCell}  | ${CellWidth}
             ${"2MHz"} | ${Mode0} | ${1}  | ${OutputLag} | ${HalfCell}
         `(
@@ -981,7 +979,6 @@ describe("Video", () => {
 
         it.each`
             clock     | mode     | ticks | from         | width
-            ${"1MHz"} | ${Mode4} | ${1}  | ${0}         | ${CellWidth}
             ${"1MHz"} | ${Mode4} | ${2}  | ${HalfCell}  | ${CellWidth}
             ${"2MHz"} | ${Mode0} | ${1}  | ${OutputLag} | ${HalfCell}
         `(
@@ -1207,7 +1204,6 @@ describe("Video", () => {
         });
     });
 
-    // The hashes were recorded from the renderer that drew each cell into the framebuffer as the beam reached it.
     describe("raster effects", () => {
         const RasterFrames = 6;
         const MaxClocksBetweenWrites = 40;

@@ -937,7 +937,7 @@ export class Video {
 
     // The render loop paints a cell whole on the tick that fetches it, so the part of it the ULA outputs after a
     // write is repainted with the new state. A 1MHz cell spans two 2MHz ticks and is painted on the first
-    // (https://github.com/mattgodbolt/jsbeeb/issues/766), so on the second the beam is half way through it.
+    // (https://github.com/mattgodbolt/jsbeeb/issues/766), so after the second the beam is half way through it.
     repaintAfterUlaWrite(lagBefore) {
         const lag = lagBefore === this.ulaOutputLag() ? lagBefore : UnmeasuredUlaOutputLagTexels;
         const beamIntoCell = this.halfClock && !this.oddClock ? BitmapXPerClock : 0;
