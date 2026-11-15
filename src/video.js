@@ -969,10 +969,10 @@ export class Video {
             } else {
                 memAddr |= 0x3c00;
             }
-            // MA6 is XORed with the 1 MHz clock for DRAM refresh (https://beebwiki.mdfs.net/Address_translation),
-            // which only a 2 MHz bitmap ULA shows. Measured on the Master, which also flips MA7 on odd RA;
-            // a Model B's MA7 is unmeasured (https://github.com/mattgodbolt/jsbeeb/issues/1849).
-            if (!this.halfClock && !this.teletextMode && !this.oddClock) {
+            // MA6 is XORed with the 1 MHz clock for DRAM refresh (https://beebwiki.mdfs.net/Address_translation);
+            // a 1 MHz ULA only reads on odd clocks, so only a 2 MHz bitmap ULA shows it. The Master also flips MA7
+            // on odd RA; a Model B's MA7 is unmeasured (https://github.com/mattgodbolt/jsbeeb/issues/1849).
+            if (!this.teletextMode && !this.oddClock) {
                 memAddr ^= 0x40;
                 if (this.isMaster && this.externalRowAddress() & 1) memAddr ^= 0x80;
             }

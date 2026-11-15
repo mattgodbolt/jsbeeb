@@ -30,7 +30,7 @@ const CursorBlinkTitles = [
 /**
  * Where in the BBC's memory the 6845's memory address `ma` reads on row address `rowAddress`: MA13 picks teletext's
  * 1K, and otherwise addresses from &8000 wrap back by the screen size IC32 sets. readVideoMem in video.js does the
- * same on every read a 1 MHz CRTC would make (a 2 MHz bitmap ULA's other MA13 reads flip MA6, and MA7 on a Master);
+ * same on every read a 1 MHz CRTC would make, but flips bits on a 2 MHz ULA's other MA13 reads;
  * tests/unit/test-crtc-panel.js holds the two to agreeing.
  */
 export function screenAddress(ma, rowAddress, { screenSubtract, isMaster }) {

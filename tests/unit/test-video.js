@@ -267,11 +267,6 @@ describe("Video", () => {
                 { isMaster: true, ctrl: Mode7 | TwoMhzClock, addr: 0x2000, scanline: 1, oddClock: false },
                 0x7c00,
             ],
-            [
-                "MA13's own with a 1 MHz bitmap ULA",
-                { isMaster: true, ctrl: Bitmap, addr: 0x2000, scanline: 1, oddClock: false },
-                0x7c00,
-            ],
             ["a bitmap mode's row and scanline", { addr: 0x1234, scanline: 5 }, ((0x1234 << 3) | 5) & 0x7fff],
             [
                 "the even field's own scanline with interlace sync and video",
