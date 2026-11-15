@@ -1,187 +1,65 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { executeUntilFrame, renderThumbnails } from "../../src/web/rewind-thumbnail.js";
-import { fake6502 } from "../../src/fake6502.js";
+import { describe, expect, it, vi } from "vitest";
+import { previewFrame } from "../../src/web/rewind-thumbnail.js";
+import { ReplayHistory, snapshotCycle } from "../../src/replay.js";
+import { cycleCount } from "../../src/lockstep.js";
 import { TEST_6502 } from "../../src/models.js";
-import { Video } from "../../src/video.js";
+import { loadBytes, machineShowingFrames } from "./helpers.js";
 
-// Minimal mock canvas for node/jsdom environment
-function createMockCanvas() {
-    const imageData = {
-        data: new Uint8Array(1024 * 625 * 4),
-        get buffer() {
-            return this.data.buffer;
-        },
-    };
-    const ctx = {
-        createImageData: () => imageData,
-        putImageData: vi.fn(),
-        drawImage: vi.fn(),
-    };
-    return { ctx, imageData };
+const ProgramAt = 0x2000;
+// STA &3000; JMP &2000
+const StoreThenLoop = [0x8d, 0x00, 0x30, 0x4c, 0x00, 0x20];
+const FrameCycles = 40000;
+const LongestInstructionCycles = 8;
+
+async function historyRunning() {
+    const cpu = await machineShowingFrames(TEST_6502);
+    loadBytes(cpu, ProgramAt, StoreThenLoop);
+    cpu.pc = ProgramAt;
+    const history = new ReplayHistory(cpu);
+    const snapshots = [];
+    for (let i = 0; i < 3; i++) {
+        cpu.execute(FrameCycles);
+        snapshots.push(cpu.snapshotState());
+        history.taken(snapshots.at(-1), null);
+    }
+    return { cpu, history, snapshots };
 }
 
-function createMockVideo() {
-    return {
-        fb32: new Uint32Array(1024 * 625),
-        frameCount: 0,
-        clearPaintBuffer: vi.fn(),
-        renderPending: vi.fn(),
-    };
-}
-
-function createMockProcessor(video) {
-    return {
-        snapshotState: vi.fn(() => ({ saved: true })),
-        restoreState: vi.fn(),
-        asReplay: (_hooks, run) => run(),
-        // Simulate: each execute call advances the video frameCount
-        execute: vi.fn(() => {
-            video.frameCount++;
-        }),
-    };
-}
-
-describe("renderThumbnails", () => {
-    let origCreateElement;
-
-    beforeEach(() => {
-        origCreateElement = document.createElement.bind(document);
-        vi.spyOn(document, "createElement").mockImplementation((tag) => {
-            if (tag !== "canvas") return origCreateElement(tag);
-            const mock = createMockCanvas();
-            return {
-                width: 0,
-                height: 0,
-                getContext: () => mock.ctx,
-            };
-        });
-    });
-
-    afterEach(() => {
-        vi.restoreAllMocks();
-    });
-
-    it("should return empty array for empty snapshots", () => {
-        const result = renderThumbnails({}, [], {}, 50);
-        expect(result).toEqual([]);
-    });
-
-    it("should generate one thumbnail per snapshot", () => {
-        const video = createMockVideo();
-        const processor = createMockProcessor(video);
-        const snapshots = [{ id: 1 }, { id: 2 }, { id: 3 }];
-
-        const results = renderThumbnails(processor, snapshots, video, 50);
-
-        expect(results).toHaveLength(3);
-        expect(results[0].index).toBe(0);
-        expect(results[1].index).toBe(1);
-        expect(results[2].index).toBe(2);
-    });
-
-    it("should calculate age in seconds from newest", () => {
-        const video = createMockVideo();
-        const processor = createMockProcessor(video);
-        const snapshots = [{ id: 1 }, { id: 2 }, { id: 3 }];
-
-        const results = renderThumbnails(processor, snapshots, video, 50);
-
-        // Oldest (index 0) is 2 steps from newest: 2 * 50 / 50 = 2s
-        expect(results[0].ageSeconds).toBe(2);
-        expect(results[1].ageSeconds).toBe(1);
-        expect(results[2].ageSeconds).toBe(0); // newest
-    });
-
-    it("should restore original state after rendering", () => {
-        const video = createMockVideo();
-        const processor = createMockProcessor(video);
-
-        renderThumbnails(processor, [{ id: 1 }], video, 50);
-
-        const calls = processor.restoreState.mock.calls;
-        expect(calls[calls.length - 1][0]).toEqual({ saved: true });
-    });
-
-    it("should restore original state even if rendering throws", () => {
-        const video = createMockVideo();
-        const processor = createMockProcessor(video);
-        processor.execute = vi.fn(() => {
-            throw new Error("boom");
-        });
-
-        expect(() => renderThumbnails(processor, [{ id: 1 }], video, 50)).toThrow("boom");
-
-        const calls = processor.restoreState.mock.calls;
-        expect(calls[calls.length - 1][0]).toEqual({ saved: true });
-    });
-
-    it("should draw the pending cells once a snapshot has run, before the next restore", () => {
-        const video = createMockVideo();
-        const processor = createMockProcessor(video);
-
-        renderThumbnails(processor, [{ id: 1 }], video, 50);
-
-        expect(video.renderPending).toHaveBeenCalledTimes(1);
-        const [drawnAt] = video.renderPending.mock.invocationCallOrder;
-        expect(drawnAt).toBeGreaterThan(Math.max(...processor.execute.mock.invocationCallOrder));
-        expect(drawnAt).toBeLessThan(Math.max(...processor.restoreState.mock.invocationCallOrder));
-    });
-
-    it("should restore each snapshot and execute until frame advances", () => {
-        const video = createMockVideo();
-        const processor = createMockProcessor(video);
-        const snapshots = [{ id: 1 }, { id: 2 }];
-
-        renderThumbnails(processor, snapshots, video, 50);
-
-        // restoreState: once per snapshot + once to restore original = 3
-        expect(processor.restoreState).toHaveBeenCalledTimes(3);
-        expect(processor.restoreState).toHaveBeenCalledWith(snapshots[0]);
-        expect(processor.restoreState).toHaveBeenCalledWith(snapshots[1]);
-        // execute called at least once per snapshot (runs in chunks until frameCount advances)
-        expect(processor.execute.mock.calls.length).toBeGreaterThanOrEqual(2);
-    });
-
-    it("should suppress clearPaintBuffer during rendering", () => {
-        const video = createMockVideo();
-        const processor = createMockProcessor(video);
-        const origClear = video.clearPaintBuffer;
-
-        renderThumbnails(processor, [{ id: 1 }], video, 50);
-
-        // clearPaintBuffer should be restored after rendering
-        expect(video.clearPaintBuffer).toBe(origClear);
-        // The original clearPaintBuffer should NOT have been called
-        // (it was temporarily replaced with a no-op)
-        expect(origClear).not.toHaveBeenCalled();
-    });
-});
-
-describe("executeUntilFrame", () => {
-    it("runs past breakpoints and watches to a whole frame, leaving them stopping real runs", async () => {
-        const video = new Video(false, 1024 * 625, () => {});
-        const processor = fake6502(TEST_6502, { video });
-        await processor.initialise();
-        const ModeSevenCrtc = [63, 40, 51, 0x24, 30, 2, 25, 27, 0x93, 18];
-        ModeSevenCrtc.forEach((value, reg) => {
-            video.crtc.write(0, reg);
-            video.crtc.write(1, value);
-        });
-        const StoreThenLoop = [0x8d, 0x00, 0x30, 0x4c, 0x00, 0x20];
-        processor.ramRomOs.set(StoreThenLoop, 0x2000);
-        processor.pc = 0x2000;
+describe("previewFrame", () => {
+    it("runs past breakpoints and watches to a whole frame, kept from being cleared, leaving them stopping real runs", async () => {
+        const { cpu, history, snapshots } = await historyRunning();
         // Turned off by a flag, not remove(), which would rebuild the look tables and hide a preview that failed to.
         let breaking = true;
-        processor.debugInstruction.add(() => breaking);
-        processor.debugWrite.add(() => true);
-        const startFrame = video.frameCount;
+        cpu.debugInstruction.add(() => breaking);
+        cpu.debugWrite.add(() => true);
+        const clear = vi.spyOn(cpu.video, "clearPaintBuffer");
+        cpu.restoreState(snapshots[0]);
+        const startFrame = cpu.video.frameCount;
 
-        executeUntilFrame(processor, video);
+        previewFrame(history, snapshots[0]);
 
-        expect(video.frameCount).toBe(startFrame + 2);
-        expect(processor.execute(1000)).toBe(false);
+        expect(cpu.video.frameCount).toBe(startFrame + 2);
+        expect(cpu.video.clearPaintBuffer).toBe(clear);
+        expect(clear).not.toHaveBeenCalled();
+        expect(cpu.execute(1000)).toBe(false);
         breaking = false;
-        expect(processor.execute(1000)).toBe(false);
+        expect(cpu.execute(1000)).toBe(false);
+    });
+
+    it("goes no further than a tenth of a second when the display never ends", async () => {
+        const { cpu, history } = await historyRunning();
+        // R6, the rows displayed, past R4, the rows in a frame.
+        cpu.video.crtc.write(0, 6);
+        cpu.video.crtc.write(1, 0x7f);
+        const snapshot = cpu.snapshotState();
+        const startFrame = cpu.video.frameCount;
+
+        previewFrame(history, snapshot);
+
+        expect(cpu.video.frameCount).toBe(startFrame);
+        const ran = cycleCount(cpu) - snapshotCycle(cpu, snapshot);
+        expect(ran).toBeGreaterThanOrEqual(cpu.model.cyclesPerSecond / 10);
+        expect(ran).toBeLessThan(cpu.model.cyclesPerSecond / 10 + LongestInstructionCycles);
     });
 });
