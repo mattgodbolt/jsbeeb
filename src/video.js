@@ -45,6 +45,9 @@ export const HwScrollSubtract = [8, 4, 10, 5];
 export const LineCountPeriod = 2500;
 
 const BitmapXPerClock = 8;
+// In the 2MHz bitmap modes the ULA's pixel output lags its fetch by half a 2MHz cycle, so a palette or control write
+// shows this many texels after the beam: inferred from a Master's screen in #1845 and #1846.
+const UlaOutputLagTexels = BitmapXPerClock / 2;
 
 /**
  * @typedef {object} BeamPosition
@@ -113,6 +116,7 @@ class Ula {
         addr |= 0;
         val |= 0;
         this.video.renderPending();
+        const was2MHzBitmap = this.video.is2MHzBitmap();
         let reg = addr & 3;
 
         // When NULA is disabled, mask off bit 1 so &FE22/&FE23 become &FE20/&FE21.
@@ -140,7 +144,7 @@ class Ula {
                 this._writeNulaPalette(val);
                 break;
         }
-        this.video.repaintSecondHalfOfCell();
+        this.video.repaintAfterUlaWrite(was2MHzBitmap);
     }
 
     snapshotState() {
@@ -876,11 +880,10 @@ export class Video {
         );
     }
 
-    // The second half of a 16 pixel cell, for the 1MHz repaint.
-    blitFbSecondHalf(dat, destOffset) {
+    blitFbFrom(dat, destOffset, fromPixel) {
         const offset = table4bppOffset(this.ulaMode, dat);
         const colourLookup = this.pixelColours();
-        for (let i = 8; i < 16; ++i) {
+        for (let i = fromPixel; i < this.pixelsPerChar; ++i) {
             this.fb32[destOffset + i] = colourLookup[this.table4bpp[offset + i]];
         }
     }
@@ -929,28 +932,34 @@ export class Video {
         return bitmapRow * 1024 + this.bitmapX;
     }
 
-    // The render loop paints a whole 1MHz cell on one 2MHz tick and skips the next, but the ULA
-    // output stage switches at 2MHz: a register write landing on the skipped tick changes the
-    // second half of the cell just painted. See https://github.com/mattgodbolt/jsbeeb/issues/766
-    repaintSecondHalfOfCell() {
-        if (!this.halfClock || !this.oddClock) return;
+    // The render loop paints a cell whole on the tick that fetches it, so the part of it the ULA outputs after a
+    // write is repainted with the new state. A 1MHz cell spans two 2MHz ticks and switches on the second, with no lag
+    // (https://github.com/mattgodbolt/jsbeeb/issues/766, #1857); a write that keeps a 2MHz bitmap mode switches the
+    // cell UlaOutputLagTexels in.
+    repaintAfterUlaWrite(was2MHzBitmap) {
+        const lagged = was2MHzBitmap && this.is2MHzBitmap();
+        if (!lagged && !(this.halfClock && this.oddClock)) return;
         if ((this.dispEnabled & EVERYTHINGENABLED) !== EVERYTHINGENABLED) return;
         if (this.bitmapX < 0 || this.bitmapX >= 1024 || this.bitmapY < 0 || this.bitmapY >= 625) return;
         const offset = this.beamOffset();
-        const halfCell = this.pixelsPerChar >>> 1;
+        const fromPixel = lagged ? UlaOutputLagTexels : this.pixelsPerChar >>> 1;
         if (this.teletextMode) {
             this.teletext.catchUp();
             this.teletext.emitSecondHalf(this.fb32, offset);
         } else {
-            this.blitFbSecondHalf(this.cellData, offset);
+            this.blitFbFrom(this.cellData, offset, fromPixel);
         }
         this.drain.markDrawn(offset, this.pixelsPerChar, this.doublesLines());
         if (this.doublesLines()) {
-            this.fb32.copyWithin(offset + 1024 + halfCell, offset + halfCell, offset + this.pixelsPerChar);
+            this.fb32.copyWithin(offset + 1024 + fromPixel, offset + fromPixel, offset + this.pixelsPerChar);
         }
         if (this.cursorInvertedOffset === offset) {
-            this.invertForCursor(offset, halfCell);
+            this.invertForCursor(offset, fromPixel);
         }
+    }
+
+    is2MHzBitmap() {
+        return !this.halfClock && !this.teletextMode;
     }
 
     setScreenHwScroll(viaScreenHwScroll) {
