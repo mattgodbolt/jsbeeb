@@ -35,11 +35,11 @@
     },
     "master-disc-cat": {
       "framebuffer": "8617b689336a52a0",
-      "registers": "08edb151fa75c24e",
-      "memory": "61f2bc064aa33f07",
-      "cycles": "f6bb6a10faabacc7",
-      "sound": "e55c3f3ff030d190",
-      "peripherals": "8536f909ef4bd342"
+      "registers": "0143ab72c8f9acf4",
+      "memory": "96d3ce8d4a2161e9",
+      "cycles": "9ff865308a9e6762",
+      "sound": "2f7be4baa3a47625",
+      "peripherals": "da102b6b3d34d6a6"
     }
   }
 }
