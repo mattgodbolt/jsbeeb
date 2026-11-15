@@ -5,6 +5,7 @@ import { cpuMoment, cycleCount } from "../../src/lockstep.js";
 import { snapshotToJSON } from "../../src/snapshot.js";
 import { fake6502 } from "../../src/fake6502.js";
 import { findModel } from "../../src/models.js";
+import { NoReplayHooks } from "../../src/6502.js";
 import { singleStep } from "../helpers/single-step.js";
 import { loadBytes } from "./helpers.js";
 import { bankView, PagedView, ShadowView } from "../../src/paging.js";
@@ -281,7 +282,7 @@ describe("Finding the last write to a byte", () => {
         expect(history.stepBackTo(cycle(cpu, before))).toMatch(why);
     });
 
-    it.each([
+    const moveOns = [
         ["run on", (cpu) => runFor(cpu, SomeCycles)],
         [
             "had a device register written",
@@ -290,24 +291,32 @@ describe("Finding the last write to a byte", () => {
                 cpu.writemem(UserViaDdrb, EditedValue);
             },
         ],
-    ])("stops, as it was left between stretches, once the machine has %s", async (_, moveOn) => {
-        const cpu = await machineAt(WriterAt, { model: findModel("B-DFS1.2") });
-        loadBytes(cpu, WriterAt, WriteThenIdle);
-        const history = new ReplayHistory(cpu);
-        writeAndIdle(cpu);
-        take(history);
-        runFor(cpu, SomeCycles);
-        take(history);
-        runFor(cpu, SomeCycles);
-        const before = snapshotToJSON(cpu.snapshotState());
-        const search = history.lastWrite(Written, PagedView);
-        expect(search.next().done).toBe(false);
-        expect(snapshotToJSON(cpu.snapshotState())).toEqual(before);
-        moveOn(cpu);
-        const movedOn = snapshotToJSON(cpu.snapshotState());
-        expect(search.next().value.refusal).toMatch(/moved on/);
-        expect(snapshotToJSON(cpu.snapshotState())).toEqual(movedOn);
-    });
+    ];
+    const searches = [
+        ["searching back", (history) => history.lastWrite(Written, PagedView)],
+        ["replaying forward", (history) => history.replayForward(0, cycleCount(history.cpu), { hooks: NoReplayHooks })],
+    ];
+    it.each(searches.flatMap(([how, start]) => moveOns.map(([moved, moveOn]) => [how, moved, start, moveOn])))(
+        "%s stops, as it was left between stretches, once the machine has %s",
+        async (_, __, start, moveOn) => {
+            const cpu = await machineAt(WriterAt, { model: findModel("B-DFS1.2") });
+            loadBytes(cpu, WriterAt, WriteThenIdle);
+            const history = new ReplayHistory(cpu);
+            writeAndIdle(cpu);
+            take(history);
+            runFor(cpu, SomeCycles);
+            take(history);
+            runFor(cpu, SomeCycles);
+            const before = snapshotToJSON(cpu.snapshotState());
+            const search = start(history);
+            expect(search.next().done).toBe(false);
+            expect(snapshotToJSON(cpu.snapshotState())).toEqual(before);
+            moveOn(cpu);
+            const movedOn = snapshotToJSON(cpu.snapshotState());
+            expect(search.next().value.refusal).toMatch(/moved on/);
+            expect(snapshotToJSON(cpu.snapshotState())).toEqual(movedOn);
+        },
+    );
 });
 
 describe("ReplayHistory", () => {
