@@ -34,6 +34,7 @@ export const PanelIds = [
     "paging",
     "basic",
     "breakpoints",
+    "callstack",
     "trace",
 ];
 export const AllEdges = { left: true, right: true, top: true, bottom: true };

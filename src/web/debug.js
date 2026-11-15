@@ -15,6 +15,7 @@ import { NumRomBanks } from "../6502.js";
 import { describeHit } from "../breakpoints.js";
 import { sheilaAddress, machineSheilaBlocks } from "../sheila.js";
 import { BreakpointsPanel } from "./breakpoints-panel.js";
+import { CallStackPanel } from "./call-stack-panel.js";
 import { TracePanel } from "./trace-panel.js";
 import { bindGotoForm, externalLink, FittedRows, labelHtml, powerOfTwoColumnsThatFit } from "./debug-dom.js";
 import { DisassemblyView } from "./disassembly-view.js";
@@ -503,7 +504,7 @@ export class Debugger {
         this.breakpoints = new BreakpointsPanel({
             arrangement,
             resolve: (text) => this._resolveBreakpoint(text),
-            nameOf: (address, bank) => this._breakpointNames(bank).address(address, this.cpu.pc)?.name,
+            nameOf: (address, bank) => this._nameIn(address, bank),
             showCode: (address, bank) => this._showCode(address, bank),
             showMemory: (address, bank) => {
                 this._showPinned(this._paging.memory, bank, address);
@@ -514,6 +515,14 @@ export class Debugger {
         });
         // So a name typed while the machine runs can resolve, and the panel names its breakpoints' addresses.
         this.breakpoints.floating.addEventListener("open", () => this._matchSymbols());
+        this.callStack = new CallStackPanel({
+            arrangement,
+            refusal: () => this._searchRefusal(),
+            search: () => this._history.callStack(),
+            isStopped: () => !this._loop.isRunning(),
+            nameOf: (address, bank) => this._nameIn(address, bank),
+            showCode: (address, bank) => this._showCode(address, bank),
+        });
         this.trace = new TracePanel({
             arrangement,
             history: () => this._history,
@@ -621,7 +630,7 @@ export class Debugger {
     }
 
     _renameShown() {
-        if (this.cpu && this.breakpoints.floating.isOpen) this._matchSymbols();
+        if (this.cpu && (this.breakpoints.floating.isOpen || this.callStack.floating.isOpen)) this._matchSymbols();
         if (!this.cpu || (!this._inDebugger && !this._ownPanelsShown())) return;
         this._matchSymbols();
         this._refresh.drawNow();
@@ -963,6 +972,7 @@ export class Debugger {
         });
         this._sheila = machineSheilaBlocks(cpu);
         this.breakpoints.setCpu(cpu);
+        this.callStack.setCpu(cpu);
         this.trace.setCpu(cpu);
         if (this._ownPanelsShown()) this._refresh.drawNow();
     }
@@ -1090,6 +1100,11 @@ export class Debugger {
         return viewsFor(this.cpu.model).includes(view) ? view : undefined;
     }
 
+    /** The name of `address`, in sideways `bank` if given, as the Breakpoints and Call stack panels name it. */
+    _nameIn(address, bank) {
+        return this._breakpointNames(bank).address(address, this.cpu.pc)?.name;
+    }
+
     /** Opens the disassembly at `address`, in sideways `bank` if one is given, or else in the view it has. */
     _showCode(address, bank) {
         this._showPinned(this._paging.disassembly, bank, address);
@@ -1116,6 +1131,7 @@ export class Debugger {
         this._bankNames = new Map();
         this._matchedAt = performance.now();
         this.breakpoints.update();
+        this.callStack.renamed();
     }
 
     /** Credits the sets whose names a panel shows, in its own line. */
@@ -1249,6 +1265,9 @@ export class Debugger {
         for (const [run, button] of Object.entries(this._buttons)) button.disabled = running !== (run === "stop");
         if (running) this.trace.refresh();
         else this._showStepBack();
+        // Stopping takes no cycles, so the panel's refresh would not see it; deferred until the loop has finished
+        // stopping.
+        if (this.callStack.floating.isOpen) queueMicrotask(() => this.callStack.update());
     }
 
     _stepBackRefusal() {
@@ -1422,7 +1441,7 @@ export class Debugger {
         const elsewhere = viewDiffers(this.cpu, view, address) ? ` in ${viewLabel(view)}` : "";
         const where = `$${hexword(address)}${elsewhere}`;
         const title = `Who wrote ${where}`;
-        const unavailable = this._loop.lockstep ? NoSearchInSession : this._history ? null : NoHistoryToSearch;
+        const unavailable = this._searchRefusal();
         if (unavailable) {
             toast(unavailable, { title });
             return { refusal: unavailable };
@@ -1439,6 +1458,12 @@ export class Debugger {
             write && write.pc !== null ? { label: "Step back to it", run: this._stepBackToWrite(write) } : null;
         toast(this._lastWriteText(where, found), { title, action });
         return found;
+    }
+
+    /** Why the machine's history cannot be searched back through, or null if it can. */
+    _searchRefusal() {
+        if (this._loop.lockstep) return NoSearchInSession;
+        return this._history ? null : NoHistoryToSearch;
     }
 
     // A cycle found is only that write's while the machine is where the search found it from.
