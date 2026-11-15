@@ -21,6 +21,7 @@ jsbeeb supports the browser versions listed under `browserslist` in [package.jso
 - [Printer Output](#printer-output)
 - [Save State and Rewind](#save-state-and-rewind)
 - [Joystick Support](#joystick-support)
+- [Touch Screen](#touch-screen)
 - [Getting Set Up to Run Locally](#getting-set-up-to-run-locally)
 - [Installing as an App and Working Offline](#installing-as-an-app-and-working-offline)
 - [Running as a Desktop Application](#running-as-a-desktop-application)
@@ -266,6 +267,14 @@ press `1`. The on-screen game pad's classic layout follows `LEFT`, `RIGHT`, `UP`
 
 The older `LEFT=`, `RIGHT=`, `UP=`, `DOWN=` and `FIRE=` parameters (no `GP.` prefix, and in capitals) still work and
 mean the same thing.
+
+### Touch Screen
+
+jsbeeb emulates the Microvitec Touchtech 501, the infrared touch screen that fitted over a monitor and talked to the
+BBC Micro over RS-423. There is nothing to switch on: once a program asks it for positions, holding the mouse button
+down over the emulated screen touches the screen there. Point and multiple modes (1, 3, 129 and 131) are emulated,
+which covers Hybrid's Soundspace; size mode (2 and 130) reports the point without a size, and the data dump mode (0
+and 128) sends nothing.
 
 ## Getting Set Up to Run Locally
 
