@@ -345,6 +345,7 @@ class Crtc {
                     } else {
                         this.video.dispEnableClear(USERDISPENABLE);
                     }
+                    this.video.repaintAfterR8Write();
                     break;
                 }
                 case 14:
@@ -940,10 +941,23 @@ export class Video {
         const lagged = was2MHzBitmap && this.is2MHzBitmap();
         if (!lagged && !(this.halfClock && this.oddClock)) return;
         if ((this.dispEnabled & EVERYTHINGENABLED) !== EVERYTHINGENABLED) return;
+        this.repaintBeamCell(lagged ? UlaOutputLagTexels : this.pixelsPerChar >>> 1);
+    }
+
+    // R8's display enable switches a CRTC character before the one its write lands on, so the cell just painted is
+    // repainted or blanked: measured on Masters in the 2MHz bitmap modes (#1847).
+    repaintAfterR8Write() {
+        if (!this.is2MHzBitmap()) return;
+        if (((this.dispEnabled | USERDISPENABLE) & EVERYTHINGENABLED) !== EVERYTHINGENABLED) return;
+        this.repaintBeamCell(0);
+    }
+
+    repaintBeamCell(fromPixel) {
         if (this.bitmapX < 0 || this.bitmapX >= 1024 || this.bitmapY < 0 || this.bitmapY >= 625) return;
         const offset = this.beamOffset();
-        const fromPixel = lagged ? UlaOutputLagTexels : this.pixelsPerChar >>> 1;
-        if (this.teletextMode) {
+        if (!(this.dispEnabled & USERDISPENABLE)) {
+            this.fb32.fill(OPAQUE_BLACK, offset + fromPixel, offset + this.pixelsPerChar);
+        } else if (this.teletextMode) {
             this.teletext.catchUp();
             this.teletext.emitSecondHalf(this.fb32, offset);
         } else {

@@ -1197,6 +1197,48 @@ describe("Video", () => {
         });
     });
 
+    describe("R8 display enable part way through a line", () => {
+        const Mode0 = 0x9c;
+        const DisplayOn = 0x00;
+        const DisplayOff = 0x30;
+        const White = 0xffffffff;
+        const AllPixelsSet = 0xff;
+        const offset = 100 * FbWidth + 100;
+
+        it.each`
+            what              | mode     | from          | to            | width | passed          | next
+            ${"switches on"}  | ${Mode0} | ${DisplayOff} | ${DisplayOn}  | ${8}  | ${White}        | ${White}
+            ${"switches off"} | ${Mode0} | ${DisplayOn}  | ${DisplayOff} | ${8}  | ${OPAQUE_BLACK} | ${OPAQUE_BLACK}
+            ${"switches on"}  | ${Mode4} | ${DisplayOff} | ${DisplayOn}  | ${16} | ${OPAQUE_BLACK} | ${White}
+            ${"switches off"} | ${Mode4} | ${DisplayOn}  | ${DisplayOff} | ${16} | ${White}        | ${OPAQUE_BLACK}
+        `(
+            "$what from the cell just passed in a 2MHz mode only ($width wide cells)",
+            ({ mode, from, to, width, passed, next }) => {
+                video.ula.write(0, mode);
+                for (let logical = 0; logical < 16; ++logical) video.ula.write(1, logical << 4);
+                Object.assign(video, {
+                    dispEnabled: EVERYTHINGENABLED,
+                    horizCounter: 10,
+                    bitmapX: 92,
+                    bitmapY: 100,
+                    oddClock: false,
+                });
+                rig.writeCrtc(8, from);
+                video.regs[7] = 30;
+                cpu.data = AllPixelsSet;
+                const ticksPerCell = width / 8;
+                rig.run(ticksPerCell);
+
+                rig.writeCrtc(8, to);
+                rig.run(ticksPerCell);
+                video.renderPending();
+
+                expect(Array.from(fb.subarray(offset, offset + width))).toEqual(Array(width).fill(passed));
+                expect(Array.from(fb.subarray(offset + width, offset + 2 * width))).toEqual(Array(width).fill(next));
+            },
+        );
+    });
+
     // The hashes were recorded from the renderer that drew each cell into the framebuffer as the beam reached it.
     describe("raster effects", () => {
         const RasterFrames = 6;
