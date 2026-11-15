@@ -1341,7 +1341,10 @@ export class WdFdc extends DiscController {
             return;
         }
         this._onDiscCrc = ((this._onDiscCrc << 8) & 0xffff) | data;
-        if (this._stateCount < this._onDiscLength + 2) return;
+        if (this._stateCount === this._onDiscLength + 2) this._endDataField();
+    }
+
+    _endDataField() {
         if (this._crc !== this._onDiscCrc) {
             this._statusRegister |= Status.crcError;
             // Sector data CRC error is terminal, even for a multi-sector read.
@@ -1449,6 +1452,8 @@ export class WdFdc extends DiscController {
 
         this._timerTask.restoreOffset(state.timerTaskOffset);
         if (state.state === State.retiredReadAddressDone) this._commandDone(true);
+        // Only older snapshots hold a data field read to its last CRC byte but not yet checked.
+        if (this._state === State.inData && this._stateCount === this._onDiscLength + 2) this._endDataField();
 
         this._updateNmi();
     }
