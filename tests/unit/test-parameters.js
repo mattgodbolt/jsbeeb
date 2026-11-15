@@ -121,7 +121,7 @@ describe("Parameters", () => {
             },
             ["audioOutput", "speakerAmount"],
             ["microphoneChannel"],
-            ["mouseJoystickEnabled"],
+            ["mouseJoystickEnabled", "hasAmxMouse"],
             ["speechOutput"],
         ]);
     });
@@ -308,6 +308,7 @@ describe("the settings a session guest takes from its host", () => {
             "hasTeletextAdaptor",
             "hasEconet",
             "hasVideoNula",
+            "hasAmxMouse",
             "fakeVideo",
             "stationId",
             "videoCyclesBatch",

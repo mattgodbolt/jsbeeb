@@ -58,7 +58,15 @@ describe("what needs a restart", () => {
             Object.keys(Parameters)
                 .filter((name) => Parameters[name].field?.restart)
                 .sort(),
-        ).toEqual(["coProcessor", "hasEconet", "hasMusic5000", "hasTeletextAdaptor", "hasVideoNula", "model"]);
+        ).toEqual([
+            "coProcessor",
+            "hasAmxMouse",
+            "hasEconet",
+            "hasMusic5000",
+            "hasTeletextAdaptor",
+            "hasVideoNula",
+            "model",
+        ]);
     });
 });
 
@@ -344,7 +352,8 @@ describe("the Settings form", () => {
     const Changed =
         "?model=Master&keyLayout=natural&displayMode=pal&coProcessor=true&tubeCpuMultiplier=2&hasEconet=true" +
         "&hasVideoNula=true" +
-        "&audioOutput=board&speakerAmount=0.5&microphoneChannel=1&mouseJoystickEnabled=true&speechOutput=true";
+        "&audioOutput=board&speakerAmount=0.5&microphoneChannel=1&mouseJoystickEnabled=true&hasAmxMouse=true" +
+        "&speechOutput=true";
 
     const shown = (control) =>
         control.type === "checkbox"
@@ -406,6 +415,13 @@ describe("the Settings form", () => {
             {
                 id: "mouseJoystickEnabled",
                 label: "Enable mouse as analogue joystick",
+                type: "checkbox",
+                value: true,
+                disabled: false,
+            },
+            {
+                id: "hasAmxMouse",
+                label: "Fit an AMX mouse to the user port",
                 type: "checkbox",
                 value: true,
                 disabled: false,

@@ -38,6 +38,7 @@ export function fake6502(model, opts = {}) {
             cpuMultiplier: opts.cpuMultiplier,
             hasMusic5000: opts.hasMusic5000,
             hasTeletextAdaptor: opts.hasTeletextAdaptor,
+            hasAmxMouse: opts.hasAmxMouse,
             fittedRoms: econet && model.isMaster ? [MasterAnfsRom] : [],
             bankRoms: opts.bankRoms,
             extraRoms: opts.extraRoms,

@@ -236,6 +236,12 @@ jsbeeb supports both USB/Bluetooth gamepads and mouse-based analogue joystick em
 - X-axis: Left = 65535, Right = 0
 - Y-axis: Up = 65535, Down = 0
 
+An AMX mouse on the user port is fitted with `hasAmxMouse=true`, or from the Settings dialog, in place of the switch
+interface (`Alt-1` to `Alt-8`). A left click on the screen locks the pointer to it (the browser lets it go on `Esc`), as
+the mouse moves by how far the host's pointer moves rather than where it is; the left, middle and right buttons are
+the AMX mouse's. The AMX's own ROM is not included; [J.G. Harston's mouse
+driver](https://mdfs.net/Info/Comp/BBC/Mouse) works with it.
+
 A gamepad presses the emulated machine's keys, and which key each control presses can be changed from the URL in the
 same way as [remapping the keyboard](#remapping-keys):
 

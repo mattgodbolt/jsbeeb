@@ -1,15 +1,16 @@
 import { GamepadSource } from "../gamepad-source.js";
 import { MicrophoneInput } from "./microphone-input.js";
 import { MouseJoystickSource } from "../mouse-joystick-source.js";
+import { AmxMouseInput } from "./amx-mouse-input.js";
 import { calculateMouseCoordinates } from "../mouse-coordinates.js";
 import { toast } from "./toast.js";
 
 const AdcChannelCount = 4;
 
 /**
- * What feeds the analogue port and the touchscreen: the gamepad, the mouse
- * acting as a joystick, and the microphone, with the mouse on the monitor
- * routed to whichever of them wants it.
+ * What feeds the analogue port, the touchscreen and the AMX mouse: the gamepad,
+ * the mouse acting as a joystick, and the microphone, with the mouse on the
+ * monitor routed to whichever of them wants it.
  */
 export class AnalogueInputs {
     /**
@@ -39,6 +40,8 @@ export class AnalogueInputs {
         this.mouseJoystickSource = new MouseJoystickSource(screenCanvas);
 
         const cubMonitor = document.getElementById("cub-monitor");
+        const amxMouseInput =
+            processor.amxMouse && new AmxMouseInput({ mouse: processor.amxMouse, target: cubMonitor, screenCanvas });
         const screenPoint = (evt) => calculateMouseCoordinates(evt, screenCanvas.getBoundingClientRect());
         const onCubMouseEvent = (evt) => {
             audioHandler.tryResume();
@@ -46,6 +49,7 @@ export class AnalogueInputs {
             const { x, y } = screenPoint(evt);
             evt.preventDefault();
             if (evt.type === "mousedown" && evt.button === 0 && takeScreenClick(x, y)) return;
+            amxMouseInput?.onMouseEvent(evt);
 
             // Handle touchscreen
             if (processor.touchScreen) processor.touchScreen.onMouse(x, y, evt.buttons);
