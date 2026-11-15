@@ -136,7 +136,7 @@ export const State = Object.freeze({
     writeTrackSetup: 16,
     inWriteTrack: 17,
     checkMulti: 18,
-    // Kept so the number is not reused: only older snapshots hold it, and restoring one finishes the command.
+    // Kept so the number is not reused; only older snapshots hold it.
     retiredReadAddressDone: 19,
 });
 
