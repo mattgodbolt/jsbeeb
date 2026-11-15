@@ -72,7 +72,7 @@ const Wd1772HeadSettleMs = 15;
 const CommandDoneDelayUs = 32;
 const FmByteUs = 64;
 const MfmByteUs = 32;
-// A Master 128's 1770 raises INTRQ and drops BUSY a fixed number of byte-times after a sector or ID command's
+// A Master 128's 1770 raises INTRQ a fixed number of byte-times after a sector or ID command's
 // last DRQ, the same in FM and MFM (#1852): 1/2 for READ ADDRESS, 2 5/8 for READ SECTOR and 5 5/8 for WRITE
 // SECTOR. Each constant is what is left of that after the bytes its command's state machine has already spent.
 const ReadAddressDoneBytes = 0.5;
