@@ -2,7 +2,7 @@
   "frames": 100,
   "workloads": {
     "elite": {
-      "framebuffer": "d0c714b85ff18819",
+      "framebuffer": "c4b6b34b05b0a9a2",
       "registers": "84a62d1f2f6aee3d",
       "memory": "5343982b27bd756b",
       "cycles": "0f1a9ce39b973c8c",
