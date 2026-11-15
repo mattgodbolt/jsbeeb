@@ -45,11 +45,12 @@ export const HwScrollSubtract = [8, 4, 10, 5];
 export const LineCountPeriod = 2500;
 
 const BitmapXPerClock = 8;
-// How many texels after the beam a palette or control write shows, when it leaves the ULA in a bitmap mode at the
+// How many texels after the beam a palette or control write shows, when it keeps the ULA in a bitmap mode at the
 // same clock rate: inferred from a Master's screen in #1845 and #1846 (2MHz) and #1857 (1MHz).
 const UlaOutputLag2MHzTexels = BitmapXPerClock / 2;
 const UlaOutputLag1MHzTexels = 0;
-// Teletext, and a write that changes the clock rate or leaves or enters teletext, have not been measured.
+// Teletext, and a write that changes the clock rate or enters or leaves teletext, are unmeasured and keep the rule
+// jsbeeb had before #1857.
 const UnmeasuredUlaOutputLagTexels = BitmapXPerClock;
 
 /**
