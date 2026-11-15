@@ -944,8 +944,8 @@ export class Video {
         this.repaintBeamCell(lagged ? UlaOutputLagTexels : this.pixelsPerChar >>> 1);
     }
 
-    // R8's display enable switches a CRTC character before the one its write lands on, so the cell just painted is
-    // repainted or blanked: measured on Masters in the 2MHz bitmap modes (#1847).
+    // R8's display enable switches a CRTC character before the one its write lands on, so the cell the beam has just
+    // passed is painted or blanked: measured on Masters in the 2MHz bitmap modes (#1847).
     repaintAfterR8Write() {
         if (!this.is2MHzBitmap()) return;
         if (((this.dispEnabled | USERDISPENABLE) & EVERYTHINGENABLED) !== EVERYTHINGENABLED) return;

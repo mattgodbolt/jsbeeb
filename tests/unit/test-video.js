@@ -1201,6 +1201,7 @@ describe("Video", () => {
         const Mode0 = 0x9c;
         const DisplayOn = 0x00;
         const DisplayOff = 0x30;
+        const TexelsPerTick = 8;
         const White = 0xffffffff;
         const AllPixelsSet = 0xff;
         const offset = 100 * FbWidth + 100;
@@ -1226,7 +1227,7 @@ describe("Video", () => {
                 rig.writeCrtc(8, from);
                 video.regs[7] = 30;
                 cpu.data = AllPixelsSet;
-                const ticksPerCell = width / 8;
+                const ticksPerCell = width / TexelsPerTick;
                 rig.run(ticksPerCell);
 
                 rig.writeCrtc(8, to);
