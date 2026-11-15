@@ -56,22 +56,22 @@ function captureThumbnail(fb32) {
  */
 function executeUntilFrame(processor, video) {
     processor.asReplay(NoReplayHooks, () => {
-        const startFrame = video.frameCount;
+        const startField = video.fieldCount;
 
         // Phase 1: run to first vsync (completes partial frame, clears fb32)
         for (let i = 0; i < MaxChunks; i++) {
             if (processor.execute(CyclesPerChunk) === false) break;
-            if (video.frameCount !== startFrame) break;
+            if (video.fieldCount !== startField) break;
         }
 
         // Phase 2: run to second vsync with clear suppressed (full frame in fb32)
-        const secondFrame = video.frameCount;
+        const secondField = video.fieldCount;
         const origClear = video.clearPaintBuffer;
         video.clearPaintBuffer = function () {};
         try {
             for (let i = 0; i < MaxChunks; i++) {
                 if (processor.execute(CyclesPerChunk) === false) return;
-                if (video.frameCount !== secondFrame) return;
+                if (video.fieldCount !== secondField) return;
             }
         } finally {
             video.clearPaintBuffer = origClear;

@@ -24,7 +24,7 @@ function createMockCanvas() {
 function createMockVideo() {
     return {
         fb32: new Uint32Array(1024 * 625),
-        frameCount: 0,
+        fieldCount: 0,
         clearPaintBuffer: vi.fn(),
         renderPending: vi.fn(),
     };
@@ -35,9 +35,9 @@ function createMockProcessor(video) {
         snapshotState: vi.fn(() => ({ saved: true })),
         restoreState: vi.fn(),
         asReplay: (_hooks, run) => run(),
-        // Simulate: each execute call advances the video frameCount
+        // Simulate: each execute call advances the video fieldCount
         execute: vi.fn(() => {
-            video.frameCount++;
+            video.fieldCount++;
         }),
     };
 }
@@ -139,7 +139,7 @@ describe("renderThumbnails", () => {
         expect(processor.restoreState).toHaveBeenCalledTimes(3);
         expect(processor.restoreState).toHaveBeenCalledWith(snapshots[0]);
         expect(processor.restoreState).toHaveBeenCalledWith(snapshots[1]);
-        // execute called at least once per snapshot (runs in chunks until frameCount advances)
+        // execute called at least once per snapshot (runs in chunks until fieldCount advances)
         expect(processor.execute.mock.calls.length).toBeGreaterThanOrEqual(2);
     });
 
@@ -175,11 +175,11 @@ describe("executeUntilFrame", () => {
         let breaking = true;
         processor.debugInstruction.add(() => breaking);
         processor.debugWrite.add(() => true);
-        const startFrame = video.frameCount;
+        const startField = video.fieldCount;
 
         executeUntilFrame(processor, video);
 
-        expect(video.frameCount).toBe(startFrame + 2);
+        expect(video.fieldCount).toBe(startField + 2);
         expect(processor.execute(1000)).toBe(false);
         breaking = false;
         expect(processor.execute(1000)).toBe(false);

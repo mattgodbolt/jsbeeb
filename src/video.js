@@ -413,8 +413,8 @@ export class Video {
         // The bitmapX the beam would be at had no hsync since the last flyback sent it back.
         this.frameStartX = 0;
         this.oddClock = false;
+        // R6 hits, which a program need never reach; fieldCount counts the TV's fields.
         this.frameCount = 0;
-        // One per TV field; frameCount counts R6 hits, which a program need never reach.
         this.fieldCount = 0;
         this.hsyncCount = 0;
         // Where the subcarrier is, in cycles, at the start of the current line.
@@ -720,7 +720,7 @@ export class Video {
         this.dispEnabled &= ~FRAMESKIPENABLE;
         let enable = FRAMESKIPENABLE;
         if (this.frameSkipCount > 1) {
-            if (this.frameCount % this.frameSkipCount) enable = 0;
+            if (this.fieldCount % this.frameSkipCount) enable = 0;
         }
         this.dispEnabled |= enable;
         this.cursorInvertedOffset = -1;

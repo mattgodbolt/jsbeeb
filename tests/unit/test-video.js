@@ -1364,12 +1364,25 @@ describe("Video", () => {
         ])("advances once a field for %s", (_, setup) => {
             const { video, run, fieldClocks } = setup();
             const startField = video.fieldCount;
-            while (video.fieldCount === startField) run(1);
+            for (let clock = 0; clock < 2 * fieldClocks && video.fieldCount === startField; clock++) run(1);
             const fieldCount = video.fieldCount;
 
             run((Fields + 0.5) * fieldClocks);
 
             expect(video.fieldCount - fieldCount).toBe(Fields);
+        });
+
+        it("paints one field in frameSkipCount when the CRTC never reaches R6", () => {
+            const v = makeVideo();
+            programStandardFrame(v);
+            v.writeCrtc(6, 0x7f);
+            v.video.frameSkipCount = 9;
+            v.run(ClocksPerFrame);
+            v.resetPaints();
+
+            v.run(2 * 9 * ClocksPerFrame);
+
+            expect(v.paints()).toBe(2);
         });
     });
 
