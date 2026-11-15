@@ -713,17 +713,25 @@ describe("Video", () => {
         });
     });
 
-    // See Video.repaintSecondHalfOfCell.
-    describe("ULA writes half way through a 1MHz cell", () => {
+    // See Video.repaintAfterUlaWrite.
+    describe("ULA writes part way through a cell", () => {
         const Mode0 = 0x9c;
+        const Mode1 = 0xd8;
+        const Mode5 = 0xc4;
+        const ControlReg = 0;
+        const PaletteReg = 1;
         const Red = 0xff0000ff;
         const PhysicalRed = 1;
         const Green = 0xff00ff00;
+        const Blue = 0xffff0000;
         const AllPixelsSet = 0xff;
+        const LowNibbleSet = 0x0f;
         const CellWidth = 16;
         const HalfCell = 8;
+        const OutputLag = 4;
         // A set pixel in a two colour mode is logical colour 15.
         const SetPixelsGreen = 0xf0 | (7 ^ 2);
+        const SetPixelsBlue = 0xf0 | (7 ^ 4);
         const offset = 100 * FbWidth + 100;
 
         // Leaves the beam at the start of a cell with the body about to run on the next tick.
@@ -739,12 +747,65 @@ describe("Video", () => {
         };
         beforeEach(aimAtCell);
 
-        const cell = (at = offset) => {
+        const cell = (at = offset, width = CellWidth) => {
             video.renderPending();
-            return Array.from(fb.subarray(at, at + CellWidth));
+            return Array.from(fb.subarray(at, at + width));
         };
         const firstHalf = () => cell().slice(0, HalfCell);
         const secondHalf = () => cell().slice(HalfCell);
+
+        describe("show from half a 2MHz cycle after the beam, in the cell already painted", () => {
+            const distinctPalette = () => {
+                for (let logical = 0; logical < 16; ++logical)
+                    video.ula.write(1, (logical << 4) | ((logical >>> 1) ^ 7));
+            };
+            it.each`
+                what                              | mode     | data            | ticks | reg           | val               | from  | to
+                ${"2MHz palette"}                 | ${Mode0} | ${AllPixelsSet} | ${1}  | ${PaletteReg} | ${SetPixelsGreen} | ${4}  | ${8}
+                ${"2MHz mode"}                    | ${Mode0} | ${LowNibbleSet} | ${1}  | ${ControlReg} | ${Mode1}          | ${4}  | ${8}
+                ${"1MHz palette, fetching tick"}  | ${Mode4} | ${AllPixelsSet} | ${1}  | ${PaletteReg} | ${SetPixelsGreen} | ${4}  | ${16}
+                ${"1MHz palette, the tick after"} | ${Mode4} | ${AllPixelsSet} | ${2}  | ${PaletteReg} | ${SetPixelsGreen} | ${12} | ${16}
+                ${"1MHz mode, fetching tick"}     | ${Mode4} | ${LowNibbleSet} | ${1}  | ${ControlReg} | ${Mode5}          | ${4}  | ${16}
+                ${"1MHz mode, the tick after"}    | ${Mode4} | ${LowNibbleSet} | ${2}  | ${ControlReg} | ${Mode5}          | ${12} | ${16}
+            `("$what write repaints texels $from to $to", ({ mode, data, ticks, reg, val, from, to }) => {
+                const paintCell = (writeFirst) => {
+                    aimAtCell();
+                    distinctPalette();
+                    cpu.data = data;
+                    video.ula.write(ControlReg, mode);
+                    if (writeFirst) video.ula.write(reg, val);
+                    video.polltime(1);
+                    return cell();
+                };
+                const after = paintCell(true);
+                const before = paintCell(false);
+                video.polltime(ticks - 1);
+
+                video.ula.write(reg, val);
+
+                const expected = before.map((pixel, i) => (i >= from && i < to ? after[i] : pixel));
+                expect(expected.slice(from, to)).not.toEqual(before.slice(from, to));
+                expect(cell()).toEqual(expected);
+            });
+        });
+
+        it("keeps the spacing of back to back palette writes", () => {
+            const BackToBackTicks = 4;
+            video.ula.write(0, Mode0);
+            video.polltime(1);
+            video.ula.write(1, SetPixelsGreen);
+            video.polltime(BackToBackTicks);
+            video.ula.write(1, SetPixelsBlue);
+            video.polltime(1);
+
+            const greenWidth = BackToBackTicks * HalfCell;
+            const blueWidth = HalfCell + OutputLag;
+            expect(cell(offset, OutputLag + greenWidth + blueWidth)).toEqual([
+                ...Array(OutputLag).fill(Red),
+                ...Array(greenWidth).fill(Green),
+                ...Array(blueWidth).fill(Blue),
+            ]);
+        });
 
         it("repaints the second half as teletext when the teletext bit is set", () => {
             video.ula.write(0, Mode4);
@@ -767,17 +828,6 @@ describe("Video", () => {
 
             expect(firstHalf()).toEqual(teletextHalf);
             expect(secondHalf()).toEqual(Array(HalfCell).fill(Red));
-        });
-
-        it("applies a palette write to the second half only", () => {
-            video.ula.write(0, Mode4);
-            video.polltime(1);
-
-            video.ula.write(1, SetPixelsGreen);
-
-            expect(video.ulaPal[15] >>> 0).toBe(Green);
-            expect(firstHalf()).toEqual(Array(HalfCell).fill(Red));
-            expect(secondHalf()).toEqual(Array(HalfCell).fill(Green));
         });
 
         it("leaves the cell alone when the write lands at the start of the next cell", () => {
@@ -818,16 +868,6 @@ describe("Video", () => {
             },
         );
 
-        it("leaves a 2MHz mode alone, where every tick already paints", () => {
-            video.ula.write(0, Mode0);
-            video.polltime(1);
-            const before = cell();
-
-            video.ula.write(1, SetPixelsGreen);
-
-            expect(cell()).toEqual(before);
-        });
-
         it("repaints the doubled scanline too", () => {
             video.doubledScanlines = true;
             video.interlacedSyncAndVideo = false;
@@ -837,10 +877,10 @@ describe("Video", () => {
 
             video.ula.write(1, SetPixelsGreen);
 
-            expect(cell(offset + FbWidth).slice(HalfCell)).toEqual(Array(HalfCell).fill(Green));
+            expect(cell(offset + FbWidth).slice(OutputLag)).toEqual(Array(CellWidth - OutputLag).fill(Green));
         });
 
-        it("keeps the cursor inverted over the repainted half", () => {
+        it("keeps the cursor inverted over the repainted part", () => {
             video.ula.write(0, Mode4 | 0x60); // cursor on both halves of the master cursor table
             video.cursorOnThisFrame = true;
             video.cursorDrawIndex = 3;
@@ -849,11 +889,13 @@ describe("Video", () => {
 
             video.ula.write(1, SetPixelsGreen);
 
-            expect(firstHalf()).toEqual(Array(HalfCell).fill(inverted(Red)));
-            expect(secondHalf()).toEqual(Array(HalfCell).fill(inverted(Green)));
+            expect(cell()).toEqual([
+                ...Array(OutputLag).fill(inverted(Red)),
+                ...Array(CellWidth - OutputLag).fill(inverted(Green)),
+            ]);
         });
 
-        it("keeps the cursor inverted over the repainted half of a field stuck doubling its rows", () => {
+        it("keeps the cursor inverted over the repainted part of a field stuck doubling its rows", () => {
             video.interlacedSyncAndVideo = true;
             video.lastRenderWasEven = video.isEvenRender;
             video.ula.write(0, Mode4 | 0x60); // cursor on both halves of the master cursor table
@@ -863,7 +905,10 @@ describe("Video", () => {
 
             video.ula.write(1, SetPixelsGreen);
 
-            const cursorCell = [...Array(HalfCell).fill(inverted(Red)), ...Array(HalfCell).fill(inverted(Green))];
+            const cursorCell = [
+                ...Array(OutputLag).fill(inverted(Red)),
+                ...Array(CellWidth - OutputLag).fill(inverted(Green)),
+            ];
             expect(cell()).toEqual(cursorCell);
             expect(cell(offset + FbWidth)).toEqual(cursorCell);
         });
@@ -1125,19 +1170,19 @@ describe("Video", () => {
                         v.writeCrtc(8, 1);
                     },
                     { seed: 1, hasVideoNula: false },
-                    [2206297541, 2206297541, 3715053517, 1469768717, 3659289193],
+                    [2206297541, 2206297541, 1675005909, 2697809929, 624138761],
                 ],
                 [
                     "on doubled rows with a VideoNuLA",
                     programStandardFrame,
                     { seed: 2, hasVideoNula: true },
-                    [2206297541, 2206297541, 2165725467, 508035057, 977855931],
+                    [2206297541, 2206297541, 618961807, 3260624621, 1110130595],
                 ],
                 [
                     "with interlace sync and video",
                     programInterlaceSyncAndVideoFrame,
                     { seed: 3, hasVideoNula: true },
-                    [2206297541, 2206297541, 2897231635, 595029415, 4284534895],
+                    [2206297541, 2206297541, 569842279, 2284806856, 2581686239],
                 ],
                 [
                     "with interlace sync and video stuck on one field",
@@ -1146,7 +1191,7 @@ describe("Video", () => {
                         v.writeCrtc(6, 40);
                     },
                     { seed: 4, hasVideoNula: true },
-                    [2206297541, 2206297541, 2410138283, 180526969, 4265788461],
+                    [2206297541, 2206297541, 3020176067, 1340224529, 2117626257],
                 ],
             ])("paints ULA writes every few clocks %s as the beam saw them", (_, program, options, expected) => {
                 const { hashes, checked } = paintedHashes(program, options, drainKind);
