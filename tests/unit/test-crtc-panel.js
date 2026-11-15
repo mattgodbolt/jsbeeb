@@ -158,6 +158,7 @@ describe("CrtcPanel", () => {
         "reads where the video reads, for every address and screen size (Master: %s)",
         (isMaster) => {
             const { video: machineVideo, reads } = makeVideo(isMaster);
+            machineVideo.oddClock = true;
             const expected = [];
             for (const [size, screenSubtract] of HwScrollSubtract.entries()) {
                 machineVideo.setScreenHwScroll(size);
