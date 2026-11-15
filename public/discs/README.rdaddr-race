@@ -1,6 +1,6 @@
 WD1770 READ ADDRESS race test by Kieran Connell (Bitshifters), for the BBC Master.
 Source: https://bitshifters.github.io/content/wip/rdaddr-race.ssd
-License: MIT (below)
+License: MIT, as the author states in https://github.com/mattgodbolt/jsbeeb/issues/1850
 
 Cut down from an old version of phX's chained-NMI disc driver: it seeks to
 track 1, then issues 100 READ ADDRESS commands, each from the previous one's
@@ -8,25 +8,3 @@ INTRQ NMI, and prints RESULT: PASS or RESULT: HANG on MODE 7 row 22. A real
 Master says HANG: INTRQ arrives so soon after the last ID byte's DRQ that the
 driver's NMIs nest and the chain stops.
 https://github.com/mattgodbolt/jsbeeb/issues/1850 has the story.
-
-MIT License
-
-Copyright (c) 2026 Kieran Connell (Bitshifters)
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
