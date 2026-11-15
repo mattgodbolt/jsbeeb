@@ -1163,13 +1163,24 @@ export class Debugger {
      * on-screen keyboard shows, the click is the machine's.
      */
     showScreenByteAt(x, y) {
-        if (!this._inDebugger || this._touchKeyboardShown()) return false;
-        const address = this.cpu.video.addressShownAt(x, y);
-        if (address !== null) {
-            this._paging.memory.view = screenView(this.cpu, address);
+        return this._atScreenByte(x, y, (address, view) => {
+            this._paging.memory.view = view;
             this._memoryView.update(address);
             this.panels.memory.open();
-        }
+        });
+    }
+
+    /**
+     * As showScreenByteAt, but offers the memory panel's menu for the byte; a right click not taken is the browser's.
+     */
+    offerScreenByteAt(e, x, y) {
+        return this._atScreenByte(x, y, (address, view) => this._offerWatch(e, address, undefined, view));
+    }
+
+    _atScreenByte(x, y, use) {
+        if (!this._inDebugger || this._touchKeyboardShown()) return false;
+        const address = this.cpu.video.addressShownAt(x, y);
+        if (address !== null) use(address, screenView(this.cpu, address));
         return true;
     }
 

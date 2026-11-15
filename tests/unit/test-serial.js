@@ -62,17 +62,16 @@ describe("Serial", () => {
             expect(serial.reg).toBe(0xff);
         });
 
-        // OS 1.20's *FX7 and *FX8 table at &E9AE, one byte per baud rate, each field the same in both halves.
         it.each([
-            [0x7f, 75],
-            [0x5b, 150],
-            [0x6d, 300],
-            [0xc9, 1200],
-            [0xf6, 2400],
-            [0xd2, 4800],
-            [0xe4, 9600],
-            [0x40, 19200],
-        ])("runs at the baud rate the OS table byte %i stands for", (value, baud) => {
+            [75, 0x7f],
+            [150, 0x5b],
+            [300, 0x6d],
+            [1200, 0xc9],
+            [2400, 0xf6],
+            [4800, 0xd2],
+            [9600, 0xe4],
+            [19200, 0x40],
+        ])("runs at %i baud when written the OS table's byte for it", (baud, value) => {
             serial.write(0, value);
 
             expect(mockAcia.setSerialTransmit).toHaveBeenLastCalledWith(baud);
