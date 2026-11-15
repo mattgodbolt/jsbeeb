@@ -38,6 +38,7 @@ const FbHeight = 768;
 const ClocksPerScanline = 128;
 const ScanlinesPerFrame = 312;
 const ClocksPerFrame = ClocksPerScanline * ScanlinesPerFrame;
+const ScanlinesBeforeTvGivesUp = 384;
 const ClocksPerSecond = 2 * 1000 * 1000;
 
 /**
@@ -1339,8 +1340,7 @@ describe("Video", () => {
 
             v.run(ClocksPerSecond);
 
-            // The beam gives up and flies back every 384 scanlines.
-            expect(v.paints()).toBe(Math.floor(ClocksPerSecond / (384 * ClocksPerScanline)));
+            expect(v.paints()).toBe(Math.floor(ClocksPerSecond / (ScanlinesBeforeTvGivesUp * ClocksPerScanline)));
         });
     });
 
@@ -1359,7 +1359,10 @@ describe("Video", () => {
 
         it.each([
             ["a CRTC that never reaches R6", bbcWith(programStandardFrame, ClocksPerFrame)],
-            ["a TV that gives up waiting for vsync", bbcWith(programExternallySyncedTiming, 384 * ClocksPerScanline)],
+            [
+                "a TV that gives up waiting for vsync",
+                bbcWith(programExternallySyncedTiming, ScanlinesBeforeTvGivesUp * ClocksPerScanline),
+            ],
             ["the Atom's 6847", atom],
         ])("advances once a field for %s", (_, setup) => {
             const { video, run, fieldClocks } = setup();
