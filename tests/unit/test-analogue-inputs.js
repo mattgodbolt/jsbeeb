@@ -183,16 +183,24 @@ describe("AnalogueInputs", () => {
                     send("mousedown", { buttons: 1 });
                 },
             ],
-        ])("presses a button with each click after the browser %s, asking for the lock again", async (_, refuse) => {
-            make();
-            refuse();
-            await Promise.resolve();
-            amxMouse.setButtons.mockClear();
-            monitor.requestPointerLock = vi.fn(async () => {});
-            send("mousedown", { buttons: 2 });
-            expect(monitor.requestPointerLock).toHaveBeenCalledTimes(1);
-            expect(amxMouse.setButtons).toHaveBeenCalledWith(AmxButtons.right);
-        });
+        ])(
+            "presses a button with each click after the browser %s, asking for the lock again with a left click",
+            async (_, refuse) => {
+                make();
+                refuse();
+                await Promise.resolve();
+                amxMouse.setButtons.mockClear();
+                monitor.requestPointerLock = vi.fn(async () => {});
+                send("mousedown", { button: 2, buttons: 2 });
+                expect(monitor.requestPointerLock).not.toHaveBeenCalled();
+                send("mousedown", { button: 0, buttons: 1 | 2 });
+                expect(monitor.requestPointerLock).toHaveBeenCalledTimes(1);
+                expect(amxMouse.setButtons.mock.calls).toEqual([
+                    [AmxButtons.right],
+                    [AmxButtons.left | AmxButtons.right],
+                ]);
+            },
+        );
 
         it("lets go of the buttons as the lock goes, and locks again with the next click", () => {
             make();
