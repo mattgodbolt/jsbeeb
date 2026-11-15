@@ -46,8 +46,7 @@ export const LineCountPeriod = 2500;
 
 const BitmapXPerClock = 8;
 // In the 2MHz bitmap modes the ULA's pixel output lags its fetch by half a 2MHz cycle, so a palette or control write
-// shows this many texels after the beam: inferred from a Master's screen in #1845 and #1846. In the 1MHz modes a
-// write's edge falls on a 2MHz tick (#1857).
+// shows this many texels after the beam: inferred from a Master's screen in #1845 and #1846.
 const UlaOutputLagTexels = BitmapXPerClock / 2;
 
 /**
@@ -931,9 +930,9 @@ export class Video {
     }
 
     // The render loop paints a cell whole on the tick that fetches it, so the part of it the ULA outputs after a
-    // write is repainted with the new state. A 1MHz cell spans two 2MHz ticks and switches on the second
-    // (https://github.com/mattgodbolt/jsbeeb/issues/766); a write that keeps a 2MHz bitmap mode switches the cell
-    // UlaOutputLagTexels in.
+    // write is repainted with the new state. A 1MHz cell spans two 2MHz ticks and switches on the second, with no lag
+    // (https://github.com/mattgodbolt/jsbeeb/issues/766, #1857); a write that keeps a 2MHz bitmap mode switches the
+    // cell UlaOutputLagTexels in.
     repaintAfterUlaWrite(was2MHzBitmap) {
         const lagged = was2MHzBitmap && this.is2MHzBitmap();
         if (!lagged && !(this.halfClock && this.oddClock)) return;

@@ -753,6 +753,10 @@ describe("Video", () => {
         };
         const firstHalf = () => cell().slice(0, HalfCell);
         const secondHalf = () => cell().slice(HalfCell);
+        const distinctPalette = () => {
+            for (let logical = 0; logical < 16; ++logical)
+                video.ula.write(PaletteReg, (logical << 4) | ((logical >>> 1) ^ 7));
+        };
 
         it("repaints the second half as teletext when the teletext bit is set", () => {
             video.ula.write(0, Mode4);
@@ -826,12 +830,24 @@ describe("Video", () => {
             },
         );
 
-        describe("in a 2MHz mode, from half a 2MHz cycle after the beam", () => {
-            const distinctPalette = () => {
-                for (let logical = 0; logical < 16; ++logical)
-                    video.ula.write(PaletteReg, (logical << 4) | ((logical >>> 1) ^ 7));
-            };
+        // Slowing down repaints the second half, as tested above, so only the first half is kept.
+        it.each`
+            what                      | from     | to       | kept
+            ${"speeds the clock up"}  | ${Mode4} | ${Mode0} | ${CellWidth}
+            ${"slows the clock down"} | ${Mode0} | ${Mode4} | ${HalfCell}
+        `("repaints nothing early when a write $what", ({ from, to, kept }) => {
+            distinctPalette();
+            cpu.data = LowNibbleSet;
+            video.ula.write(ControlReg, from);
+            video.polltime(1);
+            const before = cell(offset, kept);
 
+            video.ula.write(ControlReg, to);
+
+            expect(cell(offset, kept)).toEqual(before);
+        });
+
+        describe("in a 2MHz mode, from half a 2MHz cycle after the beam", () => {
             it.each`
                 what         | data            | reg           | val
                 ${"palette"} | ${AllPixelsSet} | ${PaletteReg} | ${SetPixelsGreen}
@@ -882,20 +898,12 @@ describe("Video", () => {
 
                 video.ula.write(NulaControlReg, NulaPaletteModeOn);
 
-                expect(cell().slice(0, OutputLag)).toEqual(Array(OutputLag).fill(Red));
-                expect(cell().slice(OutputLag, HalfCell)).not.toContain(Red);
-            });
-
-            it("leaves the cell alone when the write leaves a 1MHz mode", () => {
-                distinctPalette();
-                cpu.data = LowNibbleSet;
-                video.ula.write(ControlReg, Mode4);
-                video.polltime(1);
-                const before = cell();
-
-                video.ula.write(ControlReg, Mode0);
-
-                expect(cell()).toEqual(before);
+                const nulaColour15 = video.ula.collook[15] >>> 0;
+                expect(nulaColour15).not.toBe(Red);
+                expect(cell(offset, HalfCell)).toEqual([
+                    ...Array(OutputLag).fill(Red),
+                    ...Array(HalfCell - OutputLag).fill(nulaColour15),
+                ]);
             });
         });
 
