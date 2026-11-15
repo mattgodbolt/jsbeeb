@@ -116,6 +116,7 @@ function programExternallySyncedTiming(v) {
     v.writeCrtc(7, 0x7f); // Out of reach, so the CRTC never syncs itself
 }
 
+const Mode0 = 0x9c;
 const Mode4 = 0x88;
 const Mode4Teletext = 0x8a;
 const inverted = (colour) => (colour ^ 0x00ffffff) >>> 0;
@@ -762,7 +763,6 @@ describe("Video", () => {
 
     // See Video.repaintAfterUlaWrite.
     describe("ULA writes part way through a cell", () => {
-        const Mode0 = 0x9c;
         const Mode1 = 0xd8;
         const ControlReg = 0;
         const PaletteReg = 1;
@@ -1013,7 +1013,7 @@ describe("Video", () => {
         const AllPixelsSet = 0xff;
         const offset = 100 * FbWidth + 100;
 
-        const passCell = (r) => {
+        const passCell = (r, setUp = () => {}) => {
             Object.assign(r.video, {
                 dispEnabled: EVERYTHINGENABLED,
                 horizCounter: 10,
@@ -1023,8 +1023,60 @@ describe("Video", () => {
             });
             r.video.regs[7] = 30;
             r.cpu.data = AllPixelsSet;
+            setUp();
             r.run(1);
         };
+
+        describe("by an R8 write that switches the display", () => {
+            const DisplayOn = 0x00;
+            const DisplayOff = 0x30;
+            const InterlaceSyncAndVideo = 0x03;
+            const TexelsPerTick = 8;
+
+            it.each`
+                what              | where               | mode     | enabled                             | from          | to            | width | passed          | next
+                ${"switches on"}  | ${"in a 2MHz mode"} | ${Mode0} | ${EVERYTHINGENABLED}                | ${DisplayOff} | ${DisplayOn}  | ${8}  | ${White}        | ${White}
+                ${"switches off"} | ${"in a 2MHz mode"} | ${Mode0} | ${EVERYTHINGENABLED}                | ${DisplayOn}  | ${DisplayOff} | ${8}  | ${OPAQUE_BLACK} | ${OPAQUE_BLACK}
+                ${"switches on"}  | ${"in the border"}  | ${Mode0} | ${EVERYTHINGENABLED & ~HDISPENABLE} | ${DisplayOff} | ${DisplayOn}  | ${8}  | ${OPAQUE_BLACK} | ${OPAQUE_BLACK}
+                ${"switches on"}  | ${"in a 1MHz mode"} | ${Mode4} | ${EVERYTHINGENABLED}                | ${DisplayOff} | ${DisplayOn}  | ${16} | ${OPAQUE_BLACK} | ${White}
+                ${"switches off"} | ${"in a 1MHz mode"} | ${Mode4} | ${EVERYTHINGENABLED}                | ${DisplayOn}  | ${DisplayOff} | ${16} | ${White}        | ${OPAQUE_BLACK}
+            `(
+                "$what $where, from the cell just passed only in a 2MHz mode's display",
+                ({ mode, enabled, from, to, width, passed, next }) => {
+                    video.ula.write(0, mode);
+                    for (let logical = 0; logical < 16; ++logical) video.ula.write(1, logical << 4);
+                    passCell(rig, () => {
+                        video.dispEnabled = enabled;
+                        rig.writeCrtc(8, from);
+                    });
+
+                    rig.writeCrtc(8, to);
+                    rig.run(width / TexelsPerTick);
+                    video.renderPending();
+
+                    expect(Array.from(fb.subarray(offset, offset + width))).toEqual(Array(width).fill(passed));
+                    expect(Array.from(fb.subarray(offset + width, offset + 2 * width))).toEqual(
+                        Array(width).fill(next),
+                    );
+                },
+            );
+
+            it("leaves the row above alone when a write keeping the display on ends interlace sync and video", () => {
+                const OddRow = 101;
+                video.ula.write(0, Mode0);
+                for (let logical = 0; logical < 16; ++logical) video.ula.write(1, logical << 4);
+                passCell(rig, () => {
+                    video.bitmapY = OddRow;
+                    rig.writeCrtc(8, InterlaceSyncAndVideo);
+                });
+
+                rig.writeCrtc(8, DisplayOn);
+                video.renderPending();
+
+                expect(fb[OddRow * FbWidth + 100]).toBe(White);
+                expect(fb[(OddRow - 1) * FbWidth + 100]).toBe(OPAQUE_BLACK);
+            });
+        });
 
         it.each([
             ["an R8 write", (r) => r.writeCrtc(8, 0)],
@@ -1121,7 +1173,6 @@ describe("Video", () => {
         const AllPixelsSet = 0xff;
         const CursorOnFirstCell = 0x80;
         const InBorder = EVERYTHINGENABLED & ~HDISPENABLE;
-        const Mode0 = 0x9c;
         const WideR1 = 80;
         const NarrowR1 = 20;
 
@@ -1195,50 +1246,6 @@ describe("Video", () => {
                 expect(firstDifferentPixel(actual, expected)).toBe(-1);
             });
         });
-    });
-
-    describe("R8 display enable part way through a line", () => {
-        const Mode0 = 0x9c;
-        const DisplayOn = 0x00;
-        const DisplayOff = 0x30;
-        const TexelsPerTick = 8;
-        const White = 0xffffffff;
-        const AllPixelsSet = 0xff;
-        const offset = 100 * FbWidth + 100;
-
-        it.each`
-            what              | where               | mode     | enabled                             | from          | to            | width | passed          | next
-            ${"switches on"}  | ${"in a 2MHz mode"} | ${Mode0} | ${EVERYTHINGENABLED}                | ${DisplayOff} | ${DisplayOn}  | ${8}  | ${White}        | ${White}
-            ${"switches off"} | ${"in a 2MHz mode"} | ${Mode0} | ${EVERYTHINGENABLED}                | ${DisplayOn}  | ${DisplayOff} | ${8}  | ${OPAQUE_BLACK} | ${OPAQUE_BLACK}
-            ${"switches on"}  | ${"in the border"}  | ${Mode0} | ${EVERYTHINGENABLED & ~HDISPENABLE} | ${DisplayOff} | ${DisplayOn}  | ${8}  | ${OPAQUE_BLACK} | ${OPAQUE_BLACK}
-            ${"switches on"}  | ${"in a 1MHz mode"} | ${Mode4} | ${EVERYTHINGENABLED}                | ${DisplayOff} | ${DisplayOn}  | ${16} | ${OPAQUE_BLACK} | ${White}
-            ${"switches off"} | ${"in a 1MHz mode"} | ${Mode4} | ${EVERYTHINGENABLED}                | ${DisplayOn}  | ${DisplayOff} | ${16} | ${White}        | ${OPAQUE_BLACK}
-        `(
-            "$what $where, from the cell just passed only in a 2MHz mode's display",
-            ({ mode, enabled, from, to, width, passed, next }) => {
-                video.ula.write(0, mode);
-                for (let logical = 0; logical < 16; ++logical) video.ula.write(1, logical << 4);
-                Object.assign(video, {
-                    dispEnabled: enabled,
-                    horizCounter: 10,
-                    bitmapX: 92,
-                    bitmapY: 100,
-                    oddClock: false,
-                });
-                rig.writeCrtc(8, from);
-                video.regs[7] = 30;
-                cpu.data = AllPixelsSet;
-                const ticksPerCell = width / TexelsPerTick;
-                rig.run(ticksPerCell);
-
-                rig.writeCrtc(8, to);
-                rig.run(ticksPerCell);
-                video.renderPending();
-
-                expect(Array.from(fb.subarray(offset, offset + width))).toEqual(Array(width).fill(passed));
-                expect(Array.from(fb.subarray(offset + width, offset + 2 * width))).toEqual(Array(width).fill(next));
-            },
-        );
     });
 
     // The hashes were recorded from the renderer that drew each cell into the framebuffer as the beam reached it.
