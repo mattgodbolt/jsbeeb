@@ -66,7 +66,7 @@ export class Display {
             lineGrid: new Uint8Array(LineGridRows),
             fields: 1,
         };
-        this.lastPaintedFrameCount = 0;
+        this.lastPaintedFieldCount = 0;
         this.fieldsSincePresent = 0;
 
         const display = this;
@@ -130,15 +130,13 @@ export class Display {
         // canvas shows: one usually, more under a frame skip or when paints
         // outrun the animation frame, none for a repaint of the same frame, and
         // all of them after a restore, whose picture owes the old one nothing.
-        // The 6847 keeps its own count and syncs it after painting.
-        const frameCount = (video.video6847 ?? video).frameCount;
-        const elapsed = Math.max(0, frameCount - this.lastPaintedFrameCount);
+        const elapsed = video.fieldCount - this.lastPaintedFieldCount;
         this.fieldsSincePresent = replacesPicture
             ? MaxDecayFields
             : Math.min(MaxDecayFields, this.fieldsSincePresent + elapsed);
         video.paintsAfresh = false;
         this.pendingFrame.fields = this.fieldsSincePresent;
-        this.lastPaintedFrameCount = frameCount;
+        this.lastPaintedFieldCount = video.fieldCount;
         this.paintMsThisTick += performance.now() - start;
         this.presented = false;
         if (!this.presentScheduled) {

@@ -414,6 +414,8 @@ export class Video {
         this.frameStartX = 0;
         this.oddClock = false;
         this.frameCount = 0;
+        // One per TV field; frameCount counts R6 hits, which a program need never reach.
+        this.fieldCount = 0;
         this.hsyncCount = 0;
         // Where the subcarrier is, in cycles, at the start of the current line.
         this.subcarrierPhase = 0;
@@ -704,6 +706,7 @@ export class Video {
     }
 
     flyback() {
+        this.fieldCount++;
         this.renderPending();
         const painting = this.bitmapY >= MinPaintedFrameRows && this.dispEnabled & FRAMESKIPENABLE;
         if (painting) this.paint();

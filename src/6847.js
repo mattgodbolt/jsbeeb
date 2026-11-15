@@ -231,6 +231,7 @@ export class Video6847 {
     // END
 
     paintAndClear() {
+        this.video.fieldCount++;
         // skip 5 frames
         if (this.dispEnabled & FRAMESKIPENABLE) {
             this.paint();
