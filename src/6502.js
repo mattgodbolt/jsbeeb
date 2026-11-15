@@ -1038,9 +1038,6 @@ export class Cpu6502 extends Base6502 {
             case 0xfc10:
                 if (this.hasTeletextAdaptor) return this.teletextAdaptor.read(addr - 0xfc10);
                 break;
-            case 0xfcfc:
-                if (addr === 0xfcff && this.hasMusic5000) return this.music5000PageSel;
-                break;
             case 0xfe00:
             case 0xfe04:
                 return this.crtc.read(addr);
@@ -1133,12 +1130,6 @@ export class Cpu6502 extends Base6502 {
                 return this.tube.read(addr);
         }
 
-        if (this.hasMusic5000) {
-            if ((this.music5000PageSel & 0xf0) === 0x30 && (addr & 0xff00) === 0xfd00) {
-                return this.music5000.read(this.music5000PageSel, addr);
-            }
-        }
-
         if (addr >= 0xfc00 && addr < 0xfe00) return 0xff;
         return addr >>> 8;
     }
@@ -1211,9 +1202,6 @@ export class Cpu6502 extends Base6502 {
         switch (addr & ~0x0003) {
             case 0xfc10:
                 if (this.hasTeletextAdaptor) return UnpeekableDevice;
-                break;
-            case 0xfcfc:
-                if (addr === 0xfcff && this.hasMusic5000) return this.music5000PageSel;
                 break;
             case 0xfe00:
             case 0xfe04:
@@ -1305,12 +1293,6 @@ export class Cpu6502 extends Base6502 {
             case 0xfef8:
             case 0xfefc:
                 return this.hasTube ? UnpeekableDevice : this.tube.read(addr);
-        }
-
-        if (this.hasMusic5000) {
-            if ((this.music5000PageSel & 0xf0) === 0x30 && (addr & 0xff00) === 0xfd00) {
-                return this.music5000.read(this.music5000PageSel, addr) | 0;
-            }
         }
 
         if (addr >= 0xfc00 && addr < 0xfe00) return 0xff;

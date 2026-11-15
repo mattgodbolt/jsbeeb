@@ -22,8 +22,10 @@ export class AnalogueInputs {
      * @param {object} options.audioHandler - woken by any mouse event on the monitor
      * @param {(x: number, y: number) => boolean} options.takeScreenClick - offered each left click on the screen,
      *     at 0 to 1 across and down it, before the machine; true when it took the click
+     * @param {(event: MouseEvent, x: number, y: number) => boolean} options.takeScreenMenu - offered each right click
+     *     on the screen, as `takeScreenClick` is, before the browser's own menu; true when it took the click
      */
-    constructor({ processor, screenCanvas, getGamepads, settings, audioHandler, takeScreenClick }) {
+    constructor({ processor, screenCanvas, getGamepads, settings, audioHandler, takeScreenClick, takeScreenMenu }) {
         this.processor = processor;
         this.settings = settings;
 
@@ -40,11 +42,11 @@ export class AnalogueInputs {
         const cubMonitor = document.getElementById("cub-monitor");
         const amxMouseInput =
             processor.amxMouse && new AmxMouseInput({ mouse: processor.amxMouse, target: cubMonitor, screenCanvas });
+        const screenPoint = (evt) => calculateMouseCoordinates(evt, screenCanvas.getBoundingClientRect());
         const onCubMouseEvent = (evt) => {
             audioHandler.tryResume();
             if (document.activeElement !== document.body) document.activeElement.blur();
-            const screenRect = screenCanvas.getBoundingClientRect();
-            const { x, y } = calculateMouseCoordinates(evt, screenRect);
+            const { x, y } = screenPoint(evt);
             evt.preventDefault();
             if (evt.type === "mousedown" && evt.button === 0 && takeScreenClick(x, y)) return;
             amxMouseInput?.onMouseEvent(evt);
@@ -68,6 +70,10 @@ export class AnalogueInputs {
         for (const eventType of ["mousemove", "mousedown", "mouseup"]) {
             cubMonitor.addEventListener(eventType, onCubMouseEvent);
         }
+        cubMonitor.addEventListener("contextmenu", (evt) => {
+            const { x, y } = screenPoint(evt);
+            if (takeScreenMenu(evt, x, y)) evt.preventDefault();
+        });
     }
 
     /** Helper to manage ADC source configuration */

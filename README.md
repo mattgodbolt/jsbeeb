@@ -222,7 +222,7 @@ The emulator continuously captures snapshots into a 30-slot rewind buffer (~1 pe
 
 - **Left/Right arrows**: navigate between snapshots (the main screen updates live)
 - **Click** a thumbnail to jump to that point
-- **Enter**: commit selection and close the panel
+- **Enter** or **Go back here**: commit selection and close the panel
 - **Escape** or **Alt-W**: cancel and restore the original state
 
 While it is open, `Alt-T` and `Alt-B` still work; the other shortcuts, and every key for the emulated machine, are
