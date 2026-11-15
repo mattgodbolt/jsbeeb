@@ -10,9 +10,6 @@ describe("Serial", () => {
         selectRs423: vi.fn(),
     };
 
-    // The baud rate table as defined in serial.js
-    const baudRateTable = [19200, 9600, 4800, 2400, 1200, 300, 150, 75];
-
     let serial;
 
     beforeEach(() => {
@@ -65,27 +62,21 @@ describe("Serial", () => {
             expect(serial.reg).toBe(0xff);
         });
 
-        it("should set correct receive baud rate", () => {
-            // Test all possible receive rate values
-            for (let i = 0; i < 8; i++) {
-                // Create a value where receiveRate = i (bits 3-5)
-                const val = i << 3;
-                serial.write(0, val);
+        // OS 1.20's *FX7 and *FX8 table at &E9AE, one byte per baud rate, each field the same in both halves.
+        it.each([
+            [0x7f, 75],
+            [0x5b, 150],
+            [0x6d, 300],
+            [0xc9, 1200],
+            [0xf6, 2400],
+            [0xd2, 4800],
+            [0xe4, 9600],
+            [0x40, 19200],
+        ])("runs at the baud rate the OS table byte %i stands for", (value, baud) => {
+            serial.write(0, value);
 
-                // Check rate is set correctly
-                expect(serial.receiveRate).toBe(i);
-                // Check correct baud rate was passed to ACIA
-                expect(mockAcia.setSerialReceive).toHaveBeenLastCalledWith(baudRateTable[i]);
-            }
-        });
-
-        it("should set correct transmit baud rate", () => {
-            for (let i = 0; i < 8; i++) {
-                serial.write(0, i);
-
-                expect(serial.transmitRate).toBe(i);
-                expect(mockAcia.setSerialTransmit).toHaveBeenLastCalledWith(baudRateTable[i]);
-            }
+            expect(mockAcia.setSerialTransmit).toHaveBeenLastCalledWith(baud);
+            expect(mockAcia.setSerialReceive).toHaveBeenLastCalledWith(baud);
         });
 
         it("should set motor state based on bit 7", () => {
@@ -119,8 +110,8 @@ describe("Serial", () => {
             expect(serial.reg).toBe(0xea);
             expect(serial.transmitRate).toBe(2);
             expect(serial.receiveRate).toBe(5);
-            expect(mockAcia.setSerialReceive).toHaveBeenCalledWith(baudRateTable[5]);
-            expect(mockAcia.setSerialTransmit).toHaveBeenCalledWith(baudRateTable[2]);
+            expect(mockAcia.setSerialReceive).toHaveBeenCalledWith(300);
+            expect(mockAcia.setSerialTransmit).toHaveBeenCalledWith(4800);
             expect(mockAcia.setMotor).toHaveBeenCalledWith(true);
             expect(mockAcia.selectRs423).toHaveBeenCalledWith(true);
         });
@@ -143,8 +134,8 @@ describe("Serial", () => {
             expect(serial.transmitRate).toBe(6); // 0xFE & 0x07 = 6
             expect(serial.receiveRate).toBe(7); // (0xFE >>> 3) & 0x07 = 7
             // Check ACIA was updated
-            expect(mockAcia.setSerialReceive).toHaveBeenLastCalledWith(baudRateTable[7]);
-            expect(mockAcia.setSerialTransmit).toHaveBeenLastCalledWith(baudRateTable[6]);
+            expect(mockAcia.setSerialReceive).toHaveBeenLastCalledWith(75);
+            expect(mockAcia.setSerialTransmit).toHaveBeenLastCalledWith(2400);
             expect(mockAcia.setMotor).toHaveBeenLastCalledWith(true);
             expect(mockAcia.selectRs423).toHaveBeenLastCalledWith(true);
         });

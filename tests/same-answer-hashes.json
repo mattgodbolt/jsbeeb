@@ -7,7 +7,7 @@
       "memory": "5343982b27bd756b",
       "cycles": "0f1a9ce39b973c8c",
       "sound": "055191723b3703ad",
-      "peripherals": "072be230bc70963c"
+      "peripherals": "8b2627e1444ced4b"
     },
     "mode0-lines": {
       "framebuffer": "d1f2d4cc00487b01",
@@ -15,7 +15,7 @@
       "memory": "e868c81cbc50f89e",
       "cycles": "c0faf415fa3f247c",
       "sound": "eceb6de19b7ed4da",
-      "peripherals": "432c9fd61f1aa480"
+      "peripherals": "965bb4f22ad798b2"
     },
     "mode7-text": {
       "framebuffer": "571345c944c556ab",
@@ -23,7 +23,7 @@
       "memory": "0ee736118cd940be",
       "cycles": "835ea3fd9a6133a6",
       "sound": "b07867a2819b252d",
-      "peripherals": "5a022d64f25b0708"
+      "peripherals": "354c5c792e21ae6b"
     },
     "master-shadow": {
       "framebuffer": "431ab1a541b7da12",
