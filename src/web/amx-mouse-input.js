@@ -17,8 +17,8 @@ function amxButtonsOf(domButtons) {
 }
 
 /**
- * The host's mouse driving the AMX mouse by how far it moves over the screen, not where it is, locked or not. A click
- * on the screen locks the pointer to it, so the host's pointer never runs out of screen, and that click presses
+ * The host's mouse driving the AMX mouse by how far it moves over the screen, not where it is, locked or not. A left
+ * click on the screen locks the pointer to it, so the host's pointer never runs out of screen, and that click presses
  * nothing. Where the browser refuses the lock, or has none (as on phones), the next click presses a button as it asks
  * again. The buttons go up as the lock is let go, as the host's button may then come
  * up anywhere.
@@ -60,7 +60,7 @@ export class AmxMouseInput {
         }
         if (evt.type === "mousedown" && !this.locked) {
             const pressesToo = this.lockRefused;
-            this._lock();
+            if (pressesToo || evt.button === 0) this._lock();
             if (!pressesToo) return;
         }
         this.mouse.setButtons(amxButtonsOf(evt.buttons));

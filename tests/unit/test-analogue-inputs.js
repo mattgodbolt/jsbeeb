@@ -135,8 +135,8 @@ describe("AnalogueInputs", () => {
         let amxMouse;
         let monitor;
 
-        const send = (type, { buttons = 0, movementX = 0, movementY = 0 } = {}) => {
-            const event = new MouseEvent(type, { bubbles: true, cancelable: true, buttons });
+        const send = (type, { button = 0, buttons = 0, movementX = 0, movementY = 0 } = {}) => {
+            const event = new MouseEvent(type, { bubbles: true, cancelable: true, button, buttons });
             Object.defineProperties(event, { movementX: { value: movementX }, movementY: { value: movementY } });
             monitor.dispatchEvent(event);
         };
@@ -165,6 +165,13 @@ describe("AnalogueInputs", () => {
                 [0],
                 [AmxButtons.left | AmxButtons.right | AmxButtons.middle],
             ]);
+        });
+
+        it("leaves a right click on the unlocked screen to the right-click menu", () => {
+            make();
+            send("mousedown", { button: 2, buttons: 2 });
+            expect(monitor.requestPointerLock).not.toHaveBeenCalled();
+            expect(amxMouse.setButtons).not.toHaveBeenCalled();
         });
 
         it.each([
