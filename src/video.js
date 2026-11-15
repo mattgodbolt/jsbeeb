@@ -117,6 +117,7 @@ class Ula {
         val |= 0;
         this.video.renderPending();
         const wasTeletext = this.video.teletextMode;
+        const wasHalfClock = this.video.halfClock;
         let reg = addr & 3;
 
         // When NULA is disabled, mask off bit 1 so &FE22/&FE23 become &FE20/&FE21.
@@ -144,7 +145,7 @@ class Ula {
                 this._writeNulaPalette(val);
                 break;
         }
-        this.video.repaintAfterUlaWrite(wasTeletext);
+        this.video.repaintAfterUlaWrite(wasTeletext, wasHalfClock);
     }
 
     snapshotState() {
@@ -877,11 +878,13 @@ export class Video {
         );
     }
 
-    blitFbFrom(dat, destOffset, fromPixel) {
+    // A clock rate change can leave the span wider than the new mode's cell, so the table index wraps.
+    blitFbSpan(dat, destOffset, fromPixel, toPixel) {
         const offset = table4bppOffset(this.ulaMode, dat);
         const colourLookup = this.pixelColours();
-        for (let i = fromPixel; i < this.pixelsPerChar; ++i) {
-            this.fb32[destOffset + i] = colourLookup[this.table4bpp[offset + i]];
+        const lastPixel = this.pixelsPerChar - 1;
+        for (let i = fromPixel; i < toPixel; ++i) {
+            this.fb32[destOffset + i] = colourLookup[this.table4bpp[offset + (i & lastPixel)]];
         }
     }
 
@@ -909,12 +912,12 @@ export class Video {
         if (++this.cursorDrawIndex === 7) this.cursorDrawIndex = 0;
     }
 
-    invertForCursor(offset, fromPixel) {
-        for (let i = fromPixel; i < this.pixelsPerChar; ++i) {
+    invertForCursor(offset, fromPixel, toPixel = this.pixelsPerChar) {
+        for (let i = fromPixel; i < toPixel; ++i) {
             this.fb32[offset + i] ^= CursorInvert;
         }
         if (this.doublesLines()) {
-            for (let i = fromPixel; i < this.pixelsPerChar; ++i) {
+            for (let i = fromPixel; i < toPixel; ++i) {
                 this.fb32[offset + 1024 + i] ^= CursorInvert;
             }
         }
@@ -930,30 +933,31 @@ export class Video {
     }
 
     // The render loop paints a cell whole on the tick that fetches it, so the part of it the ULA outputs after a
-    // write is repainted here with the new state. A 1MHz cell spans two 2MHz ticks: on the second the beam is half
-    // way through it (https://github.com/mattgodbolt/jsbeeb/issues/766). Teletext output, unmeasured for the lag,
-    // still switches on the 2MHz tick.
-    repaintAfterUlaWrite(wasTeletext) {
+    // write, up to where the loop paints next, is repainted with the new state. A 1MHz cell spans two 2MHz ticks
+    // (https://github.com/mattgodbolt/jsbeeb/issues/766). Teletext output, unmeasured for the lag, switches on the tick.
+    repaintAfterUlaWrite(wasTeletext, wasHalfClock) {
         if ((this.dispEnabled & EVERYTHINGENABLED) !== EVERYTHINGENABLED) return;
-        const intoCell = this.halfClock && !this.oddClock ? BitmapXPerClock : 0;
+        const intoCell = wasHalfClock && !this.oddClock ? BitmapXPerClock : 0;
         const cellX = this.bitmapX - intoCell;
         if (cellX < 0 || cellX >= 1024 || this.bitmapY < 0 || this.bitmapY >= 625) return;
-        const teletext = wasTeletext || this.teletextMode;
-        const fromPixel = intoCell + (teletext ? BitmapXPerClock : UlaOutputLagTexels);
-        if (fromPixel >= this.pixelsPerChar) return;
+        const fromPixel = intoCell + (wasTeletext || this.teletextMode ? BitmapXPerClock : UlaOutputLagTexels);
+        const nextPaintX = this.halfClock && this.oddClock ? 2 * BitmapXPerClock : BitmapXPerClock;
+        const toPixel = intoCell + nextPaintX;
+        if (fromPixel >= toPixel) return;
         const offset = this.beamOffset() - intoCell;
         if (this.teletextMode) {
             this.teletext.catchUp();
             this.teletext.emitSecondHalf(this.fb32, offset);
         } else {
-            this.blitFbFrom(this.cellData, offset, fromPixel);
+            this.blitFbSpan(this.cellData, offset, fromPixel, toPixel);
         }
-        this.drain.markDrawn(offset, this.pixelsPerChar, this.doublesLines());
+        this.drain.markDrawn(offset, toPixel, this.doublesLines());
         if (this.doublesLines()) {
-            this.fb32.copyWithin(offset + 1024 + fromPixel, offset + fromPixel, offset + this.pixelsPerChar);
+            this.fb32.copyWithin(offset + 1024 + fromPixel, offset + fromPixel, offset + toPixel);
         }
         if (this.cursorInvertedOffset === offset) {
-            this.invertForCursor(offset, fromPixel);
+            const paintedWidth = wasHalfClock ? 2 * BitmapXPerClock : BitmapXPerClock;
+            this.invertForCursor(offset, fromPixel, Math.min(toPixel, paintedWidth));
         }
     }
 

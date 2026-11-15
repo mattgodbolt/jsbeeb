@@ -720,6 +720,7 @@ describe("Video", () => {
         const Mode5 = 0xc4;
         const ControlReg = 0;
         const PaletteReg = 1;
+        const NulaControlReg = 2;
         const Red = 0xff0000ff;
         const PhysicalRed = 1;
         const Green = 0xff00ff00;
@@ -791,11 +792,11 @@ describe("Video", () => {
 
         it("keeps the spacing of back to back palette writes", () => {
             const BackToBackTicks = 4;
-            video.ula.write(0, Mode0);
+            video.ula.write(ControlReg, Mode0);
             video.polltime(1);
-            video.ula.write(1, SetPixelsGreen);
+            video.ula.write(PaletteReg, SetPixelsGreen);
             video.polltime(BackToBackTicks);
-            video.ula.write(1, SetPixelsBlue);
+            video.ula.write(PaletteReg, SetPixelsBlue);
             video.polltime(1);
 
             const greenWidth = BackToBackTicks * HalfCell;
@@ -805,6 +806,30 @@ describe("Video", () => {
                 ...Array(greenWidth).fill(Green),
                 ...Array(blueWidth).fill(Blue),
             ]);
+        });
+
+        it("applies a VideoNuLA write with the same lag", () => {
+            ({ video, fb, cpu } = makeVideo({ hasVideoNula: true }));
+            aimAtCell();
+            video.ula.write(ControlReg, Mode0);
+            video.polltime(1);
+
+            video.ula.write(NulaControlReg, NulaPaletteModeOn);
+
+            expect(cell().slice(0, OutputLag)).toEqual(Array(OutputLag).fill(Red));
+            expect(cell().slice(OutputLag, HalfCell)).not.toContain(Red);
+        });
+
+        it("keeps the cursor inverted when a write changes the clock rate half way through a 1MHz cell", () => {
+            video.ula.write(ControlReg, Mode0 | 0x60); // cursor on both halves of the master cursor table
+            video.cursorOnThisFrame = true;
+            video.cursorDrawIndex = 3;
+            video.polltime(2);
+            expect(cell()).toEqual(Array(CellWidth).fill(inverted(Red)));
+
+            video.ula.write(ControlReg, Mode4 | 0x60);
+
+            expect(cell()).toEqual(Array(CellWidth).fill(inverted(Red)));
         });
 
         it("repaints the second half as teletext when the teletext bit is set", () => {
@@ -830,7 +855,7 @@ describe("Video", () => {
             expect(secondHalf()).toEqual(Array(HalfCell).fill(Red));
         });
 
-        it("leaves the cell alone when the write lands at the start of the next cell", () => {
+        it("leaves the cell alone when teletext is selected half way through it", () => {
             video.ula.write(0, Mode4);
             video.polltime(2);
             const before = cell();
@@ -1170,19 +1195,19 @@ describe("Video", () => {
                         v.writeCrtc(8, 1);
                     },
                     { seed: 1, hasVideoNula: false },
-                    [2206297541, 2206297541, 1675005909, 2697809929, 624138761],
+                    [2206297541, 2206297541, 1224451533, 2976817177, 958779061],
                 ],
                 [
                     "on doubled rows with a VideoNuLA",
                     programStandardFrame,
                     { seed: 2, hasVideoNula: true },
-                    [2206297541, 2206297541, 618961807, 3260624621, 1110130595],
+                    [2206297541, 2206297541, 3493172663, 1198660585, 3346846891],
                 ],
                 [
                     "with interlace sync and video",
                     programInterlaceSyncAndVideoFrame,
                     { seed: 3, hasVideoNula: true },
-                    [2206297541, 2206297541, 569842279, 2284806856, 2581686239],
+                    [2206297541, 2206297541, 2193021683, 3751262364, 2230539450],
                 ],
                 [
                     "with interlace sync and video stuck on one field",
@@ -1191,7 +1216,7 @@ describe("Video", () => {
                         v.writeCrtc(6, 40);
                     },
                     { seed: 4, hasVideoNula: true },
-                    [2206297541, 2206297541, 3020176067, 1340224529, 2117626257],
+                    [2206297541, 2206297541, 1446365955, 3533491365, 3596116597],
                 ],
             ])("paints ULA writes every few clocks %s as the beam saw them", (_, program, options, expected) => {
                 const { hashes, checked } = paintedHashes(program, options, drainKind);
