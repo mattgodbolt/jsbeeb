@@ -230,6 +230,43 @@ describe("Video", () => {
         it.each([
             ["Mode 7's chunky address on a Master", { isMaster: true, ctrl: Mode7, addr: 0x2000 }, 0x7c00],
             ["Mode 7's from &3C00 on a Model B, with MA11 clear", { ctrl: Mode7, addr: 0x2000 }, 0x3c00],
+            [
+                "MA13's with MA6 flipped on the 2 MHz tick a 1 MHz CRTC skips",
+                { isMaster: true, ctrl: TwoMhzClock, addr: 0x2000, oddClock: false },
+                0x7c40,
+            ],
+            [
+                "MA13's with MA6 and MA7 flipped on a Master's odd RA",
+                { isMaster: true, ctrl: TwoMhzClock, addr: 0x2000, scanline: 1, oddClock: false },
+                0x7cc0,
+            ],
+            [
+                "MA13's with MA7 flipped on the odd field's RA with interlace sync and video",
+                {
+                    isMaster: true,
+                    ctrl: TwoMhzClock,
+                    addr: 0x2000,
+                    r8: InterlaceSyncAndVideo,
+                    field: 1,
+                    oddClock: false,
+                },
+                0x7cc0,
+            ],
+            [
+                "MA13's own on the 2 MHz tick a 1 MHz CRTC takes",
+                { isMaster: true, ctrl: TwoMhzClock, addr: 0x2000, scanline: 1, oddClock: true },
+                0x7c00,
+            ],
+            [
+                "MA13's with only MA6 flipped on a Model B's odd RA",
+                { ctrl: TwoMhzClock, addr: 0x2800, scanline: 1, oddClock: false },
+                0x7c40,
+            ],
+            [
+                "MA13's own with a 2 MHz teletext ULA",
+                { isMaster: true, ctrl: Mode7 | TwoMhzClock, addr: 0x2000, scanline: 1, oddClock: false },
+                0x7c00,
+            ],
             ["a bitmap mode's row and scanline", { addr: 0x1234, scanline: 5 }, ((0x1234 << 3) | 5) & 0x7fff],
             [
                 "the even field's own scanline with interlace sync and video",
@@ -256,22 +293,30 @@ describe("Video", () => {
                 { addr: 0x1000, scanline: 5, scroll: ScrollMode3 },
                 0x4005,
             ],
-        ])("is %s", (_, { isMaster = false, ctrl = Bitmap, addr, scanline = 0, r8, field = 0, scroll }, expected) => {
-            ({ video, cpu } = makeVideo({ isMaster }));
-            video.ula.write(0, ctrl);
-            if (r8 !== undefined) {
-                video.crtc.write(0, 8);
-                video.crtc.write(1, r8);
-            }
-            if (scroll !== undefined) video.setScreenHwScroll(scroll);
-            video.addr = addr;
-            video.scanlineCounter = scanline;
-            video.frameCount = field;
-            cpu.data = 0x42;
+        ])(
+            "is %s",
+            (
+                _,
+                { isMaster = false, ctrl = Bitmap, addr, scanline = 0, r8, field = 0, scroll, oddClock = true },
+                expected,
+            ) => {
+                ({ video, cpu } = makeVideo({ isMaster }));
+                video.ula.write(0, ctrl);
+                if (r8 !== undefined) {
+                    video.crtc.write(0, 8);
+                    video.crtc.write(1, r8);
+                }
+                if (scroll !== undefined) video.setScreenHwScroll(scroll);
+                video.addr = addr;
+                video.scanlineCounter = scanline;
+                video.frameCount = field;
+                video.oddClock = oddClock;
+                cpu.data = 0x42;
 
-            expect(video.readVideoMem()).toBe(0x42);
-            expect(cpu.lastRead).toBe(expected);
-        });
+                expect(video.readVideoMem()).toBe(0x42);
+                expect(cpu.lastRead).toBe(expected);
+            },
+        );
     });
 
     describe("feeding the SAA5050", () => {
