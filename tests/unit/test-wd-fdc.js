@@ -702,6 +702,56 @@ describe("WD1770 FDC tests", () => {
         });
     });
 
+    describe("read address", () => {
+        const IdBytes = 6;
+
+        /** Takes each ID byte as its DRQ comes, a tick at a time, until INTRQ follows the last. */
+        function readAddressTiming(fdc, scheduler, cpu) {
+            const bytes = [];
+            let lastDrqEpoch = 0;
+            let busyAtLastDrq = 0;
+            const start = scheduler.epoch;
+            fdc.write(CommandRegister, ReadAddressCommand);
+            while (bytes.length < IdBytes || !cpu.nmi) {
+                if (bytes.length < IdBytes && fdc.peek(StatusRegister) & StatusDrq) {
+                    lastDrqEpoch = scheduler.epoch;
+                    busyAtLastDrq = fdc.peek(StatusRegister) & StatusBusy;
+                    bytes.push(fdc.read(DataRegister));
+                }
+                scheduler.polltime(1);
+                if (scheduler.epoch - start > MaxCommandTicks) throw new Error("Read address never finished");
+            }
+            return { bytes, busyAtLastDrq, intRqDelay: scheduler.epoch - lastDrqEpoch };
+        }
+
+        it.each([
+            ["FM", fmDiscWithSector, ControlRunningDrive0Fm],
+            ["MFM", mfmDiscWithSector, ControlRunningDrive0],
+        ])("in %s raises INTRQ 32us after the last ID byte's DRQ, still busy at that DRQ", (_, discWith, control) => {
+            const { cpu, scheduler, fdc } = makeFdc({ disc: discWith({}), control });
+            const { bytes, busyAtLastDrq, intRqDelay } = readAddressTiming(fdc, scheduler, cpu);
+            expect(bytes.slice(0, 4)).toEqual([0, 0, 0, SectorLengthCode]);
+            expect(busyAtLastDrq).toBe(StatusBusy);
+            expect(intRqDelay).toBe(DoneTimerTicks);
+            expect(fdc.read(StatusRegister) & (StatusBusy | StatusCrcError)).toBe(0);
+        });
+
+        it("finishes from an older snapshot saved in the byte it once waited after its last DRQ", () => {
+            const RetiredReadAddressDoneState = 19;
+            const reading = () => makeFdc({ disc: mfmDiscWithSector({}) });
+            const original = reading();
+            original.fdc.write(CommandRegister, ReadAddressCommand);
+            while (!(original.fdc.peek(StatusRegister) & StatusDrq)) original.scheduler.polltime(PollTicks);
+            const saved = { ...original.fdc.snapshotState(), state: RetiredReadAddressDoneState, isDrq: false };
+
+            const { cpu, scheduler, fdc } = reading();
+            fdc.restoreState(saved);
+            scheduler.polltime(DoneTimerTicks);
+            expect(cpu.nmi).toBe(true);
+            expect(fdc.read(StatusRegister) & StatusBusy).toBe(0);
+        });
+    });
+
     describe("an SSD's track skew", () => {
         it("reaches the next track's first sector well within a revolution of this track's last", () => {
             const SsdSectorsPerTrack = 10;

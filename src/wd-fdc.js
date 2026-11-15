@@ -135,8 +135,10 @@ export const State = Object.freeze({
     writeTrackSetup: 16,
     inWriteTrack: 17,
     checkMulti: 18,
-    done: 19,
 });
+
+// Read address once spent a byte time here after its last DRQ before finishing; older snapshots can hold it.
+const RetiredReadAddressDoneState = 19;
 
 /**
  * Timer state.
@@ -816,9 +818,6 @@ export class WdFdc extends DiscController {
             case State.inWriteTrack:
                 this._pulsesCallbackInWriteTrack(isMfm, isIndexPulsePositiveEdge);
                 break;
-            case State.done:
-                this._commandDone(true);
-                break;
             default:
                 throw new Error(`Unexpected state ${this._state}`);
         }
@@ -1263,11 +1262,9 @@ export class WdFdc extends DiscController {
             if (isCrcError) this._statusRegister |= Status.crcError;
             // Unlike the 8271, read address returns just a single record. It is also not synchronized
             // to the index pulse.
-            // EMU NOTE: the internal clock cycles the 1770 spends between delivering the last
-            // header byte, reporting the CRC error and dropping busy are not modelled.
-            // EMU NOTE: must not clear busy flag right away. The 1770 delivers the
-            // last header byte DRQ separately from lowering the busy flag.
-            this._setState(State.done);
+            // 32 us is the end-of-command delay every command has, not a measurement; a real 1770 is known
+            // only to raise INTRQ within about 45 us of this DRQ (#1850).
+            this._commandDone(true);
             return;
         }
 
@@ -1439,6 +1436,7 @@ export class WdFdc extends DiscController {
         if (this._statusRegister & Status.motorOn) for (const drive of this._drives) drive.startSpinning();
 
         this._timerTask.restoreOffset(state.timerTaskOffset);
+        if (state.state === RetiredReadAddressDoneState) this._commandDone(true);
 
         this._updateNmi();
     }
