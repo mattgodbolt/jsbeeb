@@ -1,7 +1,7 @@
 import { afterEach, describe, it, expect, vi } from "vitest";
 
 import { Scheduler } from "../../src/scheduler.js";
-import { WdFdc, WdFdcVariant } from "../../src/wd-fdc.js";
+import { State, WdFdc, WdFdcVariant } from "../../src/wd-fdc.js";
 import { DiscDrive } from "../../src/disc-drive.js";
 import { Disc, DiscConfig } from "../../src/disc.js";
 import { IbmDiscFormat } from "../../src/disc-format.js";
@@ -737,12 +737,11 @@ describe("WD1770 FDC tests", () => {
         });
 
         it("finishes from an older snapshot saved in the byte it once waited after its last DRQ", () => {
-            const RetiredReadAddressDoneState = 19;
             const reading = () => makeFdc({ disc: mfmDiscWithSector({}) });
             const original = reading();
             original.fdc.write(CommandRegister, ReadAddressCommand);
             while (!(original.fdc.peek(StatusRegister) & StatusDrq)) original.scheduler.polltime(PollTicks);
-            const saved = { ...original.fdc.snapshotState(), state: RetiredReadAddressDoneState, isDrq: false };
+            const saved = { ...original.fdc.snapshotState(), state: State.retiredReadAddressDone, isDrq: false };
 
             const { cpu, scheduler, fdc } = reading();
             fdc.restoreState(saved);

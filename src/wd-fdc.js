@@ -69,6 +69,7 @@ const FmIndexMark = 0xfc;
 // The datasheet figures. In #1225, 30 ms reproduces the sectors a real Master 128 misses, and 15 ms doesn't.
 const Wd1770HeadSettleMs = 30;
 const Wd1772HeadSettleMs = 15;
+const CommandDoneDelayUs = 32;
 
 /**
  * The drive control register is documented here:
@@ -135,10 +136,9 @@ export const State = Object.freeze({
     writeTrackSetup: 16,
     inWriteTrack: 17,
     checkMulti: 18,
+    // Kept so the number is not reused: only older snapshots hold it, and restoring one finishes the command.
+    retiredReadAddressDone: 19,
 });
-
-// A retired state older snapshots can hold; docs/snapshot-format.md says what restoring it does.
-const RetiredReadAddressDoneState = 19;
 
 /**
  * Timer state.
@@ -1136,7 +1136,7 @@ export class WdFdc extends DiscController {
     _commandDone(doRaiseIntRq) {
         if (!(this._statusRegister & Status.busy)) throw new Error("Should be busy");
         this._doRaiseIntRq = doRaiseIntRq;
-        this._startTimer(TimerState.done, 32);
+        this._startTimer(TimerState.done, CommandDoneDelayUs);
     }
 
     _doneTimer() {
@@ -1262,8 +1262,8 @@ export class WdFdc extends DiscController {
             if (isCrcError) this._statusRegister |= Status.crcError;
             // Unlike the 8271, read address returns just a single record. It is also not synchronized
             // to the index pulse.
-            // 32 us is the end-of-command delay every command has, not a measurement; a real 1770 is known
-            // only to raise INTRQ within about 45 us of this DRQ (#1850).
+            // _commandDone raises INTRQ after CommandDoneDelayUs, the delay every command ends with and not a
+            // measured figure; a real 1770 is known only to raise it within about 45 us of this DRQ (#1850).
             this._commandDone(true);
             return;
         }
@@ -1436,7 +1436,7 @@ export class WdFdc extends DiscController {
         if (this._statusRegister & Status.motorOn) for (const drive of this._drives) drive.startSpinning();
 
         this._timerTask.restoreOffset(state.timerTaskOffset);
-        if (state.state === RetiredReadAddressDoneState) this._commandDone(true);
+        if (state.state === State.retiredReadAddressDone) this._commandDone(true);
 
         this._updateNmi();
     }
