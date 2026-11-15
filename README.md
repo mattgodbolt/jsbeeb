@@ -236,7 +236,7 @@ jsbeeb supports both USB/Bluetooth gamepads and mouse-based analogue joystick em
 - Y-axis: Up = 65535, Down = 0
 
 An AMX mouse on the user port is fitted with `hasAmxMouse=true`, or from the Settings dialog, in place of the switch
-interface (`Alt-1` to `Alt-8`). A click on the screen locks the pointer to it (the browser lets it go on `Esc`), as
+interface (`Alt-1` to `Alt-8`). A left click on the screen locks the pointer to it (the browser lets it go on `Esc`), as
 the mouse moves by how far the host's pointer moves rather than where it is; the left, middle and right buttons are
 the AMX mouse's. The AMX's own ROM is not included; [J.G. Harston's mouse
 driver](https://mdfs.net/Info/Comp/BBC/Mouse) works with it.
