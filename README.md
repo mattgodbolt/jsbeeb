@@ -586,6 +586,8 @@ For timing correctness, we have:
 - Some of Kevin Edwards' protection systems (stripped of the games themselves). These are extremely timing- and
   correctness-sensitive when it comes to the timers and interrupts of the BBC.
 - Some 65C12-specific read-modify-write tests written by Ed Spittles.
+- Kieran Connell's (Bitshifters) WD1770 READ ADDRESS race test, which chains commands from the INTRQ interrupt the way
+  phX's disc driver once did, and hangs on a real Master.
 
 Tests are run via npm scripts: `npm test` runs the whole suite. The vitest suites are `npm run test:unit`,
 `npm run test:integration` and `npm run test:shader`; CPU tests are `npm run test:cpu`, and the browser tests are

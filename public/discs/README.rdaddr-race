@@ -1,0 +1,10 @@
+WD1770 READ ADDRESS race test by Kieran Connell (Bitshifters), for the BBC Master.
+Source: https://bitshifters.github.io/content/wip/rdaddr-race.ssd
+License: MIT, as the author states in https://github.com/mattgodbolt/jsbeeb/issues/1850
+
+Cut down from an old version of phX's chained-NMI disc driver: it seeks to
+track 1, then issues 100 READ ADDRESS commands, each from the previous one's
+INTRQ NMI, and prints RESULT: PASS or RESULT: HANG on MODE 7 row 22. A real
+Master says HANG: INTRQ arrives so soon after the last ID byte's DRQ that the
+driver's NMIs nest and the chain stops.
+https://github.com/mattgodbolt/jsbeeb/issues/1850 has the story.
