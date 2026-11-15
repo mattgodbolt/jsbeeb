@@ -21,6 +21,7 @@ jsbeeb supports the browser versions listed under `browserslist` in [package.jso
 - [Printer Output](#printer-output)
 - [Save State and Rewind](#save-state-and-rewind)
 - [Joystick Support](#joystick-support)
+- [Touch Screen](#touch-screen)
 - [Getting Set Up to Run Locally](#getting-set-up-to-run-locally)
 - [Installing as an App and Working Offline](#installing-as-an-app-and-working-offline)
 - [Running as a Desktop Application](#running-as-a-desktop-application)
@@ -222,7 +223,7 @@ The emulator continuously captures snapshots into a 30-slot rewind buffer (~1 pe
 
 - **Left/Right arrows**: navigate between snapshots (the main screen updates live)
 - **Click** a thumbnail to jump to that point
-- **Enter**: commit selection and close the panel
+- **Enter** or **Go back here**: commit selection and close the panel
 - **Escape** or **Alt-W**: cancel and restore the original state
 
 While it is open, `Alt-T` and `Alt-B` still work; the other shortcuts, and every key for the emulated machine, are
@@ -234,6 +235,12 @@ jsbeeb supports both USB/Bluetooth gamepads and mouse-based analogue joystick em
 
 - X-axis: Left = 65535, Right = 0
 - Y-axis: Up = 65535, Down = 0
+
+An AMX mouse on the user port is fitted with `hasAmxMouse=true`, or from the Settings dialog, in place of the switch
+interface (`Alt-1` to `Alt-8`). A left click on the screen locks the pointer to it (the browser lets it go on `Esc`), as
+the mouse moves by how far the host's pointer moves rather than where it is; the left, middle and right buttons are
+the AMX mouse's. The AMX's own ROM is not included; [J.G. Harston's mouse
+driver](https://mdfs.net/Info/Comp/BBC/Mouse) works with it.
 
 A gamepad presses the emulated machine's keys, and which key each control presses can be changed from the URL in the
 same way as [remapping the keyboard](#remapping-keys):
@@ -266,6 +273,14 @@ press `1`. The on-screen game pad's classic layout follows `LEFT`, `RIGHT`, `UP`
 
 The older `LEFT=`, `RIGHT=`, `UP=`, `DOWN=` and `FIRE=` parameters (no `GP.` prefix, and in capitals) still work and
 mean the same thing.
+
+### Touch Screen
+
+jsbeeb emulates the Microvitec Touchtech 501, the infrared touch screen that fitted over a monitor and talked to the
+BBC Micro over RS-423. There is nothing to switch on: once a program asks it for positions, holding the mouse button
+down over the emulated screen touches the screen there. Point and multiple modes (1, 3, 129 and 131) are emulated,
+which covers Hybrid's Soundspace; size mode (2 and 130) reports the point without a size, and the data dump mode (0
+and 128) sends nothing.
 
 ## Getting Set Up to Run Locally
 
@@ -448,7 +463,8 @@ sudo rpm -i out/dist/jsbeeb-<version>.x86_64.rpm
 - `embed` - Remove the margins around the screen, hide most navigation entries and make the page background
   transparent (intended for use when running within an iframe in a third-party site).
 - `touchkeys` - offers the on-screen BBC keyboard, which otherwise appears only on a touch screen or in a window up to
-  700px wide (and never embedded or on the Atom; a landscape phone gets its game pad instead).
+  700px wide (and never embedded or on the Atom; a landscape phone gets its game pad instead). Where the touch screen
+  sits beside a trackpad or mouse, as on some laptops, it starts closed behind its ⌨ button.
 - `cpuMultiplier=X` speeds up the CPU by a factor of `X` relative to the peripherals: video, sound and the VIAs keep
   running at their real-world rates. May be fractional or below one to slow the CPU down. NB disc loads become
   unreliable with a too-slow CPU, and running too fast might cause the browser to hang.

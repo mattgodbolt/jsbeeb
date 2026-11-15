@@ -31,7 +31,10 @@ const IsRom = "That is ROM, which a write leaves as it is.";
 const NotRepeatedHere = "The search could not repeat the machine's run since its newest snapshot exactly.";
 const CannotSearchPast = "The search cannot go back past";
 const MovedOn = "The machine moved on before the search back finished.";
-const Unrepeated = "a stretch of the run it could not repeat exactly";
+const NothingToReplay = `There is no history to replay: ${KeepsHistory}.`;
+const MovedOnReplaying = "The machine moved on before the replay finished.";
+const CannotReplayPast = "The replay cannot go back past";
+export const Unrepeated = "a stretch of the run it could not repeat exactly";
 const MidInstruction = "an input that came part way through an instruction";
 
 // S counts down and wraps, so "not deeper" is a difference of under half the page, either way round $00.
@@ -80,7 +83,13 @@ const insideExecute = (cpu) => !cpu.halted && cpu.currentCycles < cpu.targetCycl
 
 function hostInputs(cpu) {
     const { gamepad, mouse } = cpu.sysvia.fireButtons();
-    return { keyboard: cpu.keyboardInterface.keyboardState(), gamepad, mouse, resetting: !cpu.resetLine };
+    return {
+        keyboard: cpu.keyboardInterface.keyboardState(),
+        gamepad,
+        mouse,
+        amxButtons: cpu.amxMouse?.buttons ?? 0,
+        resetting: !cpu.resetLine,
+    };
 }
 
 /** What the host holds once `input` has gone in, from `host`, what it held before. */
@@ -95,6 +104,8 @@ function withInput(host, input) {
                 ...host,
                 mouse: host.mouse.map((pressed, button) => (button === input.button ? input.pressed : pressed)),
             };
+        case "amxButtons":
+            return { ...host, amxButtons: input.buttons };
         case "break":
             return { ...host, resetting: input.down };
         default:
@@ -114,15 +125,17 @@ function hostChanges(from, to) {
     to.mouse.forEach((pressed, button) => {
         if (pressed !== from.mouse[button]) changes.push({ kind: "joystickButton", button, pressed });
     });
+    if (from.amxButtons !== to.amxButtons) changes.push({ kind: "amxButtons", buttons: to.amxButtons });
     if (from.resetting !== to.resetting) changes.push({ kind: "break", down: to.resetting });
     return changes;
 }
 
 // Before the machine's own restore, as restoreSessionSnapshot puts the keys back, so that its VIA scans these.
-function restoreHostInputs(cpu, { keyboard, gamepad, mouse, resetting }) {
+function restoreHostInputs(cpu, { keyboard, gamepad, mouse, amxButtons, resetting }) {
     cpu.keyboardInterface.restoreKeyboard(keyboard);
     cpu.sysvia.setGamepadFire(...gamepad);
     mouse.forEach((pressed, button) => cpu.sysvia.setJoystickButton(button, pressed));
+    cpu.amxMouse?.setButtons(amxButtons);
     cpu.setReset(resetting);
 }
 
@@ -178,8 +191,9 @@ export class InputLog {
 
     _devices() {
         const { cpu } = this;
-        const { keyboardInterface, sysvia, adconverter, touchScreen, acia, fdc } = cpu;
-        return [cpu, keyboardInterface, sysvia, adconverter, touchScreen, sysvia.cmos, acia, ...fdc.drives];
+        const { keyboardInterface, sysvia, adconverter, touchScreen, amxMouse, acia, fdc } = cpu;
+        const devices = [cpu, keyboardInterface, sysvia, adconverter, touchScreen, sysvia.cmos, acia, ...fdc.drives];
+        return amxMouse ? [...devices, amxMouse] : devices;
     }
 
     /** Stops every device the host reaches recording into this log, so that nothing keeps it growing. */
@@ -681,6 +695,36 @@ export class ReplayHistory extends EventTarget {
     }
 
     /**
+     * The stretches between the snapshots before now, newest first, each `{ snapshot, from, to, next, crossing }`:
+     * replayed from `snapshot`, at cycle `from`, to `to`, which is now or, with `next` null, where the next snapshot
+     * was taken; and `crossing`, the first thing in it that no replay crosses, or null.
+     */
+    _stretchesBack() {
+        const { cpu, log } = this;
+        const stretches = [];
+        let [to, next] = [cycleCount(cpu), null];
+        for (const snapshot of this._earlier(to).reverse()) {
+            const from = snapshotCycle(cpu, snapshot);
+            // A rewind snapshot is a copy of a frame snapshot, at the same cycle, and has nothing to replay.
+            if (from === to) continue;
+            const crossing = log.refusalBetween(from, to);
+            stretches.push({ snapshot, from, to, next, crossing });
+            [to, next] = [from, snapshot];
+        }
+        return stretches;
+    }
+
+    /**
+     * Replays `stretch` watched by `hooks`, returning the hash of the machine as its snapshot put it, or null if it
+     * did not end on `hash`, that of the machine it is replayed towards. Inputs at its end go in only where that is
+     * now, as the next snapshot was taken before them.
+     */
+    _replayStretch({ snapshot, to, next }, hash, hooks) {
+        const fromHash = this.log.replay(snapshot, to, next === null, hooks);
+        return fromHash !== null && stateHash(this.cpu) === hash ? fromHash : null;
+    }
+
+    /**
      * Replays the stretches between the snapshots before now, newest first, each checked to end on the machine it
      * is replayed towards (the state now or the next snapshot's), until `seeker` finds in one what it looks for,
      * yielding after each stretch that does not have it. A seeker replays each stretch with its `hooks`, is told of
@@ -691,25 +735,56 @@ export class ReplayHistory extends EventTarget {
      * crosses, or Unrepeated. Leaves the machine at the end of whichever stretch it replayed last.
      */
     *_searchBack(seeker) {
-        const { cpu, log } = this;
-        let [to, hash, inputsAtTo] = [cycleCount(cpu), stateHash(cpu), true];
-        for (const snapshot of this._earlier(to).reverse()) {
-            const from = snapshotCycle(cpu, snapshot);
-            // A rewind snapshot is a copy of a frame snapshot, at the same cycle, and has nothing to replay.
-            if (from === to) continue;
+        let [reached, hash] = [cycleCount(this.cpu), stateHash(this.cpu)];
+        for (const stretch of this._stretchesBack()) {
+            const { snapshot, from, to, crossing } = stretch;
             if (!seeker.searches(from)) break;
-            const crossing = log.refusalBetween(from, to);
-            if (crossing) return { found: null, snapshot: null, reached: to, stoppedBy: crossing };
+            if (crossing) return { found: null, snapshot: null, reached, stoppedBy: crossing };
             seeker.startWindow(from);
-            const fromHash = log.replay(snapshot, to, inputsAtTo, seeker.hooks);
-            if (fromHash === null || stateHash(cpu) !== hash)
-                return { found: null, snapshot: null, reached: to, stoppedBy: Unrepeated };
+            const fromHash = this._replayStretch(stretch, hash, seeker.hooks);
+            if (fromHash === null) return { found: null, snapshot: null, reached, stoppedBy: Unrepeated };
             const found = seeker.inWindow(to);
             if (found !== null) return { found, snapshot, reached: from, stoppedBy: null };
-            [to, hash, inputsAtTo] = [from, fromHash, false];
+            [reached, hash] = [from, fromHash];
             yield;
         }
-        return { found: null, snapshot: null, reached: to, stoppedBy: null };
+        return { found: null, snapshot: null, reached, stoppedBy: null };
+    }
+
+    /**
+     * Replays, oldest first, the stretches from the one holding `since` to the one holding `until`, each checked to
+     * end on the machine it is replayed towards, as `_searchBack` checks them, and yields between them. Returns
+     * `{ from, to, stoppedBy }` as `replayForward` does, or `{ refusal }` if there was no stretch to replay. Leaves
+     * the machine at the end of whichever stretch it replayed last.
+     */
+    *_forward(since, until, hooks) {
+        const nowHash = stateHash(this.cpu);
+        const stretches = [];
+        let stoppedBy = null;
+        for (const stretch of this._stretchesBack()) {
+            if (stretch.to <= since) break;
+            if (stretch.from >= until) continue;
+            if (stretch.crossing) {
+                stoppedBy = stretch.crossing;
+                break;
+            }
+            stretches.unshift(stretch);
+        }
+        if (!stretches.length) return { refusal: stoppedBy ? `${CannotReplayPast} ${stoppedBy}.` : TooFarBack };
+        const from = stretches[0].from;
+        for (const [i, stretch] of stretches.entries()) {
+            if (i > 0) yield;
+            const hash = stretch.next ? this._hashOf(stretch.next) : nowHash;
+            if (this._replayStretch(stretch, hash, hooks) === null)
+                return { from, to: stretch.from, stoppedBy: Unrepeated };
+        }
+        return { from, to: stretches.at(-1).to, stoppedBy };
+    }
+
+    // The machine as `snapshot` puts it, hashed as a replay from there hashes it.
+    _hashOf(snapshot) {
+        const at = snapshotCycle(this.cpu, snapshot);
+        return this.log.replay(snapshot, at, false, NoReplayHooks);
     }
 
     _original() {
@@ -746,19 +821,18 @@ export class ReplayHistory extends EventTarget {
     }
 
     /**
-     * Runs `_searchBack(seeker)` a stretch at a time, painting none of it, putting the machine back as `original`
-     * keeps it between stretches and yielding there. Returns what the search returns, with the machine where its
-     * last stretch left it, or `{ movedOn: true }` if the machine has moved on when the search resumes.
+     * Runs `replaying`, a replay of the history a stretch at a time, painting none of it, putting the machine back
+     * as `original` keeps it between stretches and yielding there. Returns what it returns, with the machine where
+     * its last stretch left it, or `{ movedOn: true }` if the machine has moved on when it resumes.
      */
-    *_searchingAway(seeker, original) {
+    *_away(replaying, original) {
         const { cpu } = this;
         // A write to a device register takes no cycles and is not in the hash, but the log records it.
         const [now, nowHash, lastInput] = [cycleCount(cpu), stateHash(cpu), this.log.inputs.at(-1)];
-        const search = this._searchBack(seeker);
         for (;;) {
             let step;
             try {
-                step = withoutPainting(cpu.video, () => search.next());
+                step = withoutPainting(cpu.video, () => replaying.next());
             } catch (e) {
                 this._putBack(original);
                 throw e;
@@ -785,7 +859,7 @@ export class ReplayHistory extends EventTarget {
         if (refused) return refused;
         const now = cycleCount(this.cpu);
         const original = this._original();
-        const { movedOn, found, snapshot, reached, stoppedBy } = yield* this._searchingAway(seeker, original);
+        const { movedOn, found, snapshot, reached, stoppedBy } = yield* this._away(this._searchBack(seeker), original);
         if (movedOn) return MovedOn;
         let landed = false;
         try {
@@ -874,8 +948,8 @@ export class ReplayHistory extends EventTarget {
         if (target.stat === RomStat) return { refusal: IsRom };
         const now = cycleCount(cpu);
         const original = this._original();
-        const { movedOn, found, reached, stoppedBy } = yield* this._searchingAway(
-            new LastWrite(cpu, log, address, target),
+        const { movedOn, found, reached, stoppedBy } = yield* this._away(
+            this._searchBack(new LastWrite(cpu, log, address, target)),
             original,
         );
         if (movedOn) return { refusal: MovedOn };
@@ -904,7 +978,7 @@ export class ReplayHistory extends EventTarget {
         const now = cycleCount(this.cpu);
         const stack = new CallStack(this.cpu);
         const original = this._original();
-        const search = this._searchingAway(stack, original);
+        const search = this._away(this._searchBack(stack), original);
         let step = search.next();
         while (!step.done) {
             yield stack.frames;
@@ -920,6 +994,23 @@ export class ReplayHistory extends EventTarget {
         return found
             ? { frames, accounted: true, txsAt: found.txsAt, stoppedBy: null }
             : { frames, accounted: false, txsAt: null, stoppedBy };
+    }
+
+    /**
+     * Replays the machine's history forward with `hooks` (as `asReplay` takes them), oldest first, from the stretch
+     * between snapshots that holds `since` to the one that holds `until`, checking and yielding between stretches as
+     * a search back does. Returns `{ refusal }`, or `{ from, to, stoppedBy }`: the hooks saw the run from cycle
+     * `from` to `to`; `stoppedBy` is why it covers less than asked, as `_searchBack` gives it, and with Unrepeated
+     * `to` is where the stretch that went its own way began. Leaves the machine as it was.
+     */
+    *replayForward(since, until, { hooks }) {
+        const refusal = this._unavailable("Replaying the history", NothingToReplay);
+        if (refusal) return { refusal };
+        const original = this._original();
+        const replayed = yield* this._away(this._forward(since, until, hooks), original);
+        if (replayed.movedOn) return { refusal: MovedOnReplaying };
+        this._putBack(original);
+        return replayed;
     }
 
     // What came after `cycle` was a future the machine has left, and runs from here make their own.

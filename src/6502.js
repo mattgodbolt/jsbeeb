@@ -5,13 +5,14 @@ import { Tube } from "./tube.js";
 import { Adc } from "./adc.js";
 import { Scheduler } from "./scheduler.js";
 import { TouchScreen } from "./touchscreen.js";
+import { AmxMouse } from "./amx-mouse.js";
 import { TeletextAdaptor } from "./teletext_adaptor.js";
 import { Filestore } from "./filestore.js";
 import { FakeRelayNoise } from "./relaynoise.js";
 import { AtomPPIA } from "./ppia.js";
 import { AtomMMC2 } from "./mmc.js";
 import { signExtend } from "./binary.js";
-import { hexbyte, hexword } from "./hex.js";
+import { hexbyte } from "./hex.js";
 import { loadData } from "./loader.js";
 import { MediaResolver } from "./media-resolver.js";
 import { BrkOpcode, Breakpoints } from "./breakpoints.js";
@@ -184,7 +185,6 @@ class Base6502 {
         this.pc = 0;
         const { disassembler, runInstruction } = model.opcodesFactory(this, { cycleAccurate });
         this.disassembler = disassembler;
-        this.forceTracing = false;
         this.runner = runInstruction;
         this.interrupt = 0;
         this._nmiSources = 0;
@@ -801,11 +801,8 @@ export class Cpu6502 extends Base6502 {
         this.osOffset = OsOffset;
         this.romsel = 0;
         this.acccon = 0;
-        this.oldPcArray = new Uint16Array(256);
-        this.oldAArray = new Uint8Array(256);
-        this.oldXArray = new Uint8Array(256);
-        this.oldYArray = new Uint8Array(256);
-        this.oldPcIndex = 0;
+        // Where the instruction running started, kept only on the slow path, for the debug hooks.
+        this.instructionPc = 0;
         this.resetLine = true;
         this.resetsAndLoads = 0;
         /** @type {import("./replay.js").InputLog | null} */
@@ -848,7 +845,9 @@ export class Cpu6502 extends Base6502 {
             isMaster: this.model.isMaster,
             initialLayout: this.keyLayout,
         });
-        this.uservia = new via.UserVia(this, this.scheduler, this.config.userPort);
+        this.amxMouse = this.config.hasAmxMouse && !this.model.isAtom ? new AmxMouse(this.scheduler) : null;
+        this.uservia = new via.UserVia(this, this.scheduler, this.amxMouse ?? this.config.userPort);
+        this.amxMouse?.connect(this.uservia);
         this.acia = new Acia(this, this.soundChip.toneGenerator, this.scheduler, this.relayNoise);
         this.serial = new Serial(this.acia);
         this.keyboardInterface = this.sysvia;
@@ -862,10 +861,6 @@ export class Cpu6502 extends Base6502 {
 
     get memoryBytes() {
         return BbcMemoryBytes;
-    }
-
-    getPrevPc(index) {
-        return this.oldPcArray[(this.oldPcIndex - index) & 0xff];
     }
 
     // BBC Master memory map (within ramRomOs array):
@@ -1035,9 +1030,6 @@ export class Cpu6502 extends Base6502 {
             case 0xfc10:
                 if (this.hasTeletextAdaptor) return this.teletextAdaptor.read(addr - 0xfc10);
                 break;
-            case 0xfcfc:
-                if (addr === 0xfcff && this.hasMusic5000) return this.music5000PageSel;
-                break;
             case 0xfe00:
             case 0xfe04:
                 return this.crtc.read(addr);
@@ -1130,12 +1122,6 @@ export class Cpu6502 extends Base6502 {
                 return this.tube.read(addr);
         }
 
-        if (this.hasMusic5000) {
-            if ((this.music5000PageSel & 0xf0) === 0x30 && (addr & 0xff00) === 0xfd00) {
-                return this.music5000.read(this.music5000PageSel, addr);
-            }
-        }
-
         if (addr >= 0xfc00 && addr < 0xfe00) return 0xff;
         return addr >>> 8;
     }
@@ -1208,9 +1194,6 @@ export class Cpu6502 extends Base6502 {
         switch (addr & ~0x0003) {
             case 0xfc10:
                 if (this.hasTeletextAdaptor) return UnpeekableDevice;
-                break;
-            case 0xfcfc:
-                if (addr === 0xfcff && this.hasMusic5000) return this.music5000PageSel;
                 break;
             case 0xfe00:
             case 0xfe04:
@@ -1302,12 +1285,6 @@ export class Cpu6502 extends Base6502 {
             case 0xfef8:
             case 0xfefc:
                 return this.hasTube ? UnpeekableDevice : this.tube.read(addr);
-        }
-
-        if (this.hasMusic5000) {
-            if ((this.music5000PageSel & 0xf0) === 0x30 && (addr & 0xff00) === 0xfd00) {
-                return this.music5000.read(this.music5000PageSel, addr) | 0;
-            }
         }
 
         if (addr >= 0xfc00 && addr < 0xfe00) return 0xff;
@@ -1572,6 +1549,7 @@ export class Cpu6502 extends Base6502 {
             fdc: this.fdc.snapshotState(),
             teletextAdaptor: this.teletextAdaptor ? this.teletextAdaptor.snapshotState() : undefined,
             tube: this.hasTube ? this.tube.snapshotState({ includeRoms, into: into?.tube }) : undefined,
+            ...(this.amxMouse && { amxMouse: this.amxMouse.snapshotState() }),
         };
     }
 
@@ -1646,6 +1624,10 @@ export class Cpu6502 extends Base6502 {
         // Touchscreen state, added without a version bump. Absent from an older snapshot, whose
         // touchscreen keeps its current state, unpolled.
         if (state.touchScreen) this.touchScreen.restoreState(state.touchScreen);
+        if (this.amxMouse) {
+            if (state.amxMouse) this.amxMouse.restoreState(state.amxMouse);
+            else this.amxMouse.reset();
+        }
 
         // FDC state (v2+). If absent (v1 snapshot), FDC keeps its current state, and the saved
         // level is the only record of its line.
@@ -1721,6 +1703,7 @@ export class Cpu6502 extends Base6502 {
         this.adconverter.reset();
 
         this.touchScreen.reset();
+        this.amxMouse?.reset();
     }
 
     // Universal CPU state reset. Shared by all machine types.
@@ -1824,13 +1807,7 @@ export class Cpu6502 extends Base6502 {
      * executeInternal: the debug read or debug write might change tracing or other debugging while it runs.
      */
     get onFastPath() {
-        return !(
-            this.forceTracing ||
-            this._debugInstruction ||
-            this._debugRead ||
-            this._debugWrite ||
-            this._debugInterrupt
-        );
+        return !(this._debugInstruction || this._debugRead || this._debugWrite || this._debugInterrupt);
     }
 
     execute(numCyclesToRun) {
@@ -1860,8 +1837,7 @@ export class Cpu6502 extends Base6502 {
         // and none stops the machine at it again.
         let resuming = this.debugInstruction.stopped;
         while (!this.halted && this.currentCycles < this.targetCycles) {
-            this.oldPcIndex = (this.oldPcIndex + 1) & 0xff;
-            this.oldPcArray[this.oldPcIndex] = this.pc;
+            this.instructionPc = this.pc;
             this.memStatOffset = this.memStatOffsetByIFetchBank & (1 << (this.pc >>> 12)) ? 256 : 0;
             const opcode = this.readmem(this.pc);
             if (this._debugInstruction) {
@@ -1877,10 +1853,7 @@ export class Cpu6502 extends Base6502 {
             }
             this.incpc();
             this.runner.run(opcode);
-            this.oldAArray[this.oldPcIndex] = this.a;
-            this.oldXArray[this.oldPcIndex] = this.x;
-            this.oldYArray[this.oldPcIndex] = this.y;
-            if (opcode === BrkOpcode && this._debugInterrupt) this.checkBrkTakenByNmi(this.oldPcArray[this.oldPcIndex]);
+            if (opcode === BrkOpcode && this._debugInterrupt) this.checkBrkTakenByNmi(this.instructionPc);
             if (this.takeInt) {
                 const returnsTo = this.pc;
                 const taken = this.brk(true) === NmiVector ? "nmi" : "irq";
@@ -1947,29 +1920,6 @@ export class Cpu6502 extends Base6502 {
     setKeyLayout(layout) {
         this.keyLayout = layout;
         this.sysvia.setKeyLayout(layout);
-    }
-
-    dumpTrace(maxToShow, func) {
-        if (!maxToShow) maxToShow = 256;
-        if (maxToShow > 256) maxToShow = 256;
-        const disassembler = this.disassembler;
-        func =
-            func ||
-            function (pc, a, x, y) {
-                const dis = disassembler.disassemble(pc, true)[0];
-                console.log(
-                    hexword(pc),
-                    (dis + "                       ").substring(0, 15),
-                    hexbyte(a),
-                    hexbyte(x),
-                    hexbyte(y),
-                );
-            };
-        for (let i = maxToShow - 2; i >= 0; --i) {
-            const j = (this.oldPcIndex - i) & 255;
-            func(this.oldPcArray[j], this.oldAArray[j], this.oldXArray[j], this.oldYArray[j]);
-        }
-        func(this.pc, this.a, this.x, this.y);
     }
 
     async initialise() {

@@ -20,6 +20,7 @@ const SpecDefaults = {
     tube: null,
     hasMusic5000: false,
     hasTeletextAdaptor: false,
+    hasAmxMouse: false,
     fittedRoms: [],
     bankRoms: [],
     extraRoms: [],

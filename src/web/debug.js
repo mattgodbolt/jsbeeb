@@ -16,6 +16,7 @@ import { describeHit } from "../breakpoints.js";
 import { sheilaAddress, machineSheilaBlocks } from "../sheila.js";
 import { BreakpointsPanel } from "./breakpoints-panel.js";
 import { CallStackPanel } from "./call-stack-panel.js";
+import { TracePanel } from "./trace-panel.js";
 import { bindGotoForm, externalLink, FittedRows, labelHtml, powerOfTwoColumnsThatFit } from "./debug-dom.js";
 import { DisassemblyView } from "./disassembly-view.js";
 import { PagingOverride, viewLabel } from "./paging-override.js";
@@ -54,6 +55,8 @@ const NoHistory = "There is nothing to step back to here.";
 const NoStepBackInSession = "Step back is not available in a shared session.";
 const NoSearchInSession = "Searching back is not available in a shared session.";
 const NoHistoryToSearch = "There is no history to search back through here.";
+const NoTraceInSession = "The trace is not available in a shared session.";
+const NoHistoryToTrace = "There is no history to trace here.";
 const MovedSinceSearch = "The machine has moved on since that search; search again to step back to a write.";
 const StepBackRuns = ["stepBack", "stepBackOver", "stepBackOut", "reverseContinue"];
 // What a search back resolves to when a later one ended it.
@@ -520,6 +523,17 @@ export class Debugger {
             nameOf: (address, bank) => this._nameIn(address, bank),
             showCode: (address, bank) => this._showCode(address, bank),
         });
+        this.trace = new TracePanel({
+            arrangement,
+            history: () => this._history,
+            unavailable: () => (this._loop.lockstep ? NoTraceInSession : this._history ? null : NoHistoryToTrace),
+            stopped: () => this._loop.mode === RunMode.debugging,
+            nameOf: (address) => this._names.address(address, this.cpu.pc)?.name,
+            showCode: (address) => {
+                this._paging.disassembly.view = PagedView;
+                this._showCode(address, undefined);
+            },
+        });
         this._bindToolbar();
         this._bindKeys(keys);
         this._bindLabelDrops();
@@ -959,6 +973,7 @@ export class Debugger {
         this._sheila = machineSheilaBlocks(cpu);
         this.breakpoints.setCpu(cpu);
         this.callStack.setCpu(cpu);
+        this.trace.setCpu(cpu);
         if (this._ownPanelsShown()) this._refresh.drawNow();
     }
     updateElem(elem, val) {
@@ -1056,6 +1071,7 @@ export class Debugger {
         }
         this._arrangement.keepAttached();
         this._showStepBack();
+        this.trace.refresh();
         this.cpu.video.debugPaint();
     }
 
@@ -1089,7 +1105,7 @@ export class Debugger {
         return this._breakpointNames(bank).address(address, this.cpu.pc)?.name;
     }
 
-    /** Shows the code at `address` in the disassembly, in sideways `bank` where it is given and the view has it. */
+    /** Opens the disassembly at `address`, in sideways `bank` if one is given, or else in the view it has. */
     _showCode(address, bank) {
         this._showPinned(this._paging.disassembly, bank, address);
         this.panels.disassembly.open();
@@ -1182,13 +1198,24 @@ export class Debugger {
      * on-screen keyboard shows, the click is the machine's.
      */
     showScreenByteAt(x, y) {
-        if (!this._inDebugger || this._touchKeyboardShown()) return false;
-        const address = this.cpu.video.addressShownAt(x, y);
-        if (address !== null) {
-            this._paging.memory.view = screenView(this.cpu, address);
+        return this._atScreenByte(x, y, (address, view) => {
+            this._paging.memory.view = view;
             this._memoryView.update(address);
             this.panels.memory.open();
-        }
+        });
+    }
+
+    /**
+     * As showScreenByteAt, but offers the memory panel's menu for the byte; a right click not taken is the browser's.
+     */
+    offerScreenByteAt(e, x, y) {
+        return this._atScreenByte(x, y, (address, view) => this._offerWatch(e, address, undefined, view));
+    }
+
+    _atScreenByte(x, y, use) {
+        if (!this._inDebugger || this._touchKeyboardShown()) return false;
+        const address = this.cpu.video.addressShownAt(x, y);
+        if (address !== null) use(address, screenView(this.cpu, address));
         return true;
     }
 
@@ -1230,7 +1257,8 @@ export class Debugger {
     _showRunning() {
         const running = this._loop.isRunning();
         for (const [run, button] of Object.entries(this._buttons)) button.disabled = running !== (run === "stop");
-        if (!running) this._showStepBack();
+        if (running) this.trace.refresh();
+        else this._showStepBack();
         // Stopping takes no cycles, so the panel's refresh would not see it; deferred until the loop has finished
         // stopping.
         if (this.callStack.floating.isOpen) queueMicrotask(() => this.callStack.update());

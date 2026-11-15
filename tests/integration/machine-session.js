@@ -979,6 +979,7 @@ describe("MachineSession history", () => {
     const LoopAt = 0x2000;
     const CallAt = 0x2003;
     const AfterCall = 0x2006;
+    const JumpAt = 0x2007;
     const SubroutineAt = 0x2010;
     const ReturnAt = 0x2013;
     const Counter = 0x1900;
@@ -1026,7 +1027,8 @@ describe("MachineSession history", () => {
             session.stepBackOut(),
             session.reverseContinue(),
             session.whoWrote(Counter).refusal,
-        ]).toEqual(Array(5).fill(expect.stringMatching(/keeps no history/)));
+            session.trace(1).refusal,
+        ]).toEqual(Array(6).fill(expect.stringMatching(/keeps no history/)));
         expect(session.historyState()).toEqual({ recent: 0, seconds: 0, snapshots: 0, oldestCycle: null });
     });
 
@@ -1079,6 +1081,20 @@ describe("MachineSession history", () => {
         expect([session.registers().pc, session.elapsedCycles]).toEqual([SubroutineAt, write.cycle]);
     });
 
+    it("traces the instructions it ran, the newest last, leaving the machine where it was", async () => {
+        await loopingWithHistory(PageHistory);
+        await session.runUntilAddress(AfterCall, 1);
+        const { x } = session.registers();
+
+        const { entries, stoppedBy } = session.trace(4);
+        expect([entries.map(({ address }) => address), entries[2].x, stoppedBy]).toEqual([
+            [JumpAt, CallAt, SubroutineAt, ReturnAt],
+            x,
+            null,
+        ]);
+        expect(session.registers().pc).toBe(AfterCall);
+    });
+
     it("refuses to replay while text from type() is still going in", async () => {
         session.writeMemory(LoopAt, Program);
         session.writeMemory(SubroutineAt, Subroutine);
@@ -1087,10 +1103,9 @@ describe("MachineSession history", () => {
         await session.type(CallLoop);
         expect(session.typingPending).toBe(true);
 
-        expect([session.stepBack(false), session.whoWrote(Counter).refusal]).toEqual([
-            expect.stringMatching(/still being typed/),
-            expect.stringMatching(/still being typed/),
-        ]);
+        expect([session.stepBack(false), session.whoWrote(Counter).refusal, session.trace(1).refusal]).toEqual(
+            Array(3).fill(expect.stringMatching(/still being typed/)),
+        );
     });
 
     // One-a-second snapshots only, so that the step back replays frames from the one before the reset.

@@ -67,7 +67,7 @@ Snapshots can be imported from other emulators. The `importedFrom` field in the 
 | `"b-em"`       | B-em snapshot (`.snp` file, v1 or v3)            |
 | `"beebem-uef"` | BeebEm UEF save state (`.uef` with 0x046C chunk) |
 
-Imported snapshots use the same `jsbeeb-snapshot` format (version 3) and do not include FDC, disc or touchscreen state (`state.fdc` and `state.touchScreen` will be absent).
+Imported snapshots use the same `jsbeeb-snapshot` format (version 3) and do not include FDC, disc, touchscreen or AMX mouse state (`state.fdc`, `state.touchScreen` and `state.amxMouse` will be absent).
 
 B-em snapshots include the full ROM contents in the `roms` field (256KB, all 16 banks). BeebEm UEF snapshots include only the sideways RAM banks they saved, in `swram` and `swramBankMask`.
 
@@ -171,14 +171,14 @@ Scheduled tasks are not saved directly. Each component saves its task timing as 
 | `t1l`                | number       | Timer 1 Latch (doubled 2MHz ticks)                               |
 | `t2l`                | number       | Timer 2 Latch                                                    |
 | `t1c`                | number       | Timer 1 Counter                                                  |
-| `t2c`                | number       | Timer 2 Counter (just the low byte's count in shift mode 100)    |
+| `t2c`                | number       | Timer 2 Counter (the low byte alone while T2 clocks the SR)      |
 | `acr`                | number       | Auxiliary Control Register                                       |
 | `pcr`                | number       | Peripheral Control Register                                      |
 | `ifr`                | number       | Interrupt Flag Register                                          |
 | `ier`                | number       | Interrupt Enable Register                                        |
 | `t1hit`              | boolean      | Timer 1 has expired                                              |
 | `t2hit`              | boolean      | Timer 2 has expired                                              |
-| `t2High`             | number       | T2 high byte in shift mode 100; split from `t2c` when absent     |
+| `t2High`             | number       | T2 high byte while T2 clocks the SR; split from `t2c` if absent  |
 | `portapins`          | number       | Port A pin levels                                                |
 | `portbpins`          | number       | Port B pin levels                                                |
 | `ca1`                | boolean      | CA1 line level                                                   |
@@ -187,12 +187,16 @@ Scheduled tasks are not saved directly. Each component saves its task timing as 
 | `cb2`                | boolean      | CB2 line level                                                   |
 | `justhit`            | number       | Timer just-hit flags                                             |
 | `t1_pb7`             | number       | Timer 1 PB7 output state                                         |
+| `shiftBits`          | number       | Bits left in the shift register's count of eight                 |
 | `lastPolltime`       | number       | Last polltime epoch                                              |
 | `taskOffset`         | number\|null | Scheduled task offset from epoch (null if no task)               |
 | `ca2PulseTaskOffset` | number\|null | Offset at which a pulse-mode CA2 returns high (null if no pulse) |
 | `cb2PulseTaskOffset` | number\|null | Offset at which a pulse-mode CB2 returns high (null if no pulse) |
+| `shiftTaskOffset`    | number\|null | Next edge of an internal shift clock or its flag (null if none)  |
 
 `ca2PulseTaskOffset` and `cb2PulseTaskOffset` are absent from snapshots written before CA2/CB2 pulses had a width, and from imported snapshots; absent means no pulse is in flight.
+
+While an internal clock shifts, `cb1` is the clock's output level, and while it shifts out `cb2` is the last bit put out. `shiftBits` and `shiftTaskOffset` are absent from snapshots written before the shift register shifted, and from imported snapshots; absent means no shift is under way and a full count of eight.
 
 System VIA additionally includes:
 
@@ -412,6 +416,19 @@ Absent from snapshots written before the touchscreen was saved, and from importe
 touchscreen keeps whatever state it currently holds, unpolled, exactly as before.
 
 The pointer position and button state are not saved: like the keyboard, they are host input and are refreshed by the next mouse event.
+
+### AMX mouse (`state.amxMouse`)
+
+Present only when the AMX mouse was fitted. Absent means a fitted mouse drops any movement it had still to make.
+
+| Field            | Type                               | Description                                                                                                                    |
+| ---------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `x`, `y`         | `{pending: number, phase: number}` | Quadrature steps still to make (right and up positive), and phase 0 to 3                                                       |
+| `stepsWaited`    | number                             | Steps waited for the software to clear the CB1 and CB2 flags; still non-zero just after they clear, as the next step waits too |
+| `yStepsNext`     | boolean                            | Whether the Y axis takes the next step while both have steps to make                                                           |
+| `stepTaskOffset` | number\|null                       | Step task offset (null when the mouse is still)                                                                                |
+
+The levels on CB1 and CB2 are the user VIA's. The buttons are not saved: like the keyboard, they are host input.
 
 ### Teletext adaptor (`state.teletextAdaptor`)
 

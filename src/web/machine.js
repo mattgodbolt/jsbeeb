@@ -30,6 +30,7 @@ export function buildEmulationConfig({
         tube: settings.coProcessor ? tubeModelFor(settings.model) : null,
         hasMusic5000: settings.hasMusic5000,
         hasTeletextAdaptor: settings.hasTeletextAdaptor,
+        hasAmxMouse: settings.hasAmxMouse,
         fittedRoms: settings.fittedRoms,
         bankRoms,
         extraRoms,

@@ -1,5 +1,42 @@
 [
   {
+    "repo": "bitshifters/bitshifters.github.io",
+    "path": "content/wip/ddd2-wip.ssd",
+    "title": "Dare Devil Denis 2 (work in progress)",
+    "publisher": "Bitshifters",
+    "authors": "Visions Software (Dare Devil Denis, 1984); four-player sequel by Kieran Connell",
+    "year": 2026,
+    "type": "Game",
+    "url": "https://github.com/kieranhj/ddd2"
+  },
+  {
+    "repo": "bitshifters/bitshifters.github.io",
+    "path": "content/wip/isometrikum-wip.ssd",
+    "title": "Isometrikum (work in progress)",
+    "publisher": "Bitshifters",
+    "authors": "Vanity (Amstrad CPC original by Hicks, Beb and Tom et Jerry, 2018); BBC Micro port by Kieran Connell",
+    "year": 2026,
+    "type": "Demo"
+  },
+  {
+    "repo": "bitshifters/bitshifters.github.io",
+    "path": "content/wip/physics-tube-wip.ssd",
+    "title": "2D Physics (work in progress)",
+    "publisher": "Bitshifters",
+    "authors": "Kieran Connell",
+    "year": 2026,
+    "type": "Demo"
+  },
+  {
+    "repo": "bitshifters/bitshifters.github.io",
+    "path": "content/wip/puzzle-beeble-wip.ssd",
+    "title": "Puzzle Beeble (work in progress)",
+    "publisher": "Bitshifters",
+    "authors": "Taito (Puzzle Bobble, original game); port by Kieran Connell",
+    "year": 2026,
+    "type": "Game"
+  },
+  {
     "repo": "ebenupton/2048",
     "path": "2048.ssd",
     "title": "2048",
@@ -36,6 +73,16 @@
     "type": "Game"
   },
   {
+    "repo": "ebenupton/solid-elite-6502-second-processor",
+    "path": "solid-elite-tube.ssd",
+    "title": "Solid Elite (6502 Second Processor)",
+    "publisher": "Eben Upton",
+    "authors": "Ian Bell and David Braben (original game); port by Eben Upton, built on Mark Moxon's documented source",
+    "year": 2026,
+    "type": "Game",
+    "machine": "MasterTurbo"
+  },
+  {
     "repo": "ebenupton/solid-elite-bbc-master",
     "path": "solid-elite-bbc-master.ssd",
     "title": "Solid Elite",
@@ -46,11 +93,38 @@
     "machine": "Master"
   },
   {
+    "repo": "kieranhj/thrust-disassembly",
+    "path": "thrust.ssd",
+    "title": "Thrust",
+    "publisher": "Kieran Connell",
+    "authors": "Jeremy C. Smith (original game, Superior Software); rebuilt from Kieran Connell's disassembly",
+    "year": 1986,
+    "type": "Game"
+  },
+  {
     "repo": "mattgodbolt/beeb-scorched-earth",
     "path": "scorched-earth.ssd",
     "title": "Scorched Earth",
     "publisher": "Matt Godbolt",
     "authors": "Wendell Hicken (original game); fan port written with Claude Code",
+    "year": 2026,
+    "type": "Game"
+  },
+  {
+    "repo": "mattgodbolt/cauldron-2-beeb",
+    "path": "cauldron2.ssd",
+    "title": "Cauldron II",
+    "publisher": "Matt Godbolt",
+    "authors": "Palace Software (original game); port by Matt Godbolt and Claude",
+    "year": 2026,
+    "type": "Game"
+  },
+  {
+    "repo": "mattgodbolt/cauldron-beeb",
+    "path": "cauldron.ssd",
+    "title": "Cauldron (work in progress)",
+    "publisher": "Matt Godbolt",
+    "authors": "Palace Software (original game); port by Matt Godbolt and Claude",
     "year": 2026,
     "type": "Game"
   },
@@ -73,6 +147,16 @@
     "type": "Game"
   },
   {
+    "repo": "mattgodbolt/freescape-beeb",
+    "path": "freescape.ssd",
+    "title": "Driller (work in progress)",
+    "publisher": "Matt Godbolt",
+    "authors": "Incentive Software (original game); Freescape engine for the Master by Matt Godbolt and Claude",
+    "year": 2026,
+    "type": "Game",
+    "machine": "Master"
+  },
+  {
     "repo": "mattgodbolt/frogman",
     "path": "frogman_rebuilt.ssd",
     "title": "Frogman",
@@ -93,13 +177,12 @@
   },
   {
     "repo": "mattgodbolt/nm",
-    "path": "ninja_music.ssd",
-    "title": "Ninja Massacre music",
+    "path": "ninja-massacre.ssd",
+    "title": "Ninja Massacre",
     "publisher": "Matt Godbolt",
-    "authors": "Music by David Whittaker",
+    "authors": "Adam Waring, music by David Whittaker (original game, Codemasters); port by Matt Godbolt and Claude",
     "year": 2026,
-    "type": "Music",
-    "machine": "Master"
+    "type": "Game"
   },
   {
     "repo": "mattgodbolt/onslaught",
@@ -108,6 +191,63 @@
     "publisher": "Matt Godbolt",
     "authors": "Rich Talbot-Watkins and Matt Godbolt",
     "year": 1993,
+    "type": "Game"
+  },
+  {
+    "repo": "mattgodbolt/redshift-beeb",
+    "path": "redshift.ssd",
+    "title": "REDSHIFT",
+    "publisher": "Matt Godbolt",
+    "authors": "Designed and written by Claude, an AI, with Matt Godbolt",
+    "year": 2026,
+    "type": "Game"
+  },
+  {
+    "repo": "mattgodbolt/starglider-beeb",
+    "path": "starglider.ssd",
+    "title": "Starglider",
+    "publisher": "Matt Godbolt",
+    "authors": "Argonaut Software (original game); port by Matt Godbolt and Claude, with Argonaut's blessing",
+    "year": 2026,
+    "type": "Game",
+    "machine": "Master"
+  },
+  {
+    "repo": "waitingforvsync/waitingforvsync.github.io",
+    "path": "beeb/chasehq.ssd",
+    "title": "Chase H.Q. (work in progress)",
+    "publisher": "Rich Talbot-Watkins",
+    "authors": "Taito (original game, 1988); BBC Micro port by Rich Talbot-Watkins, from Ocean's Amstrad CPC version",
+    "year": 2026,
+    "type": "Game",
+    "url": "https://github.com/waitingforvsync/chasehq-beeb"
+  },
+  {
+    "repo": "waitingforvsync/waitingforvsync.github.io",
+    "path": "beeb/criticalmass.ssd",
+    "title": "Critical Mass",
+    "publisher": "Rich Talbot-Watkins",
+    "authors": "Eli Piilonen (Marble Merger, the PICO-8 original); BBC Micro version by Rich Talbot-Watkins",
+    "year": 2026,
+    "type": "Game",
+    "url": "https://github.com/waitingforvsync/criticalmass"
+  },
+  {
+    "repo": "waitingforvsync/waitingforvsync.github.io",
+    "path": "beeb/exolon.ssd",
+    "title": "Exolon (work in progress)",
+    "publisher": "Rich Talbot-Watkins",
+    "authors": "Raffaele Cecco (original game, Hewson, 1987); BBC Micro port by Rich Talbot-Watkins",
+    "year": 2026,
+    "type": "Game"
+  },
+  {
+    "repo": "waitingforvsync/waitingforvsync.github.io",
+    "path": "beeb/teddy.ssd",
+    "title": "Teddy Boy (work in progress)",
+    "publisher": "Rich Talbot-Watkins",
+    "authors": "Sega (Teddy Boy Blues, Sega Master System, 1985); BBC Micro port by Rich Talbot-Watkins",
+    "year": 2026,
     "type": "Game"
   }
 ]

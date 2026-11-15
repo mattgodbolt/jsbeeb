@@ -1184,12 +1184,44 @@ test.describe("on a phone", () => {
     });
 });
 
-test("a narrow window without a touch screen gets the on-screen keyboard but no hint to turn it for the game pad", async ({
+test.describe("with a touch screen beside a trackpad", () => {
+    // Launch options cannot vary within this file, and touch emulation makes the touch screen the main pointer too.
+    test.beforeEach(({ page }) =>
+        page.addInitScript(() => {
+            const matchMedia = window.matchMedia.bind(window);
+            window.matchMedia = (query) => (query === "(any-pointer: coarse)" ? { matches: true } : matchMedia(query));
+        }),
+    );
+
+    test("the on-screen keyboard starts closed behind its button, which opens it for good, and touchkeys opens it", async ({
+        beeb,
+        page,
+    }) => {
+        const keys = page.locator('#touch-keyboard .tk-layer[data-name="main"]');
+        const toggle = page.getByTitle("Show the on-screen keyboard");
+        await beeb.open();
+        await expect(toggle).toBeVisible();
+        await expect(keys).toBeHidden();
+        await beeb.open("?touchkeys");
+        await expect(keys).toBeVisible();
+        await beeb.open();
+        await expect(keys).toBeHidden();
+        await toggle.click();
+        await expect(keys).toBeVisible();
+        await page.reload();
+        await expect(keys).toBeVisible();
+    });
+});
+
+test("a window without a touch screen gets the on-screen keyboard only when narrow, with no hint to turn it for the game pad", async ({
     beeb,
     page,
 }) => {
-    await page.setViewportSize({ width: 600, height: 800 });
     await beeb.open();
+    await beeb.expectScreenText(">");
+    await expect(page.locator("#touch-keyboard, #touch-keyboard-toggle")).toHaveCount(0);
+    await page.setViewportSize({ width: 600, height: 800 });
+    await page.reload();
     await expect(page.locator('#touch-keyboard .tk-layer[data-name="main"]')).toBeVisible();
     await expect(page.locator("#touch-keyboard .tk-rotate-hint")).toBeHidden();
 });

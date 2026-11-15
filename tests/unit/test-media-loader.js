@@ -290,7 +290,7 @@ describe("MediaLoader", () => {
         it("describes a github: reference on the bundled list, with the machine it needs", async () => {
             const media = make();
             addArchiveSources(media);
-            await expect(media.describe("github:mattgodbolt/nm/ninja_music.ssd")).resolves.toMatchObject({
+            await expect(media.describe("github:mattgodbolt/starglider-beeb/starglider.ssd")).resolves.toMatchObject({
                 requires: MachineRequirements.Master,
             });
             await expect(media.describe("github:someone/else/disc.ssd")).resolves.toBeNull();

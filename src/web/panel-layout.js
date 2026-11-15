@@ -34,6 +34,7 @@ export const PanelIds = [
     "basic",
     "breakpoints",
     "callstack",
+    "trace",
 ];
 export const AllEdges = { left: true, right: true, top: true, bottom: true };
 export const StartEdge = { anchor: "start", offset: 0, fraction: 0 };

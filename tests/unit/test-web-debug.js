@@ -349,6 +349,7 @@ describe("Debugger", () => {
                 "Disassembly",
                 "Memory",
                 "Registers",
+                "Trace",
                 "Watches",
             ]);
         });
@@ -1337,6 +1338,44 @@ describe("Debugger", () => {
                 load(0x3000, [0xa2, 0x05, 0x60]);
             });
 
+            it("keeps the Trace panel to what ran before each stop, and to a note while the machine runs", async () => {
+                stepBackHere();
+                dbgr.trace.floating.open();
+                const traced = () =>
+                    [...document.querySelectorAll("#trace-panel tbody tr")].map((row) => row.children[1].textContent);
+                await pressAndSettle("n");
+                expect(traced()).toEqual(["2000"]);
+                await pressAndSettle("n");
+                expect(traced()).toEqual(["2000", "3000"]);
+                goTo("goto-dis-addr-form", `$8000\`${bankView(UnpagedBank)}`);
+                document.querySelector("#trace-panel [data-address]").click();
+                expect(addrOf(currentRow())).toBe("2000");
+                expect(document.querySelector("#disassembly-panel .paging-picker").classList).not.toContain(
+                    "overridden",
+                );
+                stoppedLoop.go();
+                stoppedLoop.dispatchEvent(new Event("running"));
+                expect([document.querySelector("#trace-panel .trace-status").textContent, traced()]).toEqual([
+                    expect.stringMatching(/^Stop the machine/),
+                    [],
+                ]);
+            });
+
+            it.each([
+                [
+                    "in a shared session",
+                    () => (stoppedLoop.lockstep = {}),
+                    "The trace is not available in a shared session.",
+                ],
+                ["with no history", () => {}, "There is no history to trace here."],
+            ])("says the trace cannot be made %s", async (_, set, says) => {
+                set();
+                if (stoppedLoop.lockstep) stepBackHere();
+                dbgr.trace.floating.open();
+                await pressAndSettle("n");
+                expect(document.querySelector("#trace-panel .trace-status").textContent).toBe(says);
+            });
+
             it("goes back one instruction on p, and on P back over the call just returned from, as things were there", () => {
                 stepBackHere();
                 const xAtCall = x();
@@ -1617,6 +1656,28 @@ describe("Debugger", () => {
                     );
                     stepBackButton().click();
                     expect(pc()).toBe("2002");
+                });
+
+                it("finds who wrote the byte drawn where the stopped screen is right-clicked, in the shadow RAM it is drawn from", async () => {
+                    cpu = fake6502(romless("Master"), { video });
+                    await cpu.initialise();
+                    cpu.pc = 0x2000;
+                    dbgr.setCpu(cpu);
+                    // ACCCON X, so $22 goes to shadow RAM's $3000, then ACCCON D alone: the video shows shadow RAM.
+                    load(0x2000, [0xa9, 0x04, 0x8d, 0x34, 0xfe, 0xa9, 0x22, 0x8d, 0x00, 0x30]);
+                    load(0x200a, [0xa9, 0x01, 0x8d, 0x34, 0xfe, 0xea]);
+                    stepBackHere();
+                    for (let i = 0; i < 6; ++i) keyPress("n");
+                    vi.spyOn(video, "addressShownAt").mockReturnValue(0x3000);
+                    dbgr.offerScreenByteAt(new MouseEvent("contextmenu", { cancelable: true }), 0.25, 0.25);
+                    pickFromMenu("Who wrote this?");
+                    await vi.waitFor(() =>
+                        expect(toasts()).toContainEqual(
+                            expect.stringMatching(
+                                /\$3000 in shadow RAM was last written \$22 by the instruction at \$2007/,
+                            ),
+                        ),
+                    );
                 });
 
                 it.each([

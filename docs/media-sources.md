@@ -122,13 +122,13 @@ manifest's fields, with `repo` and `ref` in place of the site:
 
 ```json
 {
-  "repo": "mattgodbolt/nm",
-  "path": "ninja_music.ssd",
-  "title": "Ninja Massacre music",
+  "repo": "mattgodbolt/starglider-beeb",
+  "path": "starglider.ssd",
+  "title": "Starglider",
   "publisher": "Matt Godbolt",
-  "authors": "Music by David Whittaker",
+  "authors": "Argonaut Software (original game); port by Matt Godbolt and Claude, with Argonaut's blessing",
   "year": 2026,
-  "type": "Music",
+  "type": "Game",
   "machine": "Master"
 }
 ```

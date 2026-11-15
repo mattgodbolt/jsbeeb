@@ -1,4 +1,5 @@
-const table = [19200, 9600, 4800, 2400, 1200, 300, 150, 75];
+// The rate each 3-bit field selects, as OS 1.20's *FX7 and *FX8 table at &E9AE sets them.
+const BaudRates = [19200, 1200, 4800, 150, 9600, 300, 2400, 75];
 
 export class Serial {
     constructor(acia) {
@@ -17,8 +18,8 @@ export class Serial {
         this.reg = val;
         this.transmitRate = val & 0x07;
         this.receiveRate = (val >>> 3) & 0x07;
-        this.acia.setSerialReceive(table[this.receiveRate]);
-        this.acia.setSerialTransmit(table[this.transmitRate]);
+        this.acia.setSerialReceive(BaudRates[this.receiveRate]);
+        this.acia.setSerialTransmit(BaudRates[this.transmitRate]);
         this.acia.setMotor(!!(val & 0x80));
         this.acia.selectRs423(!!(val & 0x40));
     }
