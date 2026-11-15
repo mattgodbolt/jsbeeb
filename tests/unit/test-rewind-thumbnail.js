@@ -78,14 +78,22 @@ describe("previewFrame", () => {
     });
 
     it("goes no further than a tenth of a second when no field ends", async () => {
-        const { cpu, history, snapshots } = await historyRunning();
-        vi.spyOn(cpu.video, "flyback").mockImplementation(() => {});
+        const { cpu, history } = await historyRunning();
+        // Hsync past the line's end and vsync past the frame's: no sync at all, so the TV never flies back.
+        for (const [register, value] of [
+            [2, 0xff],
+            [7, 0x7f],
+        ]) {
+            cpu.video.crtc.write(0, register);
+            cpu.video.crtc.write(1, value);
+        }
+        const snapshot = cpu.snapshotState();
         const startField = cpu.video.fieldCount;
 
-        previewFrame(history, snapshots[0]);
+        previewFrame(history, snapshot);
 
         expect(cpu.video.fieldCount).toBe(startField);
-        const ran = cycleCount(cpu) - snapshotCycle(cpu, snapshots[0]);
+        const ran = cycleCount(cpu) - snapshotCycle(cpu, snapshot);
         expect(ran).toBeGreaterThanOrEqual(cpu.model.cyclesPerSecond / 10);
         expect(ran).toBeLessThan(cpu.model.cyclesPerSecond / 10 + LongestInstructionCycles);
     });

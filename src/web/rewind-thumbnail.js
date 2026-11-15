@@ -6,7 +6,7 @@ const ThumbnailHeight = 128;
 const FramebufferWidth = 1024;
 const FramebufferHeight = 625;
 const VisiblePixels = FramebufferWidth * FramebufferHeight;
-// As far as a preview runs if no field ends; the TV gives up waiting for vsync long before.
+// As far as a preview runs if no field ends, as when the CRTC gives neither hsync nor vsync.
 const LongestPreviewSeconds = 0.1;
 const FramesPerSecond = 50;
 
@@ -48,7 +48,7 @@ function captureThumbnail(fb32) {
 
 /**
  * Puts the machine at `snapshot`, one of `history`'s, and replays on from it with the inputs the host gave it then
- * (see InputLog's replay) until a complete top-to-bottom frame is in fb32. As a replay, no breakpoint or watch cuts
+ * (see InputLog's replay) until a complete top-to-bottom field is in fb32. As a replay, no breakpoint or watch cuts
  * it short and nothing it prints or speaks reaches the host.
  *
  * A snapshot may be mid-field, so it runs to the second flyback, with clearing suppressed after the first, so that
