@@ -727,6 +727,7 @@ describe("Video", () => {
         const Blue = 0xffff0000;
         const AllPixelsSet = 0xff;
         const LowNibbleSet = 0x0f;
+        const HighNibbleSet = 0xf0;
         const CellWidth = 16;
         const HalfCell = 8;
         const OutputLag = 4;
@@ -818,6 +819,27 @@ describe("Video", () => {
 
             expect(cell().slice(0, OutputLag)).toEqual(Array(OutputLag).fill(Red));
             expect(cell().slice(OutputLag, HalfCell)).not.toContain(Red);
+        });
+
+        it("repaints the last quarter of a 1MHz cell from the 2MHz table when the clock speeds up half way through", () => {
+            const paint = (mode) => {
+                aimAtCell();
+                cpu.data = HighNibbleSet;
+                for (let logical = 0; logical < 16; ++logical)
+                    video.ula.write(PaletteReg, (logical << 4) | ((logical >>> 1) ^ 7));
+                video.ula.write(ControlReg, mode);
+                video.polltime(1);
+                return cell();
+            };
+            const mode0 = paint(Mode0);
+            const before = paint(Mode4);
+            video.polltime(1);
+
+            video.ula.write(ControlReg, Mode0);
+
+            const expected = [...before.slice(0, 12), ...mode0.slice(OutputLag, HalfCell)];
+            expect(expected).not.toEqual(before);
+            expect(cell()).toEqual(expected);
         });
 
         it("keeps the cursor inverted when a write changes the clock rate half way through a 1MHz cell", () => {

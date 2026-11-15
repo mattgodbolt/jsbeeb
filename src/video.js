@@ -878,7 +878,7 @@ export class Video {
         );
     }
 
-    // A clock rate change can leave the span wider than the new mode's cell, so the table index wraps.
+    // After a clock rate change the span can run past the new mode's cell; the index wraps to its first pixels.
     blitFbSpan(dat, destOffset, fromPixel, toPixel) {
         const offset = table4bppOffset(this.ulaMode, dat);
         const colourLookup = this.pixelColours();
@@ -956,8 +956,7 @@ export class Video {
             this.fb32.copyWithin(offset + 1024 + fromPixel, offset + fromPixel, offset + toPixel);
         }
         if (this.cursorInvertedOffset === offset) {
-            const paintedWidth = wasHalfClock ? 2 * BitmapXPerClock : BitmapXPerClock;
-            this.invertForCursor(offset, fromPixel, Math.min(toPixel, paintedWidth));
+            this.invertForCursor(offset, fromPixel, toPixel);
         }
     }
 
