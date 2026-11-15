@@ -1207,18 +1207,19 @@ describe("Video", () => {
         const offset = 100 * FbWidth + 100;
 
         it.each`
-            what              | mode     | from          | to            | width | passed          | next
-            ${"switches on"}  | ${Mode0} | ${DisplayOff} | ${DisplayOn}  | ${8}  | ${White}        | ${White}
-            ${"switches off"} | ${Mode0} | ${DisplayOn}  | ${DisplayOff} | ${8}  | ${OPAQUE_BLACK} | ${OPAQUE_BLACK}
-            ${"switches on"}  | ${Mode4} | ${DisplayOff} | ${DisplayOn}  | ${16} | ${OPAQUE_BLACK} | ${White}
-            ${"switches off"} | ${Mode4} | ${DisplayOn}  | ${DisplayOff} | ${16} | ${White}        | ${OPAQUE_BLACK}
+            what              | where               | mode     | enabled                             | from          | to            | width | passed          | next
+            ${"switches on"}  | ${"in a 2MHz mode"} | ${Mode0} | ${EVERYTHINGENABLED}                | ${DisplayOff} | ${DisplayOn}  | ${8}  | ${White}        | ${White}
+            ${"switches off"} | ${"in a 2MHz mode"} | ${Mode0} | ${EVERYTHINGENABLED}                | ${DisplayOn}  | ${DisplayOff} | ${8}  | ${OPAQUE_BLACK} | ${OPAQUE_BLACK}
+            ${"switches on"}  | ${"in the border"}  | ${Mode0} | ${EVERYTHINGENABLED & ~HDISPENABLE} | ${DisplayOff} | ${DisplayOn}  | ${8}  | ${OPAQUE_BLACK} | ${OPAQUE_BLACK}
+            ${"switches on"}  | ${"in a 1MHz mode"} | ${Mode4} | ${EVERYTHINGENABLED}                | ${DisplayOff} | ${DisplayOn}  | ${16} | ${OPAQUE_BLACK} | ${White}
+            ${"switches off"} | ${"in a 1MHz mode"} | ${Mode4} | ${EVERYTHINGENABLED}                | ${DisplayOn}  | ${DisplayOff} | ${16} | ${White}        | ${OPAQUE_BLACK}
         `(
-            "$what from the cell just passed in a 2MHz mode only ($width wide cells)",
-            ({ mode, from, to, width, passed, next }) => {
+            "$what $where, from the cell just passed only in a 2MHz mode's display",
+            ({ mode, enabled, from, to, width, passed, next }) => {
                 video.ula.write(0, mode);
                 for (let logical = 0; logical < 16; ++logical) video.ula.write(1, logical << 4);
                 Object.assign(video, {
-                    dispEnabled: EVERYTHINGENABLED,
+                    dispEnabled: enabled,
                     horizCounter: 10,
                     bitmapX: 92,
                     bitmapY: 100,
