@@ -50,8 +50,8 @@ describe("Display", () => {
         return display;
     };
 
-    const paintedFrom = (frameSkipCount = 0, frameCount = 0) => ({
-        frameCount,
+    const paintedFrom = (frameSkipCount = 0, fieldCount = 0) => ({
+        fieldCount,
         fb32: new Uint32Array(FbWidth * 625),
         lineGrid: new Uint8Array(LineGridRows),
         lineBaseEven: 1,
@@ -195,20 +195,20 @@ describe("Display", () => {
         const display = make();
         display.onPaint(paintedFrom(0, 100), 0, 0, FbWidth, 8);
         animationFrames.run();
-        const restored = paintedFrom(0, 3);
+        const restored = paintedFrom(0, 103);
         restored.paintsAfresh = true;
         display.onPaint(restored, 0, 0, FbWidth, 8);
         animationFrames.run();
         expect(lastPainted().fields).toBe(250);
         expect(restored.paintsAfresh).toBe(false);
-        display.onPaint(paintedFrom(0, 4), 0, 0, FbWidth, 8);
+        display.onPaint(paintedFrom(0, 104), 0, 0, FbWidth, 8);
         animationFrames.run();
         expect(lastPainted().fields).toBe(1);
     });
 
     it("replaces the picture on a mode change rather than glowing the old mode through it", () => {
         const display = make({ mode: "pal" });
-        display.onPaint(paintedFrom(0, 10), 0, 0, FbWidth, 8);
+        display.onPaint(paintedFrom(), 0, 0, FbWidth, 8);
         animationFrames.run();
         display.setMode("rgb");
         animationFrames.run();
@@ -222,18 +222,6 @@ describe("Display", () => {
         fakeCanvas.setPersistence.mockClear();
         display.setPersistence("palPersistenceMs", 40);
         expect(fakeCanvas.setPersistence).not.toHaveBeenCalled();
-    });
-
-    it("counts the Atom's fields from the 6847, which syncs its count only after painting", () => {
-        const display = make({ model: { isMaster: false, isAtom: true } });
-        const atom = paintedFrom(0, 0);
-        atom.video6847 = { frameCount: 7 };
-        display.onPaint(atom, 0, 0, FbWidth, 8);
-        animationFrames.run();
-        atom.video6847.frameCount = 10;
-        display.onPaint(atom, 0, 0, FbWidth, 8);
-        animationFrames.run();
-        expect(lastPainted().fields).toBe(3);
     });
 
     it("schedules another present once the first has run", () => {

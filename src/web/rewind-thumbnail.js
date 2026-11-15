@@ -6,7 +6,7 @@ const ThumbnailHeight = 128;
 const FramebufferWidth = 1024;
 const FramebufferHeight = 625;
 const VisiblePixels = FramebufferWidth * FramebufferHeight;
-// As far as a preview runs if the display never ends, as with the CRTC's R6 programmed past R4.
+// As far as a preview runs if no field ends, as when the CRTC gives neither hsync nor vsync.
 const LongestPreviewSeconds = 0.1;
 const FramesPerSecond = 50;
 
@@ -48,26 +48,25 @@ function captureThumbnail(fb32) {
 
 /**
  * Puts the machine at `snapshot`, one of `history`'s, and replays on from it with the inputs the host gave it then
- * (see InputLog's replay) until a complete top-to-bottom frame is in fb32. As a replay, no breakpoint or watch cuts
+ * (see InputLog's replay) until a complete top-to-bottom field is in fb32. As a replay, no breakpoint or watch cuts
  * it short and nothing it prints or speaks reaches the host.
  *
- * A snapshot may be mid-frame, so it runs until the CRTC has ended the display of a second field (where the frame
- * count goes up), with clearing suppressed once the first has ended, so that fb32 holds the whole of the field
- * after it.
+ * A snapshot may be mid-field, so it runs to the second flyback, with clearing suppressed after the first, so that
+ * fb32 holds the whole of the field between them.
  */
 export function previewFrame(history, snapshot) {
     const { cpu } = history;
     const { video } = cpu;
-    let firstFrame = null;
-    let secondFrame = null;
+    let firstField = null;
+    let secondField = null;
     const clear = video.clearPaintBuffer;
     const wholeFrame = () => {
-        firstFrame ??= video.frameCount;
-        if (secondFrame === null && video.frameCount !== firstFrame) {
-            secondFrame = video.frameCount;
+        firstField ??= video.fieldCount;
+        if (secondField === null && video.fieldCount !== firstField) {
+            secondField = video.fieldCount;
             video.clearPaintBuffer = () => {};
         }
-        return secondFrame !== null && video.frameCount !== secondFrame;
+        return secondField !== null && video.fieldCount !== secondField;
     };
     try {
         const from = snapshotCycle(cpu, snapshot);

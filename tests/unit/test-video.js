@@ -17,6 +17,7 @@ import { shortestRun } from "../helpers/pixel-runs.js";
 import { expectSnapshotRoundTrips } from "../helpers/snapshot-round-trip.js";
 import { checkDrainsAgainstJs } from "../helpers/compare-drains.js";
 import { seededRandom } from "../helpers/seeded-random.js";
+import { CpuCyclesPerField, makeAtomVideo } from "../helpers/atom-video.js";
 
 const NulaPaletteModeOn = 0x11;
 const NulaPaletteModeOff = 0x10;
@@ -37,6 +38,7 @@ const FbHeight = 768;
 const ClocksPerScanline = 128;
 const ScanlinesPerFrame = 312;
 const ClocksPerFrame = ClocksPerScanline * ScanlinesPerFrame;
+const ScanlinesBeforeTvGivesUp = 384;
 const ClocksPerSecond = 2 * 1000 * 1000;
 
 /**
@@ -1338,8 +1340,52 @@ describe("Video", () => {
 
             v.run(ClocksPerSecond);
 
-            // The beam gives up and flies back every 384 scanlines.
-            expect(v.paints()).toBe(Math.floor(ClocksPerSecond / (384 * ClocksPerScanline)));
+            expect(v.paints()).toBe(Math.floor(ClocksPerSecond / (ScanlinesBeforeTvGivesUp * ClocksPerScanline)));
+        });
+    });
+
+    describe("the TV's field count", () => {
+        const Fields = 10;
+        const bbcWith = (program, fieldClocks) => () => {
+            const v = makeVideo();
+            program(v);
+            v.writeCrtc(6, 0x7f);
+            return { video: v.video, run: v.run, fieldClocks };
+        };
+        const atom = () => {
+            const { video } = makeAtomVideo();
+            return { video, run: (cycles) => video.polltime(Math.round(cycles)), fieldClocks: CpuCyclesPerField };
+        };
+
+        it.each([
+            ["a CRTC that never reaches R6", bbcWith(programStandardFrame, ClocksPerFrame)],
+            [
+                "a TV that gives up waiting for vsync",
+                bbcWith(programExternallySyncedTiming, ScanlinesBeforeTvGivesUp * ClocksPerScanline),
+            ],
+            ["the Atom's 6847", atom],
+        ])("advances once a field for %s", (_, setup) => {
+            const { video, run, fieldClocks } = setup();
+            const startField = video.fieldCount;
+            for (let clock = 0; clock < 2 * fieldClocks && video.fieldCount === startField; clock++) run(1);
+            const fieldCount = video.fieldCount;
+
+            run((Fields + 0.5) * fieldClocks);
+
+            expect(video.fieldCount - fieldCount).toBe(Fields);
+        });
+
+        it("paints one field in frameSkipCount when the CRTC never reaches R6", () => {
+            const v = makeVideo();
+            programStandardFrame(v);
+            v.writeCrtc(6, 0x7f);
+            v.video.frameSkipCount = 9;
+            v.run(ClocksPerFrame);
+            v.resetPaints();
+
+            v.run(2 * 9 * ClocksPerFrame);
+
+            expect(v.paints()).toBe(2);
         });
     });
 
