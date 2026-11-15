@@ -531,6 +531,8 @@ The FDC type depends on the model: Intel 8271 for BBC B models, WD1770 for Maste
 
 A `state` of 19 comes from a snapshot saved while a read address waited a byte after its last DRQ, a state the controller no longer has; on restore the command finishes, raising INTRQ after the usual 32 µs.
 
+A read sector now checks its data CRC as the second CRC byte arrives. An older snapshot saved in the byte it waited after that (`state` 8, `stateCount` two past the sector length) does the check on restore and ends the command as a newer one would; one saved in `checkMulti` (18) at the end of a single-sector read ends 5/8 of a byte after the next byte, so its INTRQ comes 4 5/8 byte-times after the last DRQ rather than 2 5/8.
+
 ### Disc drive (`state.fdc.drives[n]`)
 
 | Field             | Type         | Description                                                       |

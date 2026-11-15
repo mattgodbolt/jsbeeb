@@ -14,6 +14,7 @@ import {
     appendFmSector,
     appendMfmSector,
     blankDisc,
+    corruptSectorData,
     ssdDisc,
     fmDiscWithSector,
     mfmDiscWithSector,
@@ -52,7 +53,9 @@ const RestoreCommand = 0x08;
 const SeekCommand = 0x18;
 const StepOutWithUpdateCommand = 0x78;
 const ReadSectorCommand = 0x88;
+const ReadSectorMultiCommand = 0x98;
 const ReadAddressCommand = 0xc8;
+const WriteSectorCommand = 0xa8;
 const ReadTrackCommand = 0xe8;
 // The e flag adds the head settle delay.
 const SettleFlag = 0x04;
@@ -702,40 +705,106 @@ describe("WD1770 FDC tests", () => {
         });
     });
 
-    describe("read address", () => {
-        const IdBytes = 6;
+    describe("end of a command", () => {
+        const FmByteTicks = 2 * MfmByteTicks;
 
-        /** Takes each ID byte as its DRQ comes, a tick at a time, until INTRQ follows the last. */
-        function readAddressTiming(fdc, scheduler, cpu) {
+        /**
+         * Takes or supplies each byte as its DRQ comes, a tick at a time, until INTRQ follows the last.
+         *
+         * @returns {{bytes: Number[], busyAtLastDrq: Number, intRqTicks: Number}} the bytes read, the busy
+         *   bit at the last DRQ and the ticks from that DRQ to INTRQ
+         */
+        function lastDrqToIntRq(fdc, scheduler, cpu, command, drqs) {
+            const isWrite = command === WriteSectorCommand;
             const bytes = [];
             let lastDrqEpoch = 0;
             let busyAtLastDrq = 0;
             const start = scheduler.epoch;
-            fdc.write(CommandRegister, ReadAddressCommand);
-            while (bytes.length < IdBytes || !cpu.nmi) {
-                if (bytes.length < IdBytes && fdc.peek(StatusRegister) & StatusDrq) {
+            fdc.write(SectorRegister, 0);
+            fdc.write(CommandRegister, command);
+            while (bytes.length < drqs || !cpu.nmi) {
+                if (bytes.length < drqs && fdc.peek(StatusRegister) & StatusDrq) {
                     lastDrqEpoch = scheduler.epoch;
                     busyAtLastDrq = fdc.peek(StatusRegister) & StatusBusy;
-                    bytes.push(fdc.read(DataRegister));
+                    if (isWrite) {
+                        fdc.write(DataRegister, bytes.length);
+                        bytes.push(bytes.length);
+                    } else {
+                        bytes.push(fdc.read(DataRegister));
+                    }
                 }
                 scheduler.polltime(1);
-                if (scheduler.epoch - start > MaxCommandTicks) throw new Error("Read address never finished");
+                if (scheduler.epoch - start > MaxCommandTicks) throw new Error(`Command ${command} never finished`);
             }
-            return { bytes, busyAtLastDrq, intRqDelay: scheduler.epoch - lastDrqEpoch };
+            return { bytes, busyAtLastDrq, intRqTicks: scheduler.epoch - lastDrqEpoch };
         }
 
+        // Byte-times from the last DRQ to INTRQ, as a Master 128 measures them in both densities (#1852).
         it.each([
-            ["FM", fmDiscWithSector, ControlRunningDrive0Fm],
-            ["MFM", mfmDiscWithSector, ControlRunningDrive0],
-        ])("in %s raises INTRQ 32us after the last ID byte's DRQ, still busy at that DRQ", (_, discWith, control) => {
-            const { cpu, scheduler, fdc } = makeFdc({ disc: discWith({}), control });
-            const { bytes, busyAtLastDrq, intRqDelay } = readAddressTiming(fdc, scheduler, cpu);
-            expect(bytes.slice(0, 4)).toEqual([0, 0, 0, SectorLengthCode]);
-            expect(busyAtLastDrq).toBe(StatusBusy);
-            expect(intRqDelay).toBe(DoneTimerTicks);
-            expect(fdc.read(StatusRegister) & (StatusBusy | StatusCrcError)).toBe(0);
+            ["read address", ReadAddressCommand, 6, 0.5, false, 0],
+            ["read sector", ReadSectorCommand, SectorBytes, 2.625, false, 0],
+            ["read sector with a bad data CRC", ReadSectorCommand, SectorBytes, 2.625, true, StatusCrcError],
+            ["write sector", WriteSectorCommand, SectorBytes, 5.625, false, 0],
+        ])(
+            "raises INTRQ for %s a fixed number of byte-times after its last DRQ",
+            (_, command, drqs, byteTimes, isCorrupt, status) => {
+                for (const [discWith, control, byteTicks] of [
+                    [fmDiscWithSector, ControlRunningDrive0Fm, FmByteTicks],
+                    [mfmDiscWithSector, ControlRunningDrive0, MfmByteTicks],
+                ]) {
+                    const disc = discWith({});
+                    if (isCorrupt) corruptSectorData(disc.getTrack(false, 0), 0);
+                    const { cpu, scheduler, fdc } = makeFdc({ disc, control });
+                    // The disc's bytes come slower until it is up to speed; the controller's own delay does not.
+                    runCommand(fdc, scheduler, ReadAddressCommand & ~SpinUpWaitFlag);
+                    const { bytes, busyAtLastDrq, intRqTicks } = lastDrqToIntRq(fdc, scheduler, cpu, command, drqs);
+                    expect(bytes.length).toBe(drqs);
+                    expect(busyAtLastDrq).toBe(StatusBusy);
+                    // The drive rounds each byte's start to a whole tick, so a byte can be a tick long or short.
+                    expect(Math.abs(intRqTicks - byteTimes * byteTicks)).toBeLessThanOrEqual(1);
+                    expect(fdc.read(StatusRegister) & (StatusBusy | StatusCrcError | StatusLostData)).toBe(status);
+                }
+            },
+        );
+
+        it("goes on to the next sector of a multi-sector read", () => {
+            const disc = blankDisc();
+            const builder = disc.buildTrack(false, 0).appendRepeatMfmByte(0x4e, 60);
+            appendMfmSector(appendMfmSector(builder, { sector: 0 }), { sector: 1 }).fillMfmByte(0x4e);
+            const { scheduler, fdc } = makeFdc({ disc });
+            fdc.write(SectorRegister, 0);
+            const { bytes, status } = runCommand(fdc, scheduler, ReadSectorMultiCommand);
+            expect(bytes).toEqual([...sectorData(), ...sectorData()]);
+            expect(status & (StatusRecordNotFound | StatusCrcError)).toBe(StatusRecordNotFound);
         });
 
+        it("checks the data CRC from an older snapshot saved in the byte it once waited after the last CRC byte", () => {
+            const MfmReadSectorDoneTicks = 0.625 * MfmByteTicks;
+            const reading = () => makeFdc({ disc: mfmDiscWithSector({}) });
+            const original = reading();
+            original.fdc.write(SectorRegister, 0);
+            original.fdc.write(CommandRegister, ReadSectorCommand);
+            for (let drqs = 0; drqs < SectorBytes;) {
+                if (original.fdc.peek(StatusRegister) & StatusDrq) {
+                    original.fdc.read(DataRegister);
+                    drqs++;
+                }
+                original.scheduler.polltime(1);
+            }
+            const atLastData = original.fdc.snapshotState();
+            const saved = { ...atLastData, stateCount: SectorBytes + 2, onDiscCrc: atLastData.crc };
+
+            const { cpu, scheduler, fdc } = reading();
+            fdc.restoreState(saved);
+            scheduler.polltime(MfmReadSectorDoneTicks - 1);
+            expect(cpu.nmi).toBe(false);
+            scheduler.polltime(1);
+            expect(cpu.nmi).toBe(true);
+            expect(fdc.read(StatusRegister) & (StatusBusy | StatusCrcError)).toBe(0);
+        });
+    });
+
+    describe("read address", () => {
         it("finishes from an older snapshot saved in the byte it once waited after its last DRQ", () => {
             const reading = () => makeFdc({ disc: mfmDiscWithSector({}) });
             const original = reading();
