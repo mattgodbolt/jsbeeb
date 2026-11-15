@@ -1061,13 +1061,13 @@ describe("Video", () => {
                 },
             );
 
-            it("leaves the row above alone when a write keeping the display on ends interlace sync and video", () => {
+            it("paints the passed cell's own row when the write also ends interlace sync and video", () => {
                 const OddRow = 101;
                 video.ula.write(0, Mode0);
                 for (let logical = 0; logical < 16; ++logical) video.ula.write(1, logical << 4);
                 passCell(rig, () => {
                     video.bitmapY = OddRow;
-                    rig.writeCrtc(8, InterlaceSyncAndVideo);
+                    rig.writeCrtc(8, DisplayOff | InterlaceSyncAndVideo);
                 });
 
                 rig.writeCrtc(8, DisplayOn);

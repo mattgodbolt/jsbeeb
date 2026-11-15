@@ -336,7 +336,6 @@ class Crtc {
                     break;
                 case 8: {
                     this.video.renderPending();
-                    const wasEnabled = this.video.dispEnabled & USERDISPENABLE;
                     const skew = (val & 0x30) >>> 4;
                     if (skew < 3) {
                         this.video.displayEnableSkew = skew;
@@ -345,7 +344,7 @@ class Crtc {
                         this.video.dispEnableClear(USERDISPENABLE);
                     }
                     // Before the interlace bits change, as the cell was painted with the old ones.
-                    if ((this.video.dispEnabled & USERDISPENABLE) !== wasEnabled) this.video.repaintAfterR8Write();
+                    this.video.repaintAfterR8Write();
                     this.video.interlacedSyncAndVideo = (val & 3) === 3;
                     this.video.updateVSync();
                     break;
