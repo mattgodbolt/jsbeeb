@@ -137,7 +137,7 @@ export const State = Object.freeze({
     checkMulti: 18,
 });
 
-// Read address once spent a byte time here after its last DRQ before finishing; older snapshots can hold it.
+// A retired state older snapshots can hold; docs/snapshot-format.md says what restoring it does.
 const RetiredReadAddressDoneState = 19;
 
 /**

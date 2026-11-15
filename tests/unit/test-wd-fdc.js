@@ -746,7 +746,9 @@ describe("WD1770 FDC tests", () => {
 
             const { cpu, scheduler, fdc } = reading();
             fdc.restoreState(saved);
-            scheduler.polltime(DoneTimerTicks);
+            scheduler.polltime(DoneTimerTicks - 1);
+            expect(cpu.nmi).toBe(false);
+            scheduler.polltime(1);
             expect(cpu.nmi).toBe(true);
             expect(fdc.read(StatusRegister) & StatusBusy).toBe(0);
         });
