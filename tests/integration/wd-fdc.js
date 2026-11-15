@@ -22,6 +22,6 @@ describe("WD1770", () => {
         expect(
             resultLine(),
             "rdaddr-race.ssd hangs on a real Master: INTRQ must follow READ ADDRESS's last DRQ closely (#1850)",
-        ).toMatch(/^RESULT: HANG/);
+        ).toMatch(/^RESULT: HANG after 00000/);
     });
 });
