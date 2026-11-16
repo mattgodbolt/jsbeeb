@@ -3,11 +3,13 @@
 
 INCLUDE "contract.6502"
 
+\ The filing system's scratch space in zero page.
+ZA_POOL &B0..&BF
+
 OsAsci      = &FFE3
 OsByte      = &FFF4
 RomLatch    = &F4
 RomSel      = &FE30
-FsPtr       = &B0
 FscVector   = &021E
 FscNewFilingSystem = 6
 OsVectors   = &0212
@@ -130,6 +132,7 @@ ENDSECTION
 
 .claim
 {
+    ZA_AUTO2 ext_table
     TXA : PHA
     LDA #FscNewFilingSystem : JSR call_fsc
     LDX #2 * NumVectors - 1
@@ -137,12 +140,12 @@ ENDSECTION
     LDA os_entries,X : STA OsVectors,X
     DEX : BPL copy_os
     LDA #&A8 : LDX #0 : LDY #&FF : JSR OsByte
-    STX FsPtr : STY FsPtr + 1
+    STX ext_table : STY ext_table + 1
     LDX #0 : LDY #ExtVectorOffset
     .copy_ext
-    LDA handlers,X : STA (FsPtr),Y : INX : INY
-    LDA handlers,X : STA (FsPtr),Y : INX : INY
-    LDA RomLatch : STA (FsPtr),Y : INY
+    LDA handlers,X : STA (ext_table),Y : INX : INY
+    LDA handlers,X : STA (ext_table),Y : INX : INY
+    LDA RomLatch : STA (ext_table),Y : INY
     CPX #2 * NumVectors : BNE copy_ext
     LDA #&8F : LDX #&0F : LDY #&FF : JSR OsByte
     PLA : TAX
@@ -153,6 +156,7 @@ ENDSECTION
     JMP (FscVector)
 
 .os_entries
+\ The extended vector entry points of every MOS and filing system ROM from DFS 0.9 to the Compact's.
     EQUW &FF1B, &FF1E, &FF21, &FF24, &FF27, &FF2A, &FF2D
 .handlers
     EQUW vec_file, vec_args, vec_bget, vec_bput, vec_gbpb, vec_find, vec_fsc

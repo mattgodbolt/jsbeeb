@@ -4,6 +4,8 @@ import { describe, expect, it } from "vitest";
 
 import { Call, FilingSystemNumber, FirstHandle, HostId, LastHandle, Op, Port, PortBase } from "../../src/vdfs-host.js";
 import { RepoRoot } from "../integration/helpers.js";
+import { fake6502 } from "../../src/fake6502.js";
+import { findModel } from "../../src/models.js";
 import { directory, file, getLong, hostWith, putLong, putString, text } from "../helpers/vdfs.js";
 
 const Carry = 0x01;
@@ -596,6 +598,12 @@ describe("VDFS host", () => {
             expect(help.a).toBe(9);
             expect((await service(t, 9, { line: "VDFS" })).ops[0].text).toMatch(/ACCESS CAT CDIR DELETE DIR/);
             expect((await service(t, 9, { line: "OTHER" })).ops).toEqual([]);
+        });
+    });
+
+    describe("machines it is not for", () => {
+        it.each([["Atom-Tape"], ["BBC B (MOS 0.10)"]])("is refused by the %s, which it would break", (name) => {
+            expect(() => fake6502(findModel(name), { vdfs: { volume: {} } })).toThrow(/VDFS is not for/);
         });
     });
 

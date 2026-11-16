@@ -61,6 +61,12 @@ Commands: `*VDFS`, `*CAT`, `*DIR`, `*LIB`, `*CDIR`, `*DELETE`, `*ACCESS` (`L` or
 `*` and `#` wildcards), and `*HELP VDFS`. Directories are as ADFS has them: `$` is the root, `@` the current
 directory, `%` the library, `^` the parent, and a `:0.` drive is ignored.
 
+VDFS needs a MOS that takes service ROMs, so it is for the BBC models other than the Atom and MOS 0.10, which takes the
+first ROM in its sockets for its language and does not boot with one that is not. It has been run on MOS 1.20, the US and
+German MOS and the Master's MOS 3.20 (with the DFS, ADFS and ANFS). The filing system vectors are claimed through the
+OS's extended vector entry points, `&FF1B` to `&FF2D`, which every filing system ROM jsbeeb has (DFS, ADFS, ANFS, DNFS)
+and the Master's and the Compact's MOS contain.
+
 Not done: `OSGBPB` 5 to 8, `OSFILE` 7, `*RENAME`, `*COPY`, `*TITLE`, sector access (`OSWORD` &7F, or a game that
 drives the disc controller itself), and the second processor: an address that is not in the I/O processor (`&FFFFxxxx`)
 is an error when one is fitted. A snapshot does not hold open files, and restoring one closes them.

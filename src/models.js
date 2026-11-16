@@ -33,6 +33,7 @@ class Model {
         romSockets,
         fdc,
         cmosOverride,
+        takesServiceRoms = true,
         banks,
         clockMhz,
         idleAddress,
@@ -76,6 +77,8 @@ class Model {
         this.romSockets = romSockets ?? NumRomBanks;
         this.isTest = !!isTest;
         this.cmosOverride = cmosOverride;
+        // MOS 0.10 takes the first ROM in the sockets for its language, whatever its type says.
+        this.takesServiceRoms = takesServiceRoms;
     }
 
     /**
@@ -233,6 +236,7 @@ export const allModels = [
         vsyncAddress: 0xdf12,
         swram: noSwram,
         romSockets: 4,
+        takesServiceRoms: false,
     }),
     masterModel({
         name: "BBC Master 128 (DFS)",

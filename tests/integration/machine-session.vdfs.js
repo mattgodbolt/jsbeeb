@@ -37,36 +37,39 @@ describe("VDFS in a running machine", () => {
         return session.drainOutput().screenText.replace(line, "").replace(/>\s*$/, "").trim();
     }
 
-    describe.each([["B-DFS1.2"], ["Master"]])("on a %s", (model) => {
-        it(
-            "saves and loads files, and keeps the BASIC program that was saved",
-            async () => {
-                await boot(model);
-                await enter("*VDFS");
-                await enter('10 PRINT "FROM VDFS"');
-                await enter('SAVE "PROG"');
-                await enter("NEW");
-                expect(await enter('CHAIN "PROG"')).toBe("FROM VDFS");
-                await session.flushVdfs();
-                expect((await readFile(path.join(folder, "PROG"))).length).toBeGreaterThan(10);
-            },
-            BootTimeout,
-        );
+    describe.each([["B-DFS1.2"], ["Master"], ["BBC B (US)"], ["BBC B (German)"], ["BBC Master 128 (ANFS)"]])(
+        "on a %s",
+        (model) => {
+            it(
+                "saves and loads files, and keeps the BASIC program that was saved",
+                async () => {
+                    await boot(model);
+                    await enter("*VDFS");
+                    await enter('10 PRINT "FROM VDFS"');
+                    await enter('SAVE "PROG"');
+                    await enter("NEW");
+                    expect(await enter('CHAIN "PROG"')).toBe("FROM VDFS");
+                    await session.flushVdfs();
+                    expect((await readFile(path.join(folder, "PROG"))).length).toBeGreaterThan(10);
+                },
+                BootTimeout,
+            );
 
-        it(
-            "serves a file that was in the folder, with the addresses its .inf gives",
-            async () => {
-                await writeFile(path.join(folder, "HELLO"), Uint8Array.of(0x48, 0x49));
-                await writeFile(path.join(folder, "HELLO.inf"), "$.HELLO 00003000 00003000\n");
-                await boot(model);
-                await enter("*VDFS");
-                expect(await enter("*INFO")).toContain("HELLO        00003000 00003000 000002");
-                await enter("*LOAD HELLO");
-                expect(await enter("PRINT ?&3000")).toBe("72");
-            },
-            BootTimeout,
-        );
-    });
+            it(
+                "serves a file that was in the folder, with the addresses its .inf gives",
+                async () => {
+                    await writeFile(path.join(folder, "HELLO"), Uint8Array.of(0x48, 0x49));
+                    await writeFile(path.join(folder, "HELLO.inf"), "$.HELLO 00003000 00003000\n");
+                    await boot(model);
+                    await enter("*VDFS");
+                    expect(await enter("*INFO")).toContain("HELLO        00003000 00003000 000002");
+                    await enter("*LOAD HELLO");
+                    expect(await enter("PRINT ?&3000")).toBe("72");
+                },
+                BootTimeout,
+            );
+        },
+    );
 
     it(
         "lists a folder, goes into a directory of it, and says Bad command for what is not one",

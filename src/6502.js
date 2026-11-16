@@ -815,7 +815,8 @@ export class Cpu6502 extends Base6502 {
         this.hasMusic5000 = !!this.config.hasMusic5000;
         this.hasTeletextAdaptor = !!this.config.hasTeletextAdaptor;
         this.teletextAdaptor = this.hasTeletextAdaptor ? new TeletextAdaptor(this) : null;
-        if (this.config.vdfs && model.isAtom) throw new Error("VDFS is for the BBC models, not the Atom");
+        if (this.config.vdfs && (model.isAtom || !model.takesServiceRoms))
+            throw new Error(`VDFS is not for the ${model.name}: it is for a BBC with a MOS that takes service ROMs`);
         this.vdfs = this.config.vdfs ? new VdfsHost(this, this.config.vdfs.volume) : null;
         this.tube = this.hasTube
             ? new Tube6502(this.config.tube, this, { cpuMultiplier: this.config.tubeCpuMultiplier })
