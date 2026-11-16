@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { initialise } from "../../../src/app/electron.js";
+import { desktopVdfs, initialise } from "../../../src/app/electron.js";
 import { teardownDom } from "../helpers.js";
 
 describe("the Electron hooks", () => {
@@ -109,5 +109,28 @@ describe("the Electron hooks", () => {
         expect(api.saveSettings).toHaveBeenCalledWith({ disc: undefined, disc1: "file:///discs/b.ssd" });
         deps.media.slots.dispatchEvent(new CustomEvent("changed", { detail: { slot: { ...slot, busy: {} } } }));
         expect(api.saveSettings).toHaveBeenCalledTimes(1);
+    });
+
+    describe("VDFS", () => {
+        it("gives the volume the main process's store, when the app was started with a folder to serve", async () => {
+            const store = {
+                load: vi.fn().mockResolvedValue([]),
+                writeFile: vi.fn(),
+                makeDirectory: vi.fn(),
+                remove: vi.fn(),
+            };
+            window.electronAPI = { vdfs: store };
+            const vdfs = desktopVdfs({ vdfs: true });
+            await vdfs.volume.load();
+            expect(store.load).toHaveBeenCalled();
+            expect(vdfs.volume.store).toBe(store);
+        });
+
+        it("gives nothing when there is no folder, or no app", () => {
+            window.electronAPI = { vdfs: {} };
+            expect(desktopVdfs({})).toBeNull();
+            delete window.electronAPI;
+            expect(desktopVdfs({ vdfs: true })).toBeNull();
+        });
     });
 });

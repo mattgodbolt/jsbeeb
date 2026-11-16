@@ -12,6 +12,13 @@ contextBridge.exposeInMainWorld("electronAPI", {
     saveSettings: (settings) => ipcRenderer.send("save-settings", settings),
     setPanels: (panels) => ipcRenderer.send("set-panels", panels),
     onTogglePanel: (callback) => ipcRenderer.on("toggle-panel", (event, message) => callback(message)),
+    // The store behind a VDFS volume, whose folder only the main process can reach.
+    vdfs: {
+        load: () => ipcRenderer.invoke("vdfs-load"),
+        writeFile: (path, details) => ipcRenderer.invoke("vdfs-write-file", path, details),
+        makeDirectory: (path) => ipcRenderer.invoke("vdfs-make-directory", path),
+        remove: (path) => ipcRenderer.invoke("vdfs-remove", path),
+    },
 });
 
 window.addEventListener("DOMContentLoaded", () => {

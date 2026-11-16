@@ -2,6 +2,7 @@
 // Handles IPC communication for loading disc/tape images and showing modals from Electron's main process.
 
 import { describeRef } from "../web/media-catalogue.js";
+import { VdfsVolume } from "../vdfs-volume.js";
 
 function init(args) {
     const { loadStateFile, modals, actions, settings, media, panels } = args;
@@ -58,4 +59,9 @@ export function isDesktopApp() {
 
 export function initialise(args) {
     if (isDesktopApp()) init(args);
+}
+
+/** @returns {{volume: VdfsVolume} | null} the folder the app was asked to serve as VDFS, whose files its main process holds */
+export function desktopVdfs(query) {
+    return isDesktopApp() && query.vdfs ? { volume: new VdfsVolume(window.electronAPI.vdfs) } : null;
 }

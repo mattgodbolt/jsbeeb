@@ -5,8 +5,45 @@ import * as path from "path";
 import { ArgumentParser } from "argparse";
 
 import { getArguments } from "./args.js";
+import { FsStore } from "../vdfs-fs-store.js";
 
 const store = new Store();
+
+// The folder served as VDFS is the main process's to name: the page can only use the one it was given.
+let vdfsStore = store.get("vdfsFolder") ? new FsStore(store.get("vdfsFolder")) : null;
+const pendingVdfsOperations = new Set();
+
+function vdfsOperation(run) {
+    if (!vdfsStore) return Promise.reject(new Error("No folder is being served as VDFS"));
+    const operation = Promise.resolve().then(() => run(vdfsStore));
+    pendingVdfsOperations.add(operation);
+    const forget = () => pendingVdfsOperations.delete(operation);
+    operation.then(forget, forget);
+    return operation;
+}
+
+const isVolumePath = (value) =>
+    Array.isArray(value) && value.length > 0 && value.every((name) => typeof name === "string");
+
+ipcMain.handle("vdfs-load", () => vdfsOperation((vdfs) => vdfs.load()));
+ipcMain.handle("vdfs-write-file", (event, volumePath, details) => {
+    if (!isVolumePath(volumePath) || !(details?.data instanceof Uint8Array))
+        throw new Error("Not a VDFS file to write");
+    const { data, load, exec, locked } = details;
+    return vdfsOperation((vdfs) =>
+        vdfs.writeFile(volumePath, { data, load: load >>> 0, exec: exec >>> 0, locked: !!locked }),
+    );
+});
+ipcMain.handle("vdfs-make-directory", (event, volumePath) => {
+    if (!isVolumePath(volumePath)) throw new Error("Not a VDFS directory to make");
+    return vdfsOperation((vdfs) => vdfs.makeDirectory(volumePath));
+});
+ipcMain.handle("vdfs-remove", (event, volumePath) => {
+    if (!isVolumePath(volumePath)) throw new Error("Not a VDFS file to remove");
+    return vdfsOperation((vdfs) => vdfs.remove(volumePath));
+});
+
+let menuPanels = [];
 
 ipcMain.on("set-title", (event, title) => {
     const webContents = event.sender;
@@ -14,7 +51,10 @@ ipcMain.on("set-title", (event, title) => {
     if (win) win.setTitle(title);
 });
 
-ipcMain.on("set-panels", (event, panels) => setMenu(panels));
+ipcMain.on("set-panels", (event, panels) => {
+    menuPanels = panels;
+    setMenu(panels);
+});
 
 ipcMain.on("save-settings", (event, settings) => {
     const current = store.get("settings", {});
@@ -51,6 +91,8 @@ function getFileParam(filename) {
     }
 }
 
+const pageQuery = () => ({ ...store.get("settings", {}), ...(vdfsStore && { vdfs: 1 }) });
+
 async function createWindow() {
     const iconPath = path.join(import.meta.dirname, "..", "..", "public", "jsbeeb-icon.png");
     const icon = nativeImage.createFromPath(iconPath);
@@ -65,8 +107,7 @@ async function createWindow() {
     });
 
     // Load saved settings, then override with command-line args
-    const savedSettings = store.get("settings", {});
-    const query = { ...savedSettings };
+    const query = pageQuery();
     if (args.disc1 && !args.noboot) query.autoboot = true;
     if (args.disc1) query.disc1 = getFileParam(args.disc1);
     if (args.disc2) query.disc2 = getFileParam(args.disc2);
@@ -78,7 +119,8 @@ async function createWindow() {
 }
 
 app.on("window-all-closed", function () {
-    if (process.platform !== "darwin") app.quit();
+    // What the BBC wrote to the VDFS folder is still on its way to it.
+    if (process.platform !== "darwin") Promise.allSettled([...pendingVdfsOperations]).then(() => app.quit());
 });
 
 app.whenReady()
@@ -110,6 +152,24 @@ const loadDisc = (drive) =>
         message: { drive },
         setting: `settings.disc${drive + 1}`,
     });
+
+/** Serves `folder` as VDFS, or no folder, and starts the page again, which has to be built with it. */
+async function serveVdfsFolder(browserWindow, folder) {
+    await Promise.allSettled([...pendingVdfsOperations]);
+    if (folder) store.set("vdfsFolder", folder);
+    else store.delete("vdfsFolder");
+    vdfsStore = folder ? new FsStore(folder) : null;
+    setMenu(menuPanels);
+    await browserWindow.loadFile("dist/index.html", { query: pageQuery() });
+}
+
+async function chooseVdfsFolder(_, browserWindow) {
+    const result = await dialog.showOpenDialog(browserWindow, {
+        title: "Choose a folder to serve as VDFS",
+        properties: ["openDirectory", "createDirectory"],
+    });
+    if (!result.canceled) await serveVdfsFolder(browserWindow, result.filePaths[0]);
+}
 
 function showModal(modalId) {
     return (_, browserWindow) => {
@@ -191,6 +251,15 @@ const template = (panels) => [
             {
                 label: "Discs and Tapes...",
                 click: sendAction("media"),
+            },
+            {
+                label: "Serve VDFS Folder...",
+                click: chooseVdfsFolder,
+            },
+            {
+                label: "Stop Serving VDFS Folder",
+                enabled: vdfsStore !== null,
+                click: (_, browserWindow) => serveVdfsFolder(browserWindow, null),
             },
             { type: "separator" },
             {
