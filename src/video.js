@@ -954,13 +954,16 @@ export class Video {
     // The render loop paints a cell whole on the tick that fetches it, so the part of it from a write's edge on is
     // repainted with the new state. A 1MHz cell spans two ticks and is painted on the first, so after the second the
     // beam is half way through it. The repaint runs to where the next tick paints: a switch to 1MHz with oddClock set
-    // widens the cell just painted, and one to 2MHz narrows it. A write while teletext shows changes nothing painted.
+    // widens the cell just painted, and one to 2MHz narrows it. A write while teletext shows changes nothing painted
+    // beyond widening.
     repaintAfterUlaWrite(edgeTexels, wasHalfClock, wasTeletext) {
-        if (wasTeletext && this.teletextMode) return;
+        const widens = !wasHalfClock && this.halfClock && this.oddClock;
+        if (wasTeletext && this.teletextMode && !widens) return;
         if ((this.dispEnabled & EVERYTHINGENABLED) !== EVERYTHINGENABLED) return;
         const beamIntoCell = wasHalfClock && !this.oddClock ? BitmapXPerClock : 0;
         const toPixel = beamIntoCell + (this.halfClock && this.oddClock ? WideCellTexels : BitmapXPerClock);
-        this.repaintCell(beamIntoCell, beamIntoCell + edgeTexels, toPixel);
+        const fromPixel = wasTeletext && this.teletextMode ? BitmapXPerClock : beamIntoCell + edgeTexels;
+        this.repaintCell(beamIntoCell, fromPixel, toPixel);
     }
 
     repaintAfterR8Write() {

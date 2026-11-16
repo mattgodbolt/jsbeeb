@@ -965,6 +965,22 @@ describe("Video", () => {
             },
         );
 
+        it.each`
+            screen             | from                           | to
+            ${"MODE 0"}        | ${Mode0}                       | ${Mode0 & ~TwoMhzClock}
+            ${"2MHz teletext"} | ${Mode4Teletext | TwoMhzClock} | ${Mode4Teletext}
+        `("paints the widened half of a cell when $screen slows to 1MHz after the cell's tick", ({ from, to }) => {
+            const Unpainted = 0xff00ff00;
+            video.ula.write(ControlReg, from);
+            video.polltime(1);
+            video.renderPending();
+            fb.fill(Unpainted, offset + HalfCell, offset + CellWidth);
+
+            video.ula.write(ControlReg, to);
+
+            expect(cell().slice(HalfCell)).not.toContain(Unpainted);
+        });
+
         it("repaints a wide cell only up to where the next tick paints after a switch to 2MHz", () => {
             distinctPalette();
             cpu.data = LowNibbleSet;
