@@ -379,18 +379,23 @@ describe("Video", () => {
             ["clear", TeletextAddress - 0x1000, true],
         ])("draws a teletext cell black only with MA13 %s", (_, addr, black) => {
             const WhiteGraphics = 0x17;
+            const NewBackground = 0x1d;
             const SolidBlock = 0x7f;
             const PipelineCells = 3;
             const CellPixels = 16;
+            const TicksPerCell = 2;
             video.ula.write(0, Mode4Teletext);
             video.regs[7] = 30; // keep vsync, and the flyback that clears the framebuffer, away from the cell
-            video.addr = addr;
             fb.fill(0xffffffff);
 
-            cpu.data = WhiteGraphics;
-            video.polltime(1);
+            // A white background first, so a cell the chip shows as background is not black.
+            for (const byte of [WhiteGraphics, NewBackground]) {
+                cpu.data = byte;
+                video.polltime(TicksPerCell);
+            }
+            video.addr = addr;
             cpu.data = SolidBlock;
-            video.polltime(2 * (PipelineCells + 1));
+            video.polltime(TicksPerCell * PipelineCells + 1);
             video.renderPending();
 
             const cell = [...fb.subarray(100 * FbWidth + video.bitmapX, 100 * FbWidth + video.bitmapX + CellPixels)];
@@ -872,21 +877,21 @@ describe("Video", () => {
 
         // A 1MHz cell is painted on the first of its two ticks, so after the second the beam is half way through it.
         it.each`
-            what              | mode             | ticks | data            | reg           | val               | width        | from
-            ${"palette"}      | ${Mode0}         | ${1}  | ${AllPixelsSet} | ${PaletteReg} | ${SetPixelsGreen} | ${HalfCell}  | ${3}
-            ${"palette"}      | ${Mode1}         | ${1}  | ${AllPixelsSet} | ${PaletteReg} | ${SetPixelsGreen} | ${HalfCell}  | ${2}
-            ${"palette"}      | ${Mode2}         | ${1}  | ${AllPixelsSet} | ${PaletteReg} | ${SetPixelsGreen} | ${HalfCell}  | ${0}
-            ${"palette"}      | ${Mode4}         | ${1}  | ${AllPixelsSet} | ${PaletteReg} | ${SetPixelsGreen} | ${CellWidth} | ${2}
-            ${"palette"}      | ${Mode4}         | ${2}  | ${AllPixelsSet} | ${PaletteReg} | ${SetPixelsGreen} | ${CellWidth} | ${10}
-            ${"palette"}      | ${Mode5}         | ${1}  | ${AllPixelsSet} | ${PaletteReg} | ${SetPixelsGreen} | ${CellWidth} | ${0}
-            ${"palette"}      | ${Mode5}         | ${2}  | ${AllPixelsSet} | ${PaletteReg} | ${SetPixelsGreen} | ${CellWidth} | ${8}
-            ${"mode"}         | ${Mode0}         | ${1}  | ${LowNibbleSet} | ${ControlReg} | ${Mode1}          | ${HalfCell}  | ${3}
-            ${"teletext on"}  | ${Mode5}         | ${1}  | ${AllPixelsSet} | ${ControlReg} | ${Mode5Teletext}  | ${CellWidth} | ${0}
-            ${"teletext on"}  | ${Mode4}         | ${1}  | ${AllPixelsSet} | ${ControlReg} | ${Mode4Teletext}  | ${CellWidth} | ${2}
-            ${"teletext off"} | ${Mode5Teletext} | ${1}  | ${AllPixelsSet} | ${ControlReg} | ${Mode5}          | ${CellWidth} | ${0}
-            ${"teletext off"} | ${Mode4Teletext} | ${1}  | ${AllPixelsSet} | ${ControlReg} | ${Mode4}          | ${CellWidth} | ${2}
+            what              | screen               | mode             | ticks | data            | reg           | val               | width        | from
+            ${"palette"}      | ${"MODE 0"}          | ${Mode0}         | ${1}  | ${AllPixelsSet} | ${PaletteReg} | ${SetPixelsGreen} | ${HalfCell}  | ${3}
+            ${"palette"}      | ${"MODE 1"}          | ${Mode1}         | ${1}  | ${AllPixelsSet} | ${PaletteReg} | ${SetPixelsGreen} | ${HalfCell}  | ${2}
+            ${"palette"}      | ${"MODE 2"}          | ${Mode2}         | ${1}  | ${AllPixelsSet} | ${PaletteReg} | ${SetPixelsGreen} | ${HalfCell}  | ${0}
+            ${"palette"}      | ${"MODE 4"}          | ${Mode4}         | ${1}  | ${AllPixelsSet} | ${PaletteReg} | ${SetPixelsGreen} | ${CellWidth} | ${2}
+            ${"palette"}      | ${"MODE 4"}          | ${Mode4}         | ${2}  | ${AllPixelsSet} | ${PaletteReg} | ${SetPixelsGreen} | ${CellWidth} | ${10}
+            ${"palette"}      | ${"MODE 5"}          | ${Mode5}         | ${1}  | ${AllPixelsSet} | ${PaletteReg} | ${SetPixelsGreen} | ${CellWidth} | ${0}
+            ${"palette"}      | ${"MODE 5"}          | ${Mode5}         | ${2}  | ${AllPixelsSet} | ${PaletteReg} | ${SetPixelsGreen} | ${CellWidth} | ${8}
+            ${"mode"}         | ${"MODE 0"}          | ${Mode0}         | ${1}  | ${LowNibbleSet} | ${ControlReg} | ${Mode1}          | ${HalfCell}  | ${3}
+            ${"teletext on"}  | ${"MODE 5"}          | ${Mode5}         | ${1}  | ${AllPixelsSet} | ${ControlReg} | ${Mode5Teletext}  | ${CellWidth} | ${0}
+            ${"teletext on"}  | ${"MODE 4"}          | ${Mode4}         | ${1}  | ${AllPixelsSet} | ${ControlReg} | ${Mode4Teletext}  | ${CellWidth} | ${2}
+            ${"teletext off"} | ${"MODE 5 teletext"} | ${Mode5Teletext} | ${1}  | ${AllPixelsSet} | ${ControlReg} | ${Mode5}          | ${CellWidth} | ${0}
+            ${"teletext off"} | ${"MODE 4 teletext"} | ${Mode4Teletext} | ${1}  | ${AllPixelsSet} | ${ControlReg} | ${Mode4}          | ${CellWidth} | ${2}
         `(
-            "shows a $what write in mode $mode from texel $from, after tick $ticks of the cell",
+            "shows a $what write in $screen from texel $from, after tick $ticks of the cell",
             ({ mode, ticks, data, reg, val, width, from }) => {
                 const paintCell = (writeFirst) => {
                     aimAtCell();
@@ -908,11 +913,15 @@ describe("Video", () => {
         );
 
         it("repaints nothing for a palette write while teletext shows", () => {
+            const Black = 0;
+            ({ video, fb, cpu } = rig = makeVideo({ hasVideoNula: true }));
+            aimAtCell();
             video.ula.write(ControlReg, Mode4Teletext);
             video.polltime(1);
             const before = cell();
+            expect(before).toContain(OPAQUE_BLACK);
 
-            video.ula.write(PaletteReg, SetPixelsGreen);
+            programNulaColour(rig, Black, 0xf, 0x0, 0x0);
 
             expect(cell()).toEqual(before);
         });
