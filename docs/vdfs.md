@@ -46,7 +46,8 @@ take and so sees the boot service call first. `*VDFS` does it, and `autotype` ca
   break. A machine that is stopped with a file open does not write it. A file that has been deleted or replaced while
   it is open is no longer written.
 - In the desktop app, serving or stopping a folder starts the page again, which discards the machine that was running.
-  The page is asked to hand over what the BBC wrote first, and to stop writing; so is a window that is closed.
+  The page is asked to hand over what the BBC wrote first, and to stop writing, so what the BBC saves in the moment
+  before the page is replaced is dropped; so is a window that is closed, or an app that is quit.
 - The BBC is told its write succeeded before the folder has it. A write that then fails is logged, and the page says
   so in a toast (`volume.onPersistFailure`), but the BBC does not hear of it.
 

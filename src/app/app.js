@@ -116,7 +116,7 @@ async function createWindow() {
     // What the BBC has written is handed over before the window goes, for the writes that close would not wait for.
     let flushedForClose = false;
     win.on("close", (event) => {
-        if (!vdfsStore || flushedForClose) return;
+        if (!vdfsStore || flushedForClose || readyToQuit) return;
         event.preventDefault();
         askPageToFlush(win)
             .then(() => Promise.allSettled([...pendingVdfsOperations]))
@@ -131,6 +131,20 @@ async function createWindow() {
         if (BrowserWindow.getAllWindows().length === 0) createWindow();
     });
 }
+
+// A quit closes the windows, and a close the page has not flushed for is held back, which would cancel the quit.
+let readyToQuit = false;
+app.on("before-quit", (event) => {
+    const windows = BrowserWindow.getAllWindows();
+    if (readyToQuit || !vdfsStore || windows.length === 0) return;
+    event.preventDefault();
+    Promise.all(windows.map(askPageToFlush))
+        .then(() => Promise.allSettled([...pendingVdfsOperations]))
+        .finally(() => {
+            readyToQuit = true;
+            app.quit();
+        });
+});
 
 app.on("window-all-closed", function () {
     // What the BBC wrote to the VDFS folder is still on its way to it.
@@ -194,7 +208,9 @@ async function serveVdfsFolder(browserWindow, folder) {
             vdfsStore = folder ? new FsStore(folder) : null;
             setMenu(menuPanels);
         },
-        loadPage: () => browserWindow.loadFile("dist/index.html", { query: pageQuery() }),
+        loadPage: async () => {
+            if (!browserWindow.isDestroyed()) await browserWindow.loadFile("dist/index.html", { query: pageQuery() });
+        },
     });
 }
 
