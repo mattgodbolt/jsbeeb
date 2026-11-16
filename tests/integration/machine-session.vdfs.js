@@ -1,7 +1,7 @@
 import { mkdtemp, readFile, readdir, rm, writeFile, mkdir } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { MachineSession } from "../../src/machine-session.js";
 import { BootTimeout } from "../helpers/machine-session.js";
@@ -131,6 +131,14 @@ describe("VDFS in a running machine", () => {
         },
         BootTimeout,
     );
+
+    it("refuses to start when the folder cannot be read, naming it", async () => {
+        const missing = path.join(folder, "not-there");
+        vi.spyOn(console, "error").mockImplementation(() => {});
+        session = new MachineSession("B-DFS1.2", { vdfsFolder: missing });
+        await expect(session.initialise()).rejects.toThrow(`Cannot read the VDFS folder ${missing}`);
+        vi.restoreAllMocks();
+    });
 
     it(
         "keeps out of the way when its ROM is fitted to a machine with no host",

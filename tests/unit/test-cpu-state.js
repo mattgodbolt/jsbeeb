@@ -931,6 +931,13 @@ describe("Cpu6502 VDFS", () => {
         expect(romTitles(cpu)).toContain("VDFS");
     });
 
+    it("fits its ROM into a higher bank than the ROMs the user adds, which take what is left", async () => {
+        const cpu = fake6502(findModel("B-DFS1.2"), { vdfsVolume: volumeOf(), extraRoms: ["ats-3.0.rom"] });
+        await cpu.initialise();
+        const titles = romTitles(cpu);
+        expect(titles.indexOf("VDFS")).toBeGreaterThan(titles.findIndex((title) => title.startsWith("ATS")));
+    });
+
     it("fits no ROM, and has no host, without a volume", async () => {
         const cpu = fake6502(findModel("B-DFS1.2"));
         await cpu.initialise();

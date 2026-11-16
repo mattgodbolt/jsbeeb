@@ -100,9 +100,13 @@ describe("VDFS volume", () => {
     });
 
     describe("persistence", () => {
-        beforeEach(() => {});
+        beforeEach(() => {
+            vi.spyOn(console, "error").mockImplementation(() => {});
+        });
 
-        afterEach(() => {});
+        afterEach(() => {
+            vi.restoreAllMocks();
+        });
 
         it("hands changes to the store in the order they were made, one at a time", async () => {
             const store = new MemoryStore();

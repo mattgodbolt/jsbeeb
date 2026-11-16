@@ -63,7 +63,7 @@ take and so sees the boot service call first. `*VDFS` does it, and `autotype` ca
 ## What it does
 
 Filing system calls: `OSFILE` 0 to 6, 8 and &FF; `OSFIND`, `OSBGET`, `OSBPUT`, `OSARGS` (the file's pointer and
-extent, and the filing system's number), `OSGBPB` 1 to 4, and `FSC` for `*OPT`, EOF, `*RUN`, `*CAT`, `*EX`, `*INFO`
+extent, and the filing system's number), `OSGBPB` 1 to 4, and `FSC` for EOF, `*RUN`, `*CAT`, `*EX`, `*INFO`
 and unrecognised commands, which are run as a program if they name a file in the current directory or the library.
 
 Commands: `*VDFS`, `*CAT`, `*DIR`, `*LIB`, `*CDIR`, `*DELETE`, `*ACCESS` (`L` or nothing), `*INFO` and `*EX` (with
@@ -76,8 +76,8 @@ German MOS and the Master's MOS 3.20 (with the DFS, ADFS and ANFS). The filing s
 OS's extended vector entry points, `&FF1B` to `&FF2D`, which every filing system ROM jsbeeb has (DFS, ADFS, ANFS, DNFS)
 and the Master's and the Compact's MOS contain.
 
-Not done: `OSGBPB` 5 to 8, `OSFILE` 7, `*RENAME`, `*COPY`, `*TITLE`, `*OPT` (accepted and ignored), sector access (`OSWORD` &7F, or a game that
-drives the disc controller itself), and the second processor: an address that is not in the I/O processor (`&FFFFxxxx`)
+Not done: `OSGBPB` 5 to 8, `OSFILE` 7, `*RENAME`, `*COPY`, `*TITLE`, `*OPT` (it is accepted and ignored), sector
+access (`OSWORD` &7F, or a game that drives the disc controller itself), and the second processor: an address that is not in the I/O processor (`&FFFFxxxx`)
 is an error when one is fitted. A snapshot does not hold open files, and restoring one closes them.
 
 ## The ROM and the host
@@ -108,7 +108,7 @@ The ROM reads ID before it forwards a service call, and hands the call back to t
 Calls 1 to 7 are the filing system's vectors, with the registers and flags the OS gave them; call 0 is the ROM's
 service entry, with A the service number, X the ROM's slot and Y the parameter. The ROM forwards services 4 (command),
 9 (help) and &12 (filing system selected). The numbers are in `roms-src/vdfs/contract.6502`, and
-`tests/unit/test-vdfs-host.js` fails if `src/vdfs-host.js` has different ones.
+`tests/unit/test-vdfs-protocol.js` fails if `src/vdfs-protocol.js` has different ones.
 
 | Call | Meaning |
 | ---- | ------- |
