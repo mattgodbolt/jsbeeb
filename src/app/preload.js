@@ -21,6 +21,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
                 ipcRenderer.send("vdfs-flushed");
             }
         }),
+    // Main says the folder has changed, so that the calls it held back can go on.
+    onVdfsChanged: (callback) => ipcRenderer.on("vdfs-changed", () => callback()),
     // The store behind a VDFS volume, whose folder only the main process can reach.
     vdfs: {
         find: (directory, name) => ipcRenderer.invoke("vdfs-find", directory, name),

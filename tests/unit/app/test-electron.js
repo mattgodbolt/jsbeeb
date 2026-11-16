@@ -127,17 +127,39 @@ describe("the Electron hooks", () => {
 
         describe("attached to the page", () => {
             const attached = () => {
-                const host = { flush: vi.fn(), closeAll: vi.fn().mockResolvedValue(), onWriteFailure: null };
-                window.electronAPI = { onVdfsFlush: vi.fn() };
+                const host = {
+                    flush: vi.fn(),
+                    hold: vi.fn().mockResolvedValue(),
+                    release: vi.fn(),
+                    onWriteFailure: null,
+                };
+                window.electronAPI = { onVdfsFlush: vi.fn(), onVdfsChanged: vi.fn() };
                 const notify = vi.fn();
                 attachDesktopVdfs(host, { notify });
                 return { host, notify };
             };
 
-            it("closes what is open, writing it, when the main process is about to change folder", async () => {
+            it("holds the BBC, with its files written, when the main process is about to change folder", async () => {
                 const { host } = attached();
                 await window.electronAPI.onVdfsFlush.mock.calls[0][0]();
-                expect(host.closeAll).toHaveBeenCalled();
+                expect(host.hold).toHaveBeenCalled();
+                expect(host.release).not.toHaveBeenCalled();
+            });
+
+            it("lets the BBC go on when the main process says the folder has changed", async () => {
+                const { host } = attached();
+                await window.electronAPI.onVdfsFlush.mock.calls[0][0]();
+                window.electronAPI.onVdfsChanged.mock.calls[0][0]();
+                expect(host.release).toHaveBeenCalled();
+            });
+
+            it("lets the BBC go on anyway if the main process never does", async () => {
+                vi.useFakeTimers();
+                const { host } = attached();
+                await window.electronAPI.onVdfsFlush.mock.calls[0][0]();
+                vi.advanceTimersByTime(10000);
+                expect(host.release).toHaveBeenCalled();
+                vi.useRealTimers();
             });
 
             it("hands over what has been written when the page goes", () => {

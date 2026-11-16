@@ -24,4 +24,5 @@ export const Errors = Object.freeze({
     unsupported: (what) => new VdfsError(0x94, `${what} is not supported`),
     eof: () => new VdfsError(0xdf, "EOF"),
     discFault: (reason) => new VdfsError(0xc8, `Disc fault: ${reason}`),
+    discChanged: () => new VdfsError(0xc9, "Disc changed"),
 });

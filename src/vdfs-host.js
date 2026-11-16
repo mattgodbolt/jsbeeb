@@ -58,6 +58,8 @@ const ObjectNone = 0;
 const ObjectFile = 1;
 const ObjectDirectory = 2;
 
+const IpcPrefix = /^Error invoking remote method '[^']*': (Error: )?/;
+const MissingErrors = new Set([Errors.notFound().number, Errors.badName().number, Errors.notDirectory().number]);
 const hasAddresses = (entry) => entry.load !== 0 || entry.exec !== 0;
 const blockAddress = ({ x, y }) => x | (y << 8);
 const accessFlag = (entry) => (entry.isDirectory ? "D" : entry.locked ? "L" : " ");
@@ -87,6 +89,9 @@ export class VdfsHost {
         /** @type {(error: Error) => void} called when a file that was open could not be written, once the BBC has gone */
         this.onWriteFailure = (error) => console.error("VDFS could not write a file:", error);
         this._writes = new Set();
+        /** @type {Promise<void> | null} while there is one, calls wait for it: the folder is changing */
+        this._held = null;
+        this._release = null;
         this._commands = {
             ACCESS: (argument, response, fs) => this._access(argument, fs),
             CAT: (argument, response, fs) => this._catalogue(argument, response, fs),
@@ -115,7 +120,7 @@ export class VdfsHost {
     /** A break: the OS has gone back to its own filing system, and files open on the old one are closed. */
     reset() {
         this.ports.reset();
-        this._background(this._writeBackAll(this.channels.takeAll(), this._via(null)));
+        this._background(this._writeBackEach(this.channels.takeAll()));
         this.selected = false;
         this._reselecting = false;
         this.directory = [];
@@ -124,16 +129,45 @@ export class VdfsHost {
 
     /** @returns {Promise<void>} once what the BBC has written, open files included, is in the store */
     async flush() {
-        this._background(this._writeBackAll(this.channels.all(), this._via(null)));
+        this._background(this._writeBackEach(this.channels.all()));
         await Promise.allSettled([...this._writes]);
     }
 
-    /** Closes every file, written back, and the current directory and library are the root's. For a store that is to change. */
+    /** Closes every file, written back, and the current directory and library are the root's. */
     async closeAll() {
-        this._background(this._writeBackAll(this.channels.takeAll(), this._via(null)));
+        this._background(this._writeBackEach(this.channels.takeAll()));
         this.directory = [];
         this.library = [];
         await Promise.allSettled([...this._writes]);
+    }
+
+    /**
+     * For a store that is about to change: a call that is waiting is ended with "Disc changed", every file is written
+     * to the store it came from and closed, and calls made from now on wait until `release()`.
+     */
+    async hold() {
+        this.ports.abort(Errors.discChanged());
+        this._held = new Promise((resolve) => (this._release = resolve));
+        await this.closeAll();
+    }
+
+    /** Lets the calls that have waited go on, to the store there is now. */
+    release() {
+        this._release?.();
+        this._held = null;
+        this._release = null;
+    }
+
+    /** Writes each file back, reporting the ones that cannot be, and going on to the rest. */
+    async _writeBackEach(channels) {
+        const fs = this._via(null);
+        for (const channel of channels) {
+            try {
+                await this._writeBack(channel, fs);
+            } catch (error) {
+                this.onWriteFailure(error);
+            }
+        }
     }
 
     _background(promise) {
@@ -150,7 +184,7 @@ export class VdfsHost {
                 try {
                     result = await this.store[method](...args);
                 } catch (error) {
-                    throw error instanceof VdfsError ? error : Errors.discFault(error.message);
+                    throw error instanceof VdfsError ? error : Errors.discFault(error.message.replace(IpcPrefix, ""));
                 }
                 turn?.check();
                 return result;
@@ -163,7 +197,19 @@ export class VdfsHost {
         );
     }
 
+    /** @returns {Promise<unknown> | null} what a call has to wait for before it is done: a folder change, or writes owed */
+    _mustWait() {
+        if (this._held) return this._held;
+        return this._writes.size > 0 ? Promise.allSettled([...this._writes]) : null;
+    }
+
     _dispatch(call, registers, response, turn) {
+        const waiting = this._mustWait();
+        if (waiting)
+            return waiting.then(() => {
+                turn.check();
+                return this._dispatch(call, registers, response, turn);
+            });
         const fs = this._via(turn);
         switch (call) {
             case Call.service:
@@ -240,15 +286,16 @@ export class VdfsHost {
 
     // ---- Service calls ----
 
-    async _service(registers, response, fs) {
+    _service(registers, response, fs) {
         switch (registers.a) {
             case Service.command: {
                 const { name, argument } = this._parseCommand(this._commandLine(registers.y));
                 if (name === Title) {
                     this._select(response);
                     registers.a = 0;
-                } else if (this.selected && (await this._runCommand(name, argument, response, fs))) {
-                    registers.a = 0;
+                } else if (this.selected) {
+                    const outcome = this._runCommand(name, argument, response, fs);
+                    if (outcome) return outcome.then(() => (registers.a = 0));
                 }
                 break;
             }
@@ -372,12 +419,12 @@ export class VdfsHost {
 
     // ---- Open files ----
 
-    async _find(registers, fs) {
-        if (registers.a === Osfind.close) {
-            if (registers.y === 0) await this._writeBackAll(this.channels.takeAll(), fs);
-            else await this._writeBack(this.channels.take(registers.y), fs);
-            return;
-        }
+    _find(registers, fs) {
+        if (registers.a !== Osfind.close) return this._open(registers, fs);
+        return registers.y === 0 ? this._closeOpen(fs) : this._close(this.channels.get(registers.y), fs);
+    }
+
+    async _open(registers, fs) {
         const { path, entry } = await this._resolve(this.memory.filename(blockAddress(registers)), fs);
         const mode = registers.a & OsfindModeMask;
         if (entry?.isDirectory) throw Errors.isDirectory();
@@ -403,22 +450,52 @@ export class VdfsHost {
         registers.a = this.channels.open(new Channel({ path, data, info, writable: mode !== Osfind.read }));
     }
 
-    /** Writes a file that has been written to back to the store, once, unless it has been deleted or replaced since. */
-    async _writeBack(channel, fs) {
-        if (!channel.dirty || channel.detached) return;
-        await fs.writeFile(channel.path, { data: channel.bytes.slice(), ...channel.info });
+    /**
+     * Writes a file that has been written to back to the store, once, unless it has been deleted or replaced since.
+     * It is not marked as written until it is, and again as not if it is not, for the BBC may write to it meanwhile.
+     *
+     * @returns {Promise<void> | undefined} nothing to wait for, when there is nothing to write
+     */
+    _writeBack(channel, fs) {
+        if (!channel.dirty || channel.detached) return undefined;
         channel.dirty = false;
+        return fs.writeFile(channel.path, { data: channel.bytes.slice(), ...channel.info }).catch((error) => {
+            channel.dirty = true;
+            throw error;
+        });
     }
 
-    async _writeBackAll(channels, fs) {
-        for (const channel of channels) await this._writeBack(channel, fs);
+    /** Closes a file once it is written back, so that one that cannot be written is still there to be written again. */
+    _close(channel, fs) {
+        const writing = this._writeBack(channel, fs);
+        if (!writing) return this.channels.release(channel);
+        return writing.then(() => this.channels.release(channel));
     }
 
-    async _args(registers, fs) {
+    /** Closes every file, stopping at one that cannot be written, and leaving it and the rest open. */
+    _closeOpen(fs) {
+        const open = this.channels.all();
+        if (!open.some((channel) => channel.dirty && !channel.detached))
+            return open.forEach((channel) => this.channels.release(channel));
+        return (async () => {
+            for (const channel of open) await this._close(channel, fs);
+        })();
+    }
+
+    /** Writes every file back that needs it, leaving them open. */
+    _flushOpen(fs) {
+        const dirty = this.channels.all().filter((channel) => channel.dirty && !channel.detached);
+        if (dirty.length === 0) return undefined;
+        return (async () => {
+            for (const channel of dirty) await this._writeBack(channel, fs);
+        })();
+    }
+
+    _args(registers, fs) {
         if (registers.y === 0) {
             if (registers.a === OsargsFilingSystem) registers.a = FilingSystemNumber;
-            else if (registers.a === Osargs.flush) await this._writeBackAll(this.channels.all(), fs);
-            return;
+            else if (registers.a === Osargs.flush) return this._flushOpen(fs);
+            return undefined;
         }
         const channel = this.channels.get(registers.y);
         const block = registers.x;
@@ -436,9 +513,9 @@ export class VdfsHost {
                 channel.setLength(this.memory.long(block));
                 break;
             case Osargs.flush:
-                await this._writeBack(channel, fs);
-                break;
+                return this._writeBack(channel, fs);
         }
+        return undefined;
     }
 
     _bget(registers) {
@@ -479,7 +556,7 @@ export class VdfsHost {
 
     // ---- Filing system calls and commands ----
 
-    async _fsc(registers, response, fs) {
+    _fsc(registers, response, fs) {
         const text = () => this.memory.text(blockAddress(registers));
         switch (registers.a) {
             case Fsc.eof:
@@ -487,22 +564,16 @@ export class VdfsHost {
                 break;
             case Fsc.slashRun:
             case Fsc.run:
-                await this._run(text(), response, fs);
-                break;
-            case Fsc.unrecognised: {
-                const { name, argument } = this._parseCommand(text());
-                if (!(await this._runCommand(name, argument, response, fs)))
-                    await this._run(text(), response, fs, { orElse: Errors.badCommand });
-                break;
-            }
+                return this._run(text(), response, fs);
+            case Fsc.unrecognised:
+                return this._unrecognised(text(), response, fs);
             case Fsc.catalogue:
-                await this._catalogue(text().trim(), response, fs);
-                break;
+                return this._catalogue(text().trim(), response, fs);
             case Fsc.newFilingSystem:
                 if (this._reselecting) this._reselecting = false;
                 else {
                     this.selected = false;
-                    await this._writeBackAll(this.channels.takeAll(), fs);
+                    return this._closeOpen(fs);
                 }
                 break;
             case Fsc.handles:
@@ -510,12 +581,17 @@ export class VdfsHost {
                 registers.y = LastHandle;
                 break;
             case Fsc.examine:
-                await this._examine(text().trim(), response, { extended: true }, fs);
-                break;
+                return this._examine(text().trim(), response, { extended: true }, fs);
             case Fsc.info:
-                await this._examine(text().trim(), response, { extended: false }, fs);
-                break;
+                return this._examine(text().trim(), response, { extended: false }, fs);
         }
+        return undefined;
+    }
+
+    async _unrecognised(line, response, fs) {
+        const { name, argument } = this._parseCommand(line);
+        if (!(await this._runCommand(name, argument, response, fs)))
+            await this._run(line, response, fs, { orElse: Errors.badCommand });
     }
 
     _parseCommand(line) {
@@ -523,11 +599,10 @@ export class VdfsHost {
         return { name: match[1].toUpperCase(), argument: match[2].trim() };
     }
 
-    /** @returns {Promise<boolean>} whether `name` is one of the commands, which has then been run */
-    async _runCommand(name, argument, response, fs) {
+    /** @returns {Promise<boolean> | false} false if `name` is not one of the commands, else the command, run */
+    _runCommand(name, argument, response, fs) {
         if (!Object.hasOwn(this._commands, name)) return false;
-        await this._commands[name](argument, response, fs);
-        return true;
+        return Promise.resolve(this._commands[name](argument, response, fs)).then(() => true);
     }
 
     async _makeDirectory(argument, fs) {
@@ -570,7 +645,7 @@ export class VdfsHost {
             try {
                 return await this._resolve(name, fs, { current });
             } catch (error) {
-                if (error instanceof VdfsError) return undefined;
+                if (error instanceof VdfsError && MissingErrors.has(error.number)) return undefined;
                 throw error;
             }
         };

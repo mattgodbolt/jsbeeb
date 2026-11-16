@@ -203,6 +203,28 @@ describe("VDFS folder store", () => {
         });
     });
 
+    describe("writing only what the BBC could have made", () => {
+        it.each([
+            ["a name that would be a .inf file", () => store.writeFile(["a/inf"], written())],
+            ["a name that is too long", () => store.writeFile(["ELEVENCHARS"], written())],
+            ["a directory with such a name", () => store.makeDirectory(["a/inf"])],
+            ["information for one", () => store.setInfo(["a/inf"], { locked: true })],
+            ["the removal of one", () => store.remove(["a/inf"])],
+            ["the removal of the root", () => store.remove([])],
+            ["a write to the root", () => store.writeFile([], written())],
+        ])("refuses %s", async (_, attempt) => {
+            await fs.writeFile(path.join(root, "a"), "x");
+            await fs.writeFile(path.join(root, "a.inf"), "$.a 1900 1900");
+            await expect(attempt()).rejects.toThrow(/not a name VDFS can write/);
+            expect((await fs.readdir(root)).sort()).toEqual(["a", "a.inf"]);
+        });
+
+        it("says that a file is not there, and not where on the disc it was looked for, when asked to change one that is not", async () => {
+            const error = await store.setInfo(["GONE"], { locked: true }).catch((caught) => caught);
+            expect(error.message).toBe("GONE is not there");
+        });
+    });
+
     describe("staying in the folder", () => {
         it.each([["/"], ["//"]])("will not write to %j, which is a dot or two as a host name", async (name) => {
             await expect(store.writeFile([name], written())).rejects.toThrow();

@@ -103,6 +103,16 @@ export class VdfsPorts {
         return this._streams.size;
     }
 
+    /** Ends a call that is waiting with an error, for when what it was waiting for is not there any more. */
+    abort(error) {
+        if (!this._busy) return;
+        this._epoch++;
+        const response = new Response();
+        response.error(error.number, error.message);
+        this._responseStream = this._newStream(response.bytes);
+        this._busy = false;
+    }
+
     /** A break: a call under way has no one to answer, and no response is left unread. */
     reset() {
         this._epoch++;

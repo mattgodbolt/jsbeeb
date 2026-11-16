@@ -20,9 +20,9 @@ ROM waits for the answer, as it would for a disc.
 ## Using it
 
 In the desktop app, File, Serve VDFS Folder... chooses a folder. If none was being served the page starts again with it,
-which fits the ROM; if one was, the machine goes on and the new folder is what the BBC's next call finds, as though the
-disc had been swapped: what is open is written to the old folder and closed, and the current directory and library go back
-to the root. Stop Serving VDFS Folder starts the page again without it.
+which fits the ROM; if one was, the machine goes on, as though the disc had been swapped: a call that is waiting ends
+with "Disc changed", what is open is written to the old folder and closed, the current directory and library go back to
+the root, and the BBC's next call finds the new folder. Stop Serving VDFS Folder starts the page again without it.
 
 In Node, give `MachineSession` a folder:
 
@@ -57,8 +57,10 @@ take and so sees the boot service call first. `*VDFS` does it, and `autotype` ca
 - A symbolic link is not followed, in either direction. Every host path is checked to be inside the folder before it
   is used, since what runs on the BBC is not to be trusted with the rest of the disc.
 - A file opened for output is made as it is opened, empty, as a disc's catalogue would have it, and is filled as it is
-  closed, by a close of handle 0, `OSARGS` with A=&FF, or a break. A machine that is stopped with a file open does not
-  write it. A file that has been deleted or replaced while it is open is no longer written.
+  closed, by a close of handle 0, `OSARGS` with A=&FF, or a break. Closing every file stops at one that cannot be
+  written, and leaves it and the rest open to be written again. A machine that is stopped, as when the emulator is
+  closed, with a file open does not write it. A file that has been deleted or replaced while it is open is no longer
+  written.
 - A transfer is of memory the 6502 has: no more than 64K at a time, not over the devices (`&FC00` to `&FEFF`), and not
   past the top. A file is at most 16 MB.
 - A store that cannot do what is asked, such as a full disc or a folder it may not write, gives the BBC an error,
@@ -137,6 +139,18 @@ that has finished at once, as one with a store that is in Node's `fs` can, is no
 
 The host does what the call needs in memory, and writes the answer, only once its store has answered. A break while a
 call is waiting ends the call: its answer is not given, and it does not go on to change a machine that has restarted.
+A call that does not use the store, such as `OSBGET`, `OSBPUT`, the file pointer and extent, or a check for the end of a
+file, is not busy at all.
+
+Some things follow from that:
+
+- A call made while files from before a break are still being written waits for them, so that it sees them.
+- The filing system is not re-entrant, as the DFS is not: a call made from an interrupt while one is waiting ends the
+  one that was waiting, which then returns nothing.
+- A call that a break has ended may still have a request on its way to the store, and its result will not be used. An
+  `OSFIND` for output that a break catches at the wrong moment may leave an empty file behind.
+- A store that never answers leaves the BBC waiting until BREAK. There is no timeout.
+- Cycle counts depend on how long the store takes, so a replay or a rewind over a VDFS call is not exact.
 
 ### The response
 

@@ -6,7 +6,7 @@ import { ArgumentParser } from "argparse";
 
 import { getArguments } from "./args.js";
 import { FsStore } from "../vdfs-fs-store.js";
-import { drainVdfs, swapVdfsFolder } from "./vdfs-swap.js";
+import { drainVdfs, pageKeepsRunning, swapVdfsFolder } from "./vdfs-swap.js";
 
 const store = new Store();
 
@@ -221,7 +221,7 @@ function askPageToFlush(browserWindow) {
 /** Serves `folder` as VDFS, or no folder, and starts the page again, which has to be built with it. */
 async function serveVdfsFolder(browserWindow, folder) {
     // A page that has VDFS already has its ROM, and finds the new folder on its next call; any other starts again.
-    const pageHasVdfs = vdfsStore !== null && folder !== null;
+    const pageHasVdfs = pageKeepsRunning({ wasServing: vdfsStore !== null, folder });
     await swapVdfsFolder({
         flushPages: () => (vdfsStore ? [askPageToFlush(browserWindow)] : []),
         inFlight: () => pendingVdfsOperations,
@@ -232,8 +232,9 @@ async function serveVdfsFolder(browserWindow, folder) {
             setMenu(menuPanels);
         },
         loadPage: async () => {
-            if (!pageHasVdfs && !browserWindow.isDestroyed())
-                await browserWindow.loadFile("dist/index.html", { query: pageQuery() });
+            if (browserWindow.isDestroyed()) return;
+            if (pageHasVdfs) browserWindow.webContents.send("vdfs-changed");
+            else await browserWindow.loadFile("dist/index.html", { query: pageQuery() });
         },
     });
 }

@@ -107,6 +107,12 @@ export class ChannelTable {
         return channel;
     }
 
+    /** Lets go of a file that has been written back, if it is still open. */
+    release(channel) {
+        const slot = this._channels.indexOf(channel);
+        if (slot >= 0) this._channels[slot] = null;
+    }
+
     /** Closes a file, which is the caller's to write back. */
     take(handle) {
         const channel = this.get(handle);

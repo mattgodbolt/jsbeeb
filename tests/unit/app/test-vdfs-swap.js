@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { drainVdfs, swapVdfsFolder } from "../../../src/app/vdfs-swap.js";
+import { drainVdfs, pageKeepsRunning, swapVdfsFolder } from "../../../src/app/vdfs-swap.js";
 
 const later = (events, event) => new Promise((resolve) => setTimeout(resolve, 5)).then(() => events.push(event));
 
@@ -18,6 +18,17 @@ describe("draining VDFS", () => {
         await expect(
             drainVdfs({ flushPages: () => [], inFlight: () => [Promise.reject(new Error("disc full"))] }),
         ).resolves.toBeUndefined();
+    });
+});
+
+describe("the page that is running while the VDFS folder changes", () => {
+    it.each([
+        [true, "/new", true],
+        [true, null, false],
+        [false, "/new", false],
+        [false, null, false],
+    ])("when it was served: %s, and the folder is now %s, keeps running: %s", (wasServing, folder, keeps) => {
+        expect(pageKeepsRunning({ wasServing, folder })).toBe(keeps);
     });
 });
 

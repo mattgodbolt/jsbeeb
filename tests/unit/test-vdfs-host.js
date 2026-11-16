@@ -698,6 +698,175 @@ describe("VDFS host", () => {
         });
     });
 
+    describe("writing files back", () => {
+        it("keeps every file open, to be written again, when one cannot be written as they are all closed", async () => {
+            const t = hostWith();
+            const [first, second] = [(await t.open("ONE", Osfind.write)).a, (await t.open("TWO", Osfind.write)).a];
+            await t.call(Call.bput, { a: 1, y: first });
+            await t.call(Call.bput, { a: 2, y: second });
+            const writeFile = t.store.writeFile.bind(t.store);
+            let failing = true;
+            t.store.writeFile = async (path, details) => {
+                if (failing) throw new Error("disc full");
+                return writeFile(path, details);
+            };
+            expect(errorOf(await t.call(Call.find, { a: Osfind.close, y: 0 })).text).toBe("Disc fault: disc full");
+            failing = false;
+            await t.host.flush();
+            expect([t.get("ONE").data.length, t.get("TWO").data.length]).toEqual([1, 1]);
+        });
+
+        it("keeps a file open when it cannot be written as it is closed, so that closing it again can", async () => {
+            const t = hostWith();
+            const handle = (await t.open("OUT", Osfind.write)).a;
+            await t.call(Call.bput, { a: 1, y: handle });
+            const writeFile = t.store.writeFile.bind(t.store);
+            t.store.writeFile = async () => {
+                throw new Error("disc full");
+            };
+            expect(errorOf(await t.call(Call.find, { a: Osfind.close, y: handle })).text).toMatch(/Disc fault/);
+            t.store.writeFile = writeFile;
+            await t.call(Call.find, { a: Osfind.close, y: handle });
+            expect(t.get("OUT").data.length).toBe(1);
+        });
+
+        it("makes a call wait for a flush that is under way, and writes what the BBC adds after it, when it is closed", async () => {
+            const t = hostWith();
+            const handle = (await t.open("OUT", Osfind.write)).a;
+            await t.call(Call.bput, { a: 0x41, y: handle });
+            const writeFile = t.store.writeFile.bind(t.store);
+            let release;
+            const gate = new Promise((resolve) => (release = resolve));
+            t.store.writeFile = async (path, details) => {
+                await gate;
+                return writeFile(path, details);
+            };
+            const flushing = t.host.flush();
+            const putting = t.call(Call.bput, { a: 0x42, y: handle });
+            await new Promise((resolve) => setImmediate(resolve));
+            expect(t.host.read(Port.call)).toBe(Busy);
+            release();
+            await flushing;
+            await putting;
+            t.store.writeFile = writeFile;
+            await t.call(Call.find, { a: Osfind.close, y: handle });
+            expect(text(t.get("OUT").data)).toBe("AB");
+        });
+
+        it("makes a call made after a break wait for the files the break wrote, so that it sees them", async () => {
+            const t = hostWith();
+            const handle = (await t.open("OUT", Osfind.write)).a;
+            await t.call(Call.bput, { a: 0x41, y: handle });
+            t.host.reset();
+            await t.osfile(Osfile.readInformation, "OUT");
+            expect(getLong(t.cpu, Block + 10)).toBe(1);
+        });
+    });
+
+    describe("a folder that is about to change", () => {
+        it("ends the call that is waiting with Disc changed, writes what is open to the folder it came from, and waits", async () => {
+            const t = hostWith([file("DATA", "HELLO")]);
+            const writing = (await t.open("OUT", Osfind.write)).a;
+            await t.call(Call.bput, { a: 0x41, y: writing });
+            let release;
+            const gate = new Promise((resolve) => (release = resolve));
+            const find = t.store.find.bind(t.store);
+            t.store.find = async (...args) => {
+                await gate;
+                return find(...args);
+            };
+            const pending = t.osfile(Osfile.readInformation, "DATA");
+            await new Promise((resolve) => setImmediate(resolve));
+            await t.host.hold();
+            expect(errorOf(await pending).text).toBe("Disc changed");
+            release();
+            t.host.release();
+            expect(text(t.get("OUT").data)).toBe("A");
+            expect(errorOf(await t.call(Call.bget, { y: writing })).text).toBe("Channel");
+        });
+
+        it("makes the calls that come while it is held go to the new folder, once it is released", async () => {
+            const t = hostWith([file("OLD", "x")]);
+            await t.host.hold();
+            putString(t.cpu, Name, "NEW");
+            t.cpu.memory[Block] = Name & 0xff;
+            t.cpu.memory[Block + 1] = Name >> 8;
+            for (const [port, value] of [
+                [Port.a, Osfile.readInformation],
+                [Port.x, Block & 0xff],
+                [Port.y, Block >> 8],
+            ])
+                t.host.write(port, value);
+            t.host.write(Port.call, Call.file);
+            await new Promise((resolve) => setImmediate(resolve));
+            expect(t.host.read(Port.call)).toBe(Busy);
+            t.host.store = new MemoryStore([file("NEW", "abc")]);
+            t.host.release();
+            await new Promise((resolve) => setImmediate(resolve));
+            expect(t.host.read(Port.call)).toBe(0);
+            t.host.write(Port.stream, t.host.read(Port.stream));
+            expect(getLong(t.cpu, Block + 10)).toBe(3);
+        });
+    });
+
+    describe("what the BBC waits for", () => {
+        it.each([
+            ["OSBGET", () => ({ call: Call.bget, registers: { y: FirstHandle } })],
+            ["OSBPUT", () => ({ call: Call.bput, registers: { y: FirstHandle, a: 1 } })],
+            [
+                "OSARGS for the pointer",
+                () => ({ call: Call.args, registers: { a: Osargs.pointer, x: 0x70, y: FirstHandle } }),
+            ],
+            ["OSARGS for the filing system", () => ({ call: Call.args, registers: { a: 0, y: 0 } })],
+            ["a check for the end of a file", () => ({ call: Call.fsc, registers: { a: 1, x: FirstHandle } })],
+            ["a request for the range of handles", () => ({ call: Call.fsc, registers: { a: 7 } })],
+            ["a service call it does not take", () => ({ call: Call.service, registers: { a: 0x0f } })],
+            ["a command it is not asked to run", () => ({ call: Call.service, registers: { a: 4 } })],
+            [
+                "a close of a file that has not been written to",
+                () => ({ call: Call.find, registers: { a: 0, y: FirstHandle } }),
+            ],
+        ])("is nothing, for %s, which does not use the store", async (_, make) => {
+            const t = hostWith([file("DATA", "x")]);
+            await t.open("DATA", Osfind.read);
+            const { call, registers } = make();
+            for (const [port, value] of Object.entries({ a: 0, x: 0, y: 0, p: 0, ...registers }))
+                t.host.write(Port[port], value);
+            t.host.write(Port.call, call);
+            expect(t.host.read(Port.call)).toBe(0);
+        });
+
+        it("is the store, for a call that uses it", async () => {
+            const t = hostWith([file("DATA", "x")]);
+            putString(t.cpu, Name, "DATA");
+            for (const [port, value] of Object.entries({
+                a: Osfind.read,
+                ...Object.fromEntries(Object.entries(xy(Name))),
+            }))
+                t.host.write(Port[port], value);
+            t.host.write(Port.call, Call.find);
+            expect(t.host.read(Port.call)).toBe(Busy);
+        });
+
+        it("is a disc fault, with the reason and not the IPC's wrapping of it, when the main process's store fails", async () => {
+            const t = hostWith([file("DATA", "x")]);
+            t.store.read = async () => {
+                throw new Error("Error invoking remote method 'vdfs-read': Error: EACCES: permission denied");
+            };
+            expect(errorOf(await t.osfile(Osfile.load, "DATA", { load: Data })).text).toBe(
+                "Disc fault: EACCES: permission denied",
+            );
+        });
+
+        it("is the disc fault, and not Bad command or File not found, when the store fails while a file is looked for to run", async () => {
+            const t = hostWith([file("PROG", "x", Program)]);
+            t.store.find = async () => {
+                throw new Error("EIO");
+            };
+            expect(errorOf(await t.command("PROG")).text).toBe("Disc fault: EIO");
+        });
+    });
+
     describe("the store it serves", () => {
         it("is told to close everything, and the current directory and library are the root's, when it is to change", async () => {
             const t = hostWith([directory("D")]);

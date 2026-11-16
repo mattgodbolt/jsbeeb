@@ -88,6 +88,15 @@ describe("VDFS channels", () => {
             expect(table.get(second).bytes[0]).toBe(2);
         });
 
+        it("lets go of a file once it has been written, and not twice", () => {
+            const table = new ChannelTable();
+            const channel = channelWith([1]);
+            const handle = table.open(channel);
+            table.release(channel);
+            table.release(channel);
+            expect(() => table.get(handle)).toThrow("Channel");
+        });
+
         it("gives every open file when they are all closed, and then has none", () => {
             const table = new ChannelTable();
             const channels = [channelWith([1]), channelWith([2])];

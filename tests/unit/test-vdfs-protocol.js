@@ -162,6 +162,25 @@ describe("VDFS protocol", () => {
             expect(readResponse(ports, {}).ops).toEqual([{ op: "print", text: "NEW" }]);
         });
 
+        it("ends a call that is waiting with an error, which a later answer does not replace", async () => {
+            const waiting = deferred();
+            const ports = new VdfsPorts(() => waiting.promise);
+            makeCall(ports, Call.file);
+            ports.abort(new VdfsError(0xc9, "Disc changed"));
+            expect(ports.read(Port.call)).toBe(0);
+            expect(readResponse(ports, {}).ops).toEqual([{ op: "error", number: 0xc9, text: "Disc changed" }]);
+            waiting.resolve();
+            await waiting.promise;
+            await Promise.resolve();
+            expect(ports.openStreams).toBe(0);
+        });
+
+        it("has nothing to end when no call is waiting", () => {
+            const ports = portsSaying(() => "A");
+            ports.abort(new VdfsError(0xc9, "Disc changed"));
+            expect(ports.openStreams).toBe(0);
+        });
+
         it("tells the call that a break has overtaken it, so that it does not go on to change the machine", async () => {
             const waiting = deferred();
             let seen;

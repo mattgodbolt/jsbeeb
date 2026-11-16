@@ -7,6 +7,9 @@ export async function drainVdfs({ flushPages, inFlight }) {
     await Promise.allSettled([...inFlight()]);
 }
 
+/** @returns {boolean} whether the page that is running can go on with the new folder, or has to start again to have VDFS fitted */
+export const pageKeepsRunning = ({ wasServing, folder }) => wasServing && folder !== null;
+
 /** Changes the folder served as VDFS, and starts the page again with it, once the old pages are drained. */
 export async function swapVdfsFolder({ flushPages, inFlight, changeFolder, loadPage }) {
     await drainVdfs({ flushPages, inFlight });

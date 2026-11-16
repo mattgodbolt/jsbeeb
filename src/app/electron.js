@@ -60,6 +60,9 @@ export function initialise(args) {
     if (isDesktopApp()) init(args);
 }
 
+/** How long the BBC is kept waiting for the folder to change, at most, if the main process does not say. */
+const HoldTimeoutMs = 10000;
+
 /** @returns {object | null} the store of the folder the app was asked to serve as VDFS, which its main process holds */
 export function desktopVdfsStore(query) {
     return isDesktopApp() && query.vdfs ? window.electronAPI.vdfs : null;
@@ -70,8 +73,17 @@ export function desktopVdfsStore(query) {
  * say through `notify` when the main process cannot keep one.
  */
 export function attachDesktopVdfs(host, { notify }) {
+    let safety;
     window.addEventListener("pagehide", () => host.flush());
-    window.electronAPI.onVdfsFlush(() => host.closeAll());
+    window.electronAPI.onVdfsFlush(async () => {
+        await host.hold();
+        clearTimeout(safety);
+        safety = setTimeout(() => host.release(), HoldTimeoutMs);
+    });
+    window.electronAPI.onVdfsChanged(() => {
+        clearTimeout(safety);
+        host.release();
+    });
     host.onWriteFailure = (error) =>
         notify(`The VDFS folder could not be updated (${error.message}). What the BBC wrote may be lost.`);
 }

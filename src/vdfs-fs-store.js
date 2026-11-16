@@ -68,11 +68,17 @@ export class FsStore {
         return stat?.isFile() ? parseInf(await fs.readFile(sidecarPath, "utf8")) : NoInformation;
     }
 
+    /** @returns {Promise<object | null>} what a directory entry is, or nothing if it went while it was looked at */
     async _describe(hostPath, dirent) {
         const name = toBbcName(dirent.name);
         if (dirent.isDirectory()) return { name, isDirectory: true, size: 0, ...NoInformation };
-        const { size } = await fs.lstat(hostPath);
-        return { name, isDirectory: false, size, ...(await this._readSidecar(hostPath + InfSuffix)) };
+        try {
+            const { size } = await fs.lstat(hostPath);
+            return { name, isDirectory: false, size, ...(await this._readSidecar(hostPath + InfSuffix)) };
+        } catch (error) {
+            if (isMissing(error)) return null;
+            throw error;
+        }
     }
 
     /** What is in the directory that a BBC could name, and the names of what is not. */
@@ -108,10 +114,16 @@ export class FsStore {
     async list(directory) {
         const found = await this._entries(directory);
         if (!found) return null;
-        const entries = await Promise.all(
+        const described = await Promise.all(
             found.entries.map(({ dirent, hostPath }) => this._describe(hostPath, dirent)),
         );
-        return { entries, skipped: found.skipped };
+        return { entries: described.filter(Boolean), skipped: found.skipped };
+    }
+
+    /** The BBC can only be given names it could have made, and not the root. */
+    _requireWritable(volumePath) {
+        if (volumePath.length === 0 || !volumePath.every(isValidName))
+            throw new Error(`${volumePath.join(".") || "$"} is not a name VDFS can write`);
     }
 
     async read(volumePath) {
@@ -140,6 +152,7 @@ export class FsStore {
     }
 
     async writeFile(volumePath, { data, load, exec, locked }) {
+        this._requireWritable(volumePath);
         const hostPath = await this._hostPath(volumePath);
         await this._removeOtherCases(hostPath);
         await fs.writeFile(hostPath, data);
@@ -148,17 +161,22 @@ export class FsStore {
 
     /** Changes a file's addresses or lock, as many of them as are given, and leaves what it holds. */
     async setInfo(volumePath, changes) {
+        this._requireWritable(volumePath);
         const hostPath = await this._hostPath(volumePath);
-        const { size } = await fs.lstat(hostPath);
+        const { size } = await fs.lstat(hostPath).catch((error) => {
+            throw isMissing(error) ? new Error(`${volumePath.join(".")} is not there`) : error;
+        });
         const current = await this._readSidecar(hostPath + InfSuffix);
         await this._writeInformation(hostPath, volumePath.at(-1), { ...current, ...changes }, size);
     }
 
     async makeDirectory(volumePath) {
+        this._requireWritable(volumePath);
         await fs.mkdir(await this._hostPath(volumePath), { recursive: true });
     }
 
     async remove(volumePath) {
+        this._requireWritable(volumePath);
         const hostPath = await this._hostPath(volumePath);
         const stat = await fs.lstat(hostPath);
         if (stat.isDirectory()) await fs.rmdir(hostPath);
