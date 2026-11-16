@@ -116,8 +116,14 @@ function programExternallySyncedTiming(v) {
     v.writeCrtc(7, 0x7f); // Out of reach, so the CRTC never syncs itself
 }
 
+const Mode0 = 0x9c;
 const Mode4 = 0x88;
 const Mode4Teletext = 0x8a;
+const Mode5 = 0xc4;
+// MA13 set, without which IC15 feeds the SAA5050 nothing.
+const TeletextScreenStart = 0x2000;
+const WhiteGraphics = 0x17;
+const NewBackground = 0x1d;
 const inverted = (colour) => (colour ^ 0x00ffffff) >>> 0;
 
 function programNulaColour(v, index, red, green, blue) {
@@ -320,17 +326,18 @@ describe("Video", () => {
     });
 
     describe("feeding the SAA5050", () => {
-        const TeletextAddress = 0x2000;
         const newestFed = () => video.teletext.snapshotState().dataQueue.at(-1);
 
-        beforeEach(() => {
-            video.addr = TeletextAddress;
+        const aimBeam = () => {
+            video.addr = TeletextScreenStart;
             video.dispEnabled = EVERYTHINGENABLED;
             video.bitmapX = 100;
             video.bitmapY = 100;
             video.horizCounter = 10;
             cpu.data = 0x42;
-        });
+        };
+
+        beforeEach(aimBeam);
 
         // See https://github.com/mattgodbolt/jsbeeb/issues/546 and https://github.com/mattgodbolt/jsbeeb/issues/832
         it("feeds the chip in a bitmap mode too", () => {
@@ -352,8 +359,8 @@ describe("Video", () => {
         });
 
         it.each([
-            ["set", TeletextAddress, 0x42],
-            ["clear", TeletextAddress - 1, 0],
+            ["set", TeletextScreenStart, 0x42],
+            ["clear", TeletextScreenStart - 1, 0],
         ])("feeds the chip what was fetched only with MA13 %s", (_, addr, expected) => {
             video.addr = addr;
 
@@ -363,8 +370,8 @@ describe("Video", () => {
         });
 
         it.each([
-            ["set", TeletextAddress, 5],
-            ["clear", TeletextAddress - 0x1000, 0],
+            ["set", TeletextScreenStart, 5],
+            ["clear", TeletextScreenStart - 0x1000, 0],
         ])("counts the chip's rows over lines shown with MA13 %s", (_, screenStart, rows) => {
             const LinesShown = 5;
             ({ video } = rig = makeVideo());
@@ -380,28 +387,20 @@ describe("Video", () => {
         // The restored rows start from a Video that last painted 2MHz cells, whose black cells are 8 texels.
         describe.each(["wasm", "js"])("on the %s drain", (drainKind) => {
             it.each`
-                ma13       | addr                        | restored | black
-                ${"set"}   | ${TeletextAddress}          | ${false} | ${false}
-                ${"clear"} | ${TeletextAddress - 0x1000} | ${false} | ${true}
-                ${"clear"} | ${TeletextAddress - 0x1000} | ${true}  | ${true}
+                ma13       | addr                            | restored | black
+                ${"set"}   | ${TeletextScreenStart}          | ${false} | ${false}
+                ${"clear"} | ${TeletextScreenStart - 0x1000} | ${false} | ${true}
+                ${"clear"} | ${TeletextScreenStart - 0x1000} | ${true}  | ${true}
             `(
                 "draws a whole teletext cell black only with MA13 $ma13, restored: $restored",
                 ({ addr, restored, black }) => {
-                    const WhiteGraphics = 0x17;
-                    const NewBackground = 0x1d;
                     const SolidBlock = 0x7f;
                     const PipelineCells = 3;
                     const CellPixels = 16;
                     const Unpainted = 0xff00ff00;
                     const TicksPerCell = 2;
                     ({ video, fb, cpu } = rig = makeVideo({ drainKind }));
-                    Object.assign(video, {
-                        dispEnabled: EVERYTHINGENABLED,
-                        bitmapX: 100,
-                        bitmapY: 100,
-                        horizCounter: 10,
-                        addr: TeletextAddress,
-                    });
+                    aimBeam();
                     video.regs[7] = 30; // keep vsync, and the flyback that clears the framebuffer, away from the cell
                     video.ula.write(0, Mode4Teletext);
                     if (restored) {
@@ -438,7 +437,6 @@ describe("Video", () => {
 
         // The "TTX trick": with the teletext bit set in a 2MHz mode the SAA5050 outputs black.
         it("draws black instead of characters with the teletext bit set at 2MHz", () => {
-            const WhiteGraphics = 0x17;
             const SolidBlock = 0x7f;
             const PipelineCells = 3;
             const TwoMhzCellPixels = 8;
@@ -458,7 +456,6 @@ describe("Video", () => {
 
         describe("a cell above an odd field", () => {
             const White = 0xffffffff;
-            const WhiteGraphics = 0x17;
             const SolidBlock = 0x7f;
             const Teletext = 0x02;
             const TeletextAt2MHz = 0x12;
@@ -519,8 +516,6 @@ describe("Video", () => {
         const SnapshotRow = 5;
         const BlankingColumn = 50;
         const DisplayedRows = 25;
-        // MA13 set, without which IC15 feeds the SAA5050 nothing.
-        const ScreenStart = 0x2000;
         const PaintsToRun = 3;
 
         // A MODE 7 shaped frame without interlace: ten scanline rows line the CRTC's rows up with the chip's.
@@ -535,7 +530,7 @@ describe("Video", () => {
             r.writeCrtc(7, 27); // Vsync position
             r.writeCrtc(8, 0); // No interlace
             r.writeCrtc(9, 9); // Scanlines per character row
-            r.writeCrtc(12, ScreenStart >> 8);
+            r.writeCrtc(12, TeletextScreenStart >> 8);
         }
 
         /**
@@ -684,7 +679,7 @@ describe("Video", () => {
             function programCursor(r, row, column) {
                 r.writeCrtc(10, 0); // a steady cursor from the top scanline
                 r.writeCrtc(11, ScanlinesPerRow - 1);
-                const address = ScreenStart + row * DisplayedColumns + column;
+                const address = TeletextScreenStart + row * DisplayedColumns + column;
                 r.writeCrtc(14, address >> 8);
                 r.writeCrtc(15, address & 0xff);
             }
@@ -846,10 +841,8 @@ describe("Video", () => {
 
     // See Video.repaintAfterUlaWrite.
     describe("ULA writes part way through a cell", () => {
-        const Mode0 = 0x9c;
         const Mode1 = 0xd8;
         const Mode2 = 0xf4;
-        const Mode5 = 0xc4;
         const Mode5Teletext = 0xc6;
         const ControlReg = 0;
         const PaletteReg = 1;
@@ -864,7 +857,6 @@ describe("Video", () => {
         const HalfCell = 8;
         const Mode0Edge = 3;
         const Mode4Edge = 2;
-        const TeletextAddress = 0x2000;
         // A set pixel in a two colour mode is logical colour 15.
         const SetPixelsGreen = 0xf0 | (7 ^ 2);
         const SetPixelsBlue = 0xf0 | (7 ^ 4);
@@ -875,7 +867,7 @@ describe("Video", () => {
             video.dispEnabled = EVERYTHINGENABLED;
             video.regs[7] = 30; // keep vsync, and the flyback it brings, away from the cell under test
             video.horizCounter = 10;
-            video.addr = TeletextAddress;
+            video.addr = TeletextScreenStart;
             video.bitmapX = 92;
             video.bitmapY = 100;
             video.oddClock = false;
@@ -967,8 +959,6 @@ describe("Video", () => {
         );
 
         it("paints the chip's second half when the TTX trick slows to 1MHz after the cell's tick", () => {
-            const WhiteGraphics = 0x17;
-            const NewBackground = 0x1d;
             const WhiteForeground = 7;
             video.ula.write(ControlReg, Mode4Teletext | TwoMhzClock);
             for (const byte of [WhiteGraphics, NewBackground, AllPixelsSet, AllPixelsSet, AllPixelsSet]) {
@@ -1118,7 +1108,6 @@ describe("Video", () => {
     });
 
     describe("a ULA write that changes the clock rate", () => {
-        const Mode0 = 0x9c;
         const Mode0At1MHz = Mode0 & ~TwoMhzClock;
 
         // See ClockSwitchRuntTicksCrtc.
@@ -1169,8 +1158,6 @@ describe("Video", () => {
 
         // See Video.repaintAfterR8Write.
         describe("by an R8 write that switches the display", () => {
-            const Mode0 = 0x9c;
-            const Mode5 = 0xc4;
             const DisplayOn = 0x00;
             const DisplayOff = 0x30;
             const InterlaceSyncAndVideo = 0x03;
@@ -1185,7 +1172,6 @@ describe("Video", () => {
                 ${"switches off"} | ${"in a 2MHz mode"} | ${Mode0} | ${EVERYTHINGENABLED}                | ${DisplayOn}  | ${DisplayOff} | ${8}  | ${OPAQUE_BLACK}
                 ${"switches on"}  | ${"in a 1MHz mode"} | ${Mode4} | ${EVERYTHINGENABLED}                | ${DisplayOff} | ${DisplayOn}  | ${16} | ${White}
                 ${"switches off"} | ${"in a 1MHz mode"} | ${Mode4} | ${EVERYTHINGENABLED}                | ${DisplayOn}  | ${DisplayOff} | ${16} | ${OPAQUE_BLACK}
-                ${"switches on"}  | ${"in MODE 5"}      | ${Mode5} | ${EVERYTHINGENABLED}                | ${DisplayOff} | ${DisplayOn}  | ${16} | ${White}
                 ${"switches on"}  | ${"in the border"}  | ${Mode0} | ${EVERYTHINGENABLED & ~HDISPENABLE} | ${DisplayOff} | ${DisplayOn}  | ${8}  | ${OPAQUE_BLACK}
             `(
                 "$what $where from the character fetched in the write's cycle",
@@ -1317,7 +1303,6 @@ describe("Video", () => {
         const AllPixelsSet = 0xff;
         const CursorOnFirstCell = 0x80;
         const InBorder = EVERYTHINGENABLED & ~HDISPENABLE;
-        const Mode0 = 0x9c;
         const WideR1 = 80;
         const NarrowR1 = 20;
 

@@ -443,8 +443,7 @@ export class Teletext {
             this.clockCharacter(i < PipelineLag ? queue[i + 1] : log[i - PipelineLag] & DataBits);
             if (!(entry & ShownEntry)) continue;
 
-            // Two bits a pixel, indexing the cell's palette; none set shows only the background. A black cell has its
-            // width here instead.
+            // Two bits a pixel, indexing the cell's palette; none set shows only the background.
             let pixels = 0;
             if (entry & TeletextBlack) {
                 pixels = this.blackCellPixels;

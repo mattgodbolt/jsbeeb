@@ -52,8 +52,7 @@ const WideCharacterTexels = 2 * BitmapXPerClock;
 // before the write, at either clock rate: measured on a Master in 20, 40 and 80 columns (#1866). Indexed by control
 // bits 3-2. Ten columns would put it 4 texels into the character before, which is unmeasured, so they show from the
 // character's start.
-const UnmeasuredTenColumnWriteEdgeTexels = 0;
-const UlaWriteEdgeTexels = [UnmeasuredTenColumnWriteEdgeTexels, 0, 2, 3];
+const UlaWriteEdgeTexels = [0, 0, 2, 3];
 // The HD6845S switches R8's display enable for the character fetched in the write's last cycle (#1847, #1866).
 const R8EnableTakesFetchedCharacter = true;
 // Switching the CRTC from 2MHz to 1MHz while the 1MHz clock is high clocks it once more, with no fetch: measured on
@@ -955,15 +954,15 @@ export class Video {
     // The render loop paints a character whole on the tick that fetches it, so the part of it from a write's edge on
     // is repainted with the new state. A 1MHz character spans two ticks and is painted on the first, so after the
     // second the beam is half way through it. The repaint runs to where the next tick paints: a switch to 1MHz with
-    // oddClock set widens the character just painted, and one to 2MHz narrows it. A write while teletext shows changes
-    // nothing painted beyond widening.
+    // oddClock set widens the character just painted, and one to 2MHz narrows it.
     repaintAfterUlaWrite(edgeTexels, wasHalfClock, wasTeletext) {
         const widens = !wasHalfClock && this.halfClock && this.oddClock;
-        if (wasTeletext && this.teletextMode && !widens) return;
+        const staysTeletext = wasTeletext && this.teletextMode;
+        if (staysTeletext && !widens) return;
         if ((this.dispEnabled & EVERYTHINGENABLED) !== EVERYTHINGENABLED) return;
         const beamIntoCharacter = wasHalfClock && !this.oddClock ? BitmapXPerClock : 0;
         const toPixel = beamIntoCharacter + (this.halfClock && this.oddClock ? WideCharacterTexels : BitmapXPerClock);
-        const fromPixel = wasTeletext && this.teletextMode ? BitmapXPerClock : beamIntoCharacter + edgeTexels;
+        const fromPixel = staysTeletext ? BitmapXPerClock : beamIntoCharacter + edgeTexels;
         this.repaintCharacter(beamIntoCharacter, fromPixel, toPixel);
     }
 
@@ -1276,10 +1275,9 @@ export class Video {
         if (lineEndsHeldLow) this.teletext.endLine();
     }
 
-    // Clocks the CRTC once with no fetch and no paint, leaving the beam and the 1MHz phase alone.
+    // Clocks the CRTC once with no fetch or paint: with FRAMESKIPENABLE clear polltime's tick fetches nothing (a
+    // flyback in it decides the bit anew), and its oddClock flip and beam step are undone first, so neither moves.
     clockCrtcWithoutFetch() {
-        // With FRAMESKIPENABLE clear polltime's tick fetches nothing, and a flyback during it decides the bit anew.
-        // The tick flips oddClock back and moves the beam on by the one character this takes off.
         const fetching = this.dispEnabled & FRAMESKIPENABLE;
         const field = this.fieldCount;
         this.dispEnabled &= ~FRAMESKIPENABLE;
@@ -1343,9 +1341,9 @@ export class Video {
                 if (insideBorder) {
                     // Always clock the SAA5050, whatever the ULA mode: IC15 latches the video bus
                     // into the chip and it is MA13, not the ULA's teletext bit, that gates it, so
-                    // with MA13 clear the chip sees 0 (and a low DISPTMG: dispEnableChanged). The chip is
-                    // clocked here and painted later, so a control code seen while the ULA shows
-                    // bitmap still takes effect. The chip logs the bytes and runs them when read.
+                    // with MA13 clear the chip sees 0. The chip is clocked here and painted later,
+                    // so a control code seen while the ULA shows bitmap still takes effect. The chip
+                    // logs the bytes and runs them when read.
                     // See https://github.com/mattgodbolt/jsbeeb/issues/546
                     // and https://github.com/mattgodbolt/jsbeeb/issues/832
                     this.teletext.logClocked(ma13 ? dat : 0);
