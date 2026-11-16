@@ -44,7 +44,7 @@ export class FsStore {
         const walk = async (hostDirectory, bbcPath) => {
             const dirents = await fs.readdir(hostDirectory, { withFileTypes: true });
             for (const dirent of dirents) {
-                if (dirent.name.endsWith(InfSuffix) || dirent.isSymbolicLink()) continue;
+                if (dirent.name.toLowerCase().endsWith(InfSuffix) || dirent.isSymbolicLink()) continue;
                 const bbcName = toBbcName(dirent.name);
                 if (!isValidName(bbcName)) continue;
                 const hostPath = path.join(hostDirectory, dirent.name);
@@ -54,13 +54,18 @@ export class FsStore {
                     await walk(hostPath, itemPath);
                 } else if (dirent.isFile()) {
                     const data = new Uint8Array(await fs.readFile(hostPath));
-                    const inf = await fs.readFile(hostPath + InfSuffix, "utf8").catch(() => "");
+                    const inf = await this._readSidecar(hostPath + InfSuffix);
                     items.push({ path: itemPath, isDirectory: false, data, ...parseInf(inf) });
                 }
             }
         };
         await walk(this.root, []);
         return items;
+    }
+
+    async _readSidecar(sidecarPath) {
+        const stat = await fs.lstat(sidecarPath).catch(() => null);
+        return stat?.isFile() ? fs.readFile(sidecarPath, "utf8") : "";
     }
 
     /** The host path for a volume path, which has to stay inside the root whatever the names in it say. */
@@ -73,8 +78,10 @@ export class FsStore {
         const realRoot = await fs.realpath(this.root);
         const realParent = await fs.realpath(path.dirname(hostPath));
         if (!isUnderRoot(realRoot, realParent)) throw new Error(`${hostPath} is outside ${this.root}`);
-        const existing = await fs.lstat(hostPath).catch(() => null);
-        if (existing?.isSymbolicLink()) throw new Error(`${hostPath} is a symbolic link`);
+        for (const candidate of [hostPath, hostPath + InfSuffix]) {
+            const existing = await fs.lstat(candidate).catch(() => null);
+            if (existing?.isSymbolicLink()) throw new Error(`${candidate} is a symbolic link`);
+        }
         return hostPath;
     }
 

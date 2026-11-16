@@ -61,6 +61,14 @@ export function initialise(args) {
     if (isDesktopApp()) init(args);
 }
 
+/** Has the page hand what the BBC has written to the main process, when the main process is about to change folder. */
+export function flushVdfsWhenAsked(host) {
+    window.electronAPI.onVdfsFlush(async () => {
+        host.flushChannels();
+        await host.volume.flush();
+    });
+}
+
 /** @returns {{volume: VdfsVolume} | null} the folder the app was asked to serve as VDFS, whose files its main process holds */
 export function desktopVdfs(query) {
     return isDesktopApp() && query.vdfs ? { volume: new VdfsVolume(window.electronAPI.vdfs) } : null;

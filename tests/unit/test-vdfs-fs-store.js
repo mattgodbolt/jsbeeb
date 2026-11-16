@@ -62,6 +62,17 @@ describe("VDFS folder store", () => {
             expect(toBbcName("prog.bas")).toBe("prog/bas");
         });
 
+        it("leaves out a .inf file whatever the case of its suffix, and ignores one that is a link", async () => {
+            await fs.writeFile(path.join(root, "A"), "x");
+            await fs.writeFile(path.join(root, "A.INF"), "$.A 1900 1900");
+            await fs.writeFile(path.join(outside, "secret"), "$.A FFFF FFFF");
+            await fs.writeFile(path.join(root, "B"), "x");
+            await fs.symlink(path.join(outside, "secret"), path.join(root, "B.inf"));
+            const volume = await VdfsVolume.open(new FsStore(root));
+            expect([...volume.root.children.keys()]).toEqual(["A", "B"]);
+            expect(volume.root.children.get("B").load).toBe(0);
+        });
+
         it("does not follow a symbolic link out of the folder", async () => {
             await fs.writeFile(path.join(outside, "secret"), "secret");
             await fs.symlink(path.join(outside, "secret"), path.join(root, "LINK"));
@@ -125,6 +136,17 @@ describe("VDFS folder store", () => {
                 store.writeFile([name], { data: new Uint8Array(), load: 0, exec: 0, locked: false }),
             ).rejects.toThrow();
             expect(await fs.readdir(outside)).toEqual(["volume"]);
+        });
+
+        it("will not write through a .inf file that is a symbolic link", async () => {
+            const target = path.join(outside, "target");
+            await fs.writeFile(target, "keep");
+            await fs.symlink(target, path.join(root, "GAME.inf"));
+            const store = new FsStore(root);
+            await expect(
+                store.writeFile(["GAME"], { data: Uint8Array.of(1), load: 0x1900, exec: 0, locked: false }),
+            ).rejects.toThrow(/symbolic link/);
+            expect(await fs.readFile(target, "utf8")).toBe("keep");
         });
 
         it("will not write through a symbolic link, to a file or to a directory", async () => {

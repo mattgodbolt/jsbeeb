@@ -33,13 +33,20 @@ take and so sees the boot service call first. `*VDFS` does it, and `autotype` ca
 - A file's load and exec addresses and its lock are in a `.inf` file beside it, `NAME.inf`, with a line like
   `$.NAME  FFFF1900 FFFF8023 00000A00 L`. These are the files BeebAsm, Baron (`--inf`) and b-em write and read, so
   Baron's `-p dir --inf` output is a folder VDFS serves. The name in the line is not used, the host's file name is. A
-  file with no `.inf` has load and exec 0, and an unlocked file with both 0 gets no `.inf` when it is saved.
+  file with no `.inf` has load and exec 0, and an unlocked file with both 0 gets no `.inf` when it is saved. Such a
+  file can be loaded where you say (`*LOAD NAME 3000`), but not run, or loaded at its own address, since that is
+  address 0.
+- A transfer is of memory the 6502 has: no more than 64K at a time, not over the devices (`&FC00` to `&FEFF`), and not
+  past the top. A file is at most 16 MB.
 - The folder is read once, when the machine is made. Changes made to it afterwards are not seen, and when the BBC next
   writes a file it replaces whatever the folder has of that name.
 - A symbolic link is not followed, in either direction. Every host path is checked to be inside the folder before it
   is written, since what runs on the BBC is not to be trusted with the rest of the disc.
 - Open files are written to the folder when they are closed, by a close of handle 0, `OSARGS` with A=&FF, or a
-  break. A machine that is stopped with a file open does not write it.
+  break. A machine that is stopped with a file open does not write it. A file that has been deleted or replaced while
+  it is open is no longer written.
+- The BBC is told its write succeeded before the folder has it. A write that then fails is logged, and the page says
+  so in a toast (`volume.onPersistFailure`), but the BBC does not hear of it.
 
 ## What it does
 
@@ -57,7 +64,7 @@ is an error when one is fitted. A snapshot does not hold open files, and restori
 
 ## The ROM and the host
 
-The ROM is about 430 bytes of 6502, header included. It holds no state and no text, and does no parsing; the host parses `*` commands,
+The ROM's code is about 400 bytes, in a 16K image like any other ROM's. It holds no state and no text, and does no parsing; the host parses `*` commands,
 makes the `*CAT` listing and decides what is an error. The ROM hands over a call and does what it is told.
 
 ### The ports
@@ -102,14 +109,13 @@ reads STREAM for its number, then reads DATA for each byte, writing the number b
 could follow a call it made (the OS can call the filing system again while the ROM prints, with `*SPOOL`). Streams
 are one per call, so a nested call does not disturb the one being read.
 
-| Op  | Name  | Bytes after it                             | The ROM                                                               |
-| --- | ----- | ------------------------------------------ | --------------------------------------------------------------------- |
-| 0   | Done  | X, Y, P, A                                 | returns them, and the flags, to the caller                            |
-| 1   | Print | text, 0                                    | writes it with `OSASCI`                                               |
-| 2   | Error | error number, text, 0                      | raises it, as a `BRK` built in page 1; it does not return             |
-| 3   | Exec  | high byte, low byte, of the address less 1 | pages in the language ROM and jumps to the address; does not return   |
-| 4   | Claim | none                                       | takes over the filing system vectors, and carries on                  |
-| 5   | Oscli | command with its return, 0                 | runs it, from page 1 so no longer than about 64 bytes, and carries on |
+| Op  | Name  | Bytes after it                             | The ROM                                                             |
+| --- | ----- | ------------------------------------------ | ------------------------------------------------------------------- |
+| 0   | Done  | X, Y, P, A                                 | returns them, and the flags, to the caller                          |
+| 1   | Print | text, 0                                    | writes it with `OSASCI`                                             |
+| 2   | Error | error number, text, 0                      | raises it, as a `BRK` built in page 1; it does not return           |
+| 3   | Exec  | high byte, low byte, of the address less 1 | pages in the language ROM and jumps to the address; does not return |
+| 4   | Claim | none                                       | takes over the filing system vectors, and carries on                |
 
 A stream with a `Done` returns normally. The host answers every failure of its own as an error, so a bug in the host
 is a message on the BBC and not an exception in the emulator.

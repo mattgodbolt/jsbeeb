@@ -181,6 +181,99 @@ describe("VDFS host", () => {
         });
     });
 
+    describe("what the 6502 can ask for", () => {
+        it("will not save, read or write more than the machine's memory holds", async () => {
+            const t = await hostWith([file("DATA", "x")]);
+            fileBlock(t.cpu, "BIG", { start: 0, end: 0xffffffff });
+            expect(errorOf(await osfile(t, 0)).text).toBe("Bad address");
+            const handle = await open(t, "DATA", 0xc0);
+            putLong(t.cpu, Block, 0);
+            t.cpu.memory[Block] = handle;
+            putLong(t.cpu, Block + 1, Data);
+            putLong(t.cpu, Block + 5, 0xffffffff);
+            putLong(t.cpu, Block + 9, 0);
+            expect(errorOf(await t.call(Call.gbpb, { a: 2, x: Block & 0xff, y: Block >> 8 })).text).toBe("Bad address");
+            expect(t.volume.root.children.get("DATA").length).toBe(1);
+        });
+
+        it("will not let a file grow past the size it allows", async () => {
+            const t = await hostWith([file("DATA", "x")]);
+            const handle = await open(t, "DATA", 0xc0);
+            putLong(t.cpu, 0x70, 0xffffffff);
+            expect(errorOf(await t.call(Call.args, { a: 3, x: 0x70, y: handle })).text).toBe("File too big");
+        });
+
+        it("will not load over the devices, or past the top of memory", async () => {
+            const t = await hostWith([file("DATA", "xx")]);
+            fileBlock(t.cpu, "DATA", { load: 0xfc00 });
+            expect(errorOf(await osfile(t, 0xff)).text).toBe("Bad address");
+            fileBlock(t.cpu, "DATA", { load: 0xffff });
+            expect(errorOf(await osfile(t, 0xff)).text).toBe("Bad address");
+            fileBlock(t.cpu, "DATA", { load: 0x8000 });
+            expect(errorOf(await osfile(t, 0xff))).toBeUndefined();
+        });
+
+        it("will not run, or load at its own address, a file that has no addresses, which is any with no .inf", async () => {
+            const t = await hostWith([file("PLAIN", "xx")]);
+            putString(t.cpu, Name, "PLAIN");
+            expect(errorOf(await t.call(Call.fsc, { a: 4, x: Name & 0xff, y: Name >> 8 })).text).toBe(
+                "No load address",
+            );
+            fileBlock(t.cpu, "PLAIN", { exec: 1 });
+            expect(errorOf(await osfile(t, 0xff)).text).toBe("No load address");
+            fileBlock(t.cpu, "PLAIN", { load: Data });
+            expect(errorOf(await osfile(t, 0xff))).toBeUndefined();
+        });
+
+        it("cuts an error's text short, since the ROM builds it in the page the stack is in", async () => {
+            const t = await hostWith();
+            t.host._file = () => {
+                throw new TypeError("x".repeat(500));
+            };
+            expect(errorOf(await t.call(Call.file, { a: 0 })).text.length).toBe(80);
+        });
+    });
+
+    describe("what has gone from the tree", () => {
+        it("does not write a deleted file back when the channel that had it open is closed", async () => {
+            const t = await hostWith();
+            const handle = await open(t, "OUT", 0x80);
+            await t.call(Call.bput, { a: 0x41, y: handle });
+            t.host._runCommand("DELETE", "OUT", { print() {} });
+            await t.call(Call.find, { a: 0, y: handle });
+            await t.volume.flush();
+            expect(t.store.files.size).toBe(0);
+        });
+
+        it("does not let the file an open channel had be written over what replaced it", async () => {
+            const t = await hostWith();
+            const first = await open(t, "OUT", 0x80);
+            await t.call(Call.bput, { a: 0x41, y: first });
+            const second = await open(t, "OUT", 0x80);
+            await t.call(Call.bput, { a: 0x42, y: second });
+            await t.call(Call.find, { a: 0, y: second });
+            await t.call(Call.find, { a: 0, y: first });
+            await t.volume.flush();
+            expect(text(t.files("OUT").data)).toBe("B");
+        });
+
+        it("will not open a locked file for update", async () => {
+            const t = await hostWith([file("KEEP", "x", { locked: true })]);
+            putString(t.cpu, Name, "KEEP");
+            expect(errorOf(await t.call(Call.find, { a: 0xc0, x: Name & 0xff, y: Name >> 8 })).text).toBe("Locked");
+            expect(await open(t, "KEEP", 0x40)).toBe(FirstHandle);
+        });
+
+        it("will not delete the root, and goes back to the root if the directory it is in is deleted", async () => {
+            const t = await hostWith([directory("D")]);
+            fileBlock(t.cpu, "$");
+            expect(errorOf(await osfile(t, 6)).text).toBe("Access violation");
+            t.host.directory = t.volume.root.children.get("D");
+            t.host._runCommand("DELETE", "$.D", { print() {} });
+            expect(t.host.directory).toBe(t.volume.root);
+        });
+    });
+
     describe("names", () => {
         const items = [
             directory("GAMES"),
@@ -495,7 +588,7 @@ describe("VDFS host", () => {
             const help = await service(t, 9);
             expect(help.ops).toEqual([{ op: "print", text: "  VDFS 0.1\r" }]);
             expect(help.a).toBe(9);
-            expect((await service(t, 9, { line: "VDFS" })).ops[0].text).toMatch(/CDIR DELETE DIR/);
+            expect((await service(t, 9, { line: "VDFS" })).ops[0].text).toMatch(/ACCESS CAT CDIR DELETE DIR/);
             expect((await service(t, 9, { line: "OTHER" })).ops).toEqual([]);
         });
     });

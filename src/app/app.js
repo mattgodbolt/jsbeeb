@@ -153,8 +153,25 @@ const loadDisc = (drive) =>
         setting: `settings.disc${drive + 1}`,
     });
 
+const FlushTimeoutMs = 3000;
+
+/** Waits for the page to say it has handed over what the BBC wrote, so none of it reaches the folder after this. */
+function askPageToFlush(browserWindow) {
+    return new Promise((resolve) => {
+        const done = () => {
+            clearTimeout(timer);
+            ipcMain.removeListener("vdfs-flushed", done);
+            resolve();
+        };
+        const timer = setTimeout(done, FlushTimeoutMs);
+        ipcMain.on("vdfs-flushed", done);
+        browserWindow.webContents.send("vdfs-flush");
+    });
+}
+
 /** Serves `folder` as VDFS, or no folder, and starts the page again, which has to be built with it. */
 async function serveVdfsFolder(browserWindow, folder) {
+    if (vdfsStore) await askPageToFlush(browserWindow);
     await Promise.allSettled([...pendingVdfsOperations]);
     if (folder) store.set("vdfsFolder", folder);
     else store.delete("vdfsFolder");

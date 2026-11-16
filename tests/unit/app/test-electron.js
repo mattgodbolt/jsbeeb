@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { desktopVdfs, initialise } from "../../../src/app/electron.js";
+import { desktopVdfs, flushVdfsWhenAsked, initialise } from "../../../src/app/electron.js";
 import { teardownDom } from "../helpers.js";
 
 describe("the Electron hooks", () => {
@@ -124,6 +124,18 @@ describe("the Electron hooks", () => {
             await vdfs.volume.load();
             expect(store.load).toHaveBeenCalled();
             expect(vdfs.volume.store).toBe(store);
+        });
+
+        it("hands over what has been written when the main process asks, and only then says it has", async () => {
+            const order = [];
+            const host = {
+                flushChannels: () => order.push("channels"),
+                volume: { flush: async () => order.push("volume") },
+            };
+            window.electronAPI = { onVdfsFlush: vi.fn() };
+            flushVdfsWhenAsked(host);
+            await window.electronAPI.onVdfsFlush.mock.calls[0][0]();
+            expect(order).toEqual(["channels", "volume"]);
         });
 
         it("gives nothing when there is no folder, or no app", () => {

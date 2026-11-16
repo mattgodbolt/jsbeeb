@@ -4,7 +4,6 @@
 INCLUDE "contract.6502"
 
 OsAsci      = &FFE3
-OsCli       = &FFF7
 OsByte      = &FFF4
 RomLatch    = &F4
 RomSel      = &FE30
@@ -69,12 +68,10 @@ SECTION Rom, org = &8000, filename = "vdfs.rom", guard = &C000
     CMP #OpError : BEQ error
     CMP #OpExec : BEQ exec
     CMP #OpClaim : BEQ far_claim
-    CMP #OpOscli : BEQ far_oscli
     BRK
     EQUB &FF
     EQUS "VDFS protocol error", 0
 .far_claim JMP claim
-.far_oscli JMP oscli
 
 .finish
     LDA PortData : TAX
@@ -147,20 +144,6 @@ ENDSECTION
     LDA RomLatch : STA (FsPtr),Y : INY
     CPX #2 * NumVectors : BNE copy_ext
     LDA #&8F : LDX #&0F : LDY #&FF : JSR OsByte
-    PLA : TAX
-    JMP next
-}
-
-.oscli
-{
-    TXA : PHA
-    LDY #0
-    .loop
-    LDA PortData : STA ErrorBlock,Y
-    BEQ go
-    INY : BNE loop
-    .go
-    LDX #LO(ErrorBlock) : LDY #HI(ErrorBlock) : JSR OsCli
     PLA : TAX
     JMP next
 }

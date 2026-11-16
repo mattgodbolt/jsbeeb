@@ -8,7 +8,7 @@ import { fillHelp, openHelpOnTheTabForNow } from "./web/help.js";
 import { DebugMenu } from "./web/debug-menu.js";
 import { PanelKeys } from "./web/panel-keys.js";
 import { GamePad } from "./web/gamepads.js";
-import { desktopVdfs, initialise as electron, isDesktopApp } from "./app/electron.js";
+import { desktopVdfs, flushVdfsWhenAsked, initialise as electron, isDesktopApp } from "./app/electron.js";
 import { AudioHandler } from "./web/audio-handler.js";
 import { installIcons } from "./web/icons.js";
 import { QuickSettings } from "./web/quick-settings.js";
@@ -245,6 +245,14 @@ const processor = machine.processor;
 if (processor.vdfs) {
     toast("A folder is being served as VDFS. Type *VDFS to use it.", { title: "VDFS", quietKey: "quietVdfs" });
     window.addEventListener("pagehide", () => processor.vdfs.flushChannels());
+    flushVdfsWhenAsked(processor.vdfs);
+    processor.vdfs.volume.onPersistFailure = (operation, error) =>
+        toast(
+            `The VDFS folder could not be updated (${operation}: ${error.message}). What the BBC wrote may be lost.`,
+            {
+                title: "VDFS",
+            },
+        );
 }
 panelArrangement.followMachine(() => machineMoment(processor));
 

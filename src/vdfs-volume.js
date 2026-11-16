@@ -24,7 +24,9 @@ export const Errors = Object.freeze({
     notDirectory: () => new VdfsError(0xbe, "Not a directory"),
     tooManyOpen: () => new VdfsError(0xc0, "Too many open files"),
     notOpen: () => new VdfsError(0xde, "Channel"),
-    open: () => new VdfsError(0xc2, "Already open"),
+    accessViolation: () => new VdfsError(0xbd, "Access violation"),
+    fileTooBig: () => new VdfsError(0xc6, "File too big"),
+    noAddresses: () => new VdfsError(0xcd, "No load address"),
     badCommand: () => new VdfsError(0xfe, "Bad command"),
     badAddress: () => new VdfsError(0x93, "Bad address"),
     unsupported: (what) => new VdfsError(0x94, `${what} is not supported`),
@@ -55,6 +57,8 @@ export class Entry {
         this.locked = locked;
         /** @type {Entry | null} */
         this.parent = null;
+        /** Whether it has been taken out of the tree, so that what is written to it is not the volume's any more. */
+        this.detached = false;
         if (isDirectory) {
             /** @type {Map<string, Entry>} */
             this.children = new Map();
@@ -112,6 +116,8 @@ export class VdfsVolume {
         this._pending = Promise.resolve();
         /** @type {{operation: string, error: Error}[]} */
         this.persistFailures = [];
+        /** @type {((operation: string, error: Error) => void) | null} called when the store fails a change */
+        this.onPersistFailure = null;
     }
 
     static async open(store) {
@@ -143,6 +149,8 @@ export class VdfsVolume {
     }
 
     _add(dir, entry) {
+        const replaced = dir.children.get(keyOf(entry.name));
+        if (replaced) replaced.detached = true;
         entry.parent = dir;
         dir.children.set(keyOf(entry.name), entry);
         return entry;
@@ -209,16 +217,19 @@ export class VdfsVolume {
 
     /** Writes a file's bytes and details to the store. */
     persist(entry) {
+        if (entry.detached) return;
         const path = entry.path;
         const details = { data: entry.bytes.slice(), load: entry.load, exec: entry.exec, locked: entry.locked };
         this._enqueue("writeFile", () => this.store?.writeFile(path, details));
     }
 
     remove(entry) {
+        if (!entry.parent) throw Errors.accessViolation();
         if (entry.isDirectory && entry.children.size > 0) throw Errors.notEmpty();
         if (entry.locked) throw Errors.locked();
         const path = entry.path;
         entry.parent.children.delete(keyOf(entry.name));
+        entry.detached = true;
         this._enqueue("remove", () => this.store?.remove(path));
     }
 
@@ -226,6 +237,7 @@ export class VdfsVolume {
         this._pending = this._pending.then(run).catch((error) => {
             this.persistFailures.push({ operation, error });
             console.error(`VDFS could not persist ${operation}:`, error);
+            this.onPersistFailure?.(operation, error);
         });
     }
 

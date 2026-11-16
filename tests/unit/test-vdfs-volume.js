@@ -130,6 +130,39 @@ describe("VDFS volume", () => {
             error.mockRestore();
         });
 
+        it("tells whoever is listening when the store fails, so the failure is not only in a log", async () => {
+            vi.spyOn(console, "error").mockImplementation(() => {});
+            const store = new MemoryStore();
+            store.writeFile = vi.fn().mockRejectedValue(new Error("disc full"));
+            const volume = await VdfsVolume.open(store);
+            volume.onPersistFailure = vi.fn();
+            volume.persist(volume.createFile(volume.root, "A"));
+            await volume.flush();
+            expect(volume.onPersistFailure).toHaveBeenCalledWith(
+                "writeFile",
+                expect.objectContaining({ message: "disc full" }),
+            );
+            vi.restoreAllMocks();
+        });
+
+        it("does not persist a file that is no longer in the tree, as one that was deleted or replaced is not", async () => {
+            const store = new MemoryStore();
+            const volume = await VdfsVolume.open(store);
+            const deleted = volume.createFile(volume.root, "GONE");
+            volume.remove(deleted);
+            const replaced = volume.createFile(volume.root, "SAME");
+            volume.createFile(volume.root, "SAME");
+            volume.persist(deleted);
+            volume.persist(replaced);
+            await volume.flush();
+            expect(store.log).toEqual([["remove", "GONE"]]);
+        });
+
+        it("will not remove the root", async () => {
+            const volume = await VdfsVolume.open(new MemoryStore());
+            expect(() => volume.remove(volume.root)).toThrow("Access violation");
+        });
+
         it("refuses to remove a directory with something in it, or a locked file", async () => {
             const volume = await VdfsVolume.open(new MemoryStore([file("D.F"), file("LOCKED", "", { locked: true })]));
             expect(() => volume.remove(volume.root.children.get("D"))).toThrow("Dir not empty");

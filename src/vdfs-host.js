@@ -10,13 +10,13 @@ export const HostId = 0x56;
 export const VdfsRom = "vdfs.rom";
 
 export const Call = Object.freeze({ service: 0, file: 1, args: 2, bget: 3, bput: 4, gbpb: 5, find: 6, fsc: 7 });
-export const Op = Object.freeze({ done: 0, print: 1, error: 2, exec: 3, claim: 4, oscli: 5 });
+export const Op = Object.freeze({ done: 0, print: 1, error: 2, exec: 3, claim: 4 });
 
 export const FilingSystemNumber = 0x11;
 export const FirstHandle = 0x11;
 export const LastHandle = 0x18;
 const Title = "VDFS";
-const Commands = "CAT CDIR DELETE DIR EX INFO LIB VDFS";
+const Commands = "ACCESS CAT CDIR DELETE DIR EX INFO LIB VDFS";
 const Version = "0.1";
 
 const Service = Object.freeze({ command: 0x04, help: 0x09, select: 0x12 });
@@ -44,10 +44,21 @@ const Quote = 0x22;
 const CataloguePerLine = 3;
 const CatalogueColumnWidth = 13;
 const NameWidth = 10;
+const MaxErrorText = 80;
+const MaxFileBytes = 0x1000000;
+const MemoryBytes = 0x10000;
+const FirstDeviceAddress = 0xfc00;
+const EndOfDevices = 0xff00;
+const MaxStringLength = 255;
+const BootOptionNumber = 4;
+const EndOfFile = 0xff;
+const OsfileBlock = Object.freeze({ load: 2, exec: 6, start: 10, length: 10, end: 14, attributes: 14 });
+const GbpbBlock = Object.freeze({ handle: 0, address: 1, count: 5, pointer: 9 });
 const ObjectNone = 0;
 const ObjectFile = 1;
 const ObjectDirectory = 2;
 
+const hasAddresses = (entry) => entry.load !== 0 || entry.exec !== 0;
 const hex = (value, digits) => value.toString(16).toUpperCase().padStart(digits, "0");
 
 /** What the ROM is to do once a call has been made, as the bytes it reads from the stream. */
@@ -68,10 +79,10 @@ class Response {
 
     error(number, text) {
         this.bytes.push(Op.error, number);
-        this._text(text);
+        this._text(text.slice(0, MaxErrorText));
     }
 
-    /** The ROM runs the program at `address` once it has returned to the OS. */
+    /** The ROM jumps to the program at `address`, with the caller's return address still on the stack. */
     exec(address) {
         const less = (address - 1) & 0xffff;
         this.bytes.push(Op.exec, less >> 8, less & 0xff);
@@ -79,11 +90,6 @@ class Response {
 
     claim() {
         this.bytes.push(Op.claim);
-    }
-
-    oscli(command) {
-        this.bytes.push(Op.oscli);
-        this._text(command);
     }
 
     done({ a, x, y, p }) {
@@ -239,7 +245,7 @@ export class VdfsHost {
 
     _string(address) {
         let text = "";
-        for (let index = 0; index < 255; index++) {
+        for (let index = 0; index < MaxStringLength; index++) {
             const byte = this._byte(address + index);
             if (byte === 0x0d) break;
             text += String.fromCharCode(byte);
@@ -253,23 +259,36 @@ export class VdfsHost {
         return address & 0xffff;
     }
 
-    _readMemory(address, length) {
+    /** Where in memory `length` bytes at `address` are, which has to be memory the 6502 has to give or take. */
+    _memoryRange(address, length, { writing }) {
         const from = this._memoryAddress(address);
+        if (length > MemoryBytes || from + length > MemoryBytes) throw Errors.badAddress();
+        if (writing && from < EndOfDevices && from + length > FirstDeviceAddress) throw Errors.badAddress();
+        return from;
+    }
+
+    _readMemory(address, length) {
+        const from = this._memoryRange(address, length, { writing: false });
         const bytes = new Uint8Array(length);
         for (let index = 0; index < length; index++) bytes[index] = this._byte(from + index);
         return bytes;
     }
 
     _writeMemory(address, bytes) {
-        const from = this._memoryAddress(address);
-        for (let index = 0; index < bytes.length; index++) this.cpu.writemem((from + index) & 0xffff, bytes[index]);
+        const from = this._memoryRange(address, bytes.length, { writing: true });
+        for (let index = 0; index < bytes.length; index++) this.cpu.writemem(from + index, bytes[index]);
+    }
+
+    _lengthen(entry, length) {
+        if (length > MaxFileBytes) throw Errors.fileTooBig();
+        entry.resize(length);
     }
 
     /** A name ends at a space or a return, since the OS leaves the rest of a `*SAVE` or `*LOAD` line after it. */
     _filename(address) {
         const quoted = this._byte(address) === Quote;
         let text = "";
-        for (let index = quoted ? 1 : 0; index < 255; index++) {
+        for (let index = quoted ? 1 : 0; index < MaxStringLength; index++) {
             const byte = this._byte(address + index);
             if (byte === 0x0d || (quoted ? byte === Quote : byte === Space)) break;
             text += String.fromCharCode(byte);
@@ -341,20 +360,25 @@ export class VdfsHost {
     }
 
     _writeInformation(block, entry) {
-        this._setLong(block + 2, entry.load);
-        this._setLong(block + 6, entry.exec);
-        this._setLong(block + 10, entry.isDirectory ? 0 : entry.length);
-        this._setLong(block + 14, this._attributes(entry));
+        this._setLong(block + OsfileBlock.load, entry.load);
+        this._setLong(block + OsfileBlock.exec, entry.exec);
+        this._setLong(block + OsfileBlock.length, entry.isDirectory ? 0 : entry.length);
+        this._setLong(block + OsfileBlock.attributes, this._attributes(entry));
     }
 
     _file(registers) {
         const block = registers.x | (registers.y << 8);
         const name = this._filename(this._word(block));
         const { parent, name: leaf, entry } = this._resolve(name);
-        const attributes = () => this._long(block + 14);
+        const attributes = () => this._long(block + OsfileBlock.attributes);
         switch (registers.a) {
             case 0x00: {
-                const [load, exec, start, end] = [2, 6, 10, 14].map((offset) => this._long(block + offset));
+                const [load, exec, start, end] = [
+                    OsfileBlock.load,
+                    OsfileBlock.exec,
+                    OsfileBlock.start,
+                    OsfileBlock.end,
+                ].map((offset) => this._long(block + offset));
                 if (end < start) throw Errors.badAddress();
                 if (entry?.isDirectory) throw Errors.isDirectory();
                 const data = this._readMemory(start, end - start);
@@ -368,8 +392,8 @@ export class VdfsHost {
             case 0x03:
             case 0x04:
                 if (entry) {
-                    if (registers.a === 0x01 || registers.a === 0x02) entry.load = this._long(block + 2);
-                    if (registers.a === 0x01 || registers.a === 0x03) entry.exec = this._long(block + 6);
+                    if (registers.a === 0x01 || registers.a === 0x02) entry.load = this._long(block + OsfileBlock.load);
+                    if (registers.a === 0x01 || registers.a === 0x03) entry.exec = this._long(block + OsfileBlock.exec);
                     if (registers.a === 0x01 || registers.a === 0x04)
                         entry.locked = (attributes() & LockedAttribute) !== 0;
                     if (!entry.isDirectory) this.volume.persist(entry);
@@ -383,7 +407,7 @@ export class VdfsHost {
             case 0x06:
                 if (entry) {
                     this._writeInformation(block, entry);
-                    this.volume.remove(entry);
+                    this._remove(entry);
                 }
                 registers.a = this._objectType(entry);
                 break;
@@ -395,10 +419,12 @@ export class VdfsHost {
             case 0xff: {
                 if (!entry) throw Errors.notFound();
                 if (entry.isDirectory) throw Errors.isDirectory();
-                const address = this._byte(block + 6) === 0 ? this._long(block + 2) : entry.load;
+                const atOwnAddress = this._byte(block + OsfileBlock.exec) !== 0;
+                if (atOwnAddress && !hasAddresses(entry)) throw Errors.noAddresses();
+                const address = atOwnAddress ? entry.load : this._long(block + OsfileBlock.load);
                 this._writeMemory(address, entry.bytes);
                 this._writeInformation(block, entry);
-                this._setLong(block + 2, address);
+                this._setLong(block + OsfileBlock.load, address);
                 registers.a = ObjectFile;
                 break;
             }
@@ -431,6 +457,7 @@ export class VdfsHost {
             return;
         }
         if (target.isDirectory) throw Errors.isDirectory();
+        if (kind === 0xc0 && target.locked) throw Errors.locked();
         const slot = this._channels.indexOf(null);
         if (slot < 0) throw Errors.tooManyOpen();
         this._channels[slot] = new Channel(target, { writable: kind !== 0x40 });
@@ -481,7 +508,7 @@ export class VdfsHost {
                 break;
             case 3:
                 if (!channel.writable) throw Errors.locked();
-                entry.resize(this._long(block));
+                this._lengthen(entry, this._long(block));
                 channel.dirty = true;
                 break;
             case 0xff:
@@ -506,7 +533,7 @@ export class VdfsHost {
         const channel = this._channel(registers.y);
         if (!channel.writable) throw Errors.locked();
         const { entry } = channel;
-        if (channel.pointer >= entry.length) entry.resize(channel.pointer + 1);
+        if (channel.pointer >= entry.length) this._lengthen(entry, channel.pointer + 1);
         entry.buffer[channel.pointer++] = registers.a;
         channel.dirty = true;
     }
@@ -514,25 +541,26 @@ export class VdfsHost {
     _gbpb(registers) {
         if (registers.a < 1 || registers.a > 4) throw Errors.unsupported(`OSGBPB ${registers.a}`);
         const block = registers.x | (registers.y << 8);
-        const channel = this._channel(this._byte(block));
-        const address = this._long(block + 1);
-        const count = this._long(block + 5);
+        const channel = this._channel(this._byte(block + GbpbBlock.handle));
+        const address = this._long(block + GbpbBlock.address);
+        const count = this._long(block + GbpbBlock.count);
         const { entry } = channel;
-        if (registers.a === 1 || registers.a === 3) channel.pointer = this._long(block + 9);
+        if (registers.a === 1 || registers.a === 3) channel.pointer = this._long(block + GbpbBlock.pointer);
         let transferred = count;
         if (registers.a <= 2) {
             if (!channel.writable) throw Errors.locked();
-            if (channel.pointer + count > entry.length) entry.resize(channel.pointer + count);
-            entry.buffer.set(this._readMemory(address, count), channel.pointer);
+            const data = this._readMemory(address, count);
+            if (channel.pointer + count > entry.length) this._lengthen(entry, channel.pointer + count);
+            entry.buffer.set(data, channel.pointer);
             channel.dirty = true;
         } else {
             transferred = Math.max(0, Math.min(count, entry.length - channel.pointer));
             this._writeMemory(address, entry.buffer.subarray(channel.pointer, channel.pointer + transferred));
         }
         channel.pointer += transferred;
-        this._setLong(block + 1, address + transferred);
-        this._setLong(block + 5, count - transferred);
-        this._setLong(block + 9, channel.pointer);
+        this._setLong(block + GbpbBlock.address, address + transferred);
+        this._setLong(block + GbpbBlock.count, count - transferred);
+        this._setLong(block + GbpbBlock.pointer, channel.pointer);
         if (count - transferred > 0) registers.p |= Carry;
         else registers.p &= ~Carry;
     }
@@ -543,11 +571,11 @@ export class VdfsHost {
         const text = () => this._string(registers.x | (registers.y << 8));
         switch (registers.a) {
             case Fsc.option:
-                if (registers.x === 4) this.bootOption = registers.y & 3;
+                if (registers.x === BootOptionNumber) this.bootOption = registers.y & 3;
                 break;
             case Fsc.eof: {
                 const channel = this._channel(registers.x);
-                registers.x = channel.pointer >= channel.entry.length ? 0xff : 0;
+                registers.x = channel.pointer >= channel.entry.length ? EndOfFile : 0;
                 break;
             }
             case Fsc.slashRun:
@@ -605,7 +633,7 @@ export class VdfsHost {
             }
             case "DELETE":
                 if (!argument) throw Errors.badName();
-                this.volume.remove(this._existing(argument));
+                this._remove(this._existing(argument));
                 return true;
             case "ACCESS": {
                 const [path, attributes = ""] = argument.split(/\s+/);
@@ -629,6 +657,13 @@ export class VdfsHost {
         }
     }
 
+    /** Removes an entry, and puts the current directory and the library back at the root if it was either. */
+    _remove(entry) {
+        this.volume.remove(entry);
+        if (this.directory === entry) this.directory = this.volume.root;
+        if (this.library === entry) this.library = this.volume.root;
+    }
+
     _existingDirectory(text) {
         const entry = this._existing(text);
         if (!entry.isDirectory) throw Errors.notDirectory();
@@ -649,6 +684,7 @@ export class VdfsHost {
         const entry = find(this.directory) ?? find(this.library);
         if (!entry) throw orElse();
         if (entry.isDirectory) throw Errors.isDirectory();
+        if (!hasAddresses(entry)) throw Errors.noAddresses();
         this._writeMemory(entry.load, entry.bytes);
         response.exec(this._memoryAddress(entry.exec));
     }

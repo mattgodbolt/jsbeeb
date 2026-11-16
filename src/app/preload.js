@@ -12,6 +12,15 @@ contextBridge.exposeInMainWorld("electronAPI", {
     saveSettings: (settings) => ipcRenderer.send("save-settings", settings),
     setPanels: (panels) => ipcRenderer.send("set-panels", panels),
     onTogglePanel: (callback) => ipcRenderer.on("toggle-panel", (event, message) => callback(message)),
+    // Main asks the page to hand over what it has written before it changes the folder, and hears when it has.
+    onVdfsFlush: (callback) =>
+        ipcRenderer.on("vdfs-flush", async () => {
+            try {
+                await callback();
+            } finally {
+                ipcRenderer.send("vdfs-flushed");
+            }
+        }),
     // The store behind a VDFS volume, whose folder only the main process can reach.
     vdfs: {
         load: () => ipcRenderer.invoke("vdfs-load"),

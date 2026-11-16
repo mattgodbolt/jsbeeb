@@ -123,7 +123,6 @@ export async function hostWith(items = [], { hasTube = false, ...options } = {})
                 return { ops, ...registersOf({ a: a1, x: x1, y: y1, p: p1 }) };
             }
             if (op === Op.print) ops.push({ op: "print", text: readText() });
-            else if (op === Op.oscli) ops.push({ op: "oscli", text: readText() });
             else if (op === Op.claim) ops.push({ op: "claim" });
             else if (op === Op.exec) {
                 const high = readByte();
