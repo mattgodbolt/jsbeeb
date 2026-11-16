@@ -965,20 +965,23 @@ describe("Video", () => {
             },
         );
 
-        it.each`
-            screen             | from                           | to
-            ${"MODE 0"}        | ${Mode0}                       | ${Mode0 & ~TwoMhzClock}
-            ${"2MHz teletext"} | ${Mode4Teletext | TwoMhzClock} | ${Mode4Teletext}
-        `("paints the widened half of a cell when $screen slows to 1MHz after the cell's tick", ({ from, to }) => {
-            const Unpainted = 0xff00ff00;
-            video.ula.write(ControlReg, from);
-            video.polltime(1);
-            video.renderPending();
-            fb.fill(Unpainted, offset + HalfCell, offset + CellWidth);
+        it("paints the chip's second half when the TTX trick slows to 1MHz after the cell's tick", () => {
+            const WhiteGraphics = 0x17;
+            const NewBackground = 0x1d;
+            const WhiteForeground = 7;
+            video.ula.write(ControlReg, Mode4Teletext | TwoMhzClock);
+            for (const byte of [WhiteGraphics, NewBackground, AllPixelsSet, AllPixelsSet, AllPixelsSet]) {
+                cpu.data = byte;
+                video.polltime(1);
+            }
+            const at = 100 * FbWidth + video.bitmapX;
 
-            video.ula.write(ControlReg, to);
+            video.ula.write(ControlReg, Mode4Teletext);
 
-            expect(cell().slice(HalfCell)).not.toContain(Unpainted);
+            expect(cell(at)).toEqual([
+                ...Array(HalfCell).fill(OPAQUE_BLACK),
+                ...Array(HalfCell).fill(video.teletext.colour[(WhiteForeground << 2) | 3] >>> 0),
+            ]);
         });
 
         it("repaints a wide cell only up to where the next tick paints after a switch to 2MHz", () => {
