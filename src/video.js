@@ -1272,20 +1272,23 @@ export class Video {
         if (lineEndsHeldLow) this.teletext.endLine();
     }
 
-    // Clocks the CRTC once with no fetch, no SAA5050 feed and no paint, leaving the beam and the 1MHz phase alone.
+    // Clocks the CRTC once with no fetch and no paint, leaving the beam and the 1MHz phase alone.
     clockCrtcWithoutFetch() {
-        // polltime's tick flips oddClock back and moves the beam on by the one cell this takes off.
+        // With FRAMESKIPENABLE clear polltime's tick fetches nothing, and a flyback during it decides the bit anew.
+        // The tick flips oddClock back and moves the beam on by the one cell this takes off.
+        const fetching = this.dispEnabled & FRAMESKIPENABLE;
+        const field = this.fieldCount;
+        this.dispEnabled &= ~FRAMESKIPENABLE;
         this.oddClock = !this.oddClock;
         this.bitmapX -= BitmapXPerClock;
-        this.polltime(1, true);
+        this.polltime(1);
+        if (this.fieldCount === field) this.dispEnabled |= fetching;
     }
 
     ////////////////////
     // Main drawing routine
-    polltime(clocks, crtcOnly = false) {
+    polltime(clocks) {
         const regs = this.regs;
-        const fetchEnable = crtcOnly ? 0 : FRAMESKIPENABLE;
-        const hblankFeedEnable = crtcOnly ? 0 : VDISPENABLE;
         while (clocks--) {
             this.oddClock = !this.oddClock;
             // Advance CRT beam.
@@ -1329,9 +1332,10 @@ export class Video {
             // TODO(#876) this will be cleaner if we rework skew to have fetch
             // independent from render.
             const insideBorder = (this.dispEnabled & (HDISPENABLE | VDISPENABLE)) === (HDISPENABLE | VDISPENABLE);
-            if ((insideBorder || this.cursorDrawIndex) && this.dispEnabled & fetchEnable) {
+            if ((insideBorder || this.cursorDrawIndex) && this.dispEnabled & FRAMESKIPENABLE) {
                 // Read data from address pointer if both horizontal and vertical display enabled.
                 const dat = this.readVideoMem();
+                const ma13 = this.addr & Ma13;
                 if (insideBorder) {
                     // Always clock the SAA5050, whatever the ULA mode: IC15 latches the video bus
                     // into the chip and it is MA13, not the ULA's teletext bit, that gates it, so
@@ -1340,7 +1344,7 @@ export class Video {
                     // bitmap still takes effect. The chip logs the bytes and runs them when read.
                     // See https://github.com/mattgodbolt/jsbeeb/issues/546
                     // and https://github.com/mattgodbolt/jsbeeb/issues/832
-                    this.teletext.logClocked(this.addr & Ma13 ? dat : 0);
+                    this.teletext.logClocked(ma13 ? dat : 0);
 
                     // Check cursor start.
                     if (
@@ -1376,7 +1380,7 @@ export class Video {
                             this.teletext.showLatest(
                                 bitmapRow * 1024 + this.bitmapX,
                                 doubledLines,
-                                !this.halfClock || !(this.addr & Ma13),
+                                !this.halfClock || !ma13,
                             );
                         } else {
                             this.pendingCells[this.pendingCount++] = this.pendingBeamOffset() | dat;
@@ -1396,7 +1400,7 @@ export class Video {
             // too early relative to the pipeline for that to come out right, and clocking
             // it here alone moves three of the hardware reference pages. See
             // https://github.com/mattgodbolt/jsbeeb/issues/874
-            if (!(this.dispEnabled & HDISPENABLE) && this.dispEnabled & hblankFeedEnable) {
+            if (!(this.dispEnabled & HDISPENABLE) && this.dispEnabled & VDISPENABLE) {
                 this.teletext.logFed(this.readVideoMem() | 0x40);
             }
 

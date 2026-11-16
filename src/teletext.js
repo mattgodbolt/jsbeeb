@@ -444,9 +444,10 @@ export class Teletext {
             if (!(entry & ShownEntry)) continue;
 
             // Two bits a pixel, indexing the cell's palette; none set shows only the background. A black cell's width.
-            let pixels = entry & TeletextBlack ? this.blackCellPixels : 0;
-            if (!(
-                entry & TeletextBlack ||
+            let pixels = 0;
+            if (entry & TeletextBlack) {
+                pixels = this.blackCellPixels;
+            } else if (!(
                 this.cellConceal ||
                 (this.cellFlash && hideFlashing) ||
                 (this.secondHalfOfDouble && !this.line.dbl)
