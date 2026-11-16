@@ -893,7 +893,7 @@ describe("Video", () => {
                 video.ula.write(PaletteReg, (logical << 4) | ((logical >>> 1) ^ 7));
         };
 
-        // A 1MHz cell is painted on the first of its two ticks, so after the second the beam is half way through it.
+        // A 1MHz character is painted on the first of its two ticks, so after the second the beam is half way through it.
         it.each`
             what              | screen               | mode             | ticks | data            | reg           | val               | width        | from
             ${"palette"}      | ${"MODE 0"}          | ${Mode0}         | ${1}  | ${AllPixelsSet} | ${PaletteReg} | ${SetPixelsGreen} | ${HalfCell}  | ${3}
@@ -909,7 +909,7 @@ describe("Video", () => {
             ${"teletext off"} | ${"MODE 5 teletext"} | ${Mode5Teletext} | ${1}  | ${AllPixelsSet} | ${ControlReg} | ${Mode5}          | ${CellWidth} | ${0}
             ${"teletext off"} | ${"MODE 4 teletext"} | ${Mode4Teletext} | ${1}  | ${AllPixelsSet} | ${ControlReg} | ${Mode4}          | ${CellWidth} | ${2}
         `(
-            "shows a $what write in $screen from texel $from, after tick $ticks of the cell",
+            "shows a $what write in $screen from texel $from, after tick $ticks of the character",
             ({ mode, ticks, data, reg, val, width, from }) => {
                 const paintCell = (writeFirst) => {
                     aimAtCell();

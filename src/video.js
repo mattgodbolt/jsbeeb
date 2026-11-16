@@ -47,14 +47,14 @@ export const LineCountPeriod = 2500;
 
 const BitmapXPerClock = 8;
 const Ma13 = 1 << 13;
-const WideCellTexels = 2 * BitmapXPerClock;
-// A ULA write shows from 4 - p texels into the cell fetched in its own cycle, for a pixel period of p texels before
+const WideCharacterTexels = 2 * BitmapXPerClock;
+// A ULA write shows from 4 - p texels into the character fetched in its own cycle, for a pixel period of p texels before
 // the write, at either clock rate: measured on a Master in 20, 40 and 80 columns (#1866). Indexed by control bits 3-2.
-// Ten columns would put it 4 texels into the cell before, which is unmeasured, so they show from the cell's start.
+// Ten columns would put it 4 texels into the character before, which is unmeasured, so they show from the character's start.
 const UnmeasuredTenColumnWriteEdgeTexels = 0;
 const UlaWriteEdgeTexels = [UnmeasuredTenColumnWriteEdgeTexels, 0, 2, 3];
 // The HD6845S switches R8's display enable for the character fetched in the write's last cycle (#1847, #1866).
-const R8EnableTakesFetchedCell = true;
+const R8EnableTakesFetchedCharacter = true;
 // Switching the CRTC from 2MHz to 1MHz while the 1MHz clock is high clocks it once more, with no fetch: measured on
 // one Master with an HD6845S (#1866); a Model B or another CRTC may differ.
 const ClockSwitchRuntTicksCrtc = true;
@@ -359,8 +359,8 @@ class Crtc {
                     } else {
                         this.video.dispEnableClear(USERDISPENABLE);
                     }
-                    // Before the interlace bits change, as the cell was painted with the old ones.
-                    if (R8EnableTakesFetchedCell && skew < 3 !== wasEnabled) this.video.repaintAfterR8Write();
+                    // Before the interlace bits change, as the character was painted with the old ones.
+                    if (R8EnableTakesFetchedCharacter && skew < 3 !== wasEnabled) this.video.repaintAfterR8Write();
                     this.video.interlacedSyncAndVideo = (val & 3) === 3;
                     this.video.updateVSync();
                     break;
@@ -951,38 +951,38 @@ export class Video {
         return bitmapRow * 1024 + this.bitmapX;
     }
 
-    // The render loop paints a cell whole on the tick that fetches it, so the part of it from a write's edge on is
-    // repainted with the new state. A 1MHz cell spans two ticks and is painted on the first, so after the second the
+    // The render loop paints a character whole on the tick that fetches it, so the part of it from a write's edge on is
+    // repainted with the new state. A 1MHz character spans two ticks and is painted on the first, so after the second the
     // beam is half way through it. The repaint runs to where the next tick paints: a switch to 1MHz with oddClock set
-    // widens the cell just painted, and one to 2MHz narrows it. A write while teletext shows changes nothing painted
+    // widens the character just painted, and one to 2MHz narrows it. A write while teletext shows changes nothing painted
     // beyond widening.
     repaintAfterUlaWrite(edgeTexels, wasHalfClock, wasTeletext) {
         const widens = !wasHalfClock && this.halfClock && this.oddClock;
         if (wasTeletext && this.teletextMode && !widens) return;
         if ((this.dispEnabled & EVERYTHINGENABLED) !== EVERYTHINGENABLED) return;
-        const beamIntoCell = wasHalfClock && !this.oddClock ? BitmapXPerClock : 0;
-        const toPixel = beamIntoCell + (this.halfClock && this.oddClock ? WideCellTexels : BitmapXPerClock);
-        const fromPixel = wasTeletext && this.teletextMode ? BitmapXPerClock : beamIntoCell + edgeTexels;
-        this.repaintCell(beamIntoCell, fromPixel, toPixel);
+        const beamIntoCharacter = wasHalfClock && !this.oddClock ? BitmapXPerClock : 0;
+        const toPixel = beamIntoCharacter + (this.halfClock && this.oddClock ? WideCharacterTexels : BitmapXPerClock);
+        const fromPixel = wasTeletext && this.teletextMode ? BitmapXPerClock : beamIntoCharacter + edgeTexels;
+        this.repaintCharacter(beamIntoCharacter, fromPixel, toPixel);
     }
 
     repaintAfterR8Write() {
         if (this.teletextMode) return;
         if (((this.dispEnabled | USERDISPENABLE) & EVERYTHINGENABLED) !== EVERYTHINGENABLED) return;
-        this.repaintCell(0, 0, this.pixelsPerChar);
+        this.repaintCharacter(0, 0, this.pixelsPerChar);
     }
 
-    // Repaints texels [fromPixel, toPixel) of the cell starting beamIntoCell texels behind the beam: black with R8's
+    // Repaints texels [fromPixel, toPixel) of the character starting beamIntoCharacter texels behind the beam: black with R8's
     // display enable off, else as the ULA shows its fetched byte now.
-    repaintCell(beamIntoCell, fromPixel, toPixel) {
-        const cellX = this.bitmapX - beamIntoCell;
-        if (cellX < 0 || cellX >= 1024 || this.bitmapY < 0 || this.bitmapY >= 625) return;
-        const offset = this.beamOffset() - beamIntoCell;
+    repaintCharacter(beamIntoCharacter, fromPixel, toPixel) {
+        const characterX = this.bitmapX - beamIntoCharacter;
+        if (characterX < 0 || characterX >= 1024 || this.bitmapY < 0 || this.bitmapY >= 625) return;
+        const offset = this.beamOffset() - beamIntoCharacter;
         if (!(this.dispEnabled & USERDISPENABLE)) {
             this.fb32.fill(OPAQUE_BLACK, offset + fromPixel, offset + toPixel);
         } else if (this.teletextMode) {
             this.teletext.catchUp();
-            // The address counter has moved on past the cell.
+            // The address counter has moved on past the character.
             if (this.halfClock && (this.addr - 1) & Ma13) {
                 this.teletext.emitFrom(this.fb32, offset, fromPixel, toPixel);
             } else {
@@ -1278,7 +1278,7 @@ export class Video {
     // Clocks the CRTC once with no fetch and no paint, leaving the beam and the 1MHz phase alone.
     clockCrtcWithoutFetch() {
         // With FRAMESKIPENABLE clear polltime's tick fetches nothing, and a flyback during it decides the bit anew.
-        // The tick flips oddClock back and moves the beam on by the one cell this takes off.
+        // The tick flips oddClock back and moves the beam on by the one character this takes off.
         const fetching = this.dispEnabled & FRAMESKIPENABLE;
         const field = this.fieldCount;
         this.dispEnabled &= ~FRAMESKIPENABLE;
