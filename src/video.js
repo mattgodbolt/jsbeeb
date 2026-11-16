@@ -45,6 +45,7 @@ export const HwScrollSubtract = [8, 4, 10, 5];
 export const LineCountPeriod = 2500;
 
 const BitmapXPerClock = 8;
+const Ma13 = 1 << 13;
 const WideCellTexels = 2 * BitmapXPerClock;
 // A ULA write shows from 4 - p texels into the cell fetched in its own cycle, for a pixel period of p texels before
 // the write, at either clock rate: measured on a Master in 20, 40 and 80 columns (#1866). Indexed by control bits 3-2.
@@ -978,7 +979,7 @@ export class Video {
         } else if (this.teletextMode) {
             this.teletext.catchUp();
             // The address counter has moved on past the cell.
-            if (this.halfClock && (this.addr - 1) & 0x2000) {
+            if (this.halfClock && (this.addr - 1) & Ma13) {
                 this.teletext.emitFrom(this.fb32, offset, fromPixel, toPixel);
             } else {
                 this.fb32.fill(OPAQUE_BLACK, offset + fromPixel, offset + toPixel);
@@ -1000,7 +1001,7 @@ export class Video {
     }
 
     readVideoMem() {
-        if (this.addr & 0x2000) {
+        if (this.addr & Ma13) {
             // Mode 7 chunky addressing mode if MA13 set.
             // Address offset by scanline is ignored.
             // On model B only, there's a quirk for reading 0x3c00.
@@ -1251,7 +1252,7 @@ export class Video {
         // The DISPTMG output pin is wired to the SAA5050 teletext chip,
         // for scanline tracking, so keep it apprised. IC15 passes it on only with MA13 set.
         const mask = HDISPENABLE | VDISPENABLE | USERDISPENABLE;
-        const disptmg = (this.dispEnabled & mask) === mask && !!(this.addr & 0x2000);
+        const disptmg = (this.dispEnabled & mask) === mask && !!(this.addr & Ma13);
         this.teletext.setDISPTMG(disptmg);
     }
 
@@ -1333,7 +1334,7 @@ export class Video {
                     // bitmap still takes effect. The chip logs the bytes and runs them when read.
                     // See https://github.com/mattgodbolt/jsbeeb/issues/546
                     // and https://github.com/mattgodbolt/jsbeeb/issues/832
-                    this.teletext.logClocked(this.addr & 0x2000 ? dat : 0);
+                    this.teletext.logClocked(this.addr & Ma13 ? dat : 0);
 
                     // Check cursor start.
                     if (
@@ -1369,7 +1370,7 @@ export class Video {
                             this.teletext.showLatest(
                                 bitmapRow * 1024 + this.bitmapX,
                                 doubledLines,
-                                !this.halfClock || !(this.addr & 0x2000),
+                                !this.halfClock || !(this.addr & Ma13),
                             );
                         } else {
                             this.pendingCells[this.pendingCount++] = this.pendingBeamOffset() | dat;
