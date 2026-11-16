@@ -48,9 +48,10 @@ export const LineCountPeriod = 2500;
 const BitmapXPerClock = 8;
 const Ma13 = 1 << 13;
 const WideCharacterTexels = 2 * BitmapXPerClock;
-// A ULA write shows from 4 - p texels into the character fetched in its own cycle, for a pixel period of p texels before
-// the write, at either clock rate: measured on a Master in 20, 40 and 80 columns (#1866). Indexed by control bits 3-2.
-// Ten columns would put it 4 texels into the character before, which is unmeasured, so they show from the character's start.
+// A ULA write shows from 4 - p texels into the character fetched in its own cycle, for a pixel period of p texels
+// before the write, at either clock rate: measured on a Master in 20, 40 and 80 columns (#1866). Indexed by control
+// bits 3-2. Ten columns would put it 4 texels into the character before, which is unmeasured, so they show from the
+// character's start.
 const UnmeasuredTenColumnWriteEdgeTexels = 0;
 const UlaWriteEdgeTexels = [UnmeasuredTenColumnWriteEdgeTexels, 0, 2, 3];
 // The HD6845S switches R8's display enable for the character fetched in the write's last cycle (#1847, #1866).
@@ -951,11 +952,11 @@ export class Video {
         return bitmapRow * 1024 + this.bitmapX;
     }
 
-    // The render loop paints a character whole on the tick that fetches it, so the part of it from a write's edge on is
-    // repainted with the new state. A 1MHz character spans two ticks and is painted on the first, so after the second the
-    // beam is half way through it. The repaint runs to where the next tick paints: a switch to 1MHz with oddClock set
-    // widens the character just painted, and one to 2MHz narrows it. A write while teletext shows changes nothing painted
-    // beyond widening.
+    // The render loop paints a character whole on the tick that fetches it, so the part of it from a write's edge on
+    // is repainted with the new state. A 1MHz character spans two ticks and is painted on the first, so after the
+    // second the beam is half way through it. The repaint runs to where the next tick paints: a switch to 1MHz with
+    // oddClock set widens the character just painted, and one to 2MHz narrows it. A write while teletext shows changes
+    // nothing painted beyond widening.
     repaintAfterUlaWrite(edgeTexels, wasHalfClock, wasTeletext) {
         const widens = !wasHalfClock && this.halfClock && this.oddClock;
         if (wasTeletext && this.teletextMode && !widens) return;
@@ -972,8 +973,8 @@ export class Video {
         this.repaintCharacter(0, 0, this.pixelsPerChar);
     }
 
-    // Repaints texels [fromPixel, toPixel) of the character starting beamIntoCharacter texels behind the beam: black with R8's
-    // display enable off, else as the ULA shows its fetched byte now.
+    // Repaints texels [fromPixel, toPixel) of the character starting beamIntoCharacter texels behind the beam: black
+    // with R8's display enable off, else as the ULA shows its fetched byte now.
     repaintCharacter(beamIntoCharacter, fromPixel, toPixel) {
         const characterX = this.bitmapX - beamIntoCharacter;
         if (characterX < 0 || characterX >= 1024 || this.bitmapY < 0 || this.bitmapY >= 625) return;

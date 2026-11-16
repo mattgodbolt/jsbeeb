@@ -893,7 +893,8 @@ describe("Video", () => {
                 video.ula.write(PaletteReg, (logical << 4) | ((logical >>> 1) ^ 7));
         };
 
-        // A 1MHz character is painted on the first of its two ticks, so after the second the beam is half way through it.
+        // A 1MHz character is painted on the first of its two ticks, so after the second the beam is half way
+        // through it.
         it.each`
             what              | screen               | mode             | ticks | data            | reg           | val               | width        | from
             ${"palette"}      | ${"MODE 0"}          | ${Mode0}         | ${1}  | ${AllPixelsSet} | ${PaletteReg} | ${SetPixelsGreen} | ${HalfCell}  | ${3}
@@ -984,7 +985,7 @@ describe("Video", () => {
             ]);
         });
 
-        it("repaints a wide cell only up to where the next tick paints after a switch to 2MHz", () => {
+        it("repaints a wide character only up to where the next tick paints after a switch to 2MHz", () => {
             distinctPalette();
             cpu.data = LowNibbleSet;
             video.ula.write(ControlReg, Mode4);
@@ -1187,7 +1188,7 @@ describe("Video", () => {
                 ${"switches on"}  | ${"in MODE 5"}      | ${Mode5} | ${EVERYTHINGENABLED}                | ${DisplayOff} | ${DisplayOn}  | ${16} | ${White}
                 ${"switches on"}  | ${"in the border"}  | ${Mode0} | ${EVERYTHINGENABLED & ~HDISPENABLE} | ${DisplayOff} | ${DisplayOn}  | ${8}  | ${OPAQUE_BLACK}
             `(
-                "$what $where from the cell fetched in the write's cycle",
+                "$what $where from the character fetched in the write's cycle",
                 ({ mode, enabled, from, to, width, shown }) => {
                     video.ula.write(0, mode);
                     whiteOnEveryIndex();
@@ -1204,7 +1205,7 @@ describe("Video", () => {
                 },
             );
 
-            it("paints the cell's own row when the write also ends interlace sync and video", () => {
+            it("paints the character's own row when the write also ends interlace sync and video", () => {
                 const OddRow = 101;
                 video.ula.write(0, Mode0);
                 whiteOnEveryIndex();
