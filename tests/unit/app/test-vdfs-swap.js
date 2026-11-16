@@ -1,28 +1,35 @@
 import { describe, expect, it } from "vitest";
 
-import { swapVdfsFolder } from "../../../src/app/vdfs-swap.js";
+import { drainVdfs, swapVdfsFolder } from "../../../src/app/vdfs-swap.js";
+
+const later = (events, event) => new Promise((resolve) => setTimeout(resolve, 5)).then(() => events.push(event));
+
+describe("draining VDFS", () => {
+    it("has every page hand over what it wrote, and the writes in flight finish", async () => {
+        const events = [];
+        await drainVdfs({
+            flushPages: () => [later(events, "first flushed"), later(events, "second flushed")],
+            inFlight: () => [later(events, "write done")],
+        });
+        expect(events).toEqual(["first flushed", "second flushed", "write done"]);
+    });
+
+    it("goes on with a write that failed, since it is the old folder's to report", async () => {
+        await expect(
+            drainVdfs({ flushPages: () => [], inFlight: () => [Promise.reject(new Error("disc full"))] }),
+        ).resolves.toBeUndefined();
+    });
+});
 
 describe("changing the VDFS folder", () => {
-    it("has the page hand over what it wrote, and the writes in flight finish, before the folder changes and the page starts again", async () => {
+    it("drains the old pages before the folder changes and the page starts again", async () => {
         const events = [];
-        const writes = [new Promise((resolve) => setTimeout(resolve, 5)).then(() => events.push("write done"))];
         await swapVdfsFolder({
-            flushPage: async () => events.push("page flushed"),
-            inFlight: () => writes,
+            flushPages: () => [later(events, "page flushed")],
+            inFlight: () => [later(events, "write done")],
             changeFolder: () => events.push("folder changed"),
             loadPage: async () => events.push("page loaded"),
         });
         expect(events).toEqual(["page flushed", "write done", "folder changed", "page loaded"]);
-    });
-
-    it("goes on with a write that failed, since it is the old folder's to report", async () => {
-        const events = [];
-        await swapVdfsFolder({
-            flushPage: async () => {},
-            inFlight: () => [Promise.reject(new Error("disc full"))],
-            changeFolder: () => events.push("folder changed"),
-            loadPage: async () => events.push("page loaded"),
-        });
-        expect(events).toEqual(["folder changed", "page loaded"]);
     });
 });

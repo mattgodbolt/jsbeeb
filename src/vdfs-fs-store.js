@@ -5,14 +5,14 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 
-import { isValidName } from "./vdfs-volume.js";
+import { hexUpper } from "./hex.js";
+import { LockedAttribute, isValidName } from "./vdfs-volume.js";
 
 const InfSuffix = ".inf";
 const LockedFlag = /^l(ocked)?$/i;
 const AttributeToken = /^[0-9a-f]{1,2}$/i;
-const LockedAttribute = 0x08;
 
-export const toBbcName = (hostName) => hostName.replaceAll(".", "/");
+const toBbcName = (hostName) => hostName.replaceAll(".", "/");
 const toHostName = (bbcName) => bbcName.replaceAll("/", ".");
 
 /** @returns {{load: number, exec: number, locked: boolean}} what a `.inf` line says, with what it leaves out as 0. */
@@ -27,8 +27,7 @@ export function parseInf(text) {
 }
 
 export function formatInf(name, { load, exec, locked, length }) {
-    const hex8 = (value) => value.toString(16).toUpperCase().padStart(8, "0");
-    return `$.${name}  ${hex8(load)} ${hex8(exec)} ${hex8(length)}${locked ? " L" : ""}\n`;
+    return `$.${name}  ${hexUpper(load, 8)} ${hexUpper(exec, 8)} ${hexUpper(length, 8)}${locked ? " L" : ""}\n`;
 }
 
 const isUnderRoot = (root, candidate) => candidate === root || candidate.startsWith(root + path.sep);
@@ -74,7 +73,6 @@ export class FsStore {
         if (names.some((name) => name === "." || name === ".." || name.includes(path.sep)))
             throw new Error(`${volumePath.join(".")} is not a name that stays in the volume's folder`);
         const hostPath = path.join(this.root, ...names);
-        if (!isUnderRoot(this.root, hostPath)) throw new Error(`${hostPath} is outside ${this.root}`);
         const realRoot = await fs.realpath(this.root);
         const realParent = await fs.realpath(path.dirname(hostPath));
         if (!isUnderRoot(realRoot, realParent)) throw new Error(`${hostPath} is outside ${this.root}`);

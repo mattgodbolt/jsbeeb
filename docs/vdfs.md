@@ -4,11 +4,20 @@ VDFS is a filing system whose files are the host's: a folder on this computer is
 BBC's files, and what the BBC saves is in the folder. It is the same idea as b-em's VDFS and MMFS on a Pi, with a
 host that is jsbeeb.
 
-It is a sideways ROM (`public/roms/vdfs.rom`, from `roms-src/vdfs`) and a device the ROM talks to (`src/vdfs-host.js`).
-The ROM is the OS's side of it: it takes over the filing system vectors and forwards every call. The host does the
-work.
+It is a sideways ROM (`public/roms/vdfs.rom`, from `roms-src/vdfs`) and a device the ROM talks to. The ROM is the OS's
+side of it: it takes over the filing system vectors and forwards every call. The host does the work, in:
+
+- `src/vdfs-protocol.js`: the device in FRED, and the responses the ROM reads (`VdfsPorts`, `Response`)
+- `src/vdfs-host.js`: what the OS's filing system calls and the commands do (`VdfsHost`)
+- `src/vdfs-volume.js`: the tree of files, its names, and the queue of changes to the store (`VdfsVolume`, `Entry`)
+- `src/vdfs-channels.js`: the open files; `src/vdfs-guest-memory.js`: the 6502's memory as the host may touch it
+- `src/vdfs-fs-store.js`: a folder in Node as a store; `src/vdfs-errors.js`: the errors the BBC sees
+- `src/app/*vdfs*`, `src/app/preload.js`: the desktop app's side, which holds the folder in the main process
 
 ## Using it
+
+In the desktop app, File, Serve VDFS Folder... chooses a folder, and starts the page again with it served; Stop Serving
+VDFS Folder undoes that.
 
 In Node, give `MachineSession` a folder:
 
@@ -67,14 +76,15 @@ German MOS and the Master's MOS 3.20 (with the DFS, ADFS and ANFS). The filing s
 OS's extended vector entry points, `&FF1B` to `&FF2D`, which every filing system ROM jsbeeb has (DFS, ADFS, ANFS, DNFS)
 and the Master's and the Compact's MOS contain.
 
-Not done: `OSGBPB` 5 to 8, `OSFILE` 7, `*RENAME`, `*COPY`, `*TITLE`, sector access (`OSWORD` &7F, or a game that
+Not done: `OSGBPB` 5 to 8, `OSFILE` 7, `*RENAME`, `*COPY`, `*TITLE`, `*OPT` (accepted and ignored), sector access (`OSWORD` &7F, or a game that
 drives the disc controller itself), and the second processor: an address that is not in the I/O processor (`&FFFFxxxx`)
 is an error when one is fitted. A snapshot does not hold open files, and restoring one closes them.
 
 ## The ROM and the host
 
-The ROM's code is about 400 bytes, in a 16K image like any other ROM's. It holds no state and no text, and does no parsing; the host parses `*` commands,
-makes the `*CAT` listing and decides what is an error. The ROM hands over a call and does what it is told.
+The ROM's code is about 400 bytes, in a 16K image like any other ROM's. It holds no state and no text, and does no
+parsing; the host parses `*` commands, makes the `*CAT` listing and decides what is an error. The ROM hands over a call
+and does what it is told.
 
 ### The ports
 
@@ -149,8 +159,8 @@ the checked-in ROM is what the source gives.
 
 ## Not yet done
 
-- A host for Electron, and for Chromium's File System Access API. The host's store is an object with `load()` and
-  `writeFile`, `makeDirectory` and `remove`, each of which can be asynchronous; `src/vdfs-fs-store.js` is the one for a
-  folder in Node.
+- A store for Chromium's File System Access API. A store is an object with `load()` and `writeFile`, `makeDirectory`
+  and `remove`, each of which can be asynchronous; `src/vdfs-fs-store.js` is the one for a folder in Node, and the
+  desktop app's is the same over IPC.
 - The files are all in memory, so a folder of many hundreds of games is as large in memory as it is on the disc.
 - `jsbeeb-mcp` could give an assistant a working folder with `vdfsFolder`.

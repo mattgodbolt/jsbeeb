@@ -9,6 +9,10 @@ ZA_POOL &B0..&BF
 OsAsci      = &FFE3
 OsByte      = &FFF4
 RomLatch    = &F4
+OsbyteLanguageRom = &FC
+OsbyteRomPointerTable = &A8
+OsbyteServiceRequest = &8F
+ServiceVectorsClaimed = &0F
 RomSel      = &FE30
 FscVector   = &021E
 FscNewFilingSystem = 6
@@ -115,7 +119,7 @@ SECTION Rom, org = &8000, filename = "vdfs.rom", guard = &C000
 {
     LDA PortData : PHA
     LDA PortData : PHA
-    LDA #&FC : LDX #0 : LDY #&FF : JSR OsByte
+    LDA #OsbyteLanguageRom : LDX #0 : LDY #&FF : JSR OsByte
     LDY #stub_end - stub - 1
     .copy
     LDA stub_rom,Y : STA ErrorBlock,Y
@@ -139,7 +143,7 @@ ENDSECTION
     .copy_os
     LDA os_entries,X : STA OsVectors,X
     DEX : BPL copy_os
-    LDA #&A8 : LDX #0 : LDY #&FF : JSR OsByte
+    LDA #OsbyteRomPointerTable : LDX #0 : LDY #&FF : JSR OsByte
     STX ext_table : STY ext_table + 1
     LDX #0 : LDY #ExtVectorOffset
     .copy_ext
@@ -147,7 +151,7 @@ ENDSECTION
     LDA handlers,X : STA (ext_table),Y : INX : INY
     LDA RomLatch : STA (ext_table),Y : INY
     CPX #2 * NumVectors : BNE copy_ext
-    LDA #&8F : LDX #&0F : LDY #&FF : JSR OsByte
+    LDA #OsbyteServiceRequest : LDX #ServiceVectorsClaimed : LDY #&FF : JSR OsByte
     PLA : TAX
     JMP next
 }

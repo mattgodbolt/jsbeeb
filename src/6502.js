@@ -8,7 +8,8 @@ import { TouchScreen } from "./touchscreen.js";
 import { AmxMouse } from "./amx-mouse.js";
 import { TeletextAdaptor } from "./teletext_adaptor.js";
 import { Filestore } from "./filestore.js";
-import { PortBase as VdfsPortBase, VdfsHost } from "./vdfs-host.js";
+import { VdfsHost } from "./vdfs-host.js";
+import { PortBase as VdfsPortBase, VdfsRom } from "./vdfs-protocol.js";
 import { FakeRelayNoise } from "./relaynoise.js";
 import { AtomPPIA } from "./ppia.js";
 import { AtomMMC2 } from "./mmc.js";
@@ -815,9 +816,9 @@ export class Cpu6502 extends Base6502 {
         this.hasMusic5000 = !!this.config.hasMusic5000;
         this.hasTeletextAdaptor = !!this.config.hasTeletextAdaptor;
         this.teletextAdaptor = this.hasTeletextAdaptor ? new TeletextAdaptor(this) : null;
-        if (this.config.vdfs && (model.isAtom || !model.takesServiceRoms))
+        if (this.config.vdfsVolume && !model.takesServiceRoms)
             throw new Error(`VDFS is not for the ${model.name}: it is for a BBC with a MOS that takes service ROMs`);
-        this.vdfs = this.config.vdfs ? new VdfsHost(this, this.config.vdfs.volume) : null;
+        this.vdfs = this.config.vdfsVolume ? new VdfsHost(this, this.config.vdfsVolume) : null;
         this.tube = this.hasTube
             ? new Tube6502(this.config.tube, this, { cpuMultiplier: this.config.tubeCpuMultiplier })
             : new FakeTube();
@@ -1496,7 +1497,7 @@ export class Cpu6502 extends Base6502 {
             filledBy.set(bank, rom);
             place(bank, rom);
         }
-        for (const rom of this.config.fittedRoms) {
+        for (const rom of [...this.config.fittedRoms, ...(this.vdfs ? [VdfsRom] : [])]) {
             const bank = emptySockets.length ? emptySockets.shift() : nextFreeBank(isRam);
             filledBy.set(bank, rom);
             place(bank, rom);
@@ -1739,7 +1740,7 @@ export class Cpu6502 extends Base6502 {
         this.video.reset(this, this.sysvia, hard);
         this.soundChip.reset(hard);
         if (this.teletextAdaptor) this.teletextAdaptor.reset(hard);
-        if (this.vdfs) this.vdfs.reset();
+        this.vdfs?.reset();
         if (this.music5000) this.music5000.reset(hard);
         if (hard && this.econet) {
             this.econet.reset();
@@ -1948,6 +1949,7 @@ export class Cpu6502 extends Base6502 {
             await this.tube.loadOs();
         }
         if (this.filestore) await this.filestore.load();
+        await this.vdfs?.load();
         this.reset(true);
         this.debugger.setCpu(this);
     }

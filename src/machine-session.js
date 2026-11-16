@@ -123,7 +123,7 @@ export class MachineSession {
 
         // TestMachine forwards these to fake6502
         this._machine = new TestMachine(modelName, {
-            vdfs: this._vdfsVolume && { volume: this._vdfsVolume },
+            vdfsVolume: this._vdfsVolume,
             video: this._video,
             soundChip: this._soundChip,
             tube: opts.tube,
@@ -151,8 +151,9 @@ export class MachineSession {
 
     /** Load ROMs and hardware; call once before anything else */
     async initialise() {
-        await this._vdfsVolume?.load();
         await this._machine.initialise();
+        const { loadError } = this._machine.processor.vdfs ?? {};
+        if (loadError) throw new Error(`Cannot read the VDFS folder ${this._opts.vdfsFolder}`, { cause: loadError });
         if (this._opts.discImage) {
             this.loadDisc(this._opts.discImage);
         }
@@ -161,8 +162,7 @@ export class MachineSession {
 
     /** Resolves once everything the BBC has written to the VDFS folder is in it. */
     async flushVdfs() {
-        this._machine.processor.vdfs?.flushChannels();
-        await this._vdfsVolume?.flush();
+        await this._machine.processor.vdfs?.flush();
     }
 
     /**

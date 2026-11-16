@@ -1,9 +1,9 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Entry, VdfsVolume, isValidName, wildcardMatcher } from "../../src/vdfs-volume.js";
 import { MemoryStore, directory, file } from "../helpers/vdfs.js";
 
-const Where = (volume) => ({ cwd: volume.root, library: volume.root });
+const atRoot = (volume) => ({ cwd: volume.root, library: volume.root });
 
 describe("VDFS volume", () => {
     describe("names", () => {
@@ -70,7 +70,7 @@ describe("VDFS volume", () => {
 
         it("gives the directory and leaf of a name that is not there yet, for creating it", async () => {
             const volume = await VdfsVolume.open(new MemoryStore([directory("D")]));
-            const { parent, name, entry } = volume.resolve("D.NEW", Where(volume));
+            const { parent, name, entry } = volume.resolve("D.NEW", atRoot(volume));
             expect(parent).toBe(volume.root.children.get("D"));
             expect(name).toBe("NEW");
             expect(entry).toBeUndefined();
@@ -78,12 +78,12 @@ describe("VDFS volume", () => {
 
         it("will not step through a file as though it were a directory", async () => {
             const volume = await VdfsVolume.open(new MemoryStore([file("F")]));
-            expect(() => volume.resolve("F.X", Where(volume))).toThrow("Not a directory");
+            expect(() => volume.resolve("F.X", atRoot(volume))).toThrow("Not a directory");
         });
 
         it("stops at the root when asked for its parent", async () => {
             const volume = await VdfsVolume.open(new MemoryStore());
-            expect(volume.resolve("^", Where(volume)).entry).toBe(volume.root);
+            expect(volume.resolve("^", atRoot(volume)).entry).toBe(volume.root);
         });
     });
 
@@ -100,6 +100,10 @@ describe("VDFS volume", () => {
     });
 
     describe("persistence", () => {
+        beforeEach(() => {});
+
+        afterEach(() => {});
+
         it("hands changes to the store in the order they were made, one at a time", async () => {
             const store = new MemoryStore();
             const order = [];
@@ -126,21 +130,19 @@ describe("VDFS volume", () => {
         });
 
         it("notes a store's failure and carries on with the changes after it, without throwing", async () => {
-            const error = vi.spyOn(console, "error").mockImplementation(() => {});
             const store = new MemoryStore();
             const failure = new Error("disc full");
             store.writeFile = vi.fn().mockRejectedValueOnce(failure).mockResolvedValue();
             const volume = await VdfsVolume.open(store);
+            volume.onPersistFailure = vi.fn();
             volume.persist(volume.createFile(volume.root, "A"));
             volume.persist(volume.createFile(volume.root, "B"));
             await volume.flush();
             expect(store.writeFile).toHaveBeenCalledTimes(2);
-            expect(volume.persistFailures).toEqual([{ operation: "writeFile", error: failure }]);
-            error.mockRestore();
+            expect(volume.onPersistFailure).toHaveBeenCalledWith("writeFile", failure);
         });
 
         it("carries on when whoever is listening fails too", async () => {
-            vi.spyOn(console, "error").mockImplementation(() => {});
             const store = new MemoryStore();
             store.writeFile = vi.fn().mockRejectedValueOnce(new Error("disc full")).mockResolvedValue();
             const volume = await VdfsVolume.open(store);
@@ -151,11 +153,9 @@ describe("VDFS volume", () => {
             volume.persist(volume.createFile(volume.root, "B"));
             await expect(volume.flush()).resolves.toBeUndefined();
             expect(store.writeFile).toHaveBeenCalledTimes(2);
-            vi.restoreAllMocks();
         });
 
         it("tells whoever is listening when the store fails, so the failure is not only in a log", async () => {
-            vi.spyOn(console, "error").mockImplementation(() => {});
             const store = new MemoryStore();
             store.writeFile = vi.fn().mockRejectedValue(new Error("disc full"));
             const volume = await VdfsVolume.open(store);
@@ -166,7 +166,6 @@ describe("VDFS volume", () => {
                 "writeFile",
                 expect.objectContaining({ message: "disc full" }),
             );
-            vi.restoreAllMocks();
         });
 
         it("does not persist a file that is no longer in the tree, as one that was deleted or replaced is not", async () => {
@@ -180,6 +179,17 @@ describe("VDFS volume", () => {
             volume.persist(replaced);
             await volume.flush();
             expect(store.log).toEqual([["remove", "GONE"]]);
+        });
+
+        it("sends nothing more to a store it has let go of", async () => {
+            const store = new MemoryStore();
+            const volume = await VdfsVolume.open(store);
+            volume.persist(volume.createFile(volume.root, "BEFORE"));
+            await volume.flush();
+            volume.detachStore();
+            volume.persist(volume.createFile(volume.root, "AFTER"));
+            await volume.flush();
+            expect(store.log).toEqual([["writeFile", "BEFORE"]]);
         });
 
         it("will not remove the root", async () => {

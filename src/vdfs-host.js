@@ -1,27 +1,35 @@
-// The host half of VDFS: the device the ROM in roms-src/vdfs talks to, and the filing system behind it. The ROM
-// hands over a call's registers, and the host answers with a stream of ops for the ROM to carry out. See docs/vdfs.md.
+// The filing system behind the VDFS ROM in roms-src/vdfs: what the OS's filing system calls and the commands do to the
+// volume's files, and to the 6502's memory. The device the ROM talks to is vdfs-protocol.js. See docs/vdfs.md.
 
-import { Errors, VdfsError, wildcardMatcher } from "./vdfs-volume.js";
-
-export const PortBase = 0xfc60;
-export const PortCount = 8;
-export const Port = Object.freeze({ call: 0, a: 1, x: 2, y: 3, p: 4, stream: 5, data: 6, id: 7 });
-export const HostId = 0x56;
-export const VdfsRom = "vdfs.rom";
-
-export const Call = Object.freeze({ service: 0, file: 1, args: 2, bget: 3, bput: 4, gbpb: 5, find: 6, fsc: 7 });
-export const Op = Object.freeze({ done: 0, print: 1, error: 2, exec: 3, claim: 4 });
+import { ChannelTable, FirstHandle, LastHandle } from "./vdfs-channels.js";
+import { Errors, VdfsError } from "./vdfs-errors.js";
+import { GuestMemory } from "./vdfs-guest-memory.js";
+import { hexUpper } from "./hex.js";
+import { Call, VdfsPorts } from "./vdfs-protocol.js";
+import { LockedAttribute, MaxNameLength, wildcardMatcher } from "./vdfs-volume.js";
 
 export const FilingSystemNumber = 0x11;
-export const FirstHandle = 0x11;
-export const LastHandle = 0x18;
+
+export const Osfile = Object.freeze({
+    save: 0x00,
+    writeInformation: 0x01,
+    writeLoad: 0x02,
+    writeExec: 0x03,
+    writeAttributes: 0x04,
+    readInformation: 0x05,
+    delete: 0x06,
+    createDirectory: 0x08,
+    load: 0xff,
+});
+export const Osfind = Object.freeze({ close: 0x00, read: 0x40, write: 0x80, update: 0xc0 });
+export const Osargs = Object.freeze({ pointer: 0, setPointer: 1, extent: 2, setExtent: 3, flush: 0xff });
+export const Osgbpb = Object.freeze({ writeAtPointer: 1, write: 2, readAtPointer: 3, read: 4 });
+
 const Title = "VDFS";
-const Commands = "ACCESS CAT CDIR DELETE DIR EX INFO LIB VDFS";
 const Version = "0.1";
 
 const Service = Object.freeze({ command: 0x04, help: 0x09, select: 0x12 });
 const Fsc = Object.freeze({
-    option: 0,
     eof: 1,
     slashRun: 2,
     unrecognised: 3,
@@ -34,24 +42,15 @@ const Fsc = Object.freeze({
 });
 
 const Carry = 0x01;
-const IoProcessor = 0xffff;
+const OsfindModeMask = 0xc0;
+const OsargsFilingSystem = 0;
 const CommandLinePointer = 0xf2;
 const FileAttributes = 0x03;
-const LockedAttribute = 0x08;
 const Carriage = "\r";
-const Space = 0x20;
-const Quote = 0x22;
 const CataloguePerLine = 3;
 const CatalogueColumnWidth = 13;
-const NameWidth = 10;
-const MaxErrorText = 80;
-const MaxFileBytes = 0x1000000;
-const MemoryBytes = 0x10000;
-const FirstDeviceAddress = 0xfc00;
-const EndOfDevices = 0xff00;
-const MaxStringLength = 255;
-const BootOptionNumber = 4;
 const EndOfFile = 0xff;
+const NoMoreBytes = 0xfe;
 const OsfileBlock = Object.freeze({ load: 2, exec: 6, start: 10, length: 10, end: 14, attributes: 14 });
 const GbpbBlock = Object.freeze({ handle: 0, address: 1, count: 5, pointer: 9 });
 const ObjectNone = 0;
@@ -59,58 +58,8 @@ const ObjectFile = 1;
 const ObjectDirectory = 2;
 
 const hasAddresses = (entry) => entry.load !== 0 || entry.exec !== 0;
-const hex = (value, digits) => value.toString(16).toUpperCase().padStart(digits, "0");
-
-/** What the ROM is to do once a call has been made, as the bytes it reads from the stream. */
-class Response {
-    constructor() {
-        this.bytes = [];
-        this.ended = false;
-    }
-
-    _text(text) {
-        for (const char of text) this.bytes.push(char.charCodeAt(0) & 0x7f);
-        this.bytes.push(0);
-    }
-
-    print(text) {
-        this.bytes.push(Op.print);
-        this._text(text);
-    }
-
-    error(number, text) {
-        this.bytes.push(Op.error, number);
-        this._text(text.slice(0, MaxErrorText));
-        this.ended = true;
-    }
-
-    /** The ROM jumps to the program at `address`, with the caller's return address still on the stack. */
-    exec(address) {
-        const less = (address - 1) & 0xffff;
-        this.bytes.push(Op.exec, less >> 8, less & 0xff);
-        this.ended = true;
-    }
-
-    claim() {
-        this.bytes.push(Op.claim);
-    }
-
-    /** Ends the response with the registers to return, unless the ROM is not to come back for them. */
-    done({ a, x, y, p }) {
-        if (this.ended) return;
-        this.bytes.push(Op.done, x & 0xff, y & 0xff, p & 0xff, a & 0xff);
-    }
-}
-
-/** An open file: where the next byte goes, and whether what has been written has reached the store. */
-class Channel {
-    constructor(entry, { writable }) {
-        this.entry = entry;
-        this.writable = writable;
-        this.pointer = 0;
-        this.dirty = false;
-    }
-}
+const blockAddress = ({ x, y }) => x | (y << 8);
+const accessFlag = (entry) => (entry.isDirectory ? "D" : entry.locked ? "L" : " ");
 
 export class VdfsHost {
     /**
@@ -118,98 +67,61 @@ export class VdfsHost {
      * @param {import("./vdfs-volume.js").VdfsVolume} volume the files
      */
     constructor(cpu, volume) {
-        this.cpu = cpu;
         this.volume = volume;
-        this._request = { a: 0, x: 0, y: 0, p: 0 };
-        this._streams = new Map();
-        this._nextStream = 1;
-        this._responseStream = 0;
-        this._selectedStream = 0;
-        this._channels = new Array(LastHandle - FirstHandle + 1).fill(null);
+        this.memory = new GuestMemory(cpu);
+        this.channels = new ChannelTable(volume);
+        this.ports = new VdfsPorts((call, registers, response) => this._dispatch(call, registers, response));
+        /** @type {Error | null} why the volume could not be read, in which case it is empty */
+        this.loadError = null;
+        this._commands = {
+            ACCESS: (argument) => this._access(argument),
+            CAT: (argument, response) => this._catalogue(argument, response),
+            CDIR: (argument) => this._makeDirectory(argument),
+            DELETE: (argument) => this._delete(argument),
+            DIR: (argument) => (this.directory = this._directoryNamed(argument)),
+            EX: (argument, response) => this._examine(argument, response, { extended: true }),
+            INFO: (argument, response) => this._examine(argument, response, { extended: false }),
+            LIB: (argument) => (this.library = this._directoryNamed(argument)),
+        };
         this.reset();
     }
 
-    /** A break: the OS has gone back to its own filing system, and files open on the old one are closed. */
-    /** How many responses the ROM has not finished reading. */
     get openStreams() {
-        return this._streams.size;
+        return this.ports.openStreams;
     }
 
+    read(offset) {
+        return this.ports.read(offset);
+    }
+
+    write(offset, value) {
+        this.ports.write(offset, value);
+    }
+
+    /** Reads the volume's files. A volume that cannot be read is empty, and the machine goes on without it. */
+    async load() {
+        try {
+            await this.volume.load();
+        } catch (error) {
+            console.error("VDFS could not read its files:", error);
+            this.loadError = error;
+        }
+    }
+
+    /** @returns {Promise<void>} once what the BBC has written, open files included, is in the store */
+    async flush() {
+        this.channels.flush();
+        await this.volume.flush();
+    }
+
+    /** A break: the OS has gone back to its own filing system, and files open on the old one are closed. */
     reset() {
-        this._streams.clear();
-        this.closeAll();
+        this.ports.reset();
+        this.channels.closeAll();
         this.selected = false;
         this._reselecting = false;
         this.directory = this.volume.root;
         this.library = this.volume.root;
-        this.bootOption = 0;
-    }
-
-    read(offset) {
-        switch (offset) {
-            case Port.stream:
-                return this._responseStream;
-            case Port.data:
-                return this._nextByte();
-            case Port.id:
-                return HostId;
-            default:
-                return 0;
-        }
-    }
-
-    write(offset, value) {
-        switch (offset) {
-            case Port.call:
-                this._call(value);
-                break;
-            case Port.a:
-                this._request.a = value;
-                break;
-            case Port.x:
-                this._request.x = value;
-                break;
-            case Port.y:
-                this._request.y = value;
-                break;
-            case Port.p:
-                this._request.p = value;
-                break;
-            case Port.stream:
-                this._selectedStream = value;
-                break;
-        }
-    }
-
-    _nextByte() {
-        const stream = this._streams.get(this._selectedStream);
-        if (!stream) return 0;
-        const byte = stream.bytes[stream.position++];
-        if (stream.position >= stream.bytes.length) this._streams.delete(this._selectedStream);
-        return byte ?? 0;
-    }
-
-    _call(call) {
-        const registers = { ...this._request };
-        const response = new Response();
-        try {
-            this._dispatch(call, registers, response);
-            response.done(registers);
-        } catch (error) {
-            if (error instanceof VdfsError) response.error(error.number, error.message);
-            else {
-                console.error("VDFS host failure:", error);
-                response.error(0xff, `VDFS host failure: ${error.message}`);
-            }
-        }
-        this._responseStream = this._newStream(response.bytes);
-    }
-
-    _newStream(bytes) {
-        const id = this._nextStream;
-        this._nextStream = this._nextStream === 0xff ? 1 : this._nextStream + 1;
-        this._streams.set(id, { bytes, position: 0 });
-        return id;
     }
 
     _dispatch(call, registers, response) {
@@ -223,7 +135,7 @@ export class VdfsHost {
             case Call.bget:
                 return this._bget(registers);
             case Call.bput:
-                return this._bput(registers);
+                return this.channels.get(registers.y).writeByte(registers.a);
             case Call.gbpb:
                 return this._gbpb(registers);
             case Call.find:
@@ -235,85 +147,6 @@ export class VdfsHost {
         }
     }
 
-    // ---- The 6502's memory ----
-
-    _byte(address) {
-        return this.cpu.peekmem(address & 0xffff);
-    }
-
-    _word(address) {
-        return this._byte(address) | (this._byte(address + 1) << 8);
-    }
-
-    _long(address) {
-        return (this._word(address) | (this._word(address + 2) << 16)) >>> 0;
-    }
-
-    _setLong(address, value) {
-        for (let index = 0; index < 4; index++)
-            this.cpu.writemem((address + index) & 0xffff, (value >>> (8 * index)) & 0xff);
-    }
-
-    _string(address) {
-        let text = "";
-        for (let index = 0; index < MaxStringLength; index++) {
-            const byte = this._byte(address + index);
-            if (byte === 0x0d) break;
-            text += String.fromCharCode(byte);
-        }
-        return text;
-    }
-
-    /** The address in the machine a 32-bit address names. Addresses in the second processor are not served. */
-    _memoryAddress(address) {
-        if (this.cpu.hasTube && address >>> 16 !== IoProcessor) throw Errors.unsupported("Tube transfer");
-        return address & 0xffff;
-    }
-
-    /** Where in memory `length` bytes at `address` are, which has to be memory the 6502 has to give or take. */
-    _memoryRange(address, length, { writing }) {
-        const from = this._memoryAddress(address);
-        if (length > MemoryBytes || from + length > MemoryBytes) throw Errors.badAddress();
-        if (writing && length > 0 && from < EndOfDevices && from + length > FirstDeviceAddress)
-            throw Errors.badAddress();
-        return from;
-    }
-
-    _readMemory(address, length) {
-        const from = this._memoryRange(address, length, { writing: false });
-        const bytes = new Uint8Array(length);
-        for (let index = 0; index < length; index++) bytes[index] = this._byte(from + index);
-        return bytes;
-    }
-
-    _writeMemory(address, bytes) {
-        const from = this._memoryRange(address, bytes.length, { writing: true });
-        for (let index = 0; index < bytes.length; index++) this.cpu.writemem(from + index, bytes[index]);
-    }
-
-    _lengthen(entry, length) {
-        if (length > MaxFileBytes) throw Errors.fileTooBig();
-        entry.resize(length);
-    }
-
-    /** A name ends at a space or a return, since the OS leaves the rest of a `*SAVE` or `*LOAD` line after it. */
-    _filename(address) {
-        const quoted = this._byte(address) === Quote;
-        let text = "";
-        for (let index = quoted ? 1 : 0; index < MaxStringLength; index++) {
-            const byte = this._byte(address + index);
-            if (byte === 0x0d || (quoted ? byte === Quote : byte === Space)) break;
-            text += String.fromCharCode(byte);
-        }
-        return text;
-    }
-
-    _commandLine(offset) {
-        return this._string(this._word(CommandLinePointer) + offset);
-    }
-
-    // ---- Names ----
-
     _resolve(text) {
         return this.volume.resolve(text, { cwd: this.directory, library: this.library });
     }
@@ -324,13 +157,17 @@ export class VdfsHost {
         return entry;
     }
 
+    _commandLine(offset) {
+        return this.memory.text(this.memory.word(CommandLinePointer) + offset);
+    }
+
     // ---- Service calls ----
 
     _service(registers, response) {
         switch (registers.a) {
             case Service.command: {
                 const { name, argument } = this._parseCommand(this._commandLine(registers.y));
-                if (name === "VDFS") {
+                if (name === Title) {
                     this._select(response);
                     registers.a = 0;
                 } else if (this.selected && this._runCommand(name, argument, response)) {
@@ -341,8 +178,10 @@ export class VdfsHost {
             case Service.help: {
                 const topic = this._commandLine(registers.y).trim().toUpperCase();
                 if (topic === "") response.print(`  ${Title} ${Version}${Carriage}`);
-                else if (topic === Title)
-                    response.print(`${Title} ${Version}${Carriage}  VDFS${Carriage}  ${Commands}${Carriage}`);
+                else if (topic === Title) {
+                    const names = [Title, ...Object.keys(this._commands)].sort().join(" ");
+                    response.print(`${Title} ${Version}${Carriage}  ${Title}${Carriage}  ${names}${Carriage}`);
+                }
                 break;
             }
             case Service.select:
@@ -360,7 +199,7 @@ export class VdfsHost {
         response.claim();
     }
 
-    // ---- Files ----
+    // ---- OSFILE ----
 
     _attributes(entry) {
         return entry.isDirectory ? 0 : FileAttributes | (entry.locked ? LockedAttribute : 0);
@@ -372,224 +211,175 @@ export class VdfsHost {
     }
 
     _writeInformation(block, entry) {
-        this._setLong(block + OsfileBlock.load, entry.load);
-        this._setLong(block + OsfileBlock.exec, entry.exec);
-        this._setLong(block + OsfileBlock.length, entry.isDirectory ? 0 : entry.length);
-        this._setLong(block + OsfileBlock.attributes, this._attributes(entry));
+        this.memory.setLong(block + OsfileBlock.load, entry.load);
+        this.memory.setLong(block + OsfileBlock.exec, entry.exec);
+        this.memory.setLong(block + OsfileBlock.length, entry.size);
+        this.memory.setLong(block + OsfileBlock.attributes, this._attributes(entry));
     }
 
     _file(registers) {
-        const block = registers.x | (registers.y << 8);
-        const name = this._filename(this._word(block));
-        const { parent, name: leaf, entry } = this._resolve(name);
-        const attributes = () => this._long(block + OsfileBlock.attributes);
-        switch (registers.a) {
-            case 0x00: {
-                const [load, exec, start, end] = [
-                    OsfileBlock.load,
-                    OsfileBlock.exec,
-                    OsfileBlock.start,
-                    OsfileBlock.end,
-                ].map((offset) => this._long(block + offset));
-                if (end < start) throw Errors.badAddress();
-                if (entry?.isDirectory) throw Errors.isDirectory();
-                const data = this._readMemory(start, end - start);
-                const saved = this.volume.createFile(parent, leaf, { load, exec, data });
-                this.volume.persist(saved);
+        const block = blockAddress(registers);
+        const { parent, name: leaf, entry } = this._resolve(this.memory.filename(this.memory.word(block)));
+        const action = registers.a;
+        switch (action) {
+            case Osfile.save:
+                this._save(block, { parent, leaf, entry });
                 registers.a = ObjectFile;
                 break;
-            }
-            case 0x01:
-            case 0x02:
-            case 0x03:
-            case 0x04:
-                if (entry) {
-                    if (registers.a === 0x01 || registers.a === 0x02) entry.load = this._long(block + OsfileBlock.load);
-                    if (registers.a === 0x01 || registers.a === 0x03) entry.exec = this._long(block + OsfileBlock.exec);
-                    if (registers.a === 0x01 || registers.a === 0x04)
-                        entry.locked = (attributes() & LockedAttribute) !== 0;
-                    if (!entry.isDirectory) this.volume.persist(entry);
-                }
+            case Osfile.writeInformation:
+            case Osfile.writeLoad:
+            case Osfile.writeExec:
+            case Osfile.writeAttributes:
+                if (entry) this._writeAttributes(action, block, entry);
                 registers.a = this._objectType(entry);
                 break;
-            case 0x05:
+            case Osfile.readInformation:
                 if (entry) this._writeInformation(block, entry);
                 registers.a = this._objectType(entry);
                 break;
-            case 0x06:
+            case Osfile.delete:
                 if (entry) {
                     this._writeInformation(block, entry);
                     this._remove(entry);
                 }
                 registers.a = this._objectType(entry);
                 break;
-            case 0x08:
+            case Osfile.createDirectory:
                 if (entry && !entry.isDirectory) throw Errors.exists();
                 if (!entry) this.volume.makeDirectory(parent, leaf);
                 registers.a = ObjectDirectory;
                 break;
-            case 0xff: {
-                if (!entry) throw Errors.notFound();
-                if (entry.isDirectory) throw Errors.isDirectory();
-                const atOwnAddress = this._byte(block + OsfileBlock.exec) !== 0;
-                if (atOwnAddress && !hasAddresses(entry)) throw Errors.noAddresses();
-                const address = atOwnAddress ? entry.load : this._long(block + OsfileBlock.load);
-                this._writeMemory(address, entry.bytes);
-                this._writeInformation(block, entry);
-                this._setLong(block + OsfileBlock.load, address);
+            case Osfile.load:
+                this._load(block, entry);
                 registers.a = ObjectFile;
                 break;
-            }
             default:
-                throw Errors.unsupported(`OSFILE ${registers.a}`);
+                throw Errors.unsupported(`OSFILE ${action}`);
         }
+    }
+
+    _save(block, { parent, leaf, entry }) {
+        const [load, exec, start, end] = [OsfileBlock.load, OsfileBlock.exec, OsfileBlock.start, OsfileBlock.end].map(
+            (offset) => this.memory.long(block + offset),
+        );
+        if (end < start) throw Errors.badAddress();
+        if (entry?.isDirectory) throw Errors.isDirectory();
+        const data = this.memory.read(start, end - start);
+        this.volume.persist(this.volume.createFile(parent, leaf, { load, exec, data }));
+    }
+
+    _writeAttributes(action, block, entry) {
+        const all = action === Osfile.writeInformation;
+        if (all || action === Osfile.writeLoad) entry.load = this.memory.long(block + OsfileBlock.load);
+        if (all || action === Osfile.writeExec) entry.exec = this.memory.long(block + OsfileBlock.exec);
+        if (all || action === Osfile.writeAttributes)
+            entry.locked = (this.memory.long(block + OsfileBlock.attributes) & LockedAttribute) !== 0;
+        if (!entry.isDirectory) this.volume.persist(entry);
+    }
+
+    _load(block, entry) {
+        if (!entry) throw Errors.notFound();
+        if (entry.isDirectory) throw Errors.isDirectory();
+        const atOwnAddress = this.memory.byte(block + OsfileBlock.exec) !== 0;
+        if (atOwnAddress && !hasAddresses(entry)) throw Errors.noAddresses();
+        const address = atOwnAddress ? entry.load : this.memory.long(block + OsfileBlock.load);
+        this.memory.write(address, entry.bytes);
+        this._writeInformation(block, entry);
+        this.memory.setLong(block + OsfileBlock.load, address);
     }
 
     // ---- Open files ----
 
-    _channel(handle) {
-        const channel = this._channels[handle - FirstHandle];
-        if (!channel) throw Errors.notOpen();
-        return channel;
-    }
-
     _find(registers) {
-        if (registers.a === 0) {
-            if (registers.y === 0) this.closeAll();
-            else this._close(registers.y);
+        if (registers.a === Osfind.close) {
+            if (registers.y === 0) this.channels.closeAll();
+            else this.channels.close(registers.y);
             return;
         }
-        const name = this._filename(registers.x | (registers.y << 8));
-        const { parent, name: leaf, entry } = this._resolve(name);
-        const kind = registers.a & 0xc0;
+        const { parent, name: leaf, entry } = this._resolve(this.memory.filename(blockAddress(registers)));
+        const mode = registers.a & OsfindModeMask;
         let target = entry;
-        if (kind === 0x80) target = this.volume.createFile(parent, leaf);
+        if (mode === Osfind.write) target = this.volume.createFile(parent, leaf);
         else if (!entry) {
             registers.a = 0;
             return;
         }
         if (target.isDirectory) throw Errors.isDirectory();
-        if (kind === 0xc0 && target.locked) throw Errors.locked();
-        const slot = this._channels.indexOf(null);
-        if (slot < 0) throw Errors.tooManyOpen();
-        this._channels[slot] = new Channel(target, { writable: kind !== 0x40 });
-        if (kind === 0x80) this._channels[slot].dirty = true;
-        registers.a = FirstHandle + slot;
-    }
-
-    _close(handle) {
-        const channel = this._channel(handle);
-        this._channels[handle - FirstHandle] = null;
-        this._flushChannel(channel);
-    }
-
-    _flushChannel(channel) {
-        if (!channel.dirty) return;
-        channel.dirty = false;
-        this.volume.persist(channel.entry);
-    }
-
-    /** Hands what open files have had written to them to the store, leaving them open. */
-    flushChannels() {
-        for (const channel of this._channels) if (channel) this._flushChannel(channel);
-    }
-
-    closeAll() {
-        this.flushChannels();
-        this._channels.fill(null);
+        if (mode === Osfind.update && target.locked) throw Errors.locked();
+        registers.a = this.channels.open(target, { writable: mode !== Osfind.read, dirty: mode === Osfind.write });
     }
 
     _args(registers) {
         if (registers.y === 0) {
-            if (registers.a === 0) registers.a = FilingSystemNumber;
-            else if (registers.a === 0xff) this.flushChannels();
+            if (registers.a === OsargsFilingSystem) registers.a = FilingSystemNumber;
+            else if (registers.a === Osargs.flush) this.channels.flush();
             return;
         }
-        const channel = this._channel(registers.y);
+        const channel = this.channels.get(registers.y);
         const block = registers.x;
-        const { entry } = channel;
         switch (registers.a) {
-            case 0:
-                this._setLong(block, channel.pointer);
+            case Osargs.pointer:
+                this.memory.setLong(block, channel.pointer);
                 break;
-            case 1:
-                channel.pointer = this._long(block);
+            case Osargs.setPointer:
+                channel.pointer = this.memory.long(block);
                 break;
-            case 2:
-                this._setLong(block, entry.length);
+            case Osargs.extent:
+                this.memory.setLong(block, channel.length);
                 break;
-            case 3:
-                if (!channel.writable) throw Errors.locked();
-                this._lengthen(entry, this._long(block));
-                channel.dirty = true;
+            case Osargs.setExtent:
+                channel.setLength(this.memory.long(block));
                 break;
-            case 0xff:
-                this._flushChannel(channel);
+            case Osargs.flush:
+                this.channels.flushChannel(channel);
                 break;
         }
     }
 
     _bget(registers) {
-        const channel = this._channel(registers.y);
-        if (channel.pointer > channel.entry.length) throw Errors.eof();
-        if (channel.pointer === channel.entry.length) {
-            registers.a = 0xfe;
+        const byte = this.channels.get(registers.y).readByte();
+        if (byte === undefined) {
+            registers.a = NoMoreBytes;
             registers.p |= Carry;
-            return;
+        } else {
+            registers.a = byte;
+            registers.p &= ~Carry;
         }
-        registers.a = channel.entry.buffer[channel.pointer++];
-        registers.p &= ~Carry;
-    }
-
-    _bput(registers) {
-        const channel = this._channel(registers.y);
-        if (!channel.writable) throw Errors.locked();
-        const { entry } = channel;
-        if (channel.pointer >= entry.length) this._lengthen(entry, channel.pointer + 1);
-        entry.buffer[channel.pointer++] = registers.a;
-        channel.dirty = true;
     }
 
     _gbpb(registers) {
-        if (registers.a < 1 || registers.a > 4) throw Errors.unsupported(`OSGBPB ${registers.a}`);
-        const block = registers.x | (registers.y << 8);
-        const channel = this._channel(this._byte(block + GbpbBlock.handle));
-        const address = this._long(block + GbpbBlock.address);
-        const count = this._long(block + GbpbBlock.count);
-        const { entry } = channel;
-        if (registers.a === 1 || registers.a === 3) channel.pointer = this._long(block + GbpbBlock.pointer);
+        const action = registers.a;
+        if (!Object.values(Osgbpb).includes(action)) throw Errors.unsupported(`OSGBPB ${action}`);
+        const block = blockAddress(registers);
+        const channel = this.channels.get(this.memory.byte(block + GbpbBlock.handle));
+        const address = this.memory.long(block + GbpbBlock.address);
+        const count = this.memory.long(block + GbpbBlock.count);
+        if (action === Osgbpb.writeAtPointer || action === Osgbpb.readAtPointer)
+            channel.pointer = this.memory.long(block + GbpbBlock.pointer);
         let transferred = count;
-        if (registers.a <= 2) {
-            if (!channel.writable) throw Errors.locked();
-            const data = this._readMemory(address, count);
-            if (channel.pointer + count > entry.length) this._lengthen(entry, channel.pointer + count);
-            entry.buffer.set(data, channel.pointer);
-            channel.dirty = true;
+        if (action === Osgbpb.writeAtPointer || action === Osgbpb.write) {
+            channel.write(this.memory.read(address, count));
         } else {
-            transferred = Math.max(0, Math.min(count, entry.length - channel.pointer));
-            this._writeMemory(address, entry.buffer.subarray(channel.pointer, channel.pointer + transferred));
+            const bytes = channel.peek(count);
+            this.memory.write(address, bytes);
+            channel.pointer += bytes.length;
+            transferred = bytes.length;
         }
-        channel.pointer += transferred;
-        this._setLong(block + GbpbBlock.address, address + transferred);
-        this._setLong(block + GbpbBlock.count, count - transferred);
-        this._setLong(block + GbpbBlock.pointer, channel.pointer);
-        if (count - transferred > 0) registers.p |= Carry;
+        this.memory.setLong(block + GbpbBlock.address, address + transferred);
+        this.memory.setLong(block + GbpbBlock.count, count - transferred);
+        this.memory.setLong(block + GbpbBlock.pointer, channel.pointer);
+        if (count > transferred) registers.p |= Carry;
         else registers.p &= ~Carry;
     }
 
     // ---- Filing system calls and commands ----
 
     _fsc(registers, response) {
-        const text = () => this._string(registers.x | (registers.y << 8));
+        const text = () => this.memory.text(blockAddress(registers));
         switch (registers.a) {
-            case Fsc.option:
-                if (registers.x === BootOptionNumber) this.bootOption = registers.y & 3;
+            case Fsc.eof:
+                registers.x = this.channels.get(registers.x).atEnd ? EndOfFile : 0;
                 break;
-            case Fsc.eof: {
-                const channel = this._channel(registers.x);
-                registers.x = channel.pointer >= channel.entry.length ? EndOfFile : 0;
-                break;
-            }
             case Fsc.slashRun:
             case Fsc.run:
                 this._run(text(), response);
@@ -607,7 +397,7 @@ export class VdfsHost {
                 if (this._reselecting) this._reselecting = false;
                 else {
                     this.selected = false;
-                    this.closeAll();
+                    this.channels.closeAll();
                 }
                 break;
             case Fsc.handles:
@@ -628,45 +418,38 @@ export class VdfsHost {
         return { name: match[1].toUpperCase(), argument: match[2].trim() };
     }
 
+    /** @returns {boolean} whether `name` is one of the commands, which has then been run */
     _runCommand(name, argument, response) {
-        switch (name) {
-            case "DIR":
-                this.directory = argument ? this._existingDirectory(argument) : this.volume.root;
-                return true;
-            case "LIB":
-                this.library = argument ? this._existingDirectory(argument) : this.volume.root;
-                return true;
-            case "CDIR": {
-                if (!argument) throw Errors.badName();
-                const { parent, name: leaf, entry } = this._resolve(argument);
-                if (entry) throw Errors.exists();
-                this.volume.makeDirectory(parent, leaf);
-                return true;
-            }
-            case "DELETE":
-                if (!argument) throw Errors.badName();
-                this._remove(this._existing(argument));
-                return true;
-            case "ACCESS": {
-                const [path, attributes = ""] = argument.split(/\s+/);
-                if (!path) throw Errors.badName();
-                const entry = this._existing(path);
-                entry.locked = attributes.toUpperCase().includes("L");
-                if (!entry.isDirectory) this.volume.persist(entry);
-                return true;
-            }
-            case "INFO":
-                this._examine(argument, response, { extended: false });
-                return true;
-            case "EX":
-                this._examine(argument, response, { extended: true });
-                return true;
-            case "CAT":
-                this._catalogue(argument, response);
-                return true;
-            default:
-                return false;
-        }
+        if (!Object.hasOwn(this._commands, name)) return false;
+        this._commands[name](argument, response);
+        return true;
+    }
+
+    _directoryNamed(argument) {
+        if (!argument) return this.volume.root;
+        const entry = this._existing(argument);
+        if (!entry.isDirectory) throw Errors.notDirectory();
+        return entry;
+    }
+
+    _makeDirectory(argument) {
+        if (!argument) throw Errors.badName();
+        const { parent, name, entry } = this._resolve(argument);
+        if (entry) throw Errors.exists();
+        this.volume.makeDirectory(parent, name);
+    }
+
+    _delete(argument) {
+        if (!argument) throw Errors.badName();
+        this._remove(this._existing(argument));
+    }
+
+    _access(argument) {
+        const [path, attributes = ""] = argument.split(/\s+/);
+        if (!path) throw Errors.badName();
+        const entry = this._existing(path);
+        entry.locked = attributes.toUpperCase().includes("L");
+        if (!entry.isDirectory) this.volume.persist(entry);
     }
 
     /** Removes an entry, and puts the current directory and the library back at the root if it was either. */
@@ -674,12 +457,6 @@ export class VdfsHost {
         this.volume.remove(entry);
         if (this.directory === entry) this.directory = this.volume.root;
         if (this.library === entry) this.library = this.volume.root;
-    }
-
-    _existingDirectory(text) {
-        const entry = this._existing(text);
-        if (!entry.isDirectory) throw Errors.notDirectory();
-        return entry;
     }
 
     /** `*RUN`: the file in the current directory, or failing that the library, loaded and then run. */
@@ -697,16 +474,15 @@ export class VdfsHost {
         if (!entry) throw orElse();
         if (entry.isDirectory) throw Errors.isDirectory();
         if (!hasAddresses(entry)) throw Errors.noAddresses();
-        this._writeMemory(entry.load, entry.bytes);
-        response.exec(this._memoryAddress(entry.exec));
+        this.memory.write(entry.load, entry.bytes);
+        response.exec(this.memory.address(entry.exec));
     }
 
     _catalogue(argument, response) {
-        const dir = argument ? this._existingDirectory(argument) : this.directory;
+        const dir = argument ? this._directoryNamed(argument) : this.directory;
         let text = `${Title}${Carriage}Dir. ${dir.displayPath}  Lib. ${this.library.displayPath}${Carriage}${Carriage}`;
         dir.listing().forEach((entry, index) => {
-            const flag = entry.isDirectory ? "D" : entry.locked ? "L" : " ";
-            text += `${entry.name.padEnd(NameWidth)}${flag}`.padEnd(CatalogueColumnWidth);
+            text += `${entry.name.padEnd(MaxNameLength)}${accessFlag(entry)}`.padEnd(CatalogueColumnWidth);
             if (index % CataloguePerLine === CataloguePerLine - 1) text += Carriage;
         });
         if (!text.endsWith(Carriage)) text += Carriage;
@@ -714,14 +490,12 @@ export class VdfsHost {
     }
 
     _examine(argument, response, { extended }) {
-        const entries = this._matching(argument);
         const line = (entry) => {
-            const flag = entry.isDirectory ? "D" : entry.locked ? "L" : " ";
-            const details = `${hex(entry.load, 8)} ${hex(entry.exec, 8)} ${hex(entry.isDirectory ? 0 : entry.length, 6)}`;
-            return `${entry.name.padEnd(NameWidth)} ${flag} ${details}${Carriage}`;
+            const details = `${hexUpper(entry.load, 8)} ${hexUpper(entry.exec, 8)} ${hexUpper(entry.size, 6)}`;
+            return `${entry.name.padEnd(MaxNameLength)} ${accessFlag(entry)} ${details}${Carriage}`;
         };
         let text = extended ? `Dir. ${this.directory.displayPath}${Carriage}` : "";
-        for (const entry of entries) text += line(entry);
+        for (const entry of this._matching(argument)) text += line(entry);
         response.print(text);
     }
 
@@ -729,7 +503,7 @@ export class VdfsHost {
     _matching(argument) {
         if (!argument) return this.directory.listing();
         const lastDot = argument.lastIndexOf(".");
-        const directory = lastDot < 0 ? this.directory : this._existingDirectory(argument.slice(0, lastDot) || "$");
+        const directory = lastDot < 0 ? this.directory : this._directoryNamed(argument.slice(0, lastDot) || "$");
         const matcher = wildcardMatcher(argument.slice(lastDot + 1));
         const found = directory.listing().filter((entry) => matcher.test(entry.name));
         if (found.length === 0) throw Errors.notFound();

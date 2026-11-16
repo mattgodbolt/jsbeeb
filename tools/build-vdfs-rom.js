@@ -15,7 +15,7 @@ const RomName = "vdfs.rom";
 const Installed = path.join("public", "roms", RomName);
 
 /** @returns {Buffer} the ROM Baron assembles from the source. */
-export function assemble(baron = process.env.BARON ?? "baron") {
+function assemble(baron = process.env.BARON ?? "baron") {
     const out = fs.mkdtempSync(path.join(os.tmpdir(), "vdfs-rom-"));
     try {
         const output = execFileSync(baron, ["--warn", "2", "-p", out, "vdfs.6502"], {

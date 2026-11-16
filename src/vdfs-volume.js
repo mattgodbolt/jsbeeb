@@ -1,37 +1,13 @@
 // The tree of files the VDFS host serves: held in memory, since the 6502 cannot wait for a host's storage, with
 // changes handed to a store to persist afterwards. See docs/vdfs.md.
 
+import { Errors } from "./vdfs-errors.js";
+
 export const MaxNameLength = 10;
+export const LockedAttribute = 0x08;
 const PrintableAscii = /^[!-~]*$/;
 const NameSeparators = /[.:"*#|]/;
 const SpecialDirectories = new Set(["$", "&", "@", "%", "^"]);
-
-/** An error the host raises on the 6502 as the OS would: BRK, the number, then the text. */
-export class VdfsError extends Error {
-    constructor(number, text) {
-        super(text);
-        this.number = number;
-    }
-}
-
-export const Errors = Object.freeze({
-    badName: () => new VdfsError(0xcc, "Bad name"),
-    notFound: () => new VdfsError(0xd6, "Not found"),
-    locked: () => new VdfsError(0xc3, "Locked"),
-    exists: () => new VdfsError(0xc4, "Already exists"),
-    notEmpty: () => new VdfsError(0xb4, "Dir not empty"),
-    isDirectory: () => new VdfsError(0xc7, "Is a directory"),
-    notDirectory: () => new VdfsError(0xbe, "Not a directory"),
-    tooManyOpen: () => new VdfsError(0xc0, "Too many open files"),
-    notOpen: () => new VdfsError(0xde, "Channel"),
-    accessViolation: () => new VdfsError(0xbd, "Access violation"),
-    fileTooBig: () => new VdfsError(0xc6, "File too big"),
-    noAddresses: () => new VdfsError(0xcd, "No load address"),
-    badCommand: () => new VdfsError(0xfe, "Bad command"),
-    badAddress: () => new VdfsError(0x93, "Bad address"),
-    unsupported: (what) => new VdfsError(0x94, `${what} is not supported`),
-    eof: () => new VdfsError(0xdf, "EOF"),
-});
 
 /** A name that ends in `/inf` would be a host file that ends in `.inf`, which is where a file's addresses are kept. */
 const SidecarName = /\/inf$/i;
@@ -82,6 +58,11 @@ export class Entry {
         return this.buffer.subarray(0, this.length);
     }
 
+    /** How many bytes it holds: nothing, for a directory. */
+    get size() {
+        return this.isDirectory ? 0 : this.length;
+    }
+
     /** Sets the length, zero-filling any growth. */
     resize(length) {
         if (length > this.buffer.length) {
@@ -124,8 +105,6 @@ export class VdfsVolume {
         this.store = store;
         this.root = new Entry("$", { isDirectory: true });
         this._pending = Promise.resolve();
-        /** @type {{operation: string, error: Error}[]} */
-        this.persistFailures = [];
         /** @type {((operation: string, error: Error) => void) | null} called when the store fails a change */
         this.onPersistFailure = null;
     }
@@ -178,32 +157,24 @@ export class VdfsVolume {
     resolve(text, { cwd, library }) {
         const withoutDrive = text.replace(/^:[^.]*\.?/, "");
         const parts = withoutDrive.length === 0 ? ["@"] : withoutDrive.split(".");
-        if (!parts.every((part) => SpecialDirectories.has(part) || isValidName(part))) throw Errors.badName();
-        let dir = cwd;
-        let index = 0;
         const first = parts[0];
-        if (first === "$" || first === "&") {
-            dir = this.root;
-            index = 1;
-        } else if (first === "%") {
-            dir = library;
-            index = 1;
-        }
-        if (index === parts.length) return { parent: dir.parent ?? dir, name: dir.name, entry: dir };
-        for (; index < parts.length - 1; index++) dir = this._step(dir, parts[index]);
-        const last = parts[index];
+        const root = first === "$" || first === "&" ? this.root : first === "%" ? library : null;
+        const rest = root ? parts.slice(1) : parts;
+        if (!rest.every((part) => part === "^" || part === "@" || isValidName(part))) throw Errors.badName();
+        let dir = root ?? cwd;
+        if (rest.length === 0) return { parent: dir.parent ?? dir, name: dir.name, entry: dir };
+        for (const part of rest.slice(0, -1)) dir = this._step(dir, part);
+        const last = rest.at(-1);
         if (last === "^" || last === "@") {
             const target = this._step(dir, last);
             return { parent: target.parent ?? target, name: target.name, entry: target };
         }
-        if (!isValidName(last)) throw Errors.badName();
         return { parent: dir, name: last, entry: dir.children.get(keyOf(last)) };
     }
 
     _step(dir, part) {
         if (part === "^") return dir.parent ?? dir;
         if (part === "@") return dir;
-        if (SpecialDirectories.has(part) || !isValidName(part)) throw Errors.badName();
         const child = dir.children.get(keyOf(part));
         if (!child) throw Errors.notFound();
         if (!child.isDirectory) throw Errors.notDirectory();
@@ -245,7 +216,6 @@ export class VdfsVolume {
 
     _enqueue(operation, run) {
         this._pending = this._pending.then(run).catch((error) => {
-            this.persistFailures.push({ operation, error });
             console.error(`VDFS could not persist ${operation}:`, error);
             try {
                 this.onPersistFailure?.(operation, error);
@@ -253,6 +223,11 @@ export class VdfsVolume {
                 console.error("VDFS persist failure listener failed:", listenerError);
             }
         });
+    }
+
+    /** From here on changes go nowhere, for a page that is about to be replaced by one that has its own store. */
+    detachStore() {
+        this.store = null;
     }
 
     /** @returns {Promise<void>} once every change made so far has reached the store. */

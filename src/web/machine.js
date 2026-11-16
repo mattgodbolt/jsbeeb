@@ -7,7 +7,6 @@ import { tubeModelFor } from "../models.js";
 import { toast } from "./toast.js";
 import { errorText, reportLoadFailure, showNotice } from "./reporting.js";
 import { loadData } from "../loader.js";
-import { VdfsRom } from "../vdfs-host.js";
 
 /**
  * The machine's fittings as the CPU wants them handed over. Pure, so the bank
@@ -22,7 +21,7 @@ export function buildEmulationConfig({
     bankRoms,
     userPort,
     printer,
-    vdfs,
+    vdfsVolume,
 }) {
     return machineSpec({
         keyLayout,
@@ -33,8 +32,8 @@ export function buildEmulationConfig({
         hasMusic5000: settings.hasMusic5000,
         hasTeletextAdaptor: settings.hasTeletextAdaptor,
         hasAmxMouse: settings.hasAmxMouse,
-        vdfs,
-        fittedRoms: [...settings.fittedRoms, ...(vdfs ? [VdfsRom] : [])],
+        vdfsVolume,
+        fittedRoms: settings.fittedRoms,
         bankRoms,
         extraRoms,
         userPort,
@@ -59,7 +58,7 @@ export class Machine {
         stationId,
         userPort,
         printer,
-        vdfs = null,
+        vdfsVolume = null,
         speechOutput,
         video,
         audioHandler,
@@ -100,7 +99,7 @@ export class Machine {
             bankRoms,
             userPort,
             printer,
-            vdfs,
+            vdfsVolume,
         });
 
         this.processor = build(model, {
@@ -157,11 +156,8 @@ export class Machine {
         basicNeedsRun,
     }) {
         const { processor } = this;
-        await Promise.all([
-            this.audioHandler.initialise(),
-            processor.initialise(),
-            processor.vdfs?.volume.load().catch((error) => reportLoadFailure("the VDFS folder", error)),
-        ]);
+        await Promise.all([this.audioHandler.initialise(), processor.initialise()]);
+        if (processor.vdfs?.loadError) reportLoadFailure("the VDFS folder", processor.vdfs.loadError);
 
         // Wire up the composite RS-423 handler now that the touchscreen exists.
         this.setupRs423Handler();

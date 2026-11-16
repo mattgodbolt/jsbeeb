@@ -5,7 +5,6 @@ import { FakeSoundChip } from "./soundchip.js";
 import { TEST_6502, TEST_65C02, TEST_65C12, tubeModelFor } from "./models.js";
 import { machineSpec, nullIo } from "./machine-spec.js";
 import { DefaultStationId, Econet, FileServerStationId, MasterAnfsRom } from "./econet.js";
-import { VdfsRom } from "./vdfs-host.js";
 
 const soundChip = new FakeSoundChip();
 
@@ -40,8 +39,8 @@ export function fake6502(model, opts = {}) {
             hasMusic5000: opts.hasMusic5000,
             hasTeletextAdaptor: opts.hasTeletextAdaptor,
             hasAmxMouse: opts.hasAmxMouse,
-            vdfs: opts.vdfs,
-            fittedRoms: [...(econet && model.isMaster ? [MasterAnfsRom] : []), ...(opts.vdfs ? [VdfsRom] : [])],
+            vdfsVolume: opts.vdfsVolume,
+            fittedRoms: econet && model.isMaster ? [MasterAnfsRom] : [],
             bankRoms: opts.bankRoms,
             extraRoms: opts.extraRoms,
         }),

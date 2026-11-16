@@ -61,17 +61,23 @@ export function initialise(args) {
     if (isDesktopApp()) init(args);
 }
 
-/** Has the page hand what the BBC has written to the main process, when the main process is about to change folder. */
-export function flushVdfsWhenAsked(host) {
-    window.electronAPI.onVdfsFlush(async () => {
-        host.flushChannels();
-        await host.volume.flush();
-        // The page is about to be replaced, and anything it wrote from here would go to whichever folder is next.
-        host.volume.store = null;
-    });
+/** @returns {VdfsVolume | null} the folder the app was asked to serve as VDFS, whose files its main process holds */
+export function desktopVdfs(query) {
+    return isDesktopApp() && query.vdfs ? new VdfsVolume(window.electronAPI.vdfs) : null;
 }
 
-/** @returns {{volume: VdfsVolume} | null} the folder the app was asked to serve as VDFS, whose files its main process holds */
-export function desktopVdfs(query) {
-    return isDesktopApp() && query.vdfs ? { volume: new VdfsVolume(window.electronAPI.vdfs) } : null;
+/**
+ * Has the page hand its writes to the main process when the page is going or the folder is about to change, and say
+ * through `notify` when the main process cannot keep one.
+ */
+export function attachDesktopVdfs(host, { notify }) {
+    window.addEventListener("pagehide", () => host.flush());
+    window.electronAPI.onVdfsFlush(async () => {
+        await host.flush();
+        host.volume.detachStore();
+    });
+    host.volume.onPersistFailure = (operation, error) =>
+        notify(
+            `The VDFS folder could not be updated (${operation}: ${error.message}). What the BBC wrote may be lost.`,
+        );
 }

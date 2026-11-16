@@ -6,7 +6,7 @@ import { ArgumentParser } from "argparse";
 
 import { getArguments } from "./args.js";
 import { FsStore } from "../vdfs-fs-store.js";
-import { swapVdfsFolder } from "./vdfs-swap.js";
+import { drainVdfs, swapVdfsFolder } from "./vdfs-swap.js";
 
 const store = new Store();
 
@@ -14,6 +14,8 @@ const store = new Store();
 const savedFolder = store.get("vdfsFolder");
 let vdfsStore = typeof savedFolder === "string" && savedFolder ? new FsStore(savedFolder) : null;
 const pendingVdfsOperations = new Set();
+const FlushTimeoutMs = 3000;
+let readyToQuit = false;
 
 function vdfsOperation(run) {
     if (!vdfsStore) return Promise.reject(new Error("No folder is being served as VDFS"));
@@ -118,12 +120,10 @@ async function createWindow() {
     win.on("close", (event) => {
         if (!vdfsStore || flushedForClose || readyToQuit) return;
         event.preventDefault();
-        askPageToFlush(win)
-            .then(() => Promise.allSettled([...pendingVdfsOperations]))
-            .finally(() => {
-                flushedForClose = true;
-                win.close();
-            });
+        drainVdfs({ flushPages: () => [askPageToFlush(win)], inFlight: () => pendingVdfsOperations }).finally(() => {
+            flushedForClose = true;
+            win.close();
+        });
     });
     await win.loadFile("dist/index.html", { query });
 
@@ -133,17 +133,14 @@ async function createWindow() {
 }
 
 // A quit closes the windows, and a close the page has not flushed for is held back, which would cancel the quit.
-let readyToQuit = false;
 app.on("before-quit", (event) => {
     const windows = BrowserWindow.getAllWindows();
     if (readyToQuit || !vdfsStore || windows.length === 0) return;
     event.preventDefault();
-    Promise.all(windows.map(askPageToFlush))
-        .then(() => Promise.allSettled([...pendingVdfsOperations]))
-        .finally(() => {
-            readyToQuit = true;
-            app.quit();
-        });
+    drainVdfs({ flushPages: () => windows.map(askPageToFlush), inFlight: () => pendingVdfsOperations }).finally(() => {
+        readyToQuit = true;
+        app.quit();
+    });
 });
 
 app.on("window-all-closed", function () {
@@ -181,8 +178,6 @@ const loadDisc = (drive) =>
         setting: `settings.disc${drive + 1}`,
     });
 
-const FlushTimeoutMs = 3000;
-
 /** Waits for the page to say it has handed over what the BBC wrote, so none of it reaches the folder after this. */
 function askPageToFlush(browserWindow) {
     return new Promise((resolve) => {
@@ -203,7 +198,7 @@ function askPageToFlush(browserWindow) {
 /** Serves `folder` as VDFS, or no folder, and starts the page again, which has to be built with it. */
 async function serveVdfsFolder(browserWindow, folder) {
     await swapVdfsFolder({
-        flushPage: () => (vdfsStore ? askPageToFlush(browserWindow) : Promise.resolve()),
+        flushPages: () => (vdfsStore ? [askPageToFlush(browserWindow)] : []),
         inFlight: () => pendingVdfsOperations,
         changeFolder: () => {
             if (folder) store.set("vdfsFolder", folder);

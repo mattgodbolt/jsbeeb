@@ -33,7 +33,7 @@ class Model {
         romSockets,
         fdc,
         cmosOverride,
-        takesServiceRoms = true,
+        takesServiceRoms = !isAtom,
         banks,
         clockMhz,
         idleAddress,

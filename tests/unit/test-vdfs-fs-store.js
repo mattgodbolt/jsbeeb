@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { FsStore, formatInf, parseInf, toBbcName } from "../../src/vdfs-fs-store.js";
+import { FsStore, formatInf, parseInf } from "../../src/vdfs-fs-store.js";
 import { VdfsVolume } from "../../src/vdfs-volume.js";
 
 describe("VDFS folder store", () => {
@@ -59,7 +59,6 @@ describe("VDFS folder store", () => {
             await fs.writeFile(path.join(root, "a#b"), "x");
             const volume = await VdfsVolume.open(new FsStore(root));
             expect([...volume.root.children.values()].map((entry) => entry.name)).toEqual(["prog/bas"]);
-            expect(toBbcName("prog.bas")).toBe("prog/bas");
         });
 
         it("leaves out a .inf file whatever the case of its suffix, and ignores one that is a link", async () => {
