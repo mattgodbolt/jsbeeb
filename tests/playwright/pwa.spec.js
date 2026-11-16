@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { expect, test } from "./fixtures.js";
 
 const RomsDir = fileURLToPath(new URL("../../public/roms/", import.meta.url));
+const DesktopOnlyRom = "roms/vdfs.rom";
 
 test.use({ withServiceWorker: true });
 
@@ -25,9 +26,11 @@ test("installs a worker that holds every ROM, and reloads with no network", asyn
     });
     const roms = readdirSync(RomsDir, { recursive: true, withFileTypes: true })
         .filter((entry) => entry.isFile())
-        .map((entry) => `roms/${relative(RomsDir, join(entry.parentPath, entry.name))}`);
+        .map((entry) => `roms/${relative(RomsDir, join(entry.parentPath, entry.name))}`)
+        .filter((rom) => rom !== DesktopOnlyRom);
     expect(roms.length).toBeGreaterThan(0);
     expect(cached).toEqual(expect.arrayContaining(roms));
+    expect(cached).not.toContain(DesktopOnlyRom);
 
     const session = await context.newCDPSession(page);
     const { installabilityErrors } = await session.send("Page.getInstallabilityErrors");
