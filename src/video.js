@@ -23,6 +23,7 @@ const USERDISPENABLE = 1 << 4;
 const FRAMESKIPENABLE = 1 << 5;
 export const EVERYTHINGENABLED =
     VDISPENABLE | HDISPENABLE | SKEWDISPENABLE | SCANLINEDISPENABLE | USERDISPENABLE | FRAMESKIPENABLE;
+const DisptmgEnables = HDISPENABLE | VDISPENABLE | USERDISPENABLE;
 
 export { OPAQUE_BLACK };
 const OPAQUE_WHITE = 0xffffffff;
@@ -1251,8 +1252,7 @@ export class Video {
     dispEnableChanged() {
         // The DISPTMG output pin is wired to the SAA5050 teletext chip,
         // for scanline tracking, so keep it apprised. IC15 passes it on only with MA13 set.
-        const mask = HDISPENABLE | VDISPENABLE | USERDISPENABLE;
-        const disptmg = (this.dispEnabled & mask) === mask && !!(this.addr & Ma13);
+        const disptmg = (this.dispEnabled & DisptmgEnables) === DisptmgEnables && !!(this.addr & Ma13);
         this.teletext.setDISPTMG(disptmg);
     }
 
@@ -1262,8 +1262,14 @@ export class Video {
     }
 
     dispEnableClear(flag) {
+        // A low DISPTMG holds the chip in reset, so a line it never saw ends there with no row counted.
+        const lineEndsHeldLow =
+            !this.teletext.levelDISPTMG &&
+            (this.dispEnabled & DisptmgEnables) === DisptmgEnables &&
+            flag & DisptmgEnables;
         this.dispEnabled &= ~flag;
         this.dispEnableChanged();
+        if (lineEndsHeldLow) this.teletext.endLine();
     }
 
     // Clocks the CRTC once with no fetch, no SAA5050 feed and no paint, leaving the beam and the 1MHz phase alone.

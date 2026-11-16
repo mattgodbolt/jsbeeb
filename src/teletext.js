@@ -548,6 +548,16 @@ export class Teletext {
         return this.flashTime < 16;
     }
 
+    /** Brings the log to the line's end and resets what a line carries, as a DISPTMG falling edge does. */
+    endLine() {
+        if (this.logShows) {
+            this.catchUp();
+        } else {
+            this.skipLine();
+        }
+        this.line.reset(this.normalGlyphs);
+    }
+
     setDISPTMG(level) {
         // The SAA5050 input pin "LOSE" is connected to the 6845 output pin
         // "DISPTMG" and it is used to track scanlines.
@@ -561,13 +571,7 @@ export class Teletext {
             return;
         }
 
-        if (this.logShows) {
-            this.catchUp();
-        } else {
-            this.skipLine();
-        }
-        this.line.reset(this.normalGlyphs);
-
+        this.endLine();
         this.scanlineCounter++;
         // Check for end of character row.
         if (this.scanlineCounter === 10) {

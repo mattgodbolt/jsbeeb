@@ -363,15 +363,18 @@ describe("Video", () => {
         });
 
         it.each([
-            ["set", TeletextAddress, true],
-            ["clear", TeletextAddress - 1, false],
-        ])("raises the chip's DISPTMG with the display only with MA13 %s", (_, addr, expected) => {
-            video.addr = addr;
+            ["set", TeletextAddress, 5],
+            ["clear", TeletextAddress - 0x1000, 0],
+        ])("counts the chip's rows over lines shown with MA13 %s", (_, screenStart, rows) => {
+            const LinesShown = 5;
+            ({ video } = rig = makeVideo());
+            programStandardFrame(rig);
+            rig.writeCrtc(12, screenStart >> 8);
+            rig.run(ClocksPerFrame);
+            const at = () => video.beamPosition().crtc;
+            while (at().row !== 0 || at().scanline !== LinesShown || at().column !== 0) rig.run(1);
 
-            rig.writeCrtc(8, 0x30);
-            rig.writeCrtc(8, 0);
-
-            expect(video.teletext.snapshotState().levelDISPTMG).toBe(expected);
+            expect(video.teletext.snapshotState().scanlineCounter).toBe(rows);
         });
 
         it.each([
