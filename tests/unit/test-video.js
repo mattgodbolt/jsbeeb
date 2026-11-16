@@ -320,9 +320,11 @@ describe("Video", () => {
     });
 
     describe("feeding the SAA5050", () => {
+        const TeletextAddress = 0x2000;
         const newestFed = () => video.teletext.snapshotState().dataQueue.at(-1);
 
         beforeEach(() => {
+            video.addr = TeletextAddress;
             video.dispEnabled = EVERYTHINGENABLED;
             video.bitmapX = 100;
             video.bitmapY = 100;
@@ -347,6 +349,52 @@ describe("Video", () => {
             video.polltime(1);
 
             expect(newestFed()).toBe(0x45);
+        });
+
+        it.each([
+            ["set", TeletextAddress, 0x42],
+            ["clear", TeletextAddress - 1, 0],
+        ])("feeds the chip what was fetched only with MA13 %s", (_, addr, expected) => {
+            video.addr = addr;
+
+            video.polltime(1);
+
+            expect(newestFed()).toBe(expected);
+        });
+
+        it.each([
+            ["set", TeletextAddress, true],
+            ["clear", TeletextAddress - 1, false],
+        ])("raises the chip's DISPTMG with the display only with MA13 %s", (_, addr, expected) => {
+            video.addr = addr;
+
+            rig.writeCrtc(8, 0x30);
+            rig.writeCrtc(8, 0);
+
+            expect(video.teletext.snapshotState().levelDISPTMG).toBe(expected);
+        });
+
+        it.each([
+            ["set", TeletextAddress, false],
+            ["clear", TeletextAddress - 0x1000, true],
+        ])("draws a teletext cell black only with MA13 %s", (_, addr, black) => {
+            const WhiteGraphics = 0x17;
+            const SolidBlock = 0x7f;
+            const PipelineCells = 3;
+            const CellPixels = 16;
+            video.ula.write(0, Mode4Teletext);
+            video.regs[7] = 30; // keep vsync, and the flyback that clears the framebuffer, away from the cell
+            video.addr = addr;
+            fb.fill(0xffffffff);
+
+            cpu.data = WhiteGraphics;
+            video.polltime(1);
+            cpu.data = SolidBlock;
+            video.polltime(2 * (PipelineCells + 1));
+            video.renderPending();
+
+            const cell = [...fb.subarray(100 * FbWidth + video.bitmapX, 100 * FbWidth + video.bitmapX + CellPixels)];
+            expect(cell.every((pixel) => pixel === OPAQUE_BLACK)).toBe(black);
         });
 
         it("feeds it nothing outside the vertical display", () => {
@@ -438,6 +486,8 @@ describe("Video", () => {
         const SnapshotRow = 5;
         const BlankingColumn = 50;
         const DisplayedRows = 25;
+        // MA13 set, without which IC15 feeds the SAA5050 nothing.
+        const ScreenStart = 0x2000;
         const PaintsToRun = 3;
 
         // A MODE 7 shaped frame without interlace: ten scanline rows line the CRTC's rows up with the chip's.
@@ -452,6 +502,7 @@ describe("Video", () => {
             r.writeCrtc(7, 27); // Vsync position
             r.writeCrtc(8, 0); // No interlace
             r.writeCrtc(9, 9); // Scanlines per character row
+            r.writeCrtc(12, ScreenStart >> 8);
         }
 
         /**
@@ -600,7 +651,7 @@ describe("Video", () => {
             function programCursor(r, row, column) {
                 r.writeCrtc(10, 0); // a steady cursor from the top scanline
                 r.writeCrtc(11, ScanlinesPerRow - 1);
-                const address = row * DisplayedColumns + column;
+                const address = ScreenStart + row * DisplayedColumns + column;
                 r.writeCrtc(14, address >> 8);
                 r.writeCrtc(15, address & 0xff);
             }
@@ -671,6 +722,16 @@ describe("Video", () => {
                 while (eager.video.vertCounter !== NulaRow || eager.video.horizCounter !== NulaColumn + 4) eager.step();
                 expect(lazy.video.snapshotState()).toEqual(eager.video.snapshotState());
                 expect(differingPixels(lazy.fb, eager.fb)).toBe(0);
+            });
+
+            it("paints teletext black with MA13 clear", () => {
+                const r = teletextRig({ byteAt: () => LetterA, ulaAt: () => Mode4Teletext });
+                r.writeCrtc(12, (ScreenStart - 0x1000) >> 8);
+                runUntilPaints(r, PaintsToRun);
+
+                expect(r.paints.at(-1).fb.every((pixel) => pixel >>> 0 === OPAQUE_BLACK)).toBe(true);
+                expect(r.checked.teletextPaints).toBeGreaterThan(0);
+                expect(r.checked.differences).toEqual([]);
             });
 
             it("inverts the cursor over the teletext cell it painted", () => {
@@ -764,6 +825,9 @@ describe("Video", () => {
     describe("ULA writes part way through a cell", () => {
         const Mode0 = 0x9c;
         const Mode1 = 0xd8;
+        const Mode2 = 0xf4;
+        const Mode5 = 0xc4;
+        const Mode5Teletext = 0xc6;
         const ControlReg = 0;
         const PaletteReg = 1;
         const NulaControlReg = 2;
@@ -775,7 +839,9 @@ describe("Video", () => {
         const LowNibbleSet = 0x0f;
         const CellWidth = 16;
         const HalfCell = 8;
-        const OutputLag = 4;
+        const Mode0Edge = 3;
+        const Mode4Edge = 2;
+        const TeletextAddress = 0x2000;
         // A set pixel in a two colour mode is logical colour 15.
         const SetPixelsGreen = 0xf0 | (7 ^ 2);
         const SetPixelsBlue = 0xf0 | (7 ^ 4);
@@ -786,6 +852,7 @@ describe("Video", () => {
             video.dispEnabled = EVERYTHINGENABLED;
             video.regs[7] = 30; // keep vsync, and the flyback it brings, away from the cell under test
             video.horizCounter = 10;
+            video.addr = TeletextAddress;
             video.bitmapX = 92;
             video.bitmapY = 100;
             video.oddClock = false;
@@ -798,56 +865,78 @@ describe("Video", () => {
             video.renderPending();
             return Array.from(fb.subarray(at, at + width));
         };
-        const firstHalf = () => cell().slice(0, HalfCell);
-        const secondHalf = () => cell().slice(HalfCell);
         const distinctPalette = () => {
             for (let logical = 0; logical < 16; ++logical)
                 video.ula.write(PaletteReg, (logical << 4) | ((logical >>> 1) ^ 7));
         };
 
-        it("repaints the second half as teletext when the teletext bit is set", () => {
-            video.ula.write(0, Mode4);
+        // A 1MHz cell is painted on the first of its two ticks, so after the second the beam is half way through it.
+        it.each`
+            what              | mode             | ticks | data            | reg           | val               | width        | from
+            ${"palette"}      | ${Mode0}         | ${1}  | ${AllPixelsSet} | ${PaletteReg} | ${SetPixelsGreen} | ${HalfCell}  | ${3}
+            ${"palette"}      | ${Mode1}         | ${1}  | ${AllPixelsSet} | ${PaletteReg} | ${SetPixelsGreen} | ${HalfCell}  | ${2}
+            ${"palette"}      | ${Mode2}         | ${1}  | ${AllPixelsSet} | ${PaletteReg} | ${SetPixelsGreen} | ${HalfCell}  | ${0}
+            ${"palette"}      | ${Mode4}         | ${1}  | ${AllPixelsSet} | ${PaletteReg} | ${SetPixelsGreen} | ${CellWidth} | ${2}
+            ${"palette"}      | ${Mode4}         | ${2}  | ${AllPixelsSet} | ${PaletteReg} | ${SetPixelsGreen} | ${CellWidth} | ${10}
+            ${"palette"}      | ${Mode5}         | ${1}  | ${AllPixelsSet} | ${PaletteReg} | ${SetPixelsGreen} | ${CellWidth} | ${0}
+            ${"palette"}      | ${Mode5}         | ${2}  | ${AllPixelsSet} | ${PaletteReg} | ${SetPixelsGreen} | ${CellWidth} | ${8}
+            ${"mode"}         | ${Mode0}         | ${1}  | ${LowNibbleSet} | ${ControlReg} | ${Mode1}          | ${HalfCell}  | ${3}
+            ${"teletext on"}  | ${Mode5}         | ${1}  | ${AllPixelsSet} | ${ControlReg} | ${Mode5Teletext}  | ${CellWidth} | ${0}
+            ${"teletext on"}  | ${Mode4}         | ${1}  | ${AllPixelsSet} | ${ControlReg} | ${Mode4Teletext}  | ${CellWidth} | ${2}
+            ${"teletext off"} | ${Mode5Teletext} | ${1}  | ${AllPixelsSet} | ${ControlReg} | ${Mode5}          | ${CellWidth} | ${0}
+            ${"teletext off"} | ${Mode4Teletext} | ${1}  | ${AllPixelsSet} | ${ControlReg} | ${Mode4}          | ${CellWidth} | ${2}
+        `(
+            "shows a $what write in mode $mode from texel $from, after tick $ticks of the cell",
+            ({ mode, ticks, data, reg, val, width, from }) => {
+                const paintCell = (writeFirst) => {
+                    aimAtCell();
+                    distinctPalette();
+                    cpu.data = data;
+                    video.ula.write(ControlReg, mode);
+                    if (writeFirst) video.ula.write(reg, val);
+                    video.polltime(ticks);
+                    return cell(offset, width);
+                };
+                const after = paintCell(true);
+                const before = paintCell(false);
+
+                video.ula.write(reg, val);
+
+                expect(after[from]).not.toBe(before[from]);
+                expect(cell(offset, width)).toEqual([...before.slice(0, from), ...after.slice(from)]);
+            },
+        );
+
+        it("repaints nothing for a palette write while teletext shows", () => {
+            video.ula.write(ControlReg, Mode4Teletext);
             video.polltime(1);
-            expect(cell()).toEqual(Array(CellWidth).fill(Red));
-
-            video.ula.write(0, Mode4Teletext);
-
-            expect(firstHalf()).toEqual(Array(HalfCell).fill(Red));
-            expect(secondHalf()).not.toEqual(Array(HalfCell).fill(Red));
-        });
-
-        it("repaints the second half as bitmap when the teletext bit is cleared", () => {
-            video.ula.write(0, Mode4Teletext);
-            video.polltime(1);
-            const teletextHalf = firstHalf();
-            expect(teletextHalf).not.toContain(Red);
-
-            video.ula.write(0, Mode4);
-
-            expect(firstHalf()).toEqual(teletextHalf);
-            expect(secondHalf()).toEqual(Array(HalfCell).fill(Red));
-        });
-
-        it("applies a palette write to the second half only", () => {
-            video.ula.write(0, Mode4);
-            video.polltime(1);
-
-            video.ula.write(1, SetPixelsGreen);
-
-            expect(video.ulaPal[15] >>> 0).toBe(Green);
-            expect(firstHalf()).toEqual(Array(HalfCell).fill(Red));
-            expect(secondHalf()).toEqual(Array(HalfCell).fill(Green));
-        });
-
-        it("leaves the cell alone when the write lands at the start of the next cell", () => {
-            video.ula.write(0, Mode4);
-            video.polltime(2);
             const before = cell();
 
-            video.ula.write(0, Mode4Teletext);
+            video.ula.write(PaletteReg, SetPixelsGreen);
 
             expect(cell()).toEqual(before);
         });
+
+        it.each`
+            what            | from     | to                      | ticks | kept
+            ${"speeds up"}  | ${Mode4} | ${Mode4 | TwoMhzClock}  | ${1}  | ${CellWidth}
+            ${"speeds up"}  | ${Mode4} | ${Mode4 | TwoMhzClock}  | ${2}  | ${CellWidth}
+            ${"slows down"} | ${Mode0} | ${Mode0 & ~TwoMhzClock} | ${1}  | ${HalfCell}
+            ${"slows down"} | ${Mode0} | ${Mode0 & ~TwoMhzClock} | ${2}  | ${HalfCell}
+        `(
+            "repaints nothing painted when a write only $what the clock, after $ticks ticks",
+            ({ from, to, ticks, kept }) => {
+                distinctPalette();
+                cpu.data = LowNibbleSet;
+                video.ula.write(ControlReg, from);
+                video.polltime(ticks);
+                const before = cell(offset, kept);
+
+                video.ula.write(ControlReg, to);
+
+                expect(cell(offset, kept)).toEqual(before);
+            },
+        );
 
         it("leaves the frame alone while the beam is above it", () => {
             video.ula.write(0, Mode4);
@@ -871,98 +960,55 @@ describe("Video", () => {
 
                 video.ula.write(0, Mode4);
 
-                expect(secondHalf()).toEqual(Array(HalfCell).fill(Red));
+                expect(cell().slice(HalfCell)).toEqual(Array(HalfCell).fill(Red));
                 clearBothFields(video);
                 expect(fb.every((pixel) => pixel === OPAQUE_BLACK)).toBe(true);
             },
         );
 
-        // Slowing down repaints the second half, as tested above, so only the first half is kept.
-        it.each`
-            what                      | from     | to       | kept
-            ${"speeds the clock up"}  | ${Mode4} | ${Mode0} | ${CellWidth}
-            ${"slows the clock down"} | ${Mode0} | ${Mode4} | ${HalfCell}
-        `("repaints nothing early when a write $what", ({ from, to, kept }) => {
-            distinctPalette();
-            cpu.data = LowNibbleSet;
-            video.ula.write(ControlReg, from);
+        it("keeps the spacing of back to back palette writes", () => {
+            const BackToBackTicks = 4;
+            video.ula.write(ControlReg, Mode0);
             video.polltime(1);
-            const before = cell(offset, kept);
+            video.ula.write(PaletteReg, SetPixelsGreen);
+            video.polltime(BackToBackTicks);
+            video.ula.write(PaletteReg, SetPixelsBlue);
+            video.polltime(1);
 
-            video.ula.write(ControlReg, to);
-
-            expect(cell(offset, kept)).toEqual(before);
+            const greenWidth = BackToBackTicks * HalfCell;
+            const blueWidth = HalfCell + HalfCell - Mode0Edge;
+            expect(cell(offset, Mode0Edge + greenWidth + blueWidth)).toEqual([
+                ...Array(Mode0Edge).fill(Red),
+                ...Array(greenWidth).fill(Green),
+                ...Array(blueWidth).fill(Blue),
+            ]);
         });
 
-        describe("in a 2MHz mode, from half a 2MHz cycle after the beam", () => {
-            it.each`
-                what         | data            | reg           | val
-                ${"palette"} | ${AllPixelsSet} | ${PaletteReg} | ${SetPixelsGreen}
-                ${"mode"}    | ${LowNibbleSet} | ${ControlReg} | ${Mode1}
-            `("repaints the cell's last four texels after a $what write", ({ data, reg, val }) => {
-                const paintCell = (writeFirst) => {
-                    aimAtCell();
-                    distinctPalette();
-                    cpu.data = data;
-                    video.ula.write(ControlReg, Mode0);
-                    if (writeFirst) video.ula.write(reg, val);
-                    video.polltime(1);
-                    return cell(offset, HalfCell);
-                };
-                const after = paintCell(true);
-                const before = paintCell(false);
+        it("applies a VideoNuLA write from the same edge", () => {
+            ({ video, fb, cpu } = makeVideo({ hasVideoNula: true }));
+            aimAtCell();
+            video.ula.write(ControlReg, Mode0);
+            video.polltime(1);
 
-                video.ula.write(reg, val);
+            video.ula.write(NulaControlReg, NulaPaletteModeOn);
 
-                const expected = [...before.slice(0, OutputLag), ...after.slice(OutputLag)];
-                expect(expected).not.toEqual(before);
-                expect(cell(offset, HalfCell)).toEqual(expected);
-            });
-
-            it("keeps the spacing of back to back palette writes", () => {
-                const BackToBackTicks = 4;
-                video.ula.write(ControlReg, Mode0);
-                video.polltime(1);
-                video.ula.write(PaletteReg, SetPixelsGreen);
-                video.polltime(BackToBackTicks);
-                video.ula.write(PaletteReg, SetPixelsBlue);
-                video.polltime(1);
-
-                const greenWidth = BackToBackTicks * HalfCell;
-                const blueWidth = HalfCell + OutputLag;
-                expect(cell(offset, OutputLag + greenWidth + blueWidth)).toEqual([
-                    ...Array(OutputLag).fill(Red),
-                    ...Array(greenWidth).fill(Green),
-                    ...Array(blueWidth).fill(Blue),
-                ]);
-            });
-
-            it("applies a VideoNuLA write with the same lag", () => {
-                ({ video, fb, cpu } = makeVideo({ hasVideoNula: true }));
-                aimAtCell();
-                video.ula.write(ControlReg, Mode0);
-                video.polltime(1);
-
-                video.ula.write(NulaControlReg, NulaPaletteModeOn);
-
-                const nulaColour15 = video.ula.collook[15] >>> 0;
-                expect(nulaColour15).not.toBe(Red);
-                expect(cell(offset, HalfCell)).toEqual([
-                    ...Array(OutputLag).fill(Red),
-                    ...Array(HalfCell - OutputLag).fill(nulaColour15),
-                ]);
-            });
+            const nulaColour15 = video.ula.collook[15] >>> 0;
+            expect(nulaColour15).not.toBe(Red);
+            expect(cell(offset, HalfCell)).toEqual([
+                ...Array(Mode0Edge).fill(Red),
+                ...Array(HalfCell - Mode0Edge).fill(nulaColour15),
+            ]);
         });
 
         it.each`
-            clock     | mode     | from         | width
-            ${"1MHz"} | ${Mode4} | ${HalfCell}  | ${CellWidth}
-            ${"2MHz"} | ${Mode0} | ${OutputLag} | ${HalfCell}
-        `("repaints the doubled scanline too, in a $clock mode", ({ mode, from, width }) => {
+            clock     | mode     | ticks | from                    | width
+            ${"1MHz"} | ${Mode4} | ${2}  | ${HalfCell + Mode4Edge} | ${CellWidth}
+            ${"2MHz"} | ${Mode0} | ${1}  | ${Mode0Edge}            | ${HalfCell}
+        `("repaints the doubled scanline too, in a $clock mode", ({ mode, ticks, from, width }) => {
             video.doubledScanlines = true;
             video.interlacedSyncAndVideo = false;
             video.ula.write(0, mode);
-            video.polltime(1);
+            video.polltime(ticks);
             expect(cell(offset + FbWidth, width)).toEqual(Array(width).fill(Red));
 
             video.ula.write(1, SetPixelsGreen);
@@ -974,14 +1020,14 @@ describe("Video", () => {
         });
 
         it.each`
-            clock     | mode     | from         | width
-            ${"1MHz"} | ${Mode4} | ${HalfCell}  | ${CellWidth}
-            ${"2MHz"} | ${Mode0} | ${OutputLag} | ${HalfCell}
-        `("keeps the cursor inverted over the repainted part, in a $clock mode", ({ mode, from, width }) => {
+            clock     | mode     | ticks | from                    | width
+            ${"1MHz"} | ${Mode4} | ${2}  | ${HalfCell + Mode4Edge} | ${CellWidth}
+            ${"2MHz"} | ${Mode0} | ${1}  | ${Mode0Edge}            | ${HalfCell}
+        `("keeps the cursor inverted over the repainted part, in a $clock mode", ({ mode, ticks, from, width }) => {
             video.ula.write(0, mode | 0x60); // cursor on both halves of the master cursor table
             video.cursorOnThisFrame = true;
             video.cursorDrawIndex = 3;
-            video.polltime(1);
+            video.polltime(ticks);
             expect(cell(offset, width)).toEqual(Array(width).fill(inverted(Red)));
 
             video.ula.write(1, SetPixelsGreen);
@@ -992,7 +1038,7 @@ describe("Video", () => {
             ]);
         });
 
-        it("keeps the cursor inverted over the repainted half of a field stuck doubling its rows", () => {
+        it("keeps the cursor inverted over the repainted part of a field stuck doubling its rows", () => {
             video.interlacedSyncAndVideo = true;
             video.lastRenderWasEven = video.isEvenRender;
             video.ula.write(0, Mode4 | 0x60); // cursor on both halves of the master cursor table
@@ -1002,10 +1048,41 @@ describe("Video", () => {
 
             video.ula.write(1, SetPixelsGreen);
 
-            const cursorCell = [...Array(HalfCell).fill(inverted(Red)), ...Array(HalfCell).fill(inverted(Green))];
+            const cursorCell = [
+                ...Array(Mode4Edge).fill(inverted(Red)),
+                ...Array(CellWidth - Mode4Edge).fill(inverted(Green)),
+            ];
             expect(cell()).toEqual(cursorCell);
             expect(cell(offset + FbWidth)).toEqual(cursorCell);
         });
+    });
+
+    describe("a ULA write that changes the clock rate", () => {
+        const Mode0 = 0x9c;
+        const Mode0At1MHz = Mode0 & ~TwoMhzClock;
+
+        // See ClockSwitchRuntTicksCrtc.
+        it.each`
+            what         | from           | to             | ticks | extraCharacters
+            ${"to 1MHz"} | ${Mode0}       | ${Mode0At1MHz} | ${1}  | ${1}
+            ${"to 1MHz"} | ${Mode0}       | ${Mode0At1MHz} | ${2}  | ${0}
+            ${"to 2MHz"} | ${Mode0At1MHz} | ${Mode0}       | ${1}  | ${0}
+            ${"to 2MHz"} | ${Mode0At1MHz} | ${Mode0}       | ${2}  | ${0}
+        `(
+            "clocks the CRTC $extraCharacters more times, and leaves the beam, switching $what after $ticks ticks",
+            ({ from, to, ticks, extraCharacters }) => {
+                programStandardFrame(rig);
+                video.ula.write(0, from);
+                rig.run(ticks);
+                const before = video.beamPosition();
+
+                video.ula.write(0, to);
+
+                const after = video.beamPosition();
+                expect(after.crtc.column).toBe(before.crtc.column + extraCharacters);
+                expect(after.frameCycle).toBe(before.frameCycle);
+            },
+        );
     });
 
     describe("cells the beam has passed", () => {
@@ -1013,7 +1090,7 @@ describe("Video", () => {
         const AllPixelsSet = 0xff;
         const offset = 100 * FbWidth + 100;
 
-        const passCell = (r) => {
+        const passCell = (r, setUp = () => {}) => {
             Object.assign(r.video, {
                 dispEnabled: EVERYTHINGENABLED,
                 horizCounter: 10,
@@ -1023,8 +1100,64 @@ describe("Video", () => {
             });
             r.video.regs[7] = 30;
             r.cpu.data = AllPixelsSet;
+            setUp();
             r.run(1);
         };
+
+        // See Video.repaintAfterR8Write.
+        describe("by an R8 write that switches the display", () => {
+            const Mode0 = 0x9c;
+            const Mode5 = 0xc4;
+            const DisplayOn = 0x00;
+            const DisplayOff = 0x30;
+            const InterlaceSyncAndVideo = 0x03;
+            const TexelsPerTick = 8;
+            const whiteOnEveryIndex = () => {
+                for (let logical = 0; logical < 16; ++logical) video.ula.write(1, logical << 4);
+            };
+
+            it.each`
+                what              | where               | mode     | enabled                             | from          | to            | width | shown
+                ${"switches on"}  | ${"in a 2MHz mode"} | ${Mode0} | ${EVERYTHINGENABLED}                | ${DisplayOff} | ${DisplayOn}  | ${8}  | ${White}
+                ${"switches off"} | ${"in a 2MHz mode"} | ${Mode0} | ${EVERYTHINGENABLED}                | ${DisplayOn}  | ${DisplayOff} | ${8}  | ${OPAQUE_BLACK}
+                ${"switches on"}  | ${"in a 1MHz mode"} | ${Mode4} | ${EVERYTHINGENABLED}                | ${DisplayOff} | ${DisplayOn}  | ${16} | ${White}
+                ${"switches off"} | ${"in a 1MHz mode"} | ${Mode4} | ${EVERYTHINGENABLED}                | ${DisplayOn}  | ${DisplayOff} | ${16} | ${OPAQUE_BLACK}
+                ${"switches on"}  | ${"in MODE 5"}      | ${Mode5} | ${EVERYTHINGENABLED}                | ${DisplayOff} | ${DisplayOn}  | ${16} | ${White}
+                ${"switches on"}  | ${"in the border"}  | ${Mode0} | ${EVERYTHINGENABLED & ~HDISPENABLE} | ${DisplayOff} | ${DisplayOn}  | ${8}  | ${OPAQUE_BLACK}
+            `(
+                "$what $where from the cell fetched in the write's cycle",
+                ({ mode, enabled, from, to, width, shown }) => {
+                    video.ula.write(0, mode);
+                    whiteOnEveryIndex();
+                    passCell(rig, () => {
+                        video.dispEnabled = enabled;
+                        rig.writeCrtc(8, from);
+                    });
+
+                    rig.writeCrtc(8, to);
+                    rig.run(width / TexelsPerTick);
+                    video.renderPending();
+
+                    expect(Array.from(fb.subarray(offset, offset + 2 * width))).toEqual(Array(2 * width).fill(shown));
+                },
+            );
+
+            it("paints the cell's own row when the write also ends interlace sync and video", () => {
+                const OddRow = 101;
+                video.ula.write(0, Mode0);
+                whiteOnEveryIndex();
+                passCell(rig, () => {
+                    video.bitmapY = OddRow;
+                    rig.writeCrtc(8, DisplayOff | InterlaceSyncAndVideo);
+                });
+
+                rig.writeCrtc(8, DisplayOn);
+                video.renderPending();
+
+                expect(fb[OddRow * FbWidth + 100]).toBe(White);
+                expect(fb[(OddRow - 1) * FbWidth + 100]).toBe(OPAQUE_BLACK);
+            });
+        });
 
         it.each([
             ["an R8 write", (r) => r.writeCrtc(8, 0)],
@@ -1264,19 +1397,19 @@ describe("Video", () => {
                         v.writeCrtc(8, 1);
                     },
                     { seed: 1, hasVideoNula: false },
-                    [2206297541, 2206297541, 702188529, 3871101525, 910544833],
+                    [2206297541, 2206297541, 1813569121, 3377700299, 2971069823],
                 ],
                 [
                     "on doubled rows with a VideoNuLA",
                     programStandardFrame,
                     { seed: 2, hasVideoNula: true },
-                    [2206297541, 2206297541, 912097267, 2626470685, 262768811],
+                    [2206297541, 2206297541, 2513099733, 3370381045, 3650732737],
                 ],
                 [
                     "with interlace sync and video",
                     programInterlaceSyncAndVideoFrame,
                     { seed: 3, hasVideoNula: true },
-                    [2206297541, 2206297541, 3713281787, 4245419368, 852458077],
+                    [2206297541, 2206297541, 3718618067, 2894276991, 4221043367],
                 ],
                 [
                     "with interlace sync and video stuck on one field",
@@ -1285,7 +1418,7 @@ describe("Video", () => {
                         v.writeCrtc(6, 40);
                     },
                     { seed: 4, hasVideoNula: true },
-                    [2206297541, 2206297541, 2551372563, 3750945093, 3520118721],
+                    [2206297541, 2206297541, 4167504061, 2987492895, 454205651],
                 ],
             ])("paints ULA writes every few clocks %s as the beam saw them", (_, program, options, expected) => {
                 const { hashes, checked } = paintedHashes(program, options, drainKind);
