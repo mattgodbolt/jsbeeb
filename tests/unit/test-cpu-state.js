@@ -9,7 +9,7 @@ import { findModel, TEST_6502, TEST_65C02 } from "../../src/models.js";
 import { setNodeBasePath } from "../../src/loader.js";
 import { hexbyte, hexword } from "../../src/hex.js";
 import { expectSnapshotRoundTrips } from "../helpers/snapshot-round-trip.js";
-import { VdfsVolume } from "../../src/vdfs-volume.js";
+import { Channel } from "../../src/vdfs-channels.js";
 import { Port, PortBase } from "../../src/vdfs-protocol.js";
 import { MemoryStore, file } from "../helpers/vdfs.js";
 import { machineWithRealChips } from "./helpers.js";
@@ -915,58 +915,48 @@ describe("Cpu6502 paged memory", () => {
 
 describe("Cpu6502 VDFS", () => {
     const RomTitleOffset = 9;
-    const volumeOf = (...items) => new VdfsVolume(new MemoryStore(items));
+    const storeOf = (...items) => new MemoryStore(items);
     const romTitles = (cpu) =>
         Array.from({ length: 16 }, (_, bank) => {
             const start = cpu.romOffset + bank * 16384 + RomTitleOffset;
             return String.fromCharCode(...cpu.ramRomOs.subarray(start, start + 4));
         });
 
-    it("reads its volume and fits its ROM when it is started, so that nothing else has to", async () => {
-        const volume = volumeOf(file("HELLO"));
-        const cpu = fake6502(findModel("B-DFS1.2"), { vdfsVolume: volume });
+    it("fits its ROM when it is started, so that nothing else has to", async () => {
+        const cpu = fake6502(findModel("B-DFS1.2"), { vdfsStore: storeOf() });
         expect(romTitles(cpu)).not.toContain("VDFS");
         await cpu.initialise();
-        expect(volume.root.children.has("HELLO")).toBe(true);
         expect(romTitles(cpu)).toContain("VDFS");
     });
 
     it("fits its ROM into a higher bank than the ROMs the user adds, which take what is left", async () => {
-        const cpu = fake6502(findModel("B-DFS1.2"), { vdfsVolume: volumeOf(), extraRoms: ["ats-3.0.rom"] });
+        const cpu = fake6502(findModel("B-DFS1.2"), { vdfsStore: storeOf(), extraRoms: ["ats-3.0.rom"] });
         await cpu.initialise();
         const titles = romTitles(cpu);
         expect(titles.indexOf("VDFS")).toBeGreaterThan(titles.findIndex((title) => title.startsWith("ATS")));
     });
 
-    it("fits no ROM, and has no host, without a volume", async () => {
+    it("fits no ROM, and has no host, without a store", async () => {
         const cpu = fake6502(findModel("B-DFS1.2"));
         await cpu.initialise();
         expect(cpu.vdfs).toBeNull();
         expect(romTitles(cpu)).not.toContain("VDFS");
     });
 
-    it("starts with an empty volume, and says why, when the volume cannot be read", async () => {
-        vi.spyOn(console, "error").mockImplementation(() => {});
-        const failure = new Error("no such folder");
-        const cpu = fake6502(findModel("B-DFS1.2"), {
-            vdfsVolume: new VdfsVolume({
-                load: async () => {
-                    throw failure;
-                },
-            }),
-        });
+    it("does not ask the store anything until the BBC does", async () => {
+        const store = storeOf();
+        const asked = vi.spyOn(store, "list");
+        const cpu = fake6502(findModel("B-DFS1.2"), { vdfsStore: store });
         await cpu.initialise();
-        expect(cpu.vdfs.loadError).toBe(failure);
-        expect(romTitles(cpu)).toContain("VDFS");
-        vi.restoreAllMocks();
+        expect(asked).not.toHaveBeenCalled();
     });
 
     it.each([["Atom"], ["BBC B (MOS 0.10)"]])("is refused by the %s, which it would break", (name) => {
-        expect(() => fake6502(findModel(name), { vdfsVolume: volumeOf() })).toThrow(/VDFS is not for/);
+        expect(() => fake6502(findModel(name), { vdfsStore: storeOf() })).toThrow(/VDFS is not for/);
     });
 
     it("is peeked at as the rest of the hardware is: giving nothing, and changing nothing", () => {
-        const cpu = fake6502(findModel("B-DFS1.2"), { vdfsVolume: volumeOf() });
+        const cpu = fake6502(findModel("B-DFS1.2"), { vdfsStore: storeOf() });
         cpu.writemem(PortBase + Port.call, 0);
         const before = cpu.vdfs.openStreams;
         for (let offset = 0; offset < 8; offset++) expect(cpu.peekmem(PortBase + offset)).toBe(0xff);
@@ -974,16 +964,17 @@ describe("Cpu6502 VDFS", () => {
     });
 
     it("has its ports where the ROM expects them, and nothing on a machine without it", () => {
-        const withHost = fake6502(findModel("B-DFS1.2"), { vdfsVolume: volumeOf() });
+        const withHost = fake6502(findModel("B-DFS1.2"), { vdfsStore: storeOf() });
         const without = fake6502(findModel("B-DFS1.2"));
         expect(withHost.readmem(PortBase + Port.id)).toBe(0x56);
         expect(without.readmem(PortBase + Port.id)).toBe(0xff);
     });
 
     it("goes back to the OS's own filing system, with no file open, when a snapshot is restored", () => {
-        const cpu = machineWithRealChips(TEST_6502, { vdfsVolume: volumeOf(file("DATA", "x")) });
+        const cpu = machineWithRealChips(TEST_6502, { vdfsStore: storeOf(file("DATA", "x")) });
         cpu.vdfs.selected = true;
-        cpu.vdfs.channels.open(cpu.vdfs.volume.root.children.get("DATA"), { writable: false });
+        const info = { load: 0, exec: 0, locked: false };
+        cpu.vdfs.channels.open(new Channel({ path: ["DATA"], data: Uint8Array.of(1), info, writable: false }));
         cpu.restoreState(cpu.snapshotState());
         expect(cpu.vdfs.selected).toBe(false);
         expect(() => cpu.vdfs.channels.get(0x11)).toThrow("Channel");

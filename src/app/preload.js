@@ -23,8 +23,11 @@ contextBridge.exposeInMainWorld("electronAPI", {
         }),
     // The store behind a VDFS volume, whose folder only the main process can reach.
     vdfs: {
-        load: () => ipcRenderer.invoke("vdfs-load"),
+        find: (directory, name) => ipcRenderer.invoke("vdfs-find", directory, name),
+        list: (directory) => ipcRenderer.invoke("vdfs-list", directory),
+        read: (path) => ipcRenderer.invoke("vdfs-read", path),
         writeFile: (path, details) => ipcRenderer.invoke("vdfs-write-file", path, details),
+        setInfo: (path, changes) => ipcRenderer.invoke("vdfs-set-info", path, changes),
         makeDirectory: (path) => ipcRenderer.invoke("vdfs-make-directory", path),
         remove: (path) => ipcRenderer.invoke("vdfs-remove", path),
     },

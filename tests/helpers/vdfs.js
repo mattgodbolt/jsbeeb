@@ -1,6 +1,5 @@
 import { VdfsHost } from "../../src/vdfs-host.js";
-import { Call, Op, Port } from "../../src/vdfs-protocol.js";
-import { VdfsVolume } from "../../src/vdfs-volume.js";
+import { Busy, Call, Op, Port } from "../../src/vdfs-protocol.js";
 
 export const Block = 0x2000;
 export const Name = 0x2100;
@@ -10,33 +9,93 @@ const OsfileBlock = Object.freeze({ load: 2, exec: 6, start: 10, end: 14 });
 const IdleFlags = 0x30;
 const ServiceRomSlot = 13;
 
-/** A store that remembers what it was asked to persist, as a map from path to what is there now. */
+const keyOf = (path) => path.map((name) => name.toUpperCase()).join("\u0000");
+
+/**
+ * A store of files in memory, which remembers what it was asked to change. Each of its calls takes a moment, as a
+ * folder's would.
+ */
 export class MemoryStore {
     constructor(items = []) {
-        this.items = items;
-        this.files = new Map();
-        this.directories = new Set();
+        this.nodes = new Map();
+        /** @type {string[]} the names of files it says it cannot give names to */
+        this.skipped = [];
         this.log = [];
+        for (const { path, isDirectory, data, load = 0, exec = 0, locked = false } of items)
+            this._put(path, { isDirectory, data: data ?? new Uint8Array(0), load, exec, locked });
     }
 
-    async load() {
-        return this.items;
+    _put(path, details) {
+        for (let length = 1; length < path.length; length++)
+            if (!this.nodes.has(keyOf(path.slice(0, length))))
+                this.nodes.set(keyOf(path.slice(0, length)), {
+                    name: path[length - 1],
+                    isDirectory: true,
+                    data: new Uint8Array(0),
+                    load: 0,
+                    exec: 0,
+                    locked: false,
+                });
+        this.nodes.set(keyOf(path), { name: path.at(-1), ...details });
     }
 
-    async writeFile(path, details) {
+    /** What is at a path as a test writes it, like "GAMES.ELITE": its name, bytes and information, if anything is. */
+    get(dotted) {
+        return this.nodes.get(keyOf(dotted.split(".")));
+    }
+
+    _describe(node) {
+        const { name, isDirectory, data, load, exec, locked } = node;
+        return { name, isDirectory, size: isDirectory ? 0 : data.length, load, exec, locked };
+    }
+
+    async find(directory, name) {
+        await Promise.resolve();
+        const node = this.nodes.get(keyOf([...directory, name]));
+        return node ? this._describe(node) : null;
+    }
+
+    async list(directory) {
+        await Promise.resolve();
+        if (directory.length > 0 && !this.nodes.get(keyOf(directory))?.isDirectory) return null;
+        const entries = [...this.nodes.entries()]
+            .filter(([key, node]) => {
+                const parent = key.split("\u0000").slice(0, -1);
+                return parent.join("\u0000") === keyOf(directory) && node;
+            })
+            .map(([, node]) => this._describe(node));
+        return { entries, skipped: this.skipped };
+    }
+
+    async read(path) {
+        await Promise.resolve();
+        const node = this.nodes.get(keyOf(path));
+        if (!node || node.isDirectory) throw new Error(`${path.join(".")} is not a file`);
+        return node.data.slice();
+    }
+
+    async writeFile(path, { data, load, exec, locked }) {
+        await Promise.resolve();
         this.log.push(["writeFile", path.join(".")]);
-        this.files.set(path.join("."), details);
+        this._put(path, { isDirectory: false, data: data.slice(), load, exec, locked });
+    }
+
+    async setInfo(path, changes) {
+        await Promise.resolve();
+        this.log.push(["setInfo", path.join(".")]);
+        Object.assign(this.nodes.get(keyOf(path)), changes);
     }
 
     async makeDirectory(path) {
+        await Promise.resolve();
         this.log.push(["makeDirectory", path.join(".")]);
-        this.directories.add(path.join("."));
+        this._put(path, { isDirectory: true, data: new Uint8Array(0), load: 0, exec: 0, locked: false });
     }
 
     async remove(path) {
+        await Promise.resolve();
         this.log.push(["remove", path.join(".")]);
-        this.files.delete(path.join("."));
-        this.directories.delete(path.join("."));
+        this.nodes.delete(keyOf(path));
     }
 }
 
@@ -135,17 +194,17 @@ export function readResponse(host, registersIn) {
     }
 }
 
-/**
- * A host over a volume of `items`, on a fake machine, with `call()` to make calls as the ROM does and a shortcut for
- * each kind of call a test makes.
- */
-export async function hostWith(items = [], { hasTube = false } = {}) {
-    const store = new MemoryStore(items);
-    const volume = await VdfsVolume.open(store);
-    const cpu = fakeCpu({ hasTube });
-    const host = new VdfsHost(cpu, volume);
+const MaxSettlingTurns = 1000;
 
-    function call(number, { a = 0, x = 0, y = 0, p = IdleFlags } = {}) {
+/**
+ * A host over a store of `items`, on a fake machine, with `call()` to make a call as the ROM does, waiting for it as the
+ * ROM does, and a shortcut for each kind of call a test makes.
+ */
+export function hostWith(items = [], { hasTube = false, store = new MemoryStore(items) } = {}) {
+    const cpu = fakeCpu({ hasTube });
+    const host = new VdfsHost(cpu, store);
+
+    async function call(number, { a = 0, x = 0, y = 0, p = IdleFlags } = {}) {
         for (const [port, value] of [
             [Port.a, a],
             [Port.x, x],
@@ -154,6 +213,10 @@ export async function hostWith(items = [], { hasTube = false } = {}) {
         ])
             host.write(port, value);
         host.write(Port.call, number);
+        for (let turn = 0; host.read(Port.call) & Busy; turn++) {
+            if (turn === MaxSettlingTurns) throw new Error("the call never finished");
+            await new Promise((resolve) => setImmediate(resolve));
+        }
         return readResponse(host, { a, x, y, p });
     }
 
@@ -189,5 +252,5 @@ export async function hostWith(items = [], { hasTube = false } = {}) {
         return call(Call.service, { a, x: ServiceRomSlot, y });
     }
 
-    return { host, volume, store, cpu, call, osfile, open, command, service, files: (path) => store.files.get(path) };
+    return { host, store, cpu, call, osfile, open, command, service, get: (dotted) => store.get(dotted) };
 }

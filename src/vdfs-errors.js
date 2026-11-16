@@ -23,4 +23,5 @@ export const Errors = Object.freeze({
     badAddress: () => new VdfsError(0x93, "Bad address"),
     unsupported: (what) => new VdfsError(0x94, `${what} is not supported`),
     eof: () => new VdfsError(0xdf, "EOF"),
+    discFault: (reason) => new VdfsError(0xc8, `Disc fault: ${reason}`),
 });

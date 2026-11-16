@@ -8,7 +8,7 @@ import { fillHelp, openHelpOnTheTabForNow } from "./web/help.js";
 import { DebugMenu } from "./web/debug-menu.js";
 import { PanelKeys } from "./web/panel-keys.js";
 import { GamePad } from "./web/gamepads.js";
-import { attachDesktopVdfs, desktopVdfs, initialise as electron, isDesktopApp } from "./app/electron.js";
+import { attachDesktopVdfs, desktopVdfsStore, initialise as electron, isDesktopApp } from "./app/electron.js";
 import { AudioHandler } from "./web/audio-handler.js";
 import { installIcons } from "./web/icons.js";
 import { QuickSettings } from "./web/quick-settings.js";
@@ -234,7 +234,7 @@ const machine = new Machine({
     stationId,
     userPort: accessibilitySwitches.userPort,
     printer,
-    vdfsVolume: desktopVdfs(parsedQuery),
+    vdfsStore: desktopVdfsStore(parsedQuery),
     speechOutput,
     video,
     audioHandler,

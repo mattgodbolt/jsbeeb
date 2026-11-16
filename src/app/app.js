@@ -12,7 +12,8 @@ const store = new Store();
 
 // The folder served as VDFS is the main process's to name: the page can only use the one it was given.
 const savedFolder = store.get("vdfsFolder");
-let vdfsStore = typeof savedFolder === "string" && savedFolder ? new FsStore(savedFolder) : null;
+const isFolder = (folder) => typeof folder === "string" && fs.existsSync(folder) && fs.statSync(folder).isDirectory();
+let vdfsStore = isFolder(savedFolder) ? new FsStore(savedFolder) : null;
 const pendingVdfsOperations = new Set();
 const FlushTimeoutMs = 3000;
 let readyToQuit = false;
@@ -26,24 +27,46 @@ function vdfsOperation(run) {
     return operation;
 }
 
-const isVolumePath = (value) =>
-    Array.isArray(value) && value.length > 0 && value.every((name) => typeof name === "string");
+const isNames = (value) => Array.isArray(value) && value.every((name) => typeof name === "string");
+const isPath = (value) => isNames(value) && value.length > 0;
 
-ipcMain.handle("vdfs-load", () => vdfsOperation((vdfs) => vdfs.load()));
+ipcMain.handle("vdfs-find", (event, directory, name) => {
+    if (!isNames(directory) || typeof name !== "string") throw new Error("Not a VDFS name to find");
+    return vdfsOperation((vdfs) => vdfs.find(directory, name));
+});
+ipcMain.handle("vdfs-list", (event, directory) => {
+    if (!isNames(directory)) throw new Error("Not a VDFS directory to list");
+    return vdfsOperation((vdfs) => vdfs.list(directory));
+});
+ipcMain.handle("vdfs-read", (event, volumePath) => {
+    if (!isPath(volumePath)) throw new Error("Not a VDFS file to read");
+    return vdfsOperation((vdfs) => vdfs.read(volumePath));
+});
 ipcMain.handle("vdfs-write-file", (event, volumePath, details) => {
-    if (!isVolumePath(volumePath) || !(details?.data instanceof Uint8Array))
-        throw new Error("Not a VDFS file to write");
+    if (!isPath(volumePath) || !(details?.data instanceof Uint8Array)) throw new Error("Not a VDFS file to write");
     const { data, load, exec, locked } = details;
     return vdfsOperation((vdfs) =>
         vdfs.writeFile(volumePath, { data, load: load >>> 0, exec: exec >>> 0, locked: !!locked }),
     );
 });
+ipcMain.handle("vdfs-set-info", (event, volumePath, changes) => {
+    if (!isPath(volumePath) || typeof changes !== "object" || changes === null)
+        throw new Error("Not VDFS information to set");
+    const { load, exec, locked } = changes;
+    return vdfsOperation((vdfs) =>
+        vdfs.setInfo(volumePath, {
+            ...(load !== undefined && { load: load >>> 0 }),
+            ...(exec !== undefined && { exec: exec >>> 0 }),
+            ...(locked !== undefined && { locked: !!locked }),
+        }),
+    );
+});
 ipcMain.handle("vdfs-make-directory", (event, volumePath) => {
-    if (!isVolumePath(volumePath)) throw new Error("Not a VDFS directory to make");
+    if (!isPath(volumePath)) throw new Error("Not a VDFS directory to make");
     return vdfsOperation((vdfs) => vdfs.makeDirectory(volumePath));
 });
 ipcMain.handle("vdfs-remove", (event, volumePath) => {
-    if (!isVolumePath(volumePath)) throw new Error("Not a VDFS file to remove");
+    if (!isPath(volumePath)) throw new Error("Not a VDFS file to remove");
     return vdfsOperation((vdfs) => vdfs.remove(volumePath));
 });
 
@@ -197,6 +220,8 @@ function askPageToFlush(browserWindow) {
 
 /** Serves `folder` as VDFS, or no folder, and starts the page again, which has to be built with it. */
 async function serveVdfsFolder(browserWindow, folder) {
+    // A page that has VDFS already has its ROM, and finds the new folder on its next call; any other starts again.
+    const pageHasVdfs = vdfsStore !== null && folder !== null;
     await swapVdfsFolder({
         flushPages: () => (vdfsStore ? [askPageToFlush(browserWindow)] : []),
         inFlight: () => pendingVdfsOperations,
@@ -207,7 +232,8 @@ async function serveVdfsFolder(browserWindow, folder) {
             setMenu(menuPanels);
         },
         loadPage: async () => {
-            if (!browserWindow.isDestroyed()) await browserWindow.loadFile("dist/index.html", { query: pageQuery() });
+            if (!pageHasVdfs && !browserWindow.isDestroyed())
+                await browserWindow.loadFile("dist/index.html", { query: pageQuery() });
         },
     });
 }

@@ -45,10 +45,10 @@ describe("buildEmulationConfig", () => {
         expect(built).toMatchObject({ fittedRoms: ["fitted.rom"], bankRoms, extraRoms: ["user.rom"] });
     });
 
-    it("hands over the VDFS volume only when there is one", () => {
-        const vdfsVolume = {};
-        expect(build({ vdfsVolume }).vdfsVolume).toBe(vdfsVolume);
-        expect(build().vdfsVolume).toBeNull();
+    it("hands over the VDFS store only when there is one", () => {
+        const vdfsStore = {};
+        expect(build({ vdfsStore }).vdfsStore).toBe(vdfsStore);
+        expect(build().vdfsStore).toBeNull();
     });
 
     it("fits a tube only when a co-processor was asked for", () => {

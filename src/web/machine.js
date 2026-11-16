@@ -21,7 +21,7 @@ export function buildEmulationConfig({
     bankRoms,
     userPort,
     printer,
-    vdfsVolume,
+    vdfsStore,
 }) {
     return machineSpec({
         keyLayout,
@@ -32,7 +32,7 @@ export function buildEmulationConfig({
         hasMusic5000: settings.hasMusic5000,
         hasTeletextAdaptor: settings.hasTeletextAdaptor,
         hasAmxMouse: settings.hasAmxMouse,
-        vdfsVolume,
+        vdfsStore,
         fittedRoms: settings.fittedRoms,
         bankRoms,
         extraRoms,
@@ -58,7 +58,7 @@ export class Machine {
         stationId,
         userPort,
         printer,
-        vdfsVolume = null,
+        vdfsStore = null,
         speechOutput,
         video,
         audioHandler,
@@ -99,7 +99,7 @@ export class Machine {
             bankRoms,
             userPort,
             printer,
-            vdfsVolume,
+            vdfsStore,
         });
 
         this.processor = build(model, {
@@ -157,7 +157,6 @@ export class Machine {
     }) {
         const { processor } = this;
         await Promise.all([this.audioHandler.initialise(), processor.initialise()]);
-        if (processor.vdfs?.loadError) reportLoadFailure("the VDFS folder", processor.vdfs.loadError);
 
         // Wire up the composite RS-423 handler now that the touchscreen exists.
         this.setupRs423Handler();

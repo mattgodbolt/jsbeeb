@@ -1,9 +1,9 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { VdfsError } from "../../src/vdfs-errors.js";
-import { Call, HostId, Op, Port, PortBase, VdfsPorts } from "../../src/vdfs-protocol.js";
+import { Busy, Call, HostId, Op, Port, PortBase, Superseded, VdfsPorts } from "../../src/vdfs-protocol.js";
 import { RepoRoot } from "../integration/helpers.js";
 import { readResponse } from "../helpers/vdfs.js";
 
@@ -16,6 +16,17 @@ function makeCall(ports, call, registers = {}) {
     for (const [port, value] of Object.entries({ a: 0, x: 0, y: 0, p: 0, ...registers }))
         ports.write(Port[port], value);
     ports.write(Port.call, call);
+}
+
+/** A promise, and the way to settle it, to stand for a store that takes its time. */
+function deferred() {
+    let resolve;
+    let reject;
+    const promise = new Promise((done, fail) => {
+        resolve = done;
+        reject = fail;
+    });
+    return { promise, resolve, reject };
 }
 
 describe("VDFS protocol", () => {
@@ -44,6 +55,10 @@ describe("VDFS protocol", () => {
                 ...prefixed("Op", Op),
             });
         });
+
+        it("makes the busy flag the one the ROM tests with BIT, which is the top bit", () => {
+            expect(Busy).toBe(0x80);
+        });
     });
 
     describe("responses", () => {
@@ -57,6 +72,12 @@ describe("VDFS protocol", () => {
             });
             makeCall(ports, Call.file, { x: 2, y: 3, p: 0x31 });
             expect(readResponse(ports, {})).toEqual({ ops: [], a: 5, x: 2, y: 3, p: 0x31 });
+        });
+
+        it("shows what the BBC cannot print as a question mark, and not as another character", () => {
+            const ports = portsSaying(() => "tést");
+            makeCall(ports, Call.file);
+            expect(readResponse(ports, {}).ops).toEqual([{ op: "print", text: "t?st" }]);
         });
 
         it("keeps each call's response apart, so a call made while one is being read leaves it whole", () => {
@@ -73,19 +94,86 @@ describe("VDFS protocol", () => {
             expect(ports.read(Port.data)).toBe("B".charCodeAt(0));
         });
 
-        it("raises what a call says is wrong as the OS's error, and what is a bug as one that says so", () => {
-            vi.spyOn(console, "error").mockImplementation(() => {});
-            const ports = new VdfsPorts((call) => {
-                throw call === Call.file ? new VdfsError(0xd6, "Not found") : new TypeError("x".repeat(500));
+        describe("what a call that goes wrong says", () => {
+            beforeEach(() => {
+                vi.spyOn(console, "error").mockImplementation(() => {});
+            });
+
+            afterEach(() => {
+                vi.restoreAllMocks();
+            });
+
+            it("is the OS's error for what is wrong with the call, and one that says so for a bug", () => {
+                const ports = new VdfsPorts((call) => {
+                    throw call === Call.file ? new VdfsError(0xd6, "Not found") : new TypeError("x".repeat(500));
+                });
+                makeCall(ports, Call.file);
+                expect(readResponse(ports, {}).ops).toEqual([{ op: "error", number: 0xd6, text: "Not found" }]);
+                makeCall(ports, Call.args);
+                const [{ number, text }] = readResponse(ports, {}).ops;
+                expect(number).toBe(0xff);
+                expect(text).toMatch(/^VDFS host failure: x/);
+                expect(text.length).toBe(80);
+            });
+
+            it("is the same when the call is one that took its time", async () => {
+                const waiting = deferred();
+                const ports = new VdfsPorts(() => waiting.promise);
+                makeCall(ports, Call.file);
+                waiting.reject(new VdfsError(0xc3, "Locked"));
+                await waiting.promise.catch(() => {});
+                await Promise.resolve();
+                expect(readResponse(ports, {}).ops).toEqual([{ op: "error", number: 0xc3, text: "Locked" }]);
+            });
+        });
+    });
+
+    describe("a call that takes its time", () => {
+        it("is busy until it is done, and then is answered as one that was done at once", async () => {
+            const waiting = deferred();
+            const ports = new VdfsPorts((call, registers) => {
+                registers.a = 7;
+                return waiting.promise;
+            });
+            expect(ports.read(Port.call)).toBe(0);
+            makeCall(ports, Call.file);
+            expect(ports.read(Port.call)).toBe(Busy);
+            waiting.resolve();
+            await waiting.promise;
+            await Promise.resolve();
+            expect(ports.read(Port.call)).toBe(0);
+            expect(readResponse(ports, {}).a).toBe(7);
+        });
+
+        it("is not answered at all if a break comes first, and a call made after it is", async () => {
+            const waiting = deferred();
+            const ports = new VdfsPorts((call, registers, response, turn) =>
+                call === Call.file ? waiting.promise.then(() => turn.check()) : response.print("NEW"),
+            );
+            makeCall(ports, Call.file);
+            ports.reset();
+            expect(ports.read(Port.call)).toBe(0);
+            makeCall(ports, Call.args);
+            const answered = ports.read(Port.stream);
+            waiting.resolve();
+            await waiting.promise;
+            await Promise.resolve();
+            expect(ports.read(Port.stream)).toBe(answered);
+            expect(readResponse(ports, {}).ops).toEqual([{ op: "print", text: "NEW" }]);
+        });
+
+        it("tells the call that a break has overtaken it, so that it does not go on to change the machine", async () => {
+            const waiting = deferred();
+            let seen;
+            const ports = new VdfsPorts((call, registers, response, turn) => {
+                seen = turn;
+                return waiting.promise;
             });
             makeCall(ports, Call.file);
-            expect(readResponse(ports, {}).ops).toEqual([{ op: "error", number: 0xd6, text: "Not found" }]);
-            makeCall(ports, Call.args);
-            const [{ number, text }] = readResponse(ports, {}).ops;
-            expect(number).toBe(0xff);
-            expect(text).toMatch(/^VDFS host failure: x/);
-            expect(text.length).toBe(80);
-            vi.restoreAllMocks();
+            expect(() => seen.check()).not.toThrow();
+            ports.reset();
+            expect(seen.current).toBe(false);
+            expect(() => seen.check()).toThrow(Superseded);
         });
     });
 

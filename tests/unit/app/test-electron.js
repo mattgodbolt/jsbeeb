@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { attachDesktopVdfs, desktopVdfs, initialise } from "../../../src/app/electron.js";
+import { attachDesktopVdfs, desktopVdfsStore, initialise } from "../../../src/app/electron.js";
 import { teardownDom } from "../helpers.js";
 
 describe("the Electron hooks", () => {
@@ -112,57 +112,45 @@ describe("the Electron hooks", () => {
     });
 
     describe("VDFS", () => {
-        it("gives the volume the main process's store, when the app was started with a folder to serve", async () => {
-            const store = {
-                load: vi.fn().mockResolvedValue([]),
-                writeFile: vi.fn(),
-                makeDirectory: vi.fn(),
-                remove: vi.fn(),
-            };
+        it("gives the machine the main process's store, when the app was started with a folder to serve", () => {
+            const store = { find: vi.fn() };
             window.electronAPI = { vdfs: store };
-            const volume = desktopVdfs({ vdfs: true });
-            await volume.load();
-            expect(store.load).toHaveBeenCalled();
-            expect(volume.store).toBe(store);
-        });
-
-        describe("attached to the page", () => {
-            const attached = () => {
-                const order = [];
-                const host = {
-                    flush: async () => order.push("flushed"),
-                    volume: { store: {}, detachStore: () => order.push("detached"), onPersistFailure: null },
-                };
-                window.electronAPI = { onVdfsFlush: vi.fn() };
-                const notify = vi.fn();
-                attachDesktopVdfs(host, { notify });
-                return { order, host, notify };
-            };
-
-            it("hands over what has been written when the main process asks, and only then lets the store go", async () => {
-                const { order } = attached();
-                await window.electronAPI.onVdfsFlush.mock.calls[0][0]();
-                expect(order).toEqual(["flushed", "detached"]);
-            });
-
-            it("hands over what has been written when the page goes", () => {
-                const { order } = attached();
-                window.dispatchEvent(new Event("pagehide"));
-                expect(order).toEqual(["flushed"]);
-            });
-
-            it("says so when the main process cannot keep what was written", () => {
-                const { host, notify } = attached();
-                host.volume.onPersistFailure("writeFile", new Error("disc full"));
-                expect(notify).toHaveBeenCalledWith(expect.stringContaining("writeFile: disc full"));
-            });
+            expect(desktopVdfsStore({ vdfs: true })).toBe(store);
         });
 
         it("gives nothing when there is no folder, or no app", () => {
             window.electronAPI = { vdfs: {} };
-            expect(desktopVdfs({})).toBeNull();
+            expect(desktopVdfsStore({})).toBeNull();
             delete window.electronAPI;
-            expect(desktopVdfs({ vdfs: true })).toBeNull();
+            expect(desktopVdfsStore({ vdfs: true })).toBeNull();
+        });
+
+        describe("attached to the page", () => {
+            const attached = () => {
+                const host = { flush: vi.fn(), closeAll: vi.fn().mockResolvedValue(), onWriteFailure: null };
+                window.electronAPI = { onVdfsFlush: vi.fn() };
+                const notify = vi.fn();
+                attachDesktopVdfs(host, { notify });
+                return { host, notify };
+            };
+
+            it("closes what is open, writing it, when the main process is about to change folder", async () => {
+                const { host } = attached();
+                await window.electronAPI.onVdfsFlush.mock.calls[0][0]();
+                expect(host.closeAll).toHaveBeenCalled();
+            });
+
+            it("hands over what has been written when the page goes", () => {
+                const { host } = attached();
+                window.dispatchEvent(new Event("pagehide"));
+                expect(host.flush).toHaveBeenCalled();
+            });
+
+            it("says so when the main process cannot keep what was written", () => {
+                const { host, notify } = attached();
+                host.onWriteFailure(new Error("disc full"));
+                expect(notify).toHaveBeenCalledWith(expect.stringContaining("disc full"));
+            });
         });
     });
 });

@@ -26,7 +26,6 @@ import { RewindBuffer } from "./rewind.js";
 import { cycleCount } from "./lockstep.js";
 import { FramesPerSecond } from "./emulation-tick.js";
 import { FsStore } from "./vdfs-fs-store.js";
-import { VdfsVolume } from "./vdfs-volume.js";
 
 // BBC framebuffer is 1024×625 pixels
 const FB_WIDTH = 1024;
@@ -119,11 +118,11 @@ export class MachineSession {
         // toneGenerator); FakeSoundChip provides compatible no-op stubs for headless mode.
         this._soundChip = modelObj.isAtom ? new FakeSoundChip() : new InstrumentedSoundChip();
 
-        this._vdfsVolume = opts.vdfsFolder ? new VdfsVolume(new FsStore(opts.vdfsFolder)) : null;
+        this._vdfsStore = opts.vdfsFolder ? new FsStore(opts.vdfsFolder) : null;
 
         // TestMachine forwards these to fake6502
         this._machine = new TestMachine(modelName, {
-            vdfsVolume: this._vdfsVolume,
+            vdfsStore: this._vdfsStore,
             video: this._video,
             soundChip: this._soundChip,
             tube: opts.tube,
@@ -151,9 +150,10 @@ export class MachineSession {
 
     /** Load ROMs and hardware; call once before anything else */
     async initialise() {
+        await this._vdfsStore?.check().catch((cause) => {
+            throw new Error(`Cannot read the VDFS folder ${this._opts.vdfsFolder}`, { cause });
+        });
         await this._machine.initialise();
-        const { loadError } = this._machine.processor.vdfs ?? {};
-        if (loadError) throw new Error(`Cannot read the VDFS folder ${this._opts.vdfsFolder}`, { cause: loadError });
         if (this._opts.discImage) {
             this.loadDisc(this._opts.discImage);
         }

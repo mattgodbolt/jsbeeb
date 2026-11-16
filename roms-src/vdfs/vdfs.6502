@@ -66,6 +66,8 @@ SECTION Rom, org = &8000, filename = "vdfs.rom", guard = &C000
     PLA : STA PortA
     PLA : STA PortP
     STX PortCall
+    .wait
+    BIT PortCall : BMI wait
     LDX PortStream
 .next
     STX PortStream

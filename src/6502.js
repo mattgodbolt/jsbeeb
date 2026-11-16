@@ -816,9 +816,9 @@ export class Cpu6502 extends Base6502 {
         this.hasMusic5000 = !!this.config.hasMusic5000;
         this.hasTeletextAdaptor = !!this.config.hasTeletextAdaptor;
         this.teletextAdaptor = this.hasTeletextAdaptor ? new TeletextAdaptor(this) : null;
-        if (this.config.vdfsVolume && !model.takesServiceRoms)
+        if (this.config.vdfsStore && !model.takesServiceRoms)
             throw new Error(`VDFS is not for the ${model.name}: it is for a BBC with a MOS that takes service ROMs`);
-        this.vdfs = this.config.vdfsVolume ? new VdfsHost(this, this.config.vdfsVolume) : null;
+        this.vdfs = this.config.vdfsStore ? new VdfsHost(this, this.config.vdfsStore) : null;
         this.tube = this.hasTube
             ? new Tube6502(this.config.tube, this, { cpuMultiplier: this.config.tubeCpuMultiplier })
             : new FakeTube();
@@ -1949,7 +1949,6 @@ export class Cpu6502 extends Base6502 {
             await this.tube.loadOs();
         }
         if (this.filestore) await this.filestore.load();
-        await this.vdfs?.load();
         this.reset(true);
         this.debugger.setCpu(this);
     }

@@ -2,7 +2,6 @@
 // Handles IPC communication for loading disc/tape images and showing modals from Electron's main process.
 
 import { describeRef } from "../web/media-catalogue.js";
-import { VdfsVolume } from "../vdfs-volume.js";
 
 function init(args) {
     const { loadStateFile, modals, actions, settings, media, panels } = args;
@@ -61,23 +60,18 @@ export function initialise(args) {
     if (isDesktopApp()) init(args);
 }
 
-/** @returns {VdfsVolume | null} the folder the app was asked to serve as VDFS, whose files its main process holds */
-export function desktopVdfs(query) {
-    return isDesktopApp() && query.vdfs ? new VdfsVolume(window.electronAPI.vdfs) : null;
+/** @returns {object | null} the store of the folder the app was asked to serve as VDFS, which its main process holds */
+export function desktopVdfsStore(query) {
+    return isDesktopApp() && query.vdfs ? window.electronAPI.vdfs : null;
 }
 
 /**
- * Has the page hand its writes to the main process when the page is going or the folder is about to change, and say
- * through `notify` when the main process cannot keep one.
+ * Has the page hand its open files to the main process when the page is going or the folder is about to change, and
+ * say through `notify` when the main process cannot keep one.
  */
 export function attachDesktopVdfs(host, { notify }) {
     window.addEventListener("pagehide", () => host.flush());
-    window.electronAPI.onVdfsFlush(async () => {
-        await host.flush();
-        host.volume.detachStore();
-    });
-    host.volume.onPersistFailure = (operation, error) =>
-        notify(
-            `The VDFS folder could not be updated (${operation}: ${error.message}). What the BBC wrote may be lost.`,
-        );
+    window.electronAPI.onVdfsFlush(() => host.closeAll());
+    host.onWriteFailure = (error) =>
+        notify(`The VDFS folder could not be updated (${error.message}). What the BBC wrote may be lost.`);
 }

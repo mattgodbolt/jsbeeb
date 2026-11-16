@@ -4,9 +4,12 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { MachineSession } from "../../src/machine-session.js";
+import { FsStore } from "../../src/vdfs-fs-store.js";
 import { BootTimeout } from "../helpers/machine-session.js";
 
 const CommandCycles = 2_000_000;
+const SlowCommandCycles = 8_000_000;
+const SlowStoreMs = 15;
 
 describe("VDFS in a running machine", () => {
     let folder;
@@ -17,6 +20,7 @@ describe("VDFS in a running machine", () => {
     });
 
     afterEach(async () => {
+        vi.restoreAllMocks();
         session?.destroy();
         session = undefined;
         await rm(folder, { recursive: true, force: true });
@@ -82,6 +86,55 @@ describe("VDFS in a running machine", () => {
             await enter("*DIR GAMES");
             expect(await enter("*CAT")).toMatch(/Dir\. \$\.GAMES[\s\S]*ELITE/);
             expect(await enter("*NOSUCHTHING")).toBe("Bad command");
+        },
+        BootTimeout,
+    );
+
+    it(
+        "sees a file added to the folder after the machine started, as soon as it is looked for",
+        async () => {
+            await boot();
+            await enter("*VDFS");
+            expect(await enter("*CAT")).not.toContain("LATER");
+            await writeFile(path.join(folder, "LATER"), "x");
+            expect(await enter("*CAT")).toContain("LATER");
+        },
+        BootTimeout,
+    );
+
+    it(
+        "waits for a store that is slow to answer, as it would for a disc, and gets the right answer",
+        async () => {
+            await writeFile(path.join(folder, "HELLO"), Uint8Array.of(0x48, 0x49));
+            await writeFile(path.join(folder, "HELLO.inf"), "$.HELLO 00003000 00003000\n");
+            for (const method of ["find", "list", "read", "writeFile"]) {
+                const original = FsStore.prototype[method];
+                vi.spyOn(FsStore.prototype, method).mockImplementation(async function (...args) {
+                    await new Promise((resolve) => setTimeout(resolve, SlowStoreMs));
+                    return original.apply(this, args);
+                });
+            }
+            await boot();
+            await enter("*VDFS");
+            expect(await enter("*CAT", SlowCommandCycles)).toContain("HELLO");
+            await enter("*LOAD HELLO", SlowCommandCycles);
+            expect(await enter("PRINT ?&3000")).toBe("72");
+            await enter('10 PRINT "SAVED SLOWLY"');
+            await enter('SAVE "SLOW"', SlowCommandCycles);
+            await session.flushVdfs();
+            expect((await readFile(path.join(folder, "SLOW"))).length).toBeGreaterThan(10);
+        },
+        BootTimeout,
+    );
+
+    it(
+        "says which files it cannot show, which the BBC has no names for",
+        async () => {
+            await writeFile(path.join(folder, "A_VERY_LONG_NAME.bas"), "x");
+            await writeFile(path.join(folder, "OK"), "x");
+            await boot();
+            await enter("*VDFS");
+            expect(await enter("*CAT")).toContain("1 not shown: the BBC cannot name A_VERY_LONG_NAME.bas");
         },
         BootTimeout,
     );
