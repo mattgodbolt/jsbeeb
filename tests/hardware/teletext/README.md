@@ -41,7 +41,7 @@ The same disc runs under jsbeeb, so a photograph can be held against the emulato
     node tests/hardware/teletext/capture-refs.js
 
 writes `t1.png` to `t8.png` into the `refs` directory beside the script, whatever directory you run
-it from. Committed copies are already there. T8 is captured with its first box at column 9.5, the
+it from. Committed copies are already there. T8 is captured with its first box at column 9 (9.125 exactly), the
 committed reference's phase; if a rendering change means no start lands it there, the script stops
 after T7 and says which columns it saw.
 
@@ -229,6 +229,11 @@ jsbeeb and beebjit rounding every flip out to a cell boundary had the same struc
 which is the publishable version of it. The fix in jsbeeb is in `video.js`: a ULA register write
 landing between the two 2MHz ticks of a 1MHz cell repaints the second half of the cell. See
 [#766](https://github.com/mattgodbolt/jsbeeb/issues/766).
+
+Composite does not resolve a MODE 4 pixel. Probe 8 later measured that a teletext select
+write shows one MODE 4 pixel into the cell, as a palette write does
+([#1866](https://github.com/mattgodbolt/jsbeeb/issues/1866)), so jsbeeb draws each box edge a pixel
+after the boundary or half cell, and `refs/t8.png` has them there.
 
 Two things about running it on hardware:
 
