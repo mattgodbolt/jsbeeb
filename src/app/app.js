@@ -6,11 +6,13 @@ import { ArgumentParser } from "argparse";
 
 import { getArguments } from "./args.js";
 import { FsStore } from "../vdfs-fs-store.js";
+import { swapVdfsFolder } from "./vdfs-swap.js";
 
 const store = new Store();
 
 // The folder served as VDFS is the main process's to name: the page can only use the one it was given.
-let vdfsStore = store.get("vdfsFolder") ? new FsStore(store.get("vdfsFolder")) : null;
+const savedFolder = store.get("vdfsFolder");
+let vdfsStore = typeof savedFolder === "string" && savedFolder ? new FsStore(savedFolder) : null;
 const pendingVdfsOperations = new Set();
 
 function vdfsOperation(run) {
@@ -111,6 +113,18 @@ async function createWindow() {
     if (args.disc1 && !args.noboot) query.autoboot = true;
     if (args.disc1) query.disc1 = getFileParam(args.disc1);
     if (args.disc2) query.disc2 = getFileParam(args.disc2);
+    // What the BBC has written is handed over before the window goes, for the writes that close would not wait for.
+    let flushedForClose = false;
+    win.on("close", (event) => {
+        if (!vdfsStore || flushedForClose) return;
+        event.preventDefault();
+        askPageToFlush(win)
+            .then(() => Promise.allSettled([...pendingVdfsOperations]))
+            .finally(() => {
+                flushedForClose = true;
+                win.close();
+            });
+    });
     await win.loadFile("dist/index.html", { query });
 
     app.on("activate", function () {
@@ -171,13 +185,17 @@ function askPageToFlush(browserWindow) {
 
 /** Serves `folder` as VDFS, or no folder, and starts the page again, which has to be built with it. */
 async function serveVdfsFolder(browserWindow, folder) {
-    if (vdfsStore) await askPageToFlush(browserWindow);
-    await Promise.allSettled([...pendingVdfsOperations]);
-    if (folder) store.set("vdfsFolder", folder);
-    else store.delete("vdfsFolder");
-    vdfsStore = folder ? new FsStore(folder) : null;
-    setMenu(menuPanels);
-    await browserWindow.loadFile("dist/index.html", { query: pageQuery() });
+    await swapVdfsFolder({
+        flushPage: () => (vdfsStore ? askPageToFlush(browserWindow) : Promise.resolve()),
+        inFlight: () => pendingVdfsOperations,
+        changeFolder: () => {
+            if (folder) store.set("vdfsFolder", folder);
+            else store.delete("vdfsFolder");
+            vdfsStore = folder ? new FsStore(folder) : null;
+            setMenu(menuPanels);
+        },
+        loadPage: () => browserWindow.loadFile("dist/index.html", { query: pageQuery() }),
+    });
 }
 
 async function chooseVdfsFolder(_, browserWindow) {

@@ -45,6 +45,8 @@ take and so sees the boot service call first. `*VDFS` does it, and `autotype` ca
 - Open files are written to the folder when they are closed, by a close of handle 0, `OSARGS` with A=&FF, or a
   break. A machine that is stopped with a file open does not write it. A file that has been deleted or replaced while
   it is open is no longer written.
+- In the desktop app, serving or stopping a folder starts the page again, which discards the machine that was running.
+  The page is asked to hand over what the BBC wrote first, and to stop writing; so is a window that is closed.
 - The BBC is told its write succeeded before the folder has it. A write that then fails is logged, and the page says
   so in a toast (`volume.onPersistFailure`), but the BBC does not hear of it.
 

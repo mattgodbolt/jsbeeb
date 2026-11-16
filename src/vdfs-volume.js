@@ -33,8 +33,17 @@ export const Errors = Object.freeze({
     eof: () => new VdfsError(0xdf, "EOF"),
 });
 
+/** A name that ends in `/inf` would be a host file that ends in `.inf`, which is where a file's addresses are kept. */
+const SidecarName = /\/inf$/i;
+
 export function isValidName(name) {
-    return name.length > 0 && name.length <= MaxNameLength && PrintableAscii.test(name) && !NameSeparators.test(name);
+    return (
+        name.length > 0 &&
+        name.length <= MaxNameLength &&
+        PrintableAscii.test(name) &&
+        !NameSeparators.test(name) &&
+        !SidecarName.test(name)
+    );
 }
 
 const keyOf = (name) => name.toUpperCase();
@@ -237,7 +246,11 @@ export class VdfsVolume {
         this._pending = this._pending.then(run).catch((error) => {
             this.persistFailures.push({ operation, error });
             console.error(`VDFS could not persist ${operation}:`, error);
-            this.onPersistFailure?.(operation, error);
+            try {
+                this.onPersistFailure?.(operation, error);
+            } catch (listenerError) {
+                console.error("VDFS persist failure listener failed:", listenerError);
+            }
         });
     }
 

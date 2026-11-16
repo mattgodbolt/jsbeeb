@@ -196,6 +196,12 @@ describe("VDFS host", () => {
             expect(t.volume.root.children.get("DATA").length).toBe(1);
         });
 
+        it("lets a transfer of nothing be anywhere", async () => {
+            const t = await hostWith([file("EMPTY", "")]);
+            fileBlock(t.cpu, "EMPTY", { load: 0xfd00 });
+            expect(errorOf(await osfile(t, 0xff))).toBeUndefined();
+        });
+
         it("will not let a file grow past the size it allows", async () => {
             const t = await hostWith([file("DATA", "x")]);
             const handle = await open(t, "DATA", 0xc0);

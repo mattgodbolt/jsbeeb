@@ -130,12 +130,13 @@ describe("the Electron hooks", () => {
             const order = [];
             const host = {
                 flushChannels: () => order.push("channels"),
-                volume: { flush: async () => order.push("volume") },
+                volume: { store: {}, flush: async () => order.push("volume") },
             };
             window.electronAPI = { onVdfsFlush: vi.fn() };
             flushVdfsWhenAsked(host);
             await window.electronAPI.onVdfsFlush.mock.calls[0][0]();
             expect(order).toEqual(["channels", "volume"]);
+            expect(host.volume.store).toBeNull();
         });
 
         it("gives nothing when there is no folder, or no app", () => {

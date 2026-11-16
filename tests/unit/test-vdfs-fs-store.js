@@ -123,6 +123,15 @@ describe("VDFS folder store", () => {
             expect(await fs.readdir(root)).toEqual([]);
         });
 
+        it("replaces a file saved under another case of its name, on a host that tells them apart", async () => {
+            const store = new FsStore(root);
+            const details = (byte) => ({ data: Uint8Array.of(byte), load: 5, exec: 0, locked: false });
+            await store.writeFile(["ABC"], details(1));
+            await store.writeFile(["abc"], details(2));
+            expect((await fs.readdir(root)).sort()).toEqual(["abc", "abc.inf"]);
+            expect([...(await fs.readFile(path.join(root, "abc")))]).toEqual([2]);
+        });
+
         it("writes a name with a slash in it as a dot", async () => {
             const volume = await make();
             volume.persist(volume.createFile(volume.root, "prog/bas", { data: Uint8Array.of(1) }));

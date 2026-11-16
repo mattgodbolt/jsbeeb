@@ -263,7 +263,8 @@ export class VdfsHost {
     _memoryRange(address, length, { writing }) {
         const from = this._memoryAddress(address);
         if (length > MemoryBytes || from + length > MemoryBytes) throw Errors.badAddress();
-        if (writing && from < EndOfDevices && from + length > FirstDeviceAddress) throw Errors.badAddress();
+        if (writing && length > 0 && from < EndOfDevices && from + length > FirstDeviceAddress)
+            throw Errors.badAddress();
         return from;
     }
 

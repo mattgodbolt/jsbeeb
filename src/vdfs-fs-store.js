@@ -85,8 +85,21 @@ export class FsStore {
         return hostPath;
     }
 
+    /** On a host that tells `abc` from `ABC`, a file the BBC saves under the other case replaces the one there. */
+    async _removeOtherCases(hostPath) {
+        const directory = path.dirname(hostPath);
+        const name = path.basename(hostPath);
+        for (const other of await fs.readdir(directory)) {
+            const isOtherCase = other !== name && other.toLowerCase() === name.toLowerCase();
+            if (!isOtherCase) continue;
+            await fs.rm(path.join(directory, other), { force: true });
+            await fs.rm(path.join(directory, other + InfSuffix), { force: true });
+        }
+    }
+
     async writeFile(volumePath, { data, load, exec, locked }) {
         const hostPath = await this._hostPath(volumePath);
+        await this._removeOtherCases(hostPath);
         await fs.writeFile(hostPath, data);
         const name = volumePath.at(-1);
         if (load !== 0 || exec !== 0 || locked) {

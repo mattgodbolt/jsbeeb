@@ -20,6 +20,10 @@ describe("VDFS volume", () => {
             ['A"B', false],
             ["CAFÉ", false],
             ["A B", false],
+            ["FOO/INF", false],
+            ["foo/Inf", false],
+            ["INF", true],
+            ["A/INFO", true],
             ["A\u0001B", false],
         ])("%j is a name: %s", (name, valid) => {
             expect(isValidName(name)).toBe(valid);
@@ -128,6 +132,21 @@ describe("VDFS volume", () => {
             expect(store.writeFile).toHaveBeenCalledTimes(2);
             expect(volume.persistFailures).toEqual([{ operation: "writeFile", error: failure }]);
             error.mockRestore();
+        });
+
+        it("carries on when whoever is listening fails too", async () => {
+            vi.spyOn(console, "error").mockImplementation(() => {});
+            const store = new MemoryStore();
+            store.writeFile = vi.fn().mockRejectedValueOnce(new Error("disc full")).mockResolvedValue();
+            const volume = await VdfsVolume.open(store);
+            volume.onPersistFailure = () => {
+                throw new Error("toast failed");
+            };
+            volume.persist(volume.createFile(volume.root, "A"));
+            volume.persist(volume.createFile(volume.root, "B"));
+            await expect(volume.flush()).resolves.toBeUndefined();
+            expect(store.writeFile).toHaveBeenCalledTimes(2);
+            vi.restoreAllMocks();
         });
 
         it("tells whoever is listening when the store fails, so the failure is not only in a log", async () => {

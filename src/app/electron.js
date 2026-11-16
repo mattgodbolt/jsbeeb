@@ -66,6 +66,8 @@ export function flushVdfsWhenAsked(host) {
     window.electronAPI.onVdfsFlush(async () => {
         host.flushChannels();
         await host.volume.flush();
+        // The page is about to be replaced, and anything it wrote from here would go to whichever folder is next.
+        host.volume.store = null;
     });
 }
 
