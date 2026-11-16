@@ -953,13 +953,13 @@ export class Video {
 
     // The render loop paints a cell whole on the tick that fetches it, so the part of it from a write's edge on is
     // repainted with the new state. A 1MHz cell spans two ticks and is painted on the first, so after the second the
-    // beam is half way through it. A switch to 1MHz after the first tick of a 2MHz cell widens it; the next tick
-    // paints over anything past a 2MHz cell. A write while teletext shows changes nothing already painted.
+    // beam is half way through it. The repaint runs to where the next tick paints: a switch to 1MHz with oddClock set
+    // widens the cell just painted, and one to 2MHz narrows it. A write while teletext shows changes nothing painted.
     repaintAfterUlaWrite(edgeTexels, wasHalfClock, wasTeletext) {
         if (wasTeletext && this.teletextMode) return;
         if ((this.dispEnabled & EVERYTHINGENABLED) !== EVERYTHINGENABLED) return;
         const beamIntoCell = wasHalfClock && !this.oddClock ? BitmapXPerClock : 0;
-        const toPixel = wasHalfClock || (this.halfClock && this.oddClock) ? WideCellTexels : BitmapXPerClock;
+        const toPixel = beamIntoCell + (this.halfClock && this.oddClock ? WideCellTexels : BitmapXPerClock);
         this.repaintCell(beamIntoCell, beamIntoCell + edgeTexels, toPixel);
     }
 
@@ -1262,7 +1262,7 @@ export class Video {
     }
 
     dispEnableClear(flag) {
-        // A low DISPTMG holds the chip in reset, so a line it never saw ends there with no row counted.
+        // beebjit's reading: a low DISPTMG holds the chip in reset, so a line it never saw ends with no row counted.
         const lineEndsHeldLow =
             !this.teletext.levelDISPTMG &&
             (this.dispEnabled & DisptmgEnables) === DisptmgEnables &&
