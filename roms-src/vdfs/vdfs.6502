@@ -37,6 +37,7 @@ SECTION Rom, org = &8000, filename = "vdfs.rom", guard = &C000
     CMP #ServiceSelect : BEQ forward
     RTS
 .forward
+\ Very defensive: jsbeeb fits this ROM only with a host, but rom=vdfs.rom or a snapshot can put it in a machine without.
     PHA
     LDA PortId : EOR #HostId : BNE absent
     PLA : PHP : PHA : LDA #CallService : JMP enter

@@ -85,7 +85,7 @@ Eight bytes in FRED, at `&FC60` to `&FC67`. These are not an Acorn allocation, t
 | 6      | DATA   |                                                                    | The next byte of the chosen stream           |
 | 7      | ID     |                                                                    | `&56`                                        |
 
-The ROM reads ID before it forwards a service call, so a ROM in a machine with no host does nothing.
+The ROM reads ID before it forwards a service call, and hands the call back to the OS untouched if there is no host. That is very defensive: jsbeeb fits the ROM only with a host, but `rom=vdfs.rom` or a snapshot can put it in a machine that has none, and it would crash there.
 
 ### Calls
 
