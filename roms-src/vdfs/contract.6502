@@ -1,0 +1,29 @@
+\ The ports and codes the VDFS ROM shares with the host (docs/vdfs.md). The host's copy is in
+\ src/vdfs-host.js, and tests/unit/test-vdfs-contract.js fails if the two differ.
+
+PortBase    = &FC60
+PortCall    = PortBase + 0
+PortA       = PortBase + 1
+PortX       = PortBase + 2
+PortY       = PortBase + 3
+PortP       = PortBase + 4
+PortStream  = PortBase + 5
+PortData    = PortBase + 6
+PortId      = PortBase + 7
+HostId      = &56
+
+CallService = 0
+CallFile    = 1
+CallArgs    = 2
+CallBget    = 3
+CallBput    = 4
+CallGbpb    = 5
+CallFind    = 6
+CallFsc     = 7
+
+OpDone      = 0
+OpPrint     = 1
+OpError     = 2
+OpExec      = 3
+OpClaim     = 4
+OpOscli     = 5

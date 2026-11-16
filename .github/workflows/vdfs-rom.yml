@@ -1,0 +1,56 @@
+# The VDFS ROM is checked in, so nobody needs Baron to run jsbeeb. This builds it again and fails if the ROM in
+# public/roms is not what the source assembles to.
+name: vdfs rom
+
+on:
+  push:
+    paths:
+      - roms-src/vdfs/**
+      - public/roms/vdfs.rom
+      - tools/build-vdfs-rom.js
+      - .github/workflows/vdfs-rom.yml
+  pull_request:
+    paths:
+      - roms-src/vdfs/**
+      - public/roms/vdfs.rom
+      - tools/build-vdfs-rom.js
+      - .github/workflows/vdfs-rom.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  BARON_VERSION: v0.5.3
+
+jobs:
+  rom:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Cache baron
+        id: baron
+        uses: actions/cache@v4
+        with:
+          path: baron-bin
+          key: baron-${{ env.BARON_VERSION }}-${{ runner.os }}
+
+      - name: Build baron ${{ env.BARON_VERSION }}
+        if: steps.baron.outputs.cache-hit != 'true'
+        run: |
+          git clone --quiet --depth 1 --branch "$BARON_VERSION" --recurse-submodules \
+            https://github.com/waitingforvsync/baron baron-src
+          cmake -S baron-src -B baron-src/build -DCMAKE_BUILD_TYPE=Release
+          cmake --build baron-src/build -j
+          mkdir -p baron-bin
+          cp baron-src/build/src/baron baron-bin/
+
+      - name: Use Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24.19.0
+
+      - name: The checked-in ROM is what the source assembles to
+        run: BARON="$PWD/baron-bin/baron" node tools/build-vdfs-rom.js --check
