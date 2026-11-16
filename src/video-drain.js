@@ -76,9 +76,10 @@
 // THE TELETEXT CELLS
 //
 //   word 0         the glyph row: 16 pixels, two bits each from the lowest, each picking one of the cell's four
-//                  colours (background, two blends, foreground); 0 shows only the background
+//                  colours (background, two blends, foreground); 0 shows only the background. For a black cell,
+//                  its width: 8 or 16 pixels
 //   word 1         bits 0 to 7: the palette index of the cell's first colour in teletext colour (a multiple of 4)
-//                  bit 9: the TTX trick's black cell, 8 black pixels, ignoring the glyph row and palette
+//                  bit 9: a black cell, ignoring the palette: the TTX trick's, or one with MA13 clear
 //                  bit 10: lines are doubled, so paint the row below as well
 //                  bits 11 to 31: the framebuffer offset, signed: the line above an odd field is a negative row
 //                  bit 8, the log's shown bit, is set and ignored
@@ -87,7 +88,7 @@
 // 1. A negative offset is a cell on the line above an odd field; only what spills onto row 0 is painted, pixel by
 //    pixel and with no line grid (paintClippedTeletextCell), as for a bitmap cell.
 // 2. Otherwise the cell's row, and the row below when lines are doubled, are marked in the line grid.
-// 3. A black cell is two stores of four black pixels (paintBlackCell).
+// 3. A black cell is two or four stores of four black pixels (paintBlackCell).
 // 4. Otherwise one 128-bit load fetches the cell's four colours from teletext colour. For each byte of the glyph row,
 //    a load of that byte's teletext lanes and one i8x16.swizzle pick four pixels' colours out of them, and one
 //    128-bit store writes them: four swizzles and stores a cell (paintTeletextCell). Each store is made again one row
@@ -126,7 +127,6 @@ export const TeletextOffsetShift = 11;
 export const TeletextCellWords = 2;
 const TeletextCellBytesShift = Math.log2(TeletextCellWords * WordBytes);
 export const TeletextCellPixels = 16;
-const TeletextBlackPixels = 8;
 const TeletextColours = 256;
 const VectorBytes = 16;
 const GlyphPixelBits = 2;
@@ -640,9 +640,9 @@ const PaintClippedTeletextCell = `
     local.get info
     i32.const ${TeletextBlack}
     i32.and
-    if                                  ;; a black cell is half as wide
-        i32.const ${TeletextBlackPixels}
-        local.set cellPixels            ;; cellPixels = 8
+    if                                  ;; a black cell is as wide as word 0 says
+        local.get pixels
+        local.set cellPixels            ;; cellPixels = pixels
     end
     i32.const ${RowPixels}
     local.set span                      ;; span = 1024, the pixels from a pixel to below its last row
@@ -729,12 +729,19 @@ function storeTeletextPixels(vectors) {
         end`;
 }
 
-// The TTX trick's black cell: eight black pixels at address. Pairs with paintBlackCell.
+// A black cell: `pixels` (8 or 16) black pixels at address. Pairs with paintBlackCell.
 const PaintBlackCell = `
     i32.const ${OPAQUE_BLACK}
     i32x4.splat
     local.set pixels0                       ;; four black pixels
-    ${storeTeletextPixels(["pixels0", "pixels0"])}`;
+    local.get pixels
+    i32.const ${TeletextCellPixels}
+    i32.eq
+    if                                      ;; a whole teletext cell
+        ${storeTeletextPixels(["pixels0", "pixels0", "pixels0", "pixels0"])}
+    else                                    ;; the TTX trick's 2MHz cell
+        ${storeTeletextPixels(["pixels0", "pixels0"])}
+    end`;
 
 // Picks four pixels' colours, for byte `byte` of the glyph row (pixels 4 * byte to 4 * byte + 3), out of cellColours.
 // The byte's lane pattern in TeletextLanes holds, for each of its four pixels, the byte offsets 4 * bits to
@@ -826,7 +833,7 @@ const PaintTeletextCode = `
             local.get info
             i32.const ${TeletextBlack}
             i32.and
-            if                              ;; the TTX trick's black cell
+            if                              ;; a black cell
                 ${PaintBlackCell}
                 br 1                        ;; continue
             end
@@ -959,7 +966,7 @@ export function jsDrain(views, count, modeBase, pixelsPerChar, doubledLines, lin
 }
 
 function paintClippedTeletextCell({ fb32, teletextColour }, pixels, info, offset, doubled) {
-    const cellPixels = info & TeletextBlack ? TeletextBlackPixels : TeletextCellPixels;
+    const cellPixels = info & TeletextBlack ? pixels : TeletextCellPixels;
     const span = doubled ? 2 * RowPixels : RowPixels;
     for (let pixel = 0; pixel < cellPixels; ++pixel) {
         const colour =
@@ -975,10 +982,10 @@ function paintClippedTeletextCell({ fb32, teletextColour }, pixels, info, offset
     }
 }
 
-function paintBlackCell(fb32, offset, doubled) {
-    const end = offset + (doubled ? RowPixels : 0) + TeletextBlackPixels;
+function paintBlackCell(fb32, offset, doubled, pixels) {
+    const end = offset + (doubled ? RowPixels : 0) + pixels;
     for (let rowStart = offset; rowStart < end; rowStart += RowPixels) {
-        for (let pixel = 0; pixel < TeletextBlackPixels; ++pixel) fb32[rowStart + pixel] = OPAQUE_BLACK;
+        for (let pixel = 0; pixel < pixels; ++pixel) fb32[rowStart + pixel] = OPAQUE_BLACK;
     }
 }
 
@@ -1017,7 +1024,7 @@ export function jsPaintTeletext(views, count) {
             lineGrid[row] = LineGridTeletext;
         }
         if (info & TeletextBlack) {
-            paintBlackCell(fb32, offset, doubled);
+            paintBlackCell(fb32, offset, doubled, pixels);
             continue;
         }
         paintTeletextCell(fb32, teletextColour, pixels, info, offset, doubled);

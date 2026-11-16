@@ -259,13 +259,25 @@ describe.each(["wasm", "js"])("Teletext painted by the %s drain", (drainKind) =>
         expectCells([cellAt(3), cellAt(4)], [Blank, solid(White)]);
     });
 
-    it("can paint the second half of a cell on its own", () => {
-        const [whole] = renderCells([SolidBlock], LetterA);
-        const buffer = makeFast32(new Uint32Array(PixelsPerCell)).fill(0x0badf00d);
-        teletext.emitSecondHalf(buffer, 0);
+    it.each([
+        [0, PixelsPerCell],
+        [2, PixelsPerCell],
+        [PixelsPerCell / 2, PixelsPerCell],
+        [3, PixelsPerCell / 2],
+    ])("can paint texels %i to %i of a cell on their own", (fromPixel, toPixel) => {
+        const Untouched = 0x0badf00d;
+        const RowAcrossTheA = 4;
+        for (let row = 0; row < RowAcrossTheA; ++row) endScanline();
+        const [whole] = renderCells([LetterA]);
+        expect(new Set(whole).size).toBeGreaterThan(1);
+        const buffer = makeFast32(new Uint32Array(PixelsPerCell)).fill(Untouched);
+        teletext.emitFrom(buffer, 0, fromPixel, toPixel);
 
-        expect(Array.from(buffer.subarray(0, PixelsPerCell / 2))).toEqual(Array(PixelsPerCell / 2).fill(0x0badf00d));
-        expect(Array.from(buffer.subarray(PixelsPerCell / 2))).toEqual(Array.from(whole.subarray(PixelsPerCell / 2)));
+        expect(Array.from(buffer)).toEqual([
+            ...Array(fromPixel).fill(Untouched),
+            ...whole.subarray(fromPixel, toPixel),
+            ...Array(PixelsPerCell - toPixel).fill(Untouched),
+        ]);
     });
 
     describe("scanlines", () => {
@@ -497,7 +509,7 @@ describe.each(["wasm", "js"])("Teletext painted by the %s drain", (drainKind) =>
             const repaintSecondHalf = (line, cell) => {
                 both((chip) => {
                     chip.catchUp();
-                    chip.emitSecondHalf(chip === eager ? eagerCell : loggedCell, 0);
+                    chip.emitFrom(chip === eager ? eagerCell : loggedCell, 0, PixelsPerCell / 2, PixelsPerCell);
                 });
                 if (!eagerCell.every((pixel, i) => pixel === loggedCell[i])) {
                     expect({ line, cell, pixels: [...loggedCell] }).toEqual({ line, cell, pixels: [...eagerCell] });

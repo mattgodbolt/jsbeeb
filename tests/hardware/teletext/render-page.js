@@ -29,7 +29,7 @@ async function runToField(session, field) {
 // T8's loop polls for vsync every 8 cycles, so where its boxes land depends on when it started,
 // to one of four cell positions, and that depends on disc timing. The reference has the first
 // box at this column; try start points until one puts it there.
-const T8FirstBoxColumn = 9.5;
+const T8FirstBoxColumn = 9;
 // Prime, so that successive starts walk the poll phase rather than sitting on one column.
 const T8StartStepCycles = 2503;
 const T8MaxStarts = 32;

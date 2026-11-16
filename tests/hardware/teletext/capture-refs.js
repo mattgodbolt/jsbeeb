@@ -6,7 +6,7 @@
 //
 // The flash phase is not controlled here, so T2 and T6 may be captured in
 // either phase; run it again if you want the other one. T8 is only captured
-// with its first box at column 9.5 (see README.md).
+// with its first box at column 9 (see README.md).
 
 import { mkdirSync, writeFileSync } from "fs";
 import path from "node:path";
