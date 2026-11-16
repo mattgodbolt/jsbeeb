@@ -242,6 +242,33 @@ describe("VDFS host", () => {
         });
     });
 
+    describe("what is left of a response", () => {
+        it("keeps nothing of one the ROM does not come back to read, as after a *RUN or an error", async () => {
+            const t = await hostWith([file("PROG", "x", { load: 0x1900, exec: 0x1900 })]);
+            putString(t.cpu, Name, "PROG");
+            await t.call(Call.fsc, { a: 4, x: Name & 0xff, y: Name >> 8 });
+            fileBlock(t.cpu, "MISSING");
+            await osfile(t, 0xff);
+            expect(t.host.openStreams).toBe(0);
+        });
+
+        it("keeps nothing of a response across a break", async () => {
+            const t = await hostWith();
+            t.host.write(Port.call, Call.args);
+            expect(t.host.openStreams).toBe(1);
+            t.host.reset();
+            expect(t.host.openStreams).toBe(0);
+        });
+    });
+
+    describe("names that are the root, the library and the like", () => {
+        it.each([["$.%"], ["$.&"], ["$.$"]])("will not make a file called %s", async (name) => {
+            const t = await hostWith();
+            putString(t.cpu, Name, name);
+            expect(errorOf(await t.call(Call.find, { a: 0x80, x: Name & 0xff, y: Name >> 8 })).text).toBe("Bad name");
+        });
+    });
+
     describe("what has gone from the tree", () => {
         it("does not write a deleted file back when the channel that had it open is closed", async () => {
             const t = await hostWith();

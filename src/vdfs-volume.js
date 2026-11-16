@@ -42,7 +42,8 @@ export function isValidName(name) {
         name.length <= MaxNameLength &&
         PrintableAscii.test(name) &&
         !NameSeparators.test(name) &&
-        !SidecarName.test(name)
+        !SidecarName.test(name) &&
+        !SpecialDirectories.has(name)
     );
 }
 

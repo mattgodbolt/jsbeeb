@@ -65,6 +65,7 @@ const hex = (value, digits) => value.toString(16).toUpperCase().padStart(digits,
 class Response {
     constructor() {
         this.bytes = [];
+        this.ended = false;
     }
 
     _text(text) {
@@ -80,19 +81,23 @@ class Response {
     error(number, text) {
         this.bytes.push(Op.error, number);
         this._text(text.slice(0, MaxErrorText));
+        this.ended = true;
     }
 
     /** The ROM jumps to the program at `address`, with the caller's return address still on the stack. */
     exec(address) {
         const less = (address - 1) & 0xffff;
         this.bytes.push(Op.exec, less >> 8, less & 0xff);
+        this.ended = true;
     }
 
     claim() {
         this.bytes.push(Op.claim);
     }
 
+    /** Ends the response with the registers to return, unless the ROM is not to come back for them. */
     done({ a, x, y, p }) {
+        if (this.ended) return;
         this.bytes.push(Op.done, x & 0xff, y & 0xff, p & 0xff, a & 0xff);
     }
 }
@@ -125,7 +130,13 @@ export class VdfsHost {
     }
 
     /** A break: the OS has gone back to its own filing system, and files open on the old one are closed. */
+    /** How many responses the ROM has not finished reading. */
+    get openStreams() {
+        return this._streams.size;
+    }
+
     reset() {
+        this._streams.clear();
         this.closeAll();
         this.selected = false;
         this._reselecting = false;

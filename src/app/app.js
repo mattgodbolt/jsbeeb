@@ -188,11 +188,14 @@ function askPageToFlush(browserWindow) {
     return new Promise((resolve) => {
         const done = () => {
             clearTimeout(timer);
-            ipcMain.removeListener("vdfs-flushed", done);
+            ipcMain.removeListener("vdfs-flushed", answered);
             resolve();
         };
+        const answered = (event) => {
+            if (event.sender === browserWindow.webContents) done();
+        };
         const timer = setTimeout(done, FlushTimeoutMs);
-        ipcMain.on("vdfs-flushed", done);
+        ipcMain.on("vdfs-flushed", answered);
         browserWindow.webContents.send("vdfs-flush");
     });
 }
