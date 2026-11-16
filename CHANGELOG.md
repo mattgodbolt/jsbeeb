@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.22.1](https://github.com/mattgodbolt/jsbeeb/compare/v2.22.0...v2.22.1) (2026-11-16)
+
+
+### Bug Fixes
+
+* count the TV's fields, not R6 hits, for the phosphor decay, frame skip and rewind preview ([#1854](https://github.com/mattgodbolt/jsbeeb/issues/1854)) ([caf6b63](https://github.com/mattgodbolt/jsbeeb/commit/caf6b635a56c069c98a92e4bdf92701105abbc75))
+* end the 1770's READ ADDRESS 32 µs after its last ID byte ([#1853](https://github.com/mattgodbolt/jsbeeb/issues/1853)) ([94d724e](https://github.com/mattgodbolt/jsbeeb/commit/94d724ed0cd88371b5ae846bb986755e2373a795))
+* end the 1770's READ ADDRESS, READ SECTOR and WRITE SECTOR the measured byte-times after their last DRQ ([#1860](https://github.com/mattgodbolt/jsbeeb/issues/1860)) ([dc30786](https://github.com/mattgodbolt/jsbeeb/commit/dc307869effc85b5956bb8a679a80cbaf4f47ac7))
+* flip MA6, and MA7 on a Master's odd RA, for MA13 fetches with a 2 MHz bitmap ULA ([#1859](https://github.com/mattgodbolt/jsbeeb/issues/1859)) ([3296d3a](https://github.com/mattgodbolt/jsbeeb/commit/3296d3a32e289c2e674109fdd310996b6ea3d0d0))
+* show ULA and R8 writes where a Master does, gate the SAA5050 on MA13, and count the clock-switch tick ([#1868](https://github.com/mattgodbolt/jsbeeb/issues/1868)) ([1440563](https://github.com/mattgodbolt/jsbeeb/commit/144056320e74c6638c63d82e07e9a6c5bfcedd06))
+* show ULA palette and mode writes half a 2MHz cycle before the character written, in the 2MHz modes ([#1855](https://github.com/mattgodbolt/jsbeeb/issues/1855)) ([e2b5166](https://github.com/mattgodbolt/jsbeeb/commit/e2b5166b6517e9e9631eaa59ed706579743120a8))
+
 ## [2.22.0](https://github.com/mattgodbolt/jsbeeb/compare/v2.21.1...v2.22.0) (2026-11-15)
 
 
