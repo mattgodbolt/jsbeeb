@@ -1,0 +1,105 @@
+// Keeps a VDFS volume in a folder of the host's: each file is a file, each directory a directory, and the load and
+// exec addresses and the lock are in a `.inf` file beside it, as BeebAsm, Baron and b-em keep them. A `.` in a host
+// name is a `/` to the 6502, which has no use for the dot in a name. See docs/vdfs.md.
+
+import * as fs from "node:fs/promises";
+import * as path from "node:path";
+
+import { isValidName } from "./vdfs-volume.js";
+
+const InfSuffix = ".inf";
+const LockedFlag = /^l(ocked)?$/i;
+const AttributeToken = /^[0-9a-f]{1,2}$/i;
+const LockedAttribute = 0x08;
+
+export const toBbcName = (hostName) => hostName.replaceAll(".", "/");
+const toHostName = (bbcName) => bbcName.replaceAll("/", ".");
+
+/** @returns {{load: number, exec: number, locked: boolean}} what a `.inf` line says, with what it leaves out as 0. */
+export function parseInf(text) {
+    const [, load = "0", exec = "0", , ...rest] = text.trim().split(/\r?\n/)[0].split(/\s+/);
+    const hexOrZero = (token) => (/^[0-9a-f]{1,8}$/i.test(token) ? parseInt(token, 16) >>> 0 : 0);
+    const locked = rest.some(
+        (token) =>
+            LockedFlag.test(token) || (AttributeToken.test(token) && (parseInt(token, 16) & LockedAttribute) !== 0),
+    );
+    return { load: hexOrZero(load), exec: hexOrZero(exec), locked };
+}
+
+export function formatInf(name, { load, exec, locked, length }) {
+    const hex8 = (value) => value.toString(16).toUpperCase().padStart(8, "0");
+    return `$.${name}  ${hex8(load)} ${hex8(exec)} ${hex8(length)}${locked ? " L" : ""}\n`;
+}
+
+const isUnderRoot = (root, candidate) => candidate === root || candidate.startsWith(root + path.sep);
+
+export class FsStore {
+    /** @param {string} root the folder that is the volume's `$` */
+    constructor(root) {
+        this.root = path.resolve(root);
+    }
+
+    async load() {
+        const items = [];
+        const walk = async (hostDirectory, bbcPath) => {
+            const dirents = await fs.readdir(hostDirectory, { withFileTypes: true });
+            for (const dirent of dirents) {
+                if (dirent.name.endsWith(InfSuffix) || dirent.isSymbolicLink()) continue;
+                const bbcName = toBbcName(dirent.name);
+                if (!isValidName(bbcName)) continue;
+                const hostPath = path.join(hostDirectory, dirent.name);
+                const itemPath = [...bbcPath, bbcName];
+                if (dirent.isDirectory()) {
+                    items.push({ path: itemPath, isDirectory: true });
+                    await walk(hostPath, itemPath);
+                } else if (dirent.isFile()) {
+                    const data = new Uint8Array(await fs.readFile(hostPath));
+                    const inf = await fs.readFile(hostPath + InfSuffix, "utf8").catch(() => "");
+                    items.push({ path: itemPath, isDirectory: false, data, ...parseInf(inf) });
+                }
+            }
+        };
+        await walk(this.root, []);
+        return items;
+    }
+
+    /** The host path for a volume path, which has to stay inside the root whatever the names in it say. */
+    async _hostPath(volumePath) {
+        const names = volumePath.map(toHostName);
+        if (names.some((name) => name === "." || name === ".." || name.includes(path.sep)))
+            throw new Error(`${volumePath.join(".")} is not a name that stays in the volume's folder`);
+        const hostPath = path.join(this.root, ...names);
+        if (!isUnderRoot(this.root, hostPath)) throw new Error(`${hostPath} is outside ${this.root}`);
+        const realRoot = await fs.realpath(this.root);
+        const realParent = await fs.realpath(path.dirname(hostPath));
+        if (!isUnderRoot(realRoot, realParent)) throw new Error(`${hostPath} is outside ${this.root}`);
+        const existing = await fs.lstat(hostPath).catch(() => null);
+        if (existing?.isSymbolicLink()) throw new Error(`${hostPath} is a symbolic link`);
+        return hostPath;
+    }
+
+    async writeFile(volumePath, { data, load, exec, locked }) {
+        const hostPath = await this._hostPath(volumePath);
+        await fs.writeFile(hostPath, data);
+        const name = volumePath.at(-1);
+        if (load !== 0 || exec !== 0 || locked) {
+            await fs.writeFile(hostPath + InfSuffix, formatInf(name, { load, exec, locked, length: data.length }));
+        } else {
+            await fs.rm(hostPath + InfSuffix, { force: true });
+        }
+    }
+
+    async makeDirectory(volumePath) {
+        await fs.mkdir(await this._hostPath(volumePath), { recursive: true });
+    }
+
+    async remove(volumePath) {
+        const hostPath = await this._hostPath(volumePath);
+        const stat = await fs.lstat(hostPath);
+        if (stat.isDirectory()) await fs.rmdir(hostPath);
+        else {
+            await fs.rm(hostPath);
+            await fs.rm(hostPath + InfSuffix, { force: true });
+        }
+    }
+}

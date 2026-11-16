@@ -430,6 +430,10 @@ Present only when the AMX mouse was fitted. Absent means a fitted mouse drops an
 
 The levels on CB1 and CB2 are the user VIA's. The buttons are not saved: like the keyboard, they are host input.
 
+### VDFS
+
+A VDFS filing system (see [vdfs.md](vdfs.md)) adds nothing to a snapshot. Its open files are the host's, so a restored snapshot has none open, and the filing system is not the selected one until `*VDFS` selects it again.
+
 ### Teletext adaptor (`state.teletextAdaptor`)
 
 Present only when the Acorn teletext adaptor was fitted. Absent means the adaptor, if one is fitted now, keeps its current state, the same fallback as a v1 snapshot's missing FDC. Because absence is already the well-defined case, adding this field did not need a format version bump: v3 readers that predate it ignore it, and readers that know it treat an older v3 snapshot as "adaptor state unchanged".

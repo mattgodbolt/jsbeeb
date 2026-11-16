@@ -8,6 +8,7 @@ import { TouchScreen } from "./touchscreen.js";
 import { AmxMouse } from "./amx-mouse.js";
 import { TeletextAdaptor } from "./teletext_adaptor.js";
 import { Filestore } from "./filestore.js";
+import { PortBase as VdfsPortBase, VdfsHost } from "./vdfs-host.js";
 import { FakeRelayNoise } from "./relaynoise.js";
 import { AtomPPIA } from "./ppia.js";
 import { AtomMMC2 } from "./mmc.js";
@@ -814,6 +815,8 @@ export class Cpu6502 extends Base6502 {
         this.hasMusic5000 = !!this.config.hasMusic5000;
         this.hasTeletextAdaptor = !!this.config.hasTeletextAdaptor;
         this.teletextAdaptor = this.hasTeletextAdaptor ? new TeletextAdaptor(this) : null;
+        if (this.config.vdfs && model.isAtom) throw new Error("VDFS is for the BBC models, not the Atom");
+        this.vdfs = this.config.vdfs ? new VdfsHost(this, this.config.vdfs.volume) : null;
         this.tube = this.hasTube
             ? new Tube6502(this.config.tube, this, { cpuMultiplier: this.config.tubeCpuMultiplier })
             : new FakeTube();
@@ -1030,6 +1033,10 @@ export class Cpu6502 extends Base6502 {
             case 0xfc10:
                 if (this.hasTeletextAdaptor) return this.teletextAdaptor.read(addr - 0xfc10);
                 break;
+            case VdfsPortBase:
+            case VdfsPortBase + 4:
+                if (this.vdfs) return this.vdfs.read(addr - VdfsPortBase);
+                break;
             case 0xfe00:
             case 0xfe04:
                 return this.crtc.read(addr);
@@ -1195,6 +1202,10 @@ export class Cpu6502 extends Base6502 {
             case 0xfc10:
                 if (this.hasTeletextAdaptor) return UnpeekableDevice;
                 break;
+            case VdfsPortBase:
+            case VdfsPortBase + 4:
+                if (this.vdfs) return UnpeekableDevice;
+                break;
             case 0xfe00:
             case 0xfe04:
                 return this.crtc.read(addr);
@@ -1319,6 +1330,10 @@ export class Cpu6502 extends Base6502 {
         switch (addr & ~0x0003) {
             case 0xfc10:
                 if (this.hasTeletextAdaptor) return this.teletextAdaptor.write(addr - 0xfc10, b);
+                break;
+            case VdfsPortBase:
+            case VdfsPortBase + 4:
+                if (this.vdfs) return this.vdfs.write(addr - VdfsPortBase, b);
                 break;
             case 0xfcfc:
                 if (addr === 0xfcff && this.hasMusic5000) {
@@ -1620,6 +1635,7 @@ export class Cpu6502 extends Base6502 {
         this.acia.restoreState(state.acia);
         this.adconverter.restoreState(state.adc);
         if (this.teletextAdaptor && state.teletextAdaptor) this.teletextAdaptor.restoreState(state.teletextAdaptor);
+        this.vdfs?.reset();
 
         // Touchscreen state, added without a version bump. Absent from an older snapshot, whose
         // touchscreen keeps its current state, unpolled.
@@ -1722,6 +1738,7 @@ export class Cpu6502 extends Base6502 {
         this.video.reset(this, this.sysvia, hard);
         this.soundChip.reset(hard);
         if (this.teletextAdaptor) this.teletextAdaptor.reset(hard);
+        if (this.vdfs) this.vdfs.reset();
         if (this.music5000) this.music5000.reset(hard);
         if (hard && this.econet) {
             this.econet.reset();
