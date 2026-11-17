@@ -73,7 +73,7 @@ Filing system calls: `OSFILE` 0 to 6, 8 and &FF; `OSFIND`, `OSBGET`, `OSBPUT`, `
 extent, and the filing system's number), `OSGBPB` 1 to 4, and `FSC` for EOF, `*RUN`, `*CAT`, `*EX`, `*INFO` and
 unrecognised commands, which are run as a program if they name a file in the current directory or the library.
 
-Commands: `*VDFS`, `*CAT`, `*DIR`, `*LIB`, `*CDIR`, `*DELETE`, `*ACCESS` (`L` or nothing), `*INFO` and `*EX` (with `*`
+Commands: `*VDFS`, `*CAT`, `*DIR`, `*LIB`, `*CDIR`, `*DELETE`, `*ACCESS` (`L` or nothing), `*SETINFO name load [exec]` (hexadecimal; for a file with no `.inf`, which cannot be run until it has an exec address), `*INFO` and `*EX` (with `*`
 and `#` wildcards), and `*HELP VDFS`. Directories are as ADFS has them: `$` is the root, `@` the current directory, `%`
 the library, `^` the parent, and a `:0.` drive is ignored.
 

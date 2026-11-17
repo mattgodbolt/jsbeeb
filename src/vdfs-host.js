@@ -100,6 +100,7 @@ export class VdfsHost {
             DIR: async (argument, response, fs) => (this.directory = await this._directoryNamed(argument, fs)),
             EX: (argument, response, fs) => this._examine(argument, response, { extended: true }, fs),
             INFO: (argument, response, fs) => this._examine(argument, response, { extended: false }, fs),
+            SETINFO: (argument, response, fs) => this._setInfo(argument, fs),
             LIB: async (argument, response, fs) => (this.library = await this._directoryNamed(argument, fs)),
         };
         this.reset();
@@ -632,6 +633,24 @@ export class VdfsHost {
         if (!name) throw Errors.badName();
         const { path, entry } = await this._existing(name, fs);
         if (!entry.isDirectory) await fs.setInfo(path, { locked: attributes.toUpperCase().includes("L") });
+    }
+
+    /** `*SETINFO name load [exec]`: the addresses are hexadecimal, and exec stays as it was if it is left out. */
+    async _setInfo(argument, fs) {
+        const [name, load, exec] = argument.split(/\s+/);
+        if (!name) throw Errors.badName();
+        const parse = (text) => {
+            const digits = text.replace(/^&/, "");
+            if (!/^[0-9a-f]{1,8}$/i.test(digits)) throw Errors.badAddress();
+            return parseInt(digits, 16) >>> 0;
+        };
+        if (load === undefined) throw Errors.badAddress();
+        const changes = { load: parse(load) };
+        if (exec !== undefined) changes.exec = parse(exec);
+        const { path, entry } = await this._existing(name, fs);
+        if (entry.isDirectory) throw Errors.accessViolation();
+        if (entry.locked) throw Errors.locked();
+        await fs.setInfo(path, changes);
     }
 
     /** Removes a file, or a directory with nothing in it, and puts the current directory and library back at the root if it was. */

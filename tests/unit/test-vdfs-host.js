@@ -163,8 +163,12 @@ describe("VDFS host", () => {
         it("will not run, or load at its own address, a file that has no addresses, which is any with no .inf", async () => {
             const t = hostWith([file("PLAIN", "xx")]);
             putString(t.cpu, Name, "PLAIN");
-            expect(errorOf(await t.call(Call.fsc, { a: 4, ...xy(Name) })).text).toBe("No load address");
-            expect(errorOf(await t.osfile(Osfile.load, "PLAIN", { exec: 1 })).text).toBe("No load address");
+            expect(errorOf(await t.call(Call.fsc, { a: 4, ...xy(Name) })).text).toBe(
+                "No load address (*SETINFO name load exec, or *LOAD name address)",
+            );
+            expect(errorOf(await t.osfile(Osfile.load, "PLAIN", { exec: 1 })).text).toBe(
+                "No load address (*SETINFO name load exec, or *LOAD name address)",
+            );
             expect(errorOf(await t.osfile(Osfile.load, "PLAIN", { load: Data }))).toBeUndefined();
         });
     });
@@ -592,7 +596,19 @@ describe("VDFS host", () => {
             expect(errorOf(await t.command("CDIR NEW")).text).toBe("Already exists");
         });
 
-        it.each([["CDIR"], ["DELETE"], ["ACCESS"]])("says Bad name for *%s with no name", async (name) => {
+        it("sets a file's addresses with *SETINFO, and leaves exec alone if it is left out", async () => {
+            const t = hostWith([file("PLAIN", "x"), directory("DIR")]);
+            await t.command("SETINFO PLAIN &2000 2005");
+            expect(t.get("PLAIN")).toMatchObject({ load: 0x2000, exec: 0x2005 });
+            await t.command("SETINFO PLAIN 3000");
+            expect(t.get("PLAIN")).toMatchObject({ load: 0x3000, exec: 0x2005 });
+            expect(errorOf(await t.command("SETINFO PLAIN XYZ")).text).toBe("Bad address");
+            expect(errorOf(await t.command("SETINFO PLAIN")).text).toBe("Bad address");
+            expect(errorOf(await t.command("SETINFO DIR 2000")).text).toBe("Access violation");
+            expect(errorOf(await t.command("SETINFO NOPE 2000")).text).toBe("Not found");
+        });
+
+        it.each([["CDIR"], ["DELETE"], ["ACCESS"], ["SETINFO"]])("says Bad name for *%s with no name", async (name) => {
             const t = hostWith(items);
             expect(errorOf(await t.command(name)).text).toBe("Bad name");
         });
@@ -692,7 +708,7 @@ describe("VDFS host", () => {
             expect(help.ops).toEqual([{ op: "print", text: "  VDFS 0.1\r" }]);
             expect(help.a).toBe(9);
             expect((await t.service(9, { line: "VDFS" })).ops[0].text).toContain(
-                "  ACCESS CAT CDIR DELETE DIR EX INFO LIB VDFS\r",
+                "  ACCESS CAT CDIR DELETE DIR EX INFO LIB SETINFO VDFS\r",
             );
             expect((await t.service(9, { line: "OTHER" })).ops).toEqual([]);
         });
