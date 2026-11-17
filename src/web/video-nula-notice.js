@@ -44,7 +44,7 @@ export const answerMissingVideoNula =
 
 /**
  * The page's answer to the TV view showing NuLA colours that the machine's composite encoder cannot make: a notice,
- * once a session and once the emulator has let go, that the picture is a guess, offering to `switchToRgb`.
+ * once a page load and once the emulator has let go, that the picture is a guess, offering to `switchToRgb`.
  */
 export function answerNulaOverComposite({ switchToRgb }) {
     let told = false;
