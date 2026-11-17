@@ -246,10 +246,10 @@ function errorMessage(peek, block, keywords) {
 }
 
 /**
- * The error BASIC's own handler reported, with its tokens spelt out as REPORT prints them. That handler reports an
- * error no ON ERROR takes, and any numbered 0 such as STOP; it is BASIC text in the ROM, and the last text BASIC reads
- * until the next command is typed, so this is null once BASIC has read anything else. The line number is 0 for an error
- * in a command typed at the prompt.
+ * The error BASIC's own handler last reported, with its tokens spelt out as REPORT prints them, or null. That handler,
+ * which reports an error no ON ERROR takes and any numbered 0 such as STOP, is BASIC text in the ROM, so this lasts
+ * until BASIC next reads text through its expression pointer, as LIST does not. The line number is 0 for an error in a
+ * command typed at the prompt.
  * @param {(address: number) => number} peek
  * @param {Map<number, string>} keywords
  * @returns {{number: number, message: string, lineNumber: number} | null}
