@@ -6,31 +6,8 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 
-import { hexUpper } from "./hex.js";
-import { LockedAttribute, isValidName, sameName } from "./vdfs-names.js";
-
-const InfSuffix = ".inf";
-const LockedFlag = /^l(ocked)?$/i;
-const AttributeToken = /^[0-9a-f]{1,2}$/i;
-const NoInformation = Object.freeze({ load: 0, exec: 0, locked: false });
-
-const toBbcName = (hostName) => hostName.replaceAll(".", "/");
-const toHostName = (bbcName) => bbcName.replaceAll("/", ".");
-
-/** @returns {{load: number, exec: number, locked: boolean}} what a `.inf` line says, with what it leaves out as 0. */
-export function parseInf(text) {
-    const [, load = "0", exec = "0", , ...rest] = text.trim().split(/\r?\n/)[0].split(/\s+/);
-    const hexOrZero = (token) => (/^[0-9a-f]{1,8}$/i.test(token) ? parseInt(token, 16) >>> 0 : 0);
-    const locked = rest.some(
-        (token) =>
-            LockedFlag.test(token) || (AttributeToken.test(token) && (parseInt(token, 16) & LockedAttribute) !== 0),
-    );
-    return { load: hexOrZero(load), exec: hexOrZero(exec), locked };
-}
-
-export function formatInf(name, { load, exec, locked, length }) {
-    return `$.${name}  ${hexUpper(load, 8)} ${hexUpper(exec, 8)} ${hexUpper(length, 8)}${locked ? " L" : ""}\n`;
-}
+import { InfSuffix, NoInformation, formatInf, parseInf, toBbcName, toHostName } from "./vdfs-inf.js";
+import { isValidName, sameName } from "./vdfs-names.js";
 
 const isUnderRoot = (root, candidate) => candidate === root || candidate.startsWith(root + path.sep);
 const isMissing = (error) => error?.code === "ENOENT" || error?.code === "ENOTDIR";

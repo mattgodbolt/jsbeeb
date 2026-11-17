@@ -8,6 +8,8 @@ import { fillHelp, openHelpOnTheTabForNow } from "./web/help.js";
 import { DebugMenu } from "./web/debug-menu.js";
 import { PanelKeys } from "./web/panel-keys.js";
 import { GamePad } from "./web/gamepads.js";
+import { canChooseFolder, browserVdfsStore } from "./web/vdfs-folder.js";
+import { attachBrowserVdfs, attachVdfsMenu } from "./web/vdfs-ui.js";
 import { attachDesktopVdfs, desktopVdfsStore, initialise as electron, isDesktopApp } from "./app/electron.js";
 import { AudioHandler } from "./web/audio-handler.js";
 import { installIcons } from "./web/icons.js";
@@ -234,7 +236,7 @@ const machine = new Machine({
     stationId,
     userPort: accessibilitySwitches.userPort,
     printer,
-    vdfsStore: desktopVdfsStore(parsedQuery),
+    vdfsStore: desktopVdfsStore(parsedQuery) ?? browserVdfsStore(parsedQuery),
     speechOutput,
     video,
     audioHandler,
@@ -244,7 +246,13 @@ const machine = new Machine({
 const processor = machine.processor;
 if (processor.vdfs) {
     toast("A folder is being served as VDFS. Type *VDFS to use it.", { title: "VDFS", quietKey: "quietVdfs" });
-    attachDesktopVdfs(processor.vdfs, { notify: (message) => toast(message, { title: "VDFS" }) });
+    const notify = (message) => toast(message, { title: "VDFS" });
+    if (isDesktopApp()) attachDesktopVdfs(processor.vdfs, { notify });
+    else
+        attachBrowserVdfs(processor.vdfs, {
+            notify,
+            offer: (message, label, run) => toast(message, { title: "VDFS", action: { label, run } }),
+        });
 }
 panelArrangement.followMachine(() => machineMoment(processor));
 
@@ -285,6 +293,7 @@ const { keyboard } = new KeyboardSetup({
 });
 
 const modals = new Modals({ loop });
+if (!isDesktopApp() && canChooseFolder()) attachVdfsMenu({ urlState, modals, serving: !!processor.vdfs });
 openHelpOnTheTabForNow(() => loop.isPaused() || loop.mode === RunMode.debugging);
 
 const drives = new Drives({

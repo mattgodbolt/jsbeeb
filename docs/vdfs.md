@@ -11,7 +11,8 @@ side of it: it takes over the filing system vectors and forwards every call. The
 - `src/vdfs-host.js`: what the OS's filing system calls and the commands do (`VdfsHost`)
 - `src/vdfs-channels.js`: the open files; `src/vdfs-guest-memory.js`: the 6502's memory as the host may touch it
 - `src/vdfs-names.js`: the names the BBC can give a file, and how it spells a path; `src/vdfs-errors.js`: the errors
-- `src/vdfs-fs-store.js`: a folder in Node as a store
+- `src/vdfs-fs-store.js`: a folder in Node as a store; `src/vdfs-inf.js`: the `.inf` files and the host names both stores share
+- `src/web/vdfs-folder-store.js`, `vdfs-folder.js`, `vdfs-ui.js`: a folder in a browser as a store, the folder kept for the next page, and the menu
 - `src/app/*vdfs*`, `src/app/preload.js`: the desktop app's side, which holds the folder in the main process
 
 There is no copy of the folder in memory. The host asks the store for what a call needs as the call is made, and the
@@ -23,6 +24,15 @@ In the desktop app, File, Serve VDFS Folder... chooses a folder. If none was bei
 which fits the ROM; if one was, the machine goes on, as though the disc had been swapped: a call that is waiting ends
 with "Disc changed", what is open is written to the old folder and closed, the current directory and library go back to
 the root, and the BBC's next call finds the new folder. Stop Serving VDFS Folder starts the page again without it.
+
+In a browser with the File System Access API (Chrome, Edge and other Chromium browsers; not Firefox or Safari), More,
+Serve a folder as VDFS... asks for a folder and starts the page again with it, as the desktop app does for its first
+folder. The folder is kept in the browser's IndexedDB, so a page opened with `?vdfs` finds it again. The browser asks
+again whether the page may use it in a new session, and only a click can answer; the page shows a notice with an Allow
+button when that is so, and until it is answered the BBC gets "Disc fault: The browser has not been told that the VDFS
+folder may be used". More, Stop serving the VDFS folder forgets it. A browser cannot be made to write a file as the page
+goes, so a program that has a file open when the tab is closed may lose what it wrote since it last closed or flushed
+it; the page writes what is open when it is hidden, which is the best that can be done.
 
 In Node, give `MachineSession` a folder:
 
@@ -178,7 +188,8 @@ write the seven vectors to the OS's extended vector entries, put the extended ve
 ### The store
 
 The host is given an object with these calls, each returning a promise. `src/vdfs-fs-store.js` is the one for a folder
-in Node, and the desktop app's is the same, over IPC to its main process. The names it is given and gives are the
+in Node, `src/web/vdfs-folder-store.js` the one for a folder in a browser, and the desktop app's is the same as the Node
+one, over IPC to its main process. The names it is given and gives are the
 BBC's; matching them without regard to case, and keeping the addresses and lock, is its work.
 
 | Call                       | Gives                                                                                                                  |
@@ -207,6 +218,4 @@ the checked-in ROM is what the source gives.
 
 ## Not yet done
 
-- A store for Chromium's File System Access API. It is the same store, over that API, which is asynchronous throughout
-  and so needs nothing held in memory.
 - `jsbeeb-mcp` could give an assistant a working folder with `vdfsFolder`.
