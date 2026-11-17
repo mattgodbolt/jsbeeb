@@ -36,10 +36,9 @@ const Syntax = Object.freeze({
     DELETE: "<fsp>",
     DIR: "(<dir>)",
     EX: "(<afsp>)",
-    INFO: "<afsp>",
+    INFO: "(<afsp>)",
     LIB: "(<dir>)",
     SETINFO: "<fsp> <load> (<exec>)",
-    [Title]: "",
 });
 
 const Service = Object.freeze({ command: 0x04, help: 0x09, select: 0x12 });
@@ -327,7 +326,8 @@ export class VdfsHost {
                 const topic = this._commandLine(registers.y).trim().toUpperCase();
                 if (topic === "") response.print(`  ${Title} ${Version}${Carriage}`);
                 else if (topic === Title) {
-                    const lines = Object.entries(Syntax).map(([name, syntax]) => `  ${`${name} ${syntax}`.trim()}`);
+                    const names = [Title, ...Object.keys(this._commands)].sort();
+                    const lines = names.map((name) => `  ${`${name} ${Syntax[name] ?? ""}`.trim()}`);
                     response.print(`${Title} ${Version}${Carriage}${lines.join(Carriage)}${Carriage}`);
                 }
                 break;
