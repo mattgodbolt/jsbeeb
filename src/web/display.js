@@ -2,6 +2,7 @@ import * as canvasLib from "./canvas.js";
 import { MaxPersistenceMs, persistenceFromMs } from "./canvas.js";
 import { FakeAtomVideo, FakeVideo, Video } from "../video.js";
 import { LineGridRows } from "../video-filters/pixel-grid.js";
+import { MasterChromaThreshold, ModelBChromaThreshold, PALCompositeFilter } from "../video-filters/pal-composite.js";
 import { toast } from "./toast.js";
 
 // While running fast the state machines still run accurately, but painting is
@@ -28,6 +29,7 @@ export class Display {
         fakeVideo = false,
         hasVideoNula = false,
         onMissingVideoNula = null,
+        onNulaOverComposite,
         frameSkip = 0,
         makeCanvas = (canvasEl, filterClass) =>
             tryGl
@@ -43,6 +45,7 @@ export class Display {
         this.presentMsMax = 0;
         this.presentScheduled = false;
         this.presented = true;
+        this.onNulaOverComposite = onNulaOverComposite;
 
         this.filterClass = canvasLib.getFilterForMode(mode);
         // Each mode says how many pixels it wants to draw into. Set this before
@@ -65,6 +68,8 @@ export class Display {
             phaseBaseOdd: 0,
             lineGrid: new Uint8Array(LineGridRows),
             fields: 1,
+            quantiseChroma: false,
+            chromaThreshold: model.isMaster ? MasterChromaThreshold : ModelBChromaThreshold,
         };
         this.lastPaintedFieldCount = 0;
         this.fieldsSincePresent = 0;
@@ -80,7 +85,15 @@ export class Display {
                   function paint(minx, miny, maxx, maxy, paintedTo) {
                       display.onPaint(this, minx, miny, maxx, maxy, paintedTo);
                   },
-                  { isAtom: model.isAtom, hasVideoNula, onMissingVideoNula },
+                  {
+                      isAtom: model.isAtom,
+                      hasVideoNula,
+                      onMissingVideoNula,
+                      onPartialNulaLevelsChanged: (partial) => {
+                          display.pendingFrame.quantiseChroma = partial;
+                          display.noteAnyNulaOverComposite();
+                      },
+                  },
               );
 
         this.setCrtPic();
@@ -195,10 +208,16 @@ export class Display {
         // Back to the mode's own size, undoing any scaling the last one asked for.
         this.sizeCanvasFor(this.filterClass);
         this.applyPersistence();
+        this.noteAnyNulaOverComposite();
         // The new mode's picture replaces the old one's, not glows through it.
         this.fieldsSincePresent = MaxDecayFields;
         this.video.paint();
         this.setCrtPic();
+    }
+
+    /** Tells `onNulaOverComposite` when the TV picture shows NuLA levels its chroma can only guess at. */
+    noteAnyNulaOverComposite() {
+        if (this.pendingFrame.quantiseChroma && this.filterClass === PALCompositeFilter) this.onNulaOverComposite?.();
     }
 
     sizeCanvasFor(filterClass) {

@@ -3,6 +3,7 @@ import { buildPattern, eachPixel, pixelAt, renderJobs, TextureSize } from "./ren
 import { applyFirCoefficients, applyLumaCoefficients } from "../../tools/vite-plugin-fir-shader.js";
 import { LumaTaps } from "../../tools/luma-fir-generator.js";
 import { PalCyclesPerLine, PalPhasePerLine } from "../../src/video.js";
+import { ModelBChromaThreshold } from "../../src/video-filters/pal-composite.js";
 
 // These run the PAL composite shader itself, as shipped, and assert on what it
 // draws; see test-xbr.js for why that means headless Chrome. The properties
@@ -12,6 +13,8 @@ import { PalCyclesPerLine, PalPhasePerLine } from "../../src/video.js";
 // the subcarrier's cycle it lands on changes that. Where the picture has
 // cross-colour, that depends on the scanline it was drawn on and nothing
 // else: not the texture row, not the size it is drawn at.
+
+const rgbOf = (word) => [word & 0xff, (word >>> 8) & 0xff, (word >>> 16) & 0xff];
 
 const Black = 0xff000000;
 const Red = 0xff0000ff;
@@ -76,6 +79,8 @@ const PalHarness = {
             uExtentCentre: gl.getUniformLocation(program, "uExtentCentre"),
             uExtentHalfSize: gl.getUniformLocation(program, "uExtentHalfSize"),
             uCurvature: gl.getUniformLocation(program, "uCurvature"),
+            uQuantiseChroma: gl.getUniformLocation(program, "uQuantiseChroma"),
+            uChromaThreshold: gl.getUniformLocation(program, "uChromaThreshold"),
         };
     },
     bind(gl, state, params) {
@@ -91,6 +96,8 @@ const PalHarness = {
         gl.uniform2f(state.uExtentHalfSize, (maxx - minx) / 2 / params.width, (maxy - miny) / 2 / params.height);
         const curvature = params.curvature ?? { x: 0, y: 0 };
         gl.uniform2f(state.uCurvature, curvature.x, curvature.y);
+        gl.uniform1i(state.uQuantiseChroma, params.quantiseChroma ? 1 : 0);
+        gl.uniform1f(state.uChromaThreshold, params.chromaThreshold ?? 0);
     },
 };
 
@@ -211,6 +218,41 @@ const bowBarRows = (across) =>
         }),
     );
 
+const MaxLevel = 15;
+
+/** A VideoNuLA colour from its four-bit levels, expanded as video.js expands them. */
+const nulaColour = (r, g, b) => (0xff000000 | ((b * 17) << 16) | ((g * 17) << 8) | (r * 17)) >>> 0;
+
+const GreyRamp = Array.from({ length: MaxLevel + 1 }, (_, level) => [`grey ${level}`, [level, level, level]]);
+
+/** Levels per channel: the stock colours, either side of the threshold, a pastel, a dark shade, and every grey. */
+const NulaLevels = [
+    ...Object.entries(Palette).map(([name, word]) => [name, rgbOf(word).map((channel) => channel / 17)]),
+    ["red 9", [9, 0, 0]],
+    ["red 10", [10, 0, 0]],
+    ["green 9 blue 10", [0, 9, 10]],
+    ["pastel pink", [15, 8, 8]],
+    ["orange", [15, 8, 0]],
+    ["dark blue", [0, 0, 5]],
+    ...GreyRamp,
+];
+
+const nulaName = (name, lineBase) => `nula-${name}-${lineBase}`;
+
+function buildNulaJobs() {
+    return NulaLevels.flatMap(([name, levels]) =>
+        LineBases.map((lineBase) =>
+            buildPattern({
+                name: nulaName(name, lineBase),
+                rows: flatRows("nula", FlatWidth, FlatHeight),
+                palette: { nula: nulaColour(...levels) },
+                padding: Padding,
+                params: { ...sameLine(lineBase), quantiseChroma: true, chromaThreshold: ModelBChromaThreshold },
+            }),
+        ),
+    );
+}
+
 function buildJobs() {
     const jobs = [];
     for (const colour of Object.keys(Palette))
@@ -260,6 +302,7 @@ function buildJobs() {
                 params: sameLine(0),
             }),
         );
+    jobs.push(...buildNulaJobs());
     for (const lineBase of LineBases)
         jobs.push(
             buildPattern({
@@ -332,8 +375,6 @@ function buildNearestJobs() {
         }),
     );
 }
-
-const rgbOf = (word) => [word & 0xff, (word >>> 8) & 0xff, (word >>> 16) & 0xff];
 
 const isColour = (pixel, word) => rgbOf(word).every((channel, i) => Math.abs(pixel[i] - channel) <= Tolerance);
 
@@ -433,6 +474,25 @@ describe("PAL composite shader", () => {
                     expect(pictureDifference(image, reference)).toBeLessThanOrEqual(Tolerance);
                 }
             }
+        });
+    });
+
+    describe("VideoNuLA levels", () => {
+        const luma = ([r, g, b]) => 0.299 * r + 0.587 * g + 0.114 * b;
+
+        /** Brightness from the levels themselves, colour from each channel on or off at the threshold. */
+        const expectedFrom = (levels) => {
+            const full = levels.map((level) => level / MaxLevel);
+            const onOff = full.map((channel) => (channel >= ModelBChromaThreshold ? 1 : 0));
+            const lift = luma(full) - luma(onOff);
+            return onOff.map((channel) => Math.round(255 * Math.min(1, Math.max(0, channel + lift))));
+        };
+
+        it.each(NulaLevels)("takes chroma from %s with each channel on or off", (name, levels) => {
+            const expected = expectedFrom(levels);
+            for (const lineBase of LineBases)
+                for (const pixel of eachPixel(rendered[nulaName(name, lineBase)]))
+                    expect(channelDifference(pixel, expected)).toBeLessThanOrEqual(Tolerance);
         });
     });
 

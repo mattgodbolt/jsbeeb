@@ -17,6 +17,10 @@ uniform vec2 uExtentCentre;
 uniform vec2 uExtentHalfSize;
 // How far the picture bows outwards at the middle of each edge, as a fraction of its half size
 uniform vec2 uCurvature;
+// Set while the palette has levels between off and full; the machine's encoder makes chroma from
+// each channel as on or off, switching at uChromaThreshold
+uniform bool uQuantiseChroma;
+uniform float uChromaThreshold;
 
 const float PI = 3.14159265359;
 
@@ -67,6 +71,7 @@ float encode_composite(vec2 xy, float offset_pixels, float t, float v_switch) {
     vec2 sample_uv = xy + vec2(offset_pixels * uTexelSize.x, 0.0);
     vec3 rgb = texture2D(uFramebuffer, sample_uv).rgb;
     vec3 yuv = rgb_to_yuv(rgb);
+    if (uQuantiseChroma) yuv.yz = rgb_to_yuv(step(vec3(uChromaThreshold), rgb)).yz;
     return yuv.x + yuv.y * sin(t) + yuv.z * cos(t) * v_switch;
 }
 

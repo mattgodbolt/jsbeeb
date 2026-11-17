@@ -5,6 +5,7 @@ import { Display } from "../../src/web/display.js";
 import { FakeAtomVideo, FakeVideo } from "../../src/video.js";
 import { PassthroughFilter } from "../../src/video-filters/passthrough-filter.js";
 import { LineGridRows } from "../../src/video-filters/pixel-grid.js";
+import { answerNulaOverComposite } from "../../src/web/video-nula-notice.js";
 import { domFromIndexHtml, fakeAnimationFrames, teardownDom, toasts } from "./helpers.js";
 
 const FbWidth = 1024;
@@ -329,6 +330,59 @@ describe("Display", () => {
                 )),
         });
         expect(toasts()).toEqual([expect.stringContaining("no WebGL")]);
+    });
+
+    describe("VideoNuLA colours in the TV view", () => {
+        const writeNulaColour = (display, index, red, green, blue) => {
+            display.video.ula.write(3, (index << 4) | red);
+            display.video.ula.write(3, (green << 4) | blue);
+        };
+        const showing = (mode) => {
+            const switchToRgb = vi.fn();
+            const display = make({
+                mode,
+                hasVideoNula: true,
+                onNulaOverComposite: answerNulaOverComposite({ switchToRgb }),
+            });
+            vi.useFakeTimers({ toFake: ["setTimeout"] });
+            return { display, switchToRgb };
+        };
+        const guessNotices = () => toasts().filter((text) => text.includes("best guess"));
+
+        it("says once that the TV picture is a guess, offering to switch to RGB", () => {
+            const { display, switchToRgb } = showing("pal");
+            writeNulaColour(display, 1, 15, 15, 15);
+            vi.runOnlyPendingTimers();
+            expect(guessNotices()).toEqual([]);
+            writeNulaColour(display, 1, 8, 0, 0);
+            writeNulaColour(display, 1, 0, 0, 0);
+            writeNulaColour(display, 2, 0, 4, 0);
+            vi.runOnlyPendingTimers();
+            expect(guessNotices()).toHaveLength(1);
+            document.querySelector(".toast .toast-action").click();
+            expect(switchToRgb).toHaveBeenCalledTimes(1);
+        });
+
+        it("says nothing in the RGB view, until the TV view is chosen", () => {
+            const { display } = showing("rgb");
+            writeNulaColour(display, 1, 8, 0, 0);
+            vi.runOnlyPendingTimers();
+            expect(guessNotices()).toEqual([]);
+            display.setMode("pal");
+            vi.runOnlyPendingTimers();
+            expect(guessNotices()).toHaveLength(1);
+        });
+
+        it("has the TV view take chroma from channels on or off only while a colour needs it", () => {
+            const { display } = showing("pal");
+            const quantisedAfter = (red) => {
+                writeNulaColour(display, 1, red, 0, 0);
+                display.onPaint(paintedFrom(), 0, 0, FbWidth, 8);
+                animationFrames.run();
+                return lastPainted().quantiseChroma;
+            };
+            expect([15, 8, 0].map(quantisedAfter)).toEqual([false, true, false]);
+        });
     });
 
     it.each([

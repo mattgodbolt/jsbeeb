@@ -41,3 +41,26 @@ export const answerMissingVideoNula =
                 },
             }),
         );
+
+/**
+ * The page's answer to the TV view showing NuLA colours that the machine's composite encoder cannot make: a notice,
+ * once a session and once the emulator has let go, that the picture is a guess, offering to `switchToRgb`.
+ */
+export function answerNulaOverComposite({ switchToRgb }) {
+    let told = false;
+    return () => {
+        if (told) return;
+        told = true;
+        setTimeout(() =>
+            toast(
+                "This program sets VideoNuLA colours that only RGB really shows. The TV picture is our best guess at " +
+                    "what the BBC Micro's composite output makes of them.",
+                {
+                    title: "VideoNuLA",
+                    quietKey: "quietVideoNulaComposite",
+                    action: { label: "Switch to RGB", run: switchToRgb },
+                },
+            ),
+        );
+    };
+}
