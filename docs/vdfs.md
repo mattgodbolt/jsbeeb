@@ -30,9 +30,10 @@ Serve a folder as VDFS... asks for a folder and starts the page again with it, a
 folder. The folder is kept in the browser's IndexedDB, so a page opened with `?vdfs` finds it again. The browser asks
 again whether the page may use it in a new session, and only a click can answer; the page shows a notice with an Allow
 button when that is so, and until it is answered the BBC gets "Disc fault: The browser has not been told that the VDFS
-folder may be used". If the answer was no, the BBC gets a disc fault that says to allow it in the site settings. More, Stop serving the VDFS folder forgets it. A browser cannot be made to write a file as the page
-goes, so a program that has a file open when the tab is closed may lose what it wrote since it last closed or flushed
-it; the page writes what is open when it is hidden, which is the best that can be done.
+folder may be used". If the answer was no, the BBC gets a disc fault that says to allow it in the site settings. More,
+Stop serving the VDFS folder forgets it. A browser cannot be made to write a file as the page goes, so a program that
+has a file open when the tab is closed may lose what it wrote since it last closed or flushed it; the page writes what
+is open when it is hidden, which is the best that can be done.
 
 In Node, give `MachineSession` a folder:
 
@@ -187,12 +188,12 @@ write the seven vectors to the OS's extended vector entries, put the extended ve
 
 ### The store
 
-The host is given an object with these calls, each returning a promise, and the text of what it throws is what the BBC's
-"Disc fault" says. A store may have more than this for its page: `FsStore.check()`, and the browser's
-`permission()` and `requestPermission()`, which a folder the browser has to be asked about needs. `src/vdfs-fs-store.js` is the one for a folder
-in Node, `src/web/vdfs-folder-store.js` the one for a folder in a browser, and the desktop app's is the same as the Node
-one, over IPC to its main process. The names it is given and gives are the
-BBC's; matching them without regard to case, and keeping the addresses and lock, is its work.
+The host is given an object with these calls, each returning a promise, and the text of what it throws is what the
+BBC's "Disc fault" says. A store may have more than this for its page: `FsStore.check()`, and the browser's
+`permission()` and `requestPermission()`, which a folder the browser has to be asked about needs.
+`src/vdfs-fs-store.js` is the one for a folder in Node, `src/web/vdfs-folder-store.js` the one for a folder in a
+browser, and the desktop app's is the same as the Node one, over IPC to its main process. The names it is given and
+gives are the BBC's; matching them without regard to case, and keeping the addresses and lock, is its work.
 
 | Call                       | Gives                                                                                                                  |
 | -------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
