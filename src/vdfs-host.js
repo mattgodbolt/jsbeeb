@@ -29,6 +29,19 @@ export const Osgbpb = Object.freeze({ writeAtPointer: 1, write: 2, readAtPointer
 const Title = "VDFS";
 const Version = "0.1";
 
+const Syntax = Object.freeze({
+    ACCESS: "<afsp> (L)",
+    CAT: "(<dir>)",
+    CDIR: "<dir>",
+    DELETE: "<fsp>",
+    DIR: "(<dir>)",
+    EX: "(<afsp>)",
+    INFO: "<afsp>",
+    LIB: "(<dir>)",
+    SETINFO: "<fsp> <load> (<exec>)",
+    [Title]: "",
+});
+
 const Service = Object.freeze({ command: 0x04, help: 0x09, select: 0x12 });
 const Fsc = Object.freeze({
     eof: 1,
@@ -314,8 +327,8 @@ export class VdfsHost {
                 const topic = this._commandLine(registers.y).trim().toUpperCase();
                 if (topic === "") response.print(`  ${Title} ${Version}${Carriage}`);
                 else if (topic === Title) {
-                    const names = [Title, ...Object.keys(this._commands)].sort().join(" ");
-                    response.print(`${Title} ${Version}${Carriage}  ${Title}${Carriage}  ${names}${Carriage}`);
+                    const lines = Object.entries(Syntax).map(([name, syntax]) => `  ${`${name} ${syntax}`.trim()}`);
+                    response.print(`${Title} ${Version}${Carriage}${lines.join(Carriage)}${Carriage}`);
                 }
                 break;
             }

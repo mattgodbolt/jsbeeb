@@ -728,10 +728,20 @@ describe("VDFS host", () => {
             const help = await t.service(9);
             expect(help.ops).toEqual([{ op: "print", text: "  VDFS 0.1\r" }]);
             expect(help.a).toBe(9);
-            expect((await t.service(9, { line: "VDFS" })).ops[0].text).toContain(
-                "  ACCESS CAT CDIR DELETE DIR EX INFO LIB SETINFO VDFS\r",
-            );
+            const lines = (await t.service(9, { line: "VDFS" })).ops[0].text.split("\r");
+            expect(lines.slice(0, 3)).toEqual(["VDFS 0.1", "  ACCESS <afsp> (L)", "  CAT (<dir>)"]);
+            expect(lines.filter((line) => line.trim() === "VDFS")).toEqual(["  VDFS"]);
+            expect(lines.at(-2)).toBe("  VDFS");
             expect((await t.service(9, { line: "OTHER" })).ops).toEqual([]);
+        });
+
+        it("lists every command it has under *HELP VDFS, each once, in order", async () => {
+            const t = hostWith();
+            const listed = (await t.service(9, { line: "VDFS" })).ops[0].text
+                .split("\r")
+                .slice(1, -1)
+                .map((line) => line.trim().split(" ")[0]);
+            expect(listed).toEqual(["ACCESS", "CAT", "CDIR", "DELETE", "DIR", "EX", "INFO", "LIB", "SETINFO", "VDFS"]);
         });
     });
 
