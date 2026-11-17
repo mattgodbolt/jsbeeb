@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { basicRom, formatReal, listStatements, readVariables } from "../../src/basic-state.js";
+import { basicRom, formatReal, listStatements, readPointers, readVariables } from "../../src/basic-state.js";
 import { RepoRoot } from "../../src/test-machine.js";
 
 const RomBankBytes = 16 * 1024;
@@ -18,16 +18,16 @@ const ascii = (text) => [...text].map((char) => char.charCodeAt(0));
 
 describe("basicRom", () => {
     it.each([
-        ["BASIC.ROM", 0, 0x8bad],
-        ["a01/BASIC1.rom", 0, 0x8b1e],
-        ["us/USBASIC.rom", 0, 0x8bc8],
-        ["compact/basic48.rom", 0, 0x8ff6],
-        ["compact/basic486.rom", 0, 0x8ff6],
-        ["master/mos3.20", 4, 0x9015],
-    ])("finds where %s (bank %i) starts each statement, and its keywords", (file, bank, statementStart) => {
+        ["BASIC.ROM", 0, 0x8ba7, 0x8bad],
+        ["a01/BASIC1.rom", 0, 0x8b18, 0x8b1e],
+        ["us/USBASIC.rom", 0, 0x8bc2, 0x8bc8],
+        ["compact/basic48.rom", 0, 0x8ff0, 0x8ff6],
+        ["compact/basic486.rom", 0, 0x8ff0, 0x8ff6],
+        ["master/mos3.20", 4, 0x900f, 0x9015],
+    ])("finds where %s (bank %i) reads and starts each statement, and its keywords", (file, bank, read, start) => {
         const image = readFileSync(path.join(RepoRoot, "public/roms", file));
         const basic = basicRom(image.subarray(bank * RomBankBytes, (bank + 1) * RomBankBytes));
-        expect(basic.statementStart).toBe(statementStart);
+        expect([basic.statementRead, basic.statementStart]).toEqual([read, start]);
         expect([basic.keywords.get(0x80), basic.keywords.get(0xf1), basic.keywords.get(0xf4)]).toEqual([
             "AND",
             "PRINT",
@@ -52,6 +52,17 @@ describe("readVariables", () => {
         const peek = memory([heap, [0x400, new Array(0x100).fill(0x31)], [0x3000, new Array(0x1000).fill(0x31)]]);
         const { variables, routines } = readVariables(peek);
         expect(variables.length + routines.length).toBe(1);
+    });
+});
+
+describe("readPointers", () => {
+    it("reads the statement and expression pointers each as the character last read", () => {
+        const peek = memory([
+            [0x0a, [3, 0x00, 0x19]],
+            [0x19, [0x10, 0x19, 5]],
+        ]);
+        const { reading, expression } = readPointers(peek);
+        expect([reading, expression]).toEqual([0x1902, 0x1914]);
     });
 });
 

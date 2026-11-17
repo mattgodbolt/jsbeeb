@@ -4,10 +4,13 @@ import { hexbyte } from "./hex.js";
 const Lomem = 0x00;
 const VariablesEnd = 0x02;
 const Himem = 0x06;
-const TextPointerOffset = 0x0a;
-const TextPointerBase = 0x0b;
+const ErrorLine = 0x08;
+export const TextPointerOffset = 0x0a;
+export const TextPointerBase = 0x0b;
 const Top = 0x12;
 const PageHigh = 0x18;
+const ExpressionPointerBase = 0x19;
+const ExpressionPointerOffset = 0x1b;
 const ResidentIntegers = 0x400;
 const ResidentIntegerCount = 27;
 const FirstVariableInitial = 0x40;
@@ -16,9 +19,12 @@ const ProcedureChain = 0x4f6;
 const FunctionChain = 0x4f8;
 /** Where the OS notes the language ROM's number, in the Advanced User Guide's map of page &02. */
 export const LanguageRomNumber = 0x28c;
+/** Where the OS's BRK handler leaves the address of the error block, its number then its message, low byte first. */
+export const ErrorBlock = 0xfd;
 
 const RomTitle = 9;
 const RomBase = 0x8000;
+const RomEnd = 0xc000;
 const FirstToken = 0x80;
 const LineNumberToken = 0x8d;
 const Return = 0x0d;
@@ -37,6 +43,9 @@ const MantissaSign = 0x80;
 const SignificantDigits = 9;
 const LargestFixedExponent = 8;
 const SmallestFixedExponent = -1;
+const MostMessageBytes = 255;
+/** BASIC IV keeps "Missing " in its messages as a token of its own, which is not a keyword. */
+const MissingToken = 0x8d;
 /** More lines than fit in memory, so that a walk over memory that is not a program ends. */
 const MostLines = 0x4000;
 
@@ -74,15 +83,16 @@ function keywordsIn(rom) {
 }
 
 /**
- * What a language ROM shows of BASIC: where it starts each statement, and its keywords; null for a ROM that is not a
- * BASIC this can follow.
+ * What a language ROM shows of BASIC: where it reads each statement's first character, where it starts each statement,
+ * and its keywords; null for a ROM that is not a BASIC this can follow.
  * @param {Uint8Array} rom
- * @returns {{statementStart: number, keywords: Map<number, string>} | null}
+ * @returns {{statementRead: number, statementStart: number, keywords: Map<number, string>} | null}
  */
 export function basicRom(rom) {
     const dispatches = findBytes(rom, StatementDispatch);
     if (dispatches.length !== 1) return null;
-    return { statementStart: RomBase + dispatches[0] + DispatchCompareOffset, keywords: keywordsIn(rom) };
+    const statementRead = RomBase + dispatches[0];
+    return { statementRead, statementStart: statementRead + DispatchCompareOffset, keywords: keywordsIn(rom) };
 }
 
 /** A sideways ROM's title, from its header. */
@@ -93,6 +103,7 @@ export function romTitle(rom) {
 
 const word = (peek, address) => peek(address) | (peek(address + 1) << 8);
 const int32 = (peek, address) => word(peek, address) | (word(peek, address + 2) << 16);
+const textReading = (peek, base, offset) => (word(peek, base) + peek(offset) - 1) & 0xffff;
 
 function real(peek, address) {
     const exponent = peek(address);
@@ -216,8 +227,38 @@ export function readPointers(peek) {
         lomem: word(peek, Lomem),
         himem: word(peek, Himem),
         /** The character last read: in a statement, the statement's, and at the start of one, its first. */
-        reading: (word(peek, TextPointerBase) + peek(TextPointerOffset) - 1) & 0xffff,
+        reading: textReading(peek, TextPointerBase, TextPointerOffset),
+        /** The character last read of an expression in the statement. */
+        expression: textReading(peek, ExpressionPointerBase, ExpressionPointerOffset),
     };
+}
+
+function errorMessage(peek, block, keywords) {
+    let message = "";
+    for (let at = block + 1; at <= block + MostMessageBytes; ++at) {
+        const code = peek(at & 0xffff);
+        if (code === 0) break;
+        if (code === MissingToken) message += "Missing ";
+        else if (code >= FirstToken) message += keywords.get(code) ?? ".";
+        else message += code >= Space && code <= LastPrintable ? String.fromCharCode(code) : ".";
+    }
+    return message;
+}
+
+/**
+ * The error BASIC's own handler reported, with its tokens spelt out as REPORT prints them. That handler reports an
+ * error no ON ERROR takes, and any numbered 0 such as STOP; it is BASIC text in the ROM, and the last text BASIC reads
+ * until the next command is typed, so this is null once BASIC has read anything else. The line number is 0 for an error
+ * in a command typed at the prompt.
+ * @param {(address: number) => number} peek
+ * @param {Map<number, string>} keywords
+ * @returns {{number: number, message: string, lineNumber: number} | null}
+ */
+export function readReportedError(peek, keywords) {
+    const expression = word(peek, ExpressionPointerBase);
+    if (expression < RomBase || expression >= RomEnd) return null;
+    const block = word(peek, ErrorBlock);
+    return { number: peek(block), message: errorMessage(peek, block, keywords), lineNumber: word(peek, ErrorLine) };
 }
 
 /**
