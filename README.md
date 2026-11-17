@@ -345,7 +345,8 @@ What the worker keeps, and when it changes:
 - A new version installs in the background and then waits. If the page is older than the waiting worker (each reports
   the commit it was built from), it shows an "A new version of jsbeeb is ready" notice, and only its Reload button
   switches to the new version, because switching reloads the page and would lose a running machine. A page loaded
-  after a deploy is already the new build, so it shows nothing. A tab that stays open is checked for a new version whenever it comes back into view.
+  after a deploy is already the new build, so it shows nothing, and the waiting worker takes over once every jsbeeb
+  tab and window has closed. A tab that stays open is checked for a new version whenever it comes back into view.
 - `npm run test:e2e` removes `navigator.serviceWorker` from its pages, so a worker never answers a request the tests
   route themselves; only `tests/playwright/pwa.spec.js` keeps it, in a fresh browser context of its own.
 

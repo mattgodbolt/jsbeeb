@@ -10,6 +10,7 @@ import { expect, test } from "./fixtures.js";
 
 const RomsDir = fileURLToPath(new URL("../../public/roms/", import.meta.url));
 const BuiltWorker = new URL("../../dist/service-worker.js", import.meta.url);
+const WaitingPollMs = 50;
 
 test.use({ withServiceWorker: true });
 
@@ -66,6 +67,23 @@ test("offers an update only when the worker is a newer build than the page", asy
     });
     try {
         const origin = `http://127.0.0.1:${server.httpServer.address().port}/`;
+        // Counts the page's build checks once each has finished, so a missing notice is not just a late one. Only
+        // a worker's answer is a string.
+        await page.addInitScript(() => {
+            window.buildChecks = 0;
+            const { get, set } = Object.getOwnPropertyDescriptor(MessagePort.prototype, "onmessage");
+            Object.defineProperty(MessagePort.prototype, "onmessage", {
+                get,
+                set(handler) {
+                    set.call(this, (event) => {
+                        handler(event);
+                        if (typeof event.data === "string") setTimeout(() => window.buildChecks++);
+                    });
+                },
+            });
+        });
+        const buildChecksDone = () =>
+            expect.poll(() => page.evaluate(() => window.buildChecks), { message: "the page's build check" });
         await beeb.routed;
         await page.goto(origin);
         await page.evaluate(() => navigator.serviceWorker.ready);
@@ -83,19 +101,22 @@ test("offers an update only when the worker is a newer build than the page", asy
             }, which);
         const deploy = async (rewrite) => {
             deployed = rewrite;
-            await deployer.evaluate(async () => {
+            await deployer.evaluate(async (pollMs) => {
                 const registration = await navigator.serviceWorker.ready;
                 await registration.update();
-                while (!registration.waiting) await new Promise((resolve) => setTimeout(resolve, 50));
-            });
+                while (!registration.waiting) await new Promise((resolve) => setTimeout(resolve, pollMs));
+            }, WaitingPollMs);
         };
         const update = page.locator(".toast", { hasText: "A new version of jsbeeb is ready." });
 
         const pageBuild = await askBuild("active");
+        expect(pageBuild).toMatch(/^[0-9a-f]{7,}/);
         await deploy((worker) => `${worker}\n;`);
         expect(await askBuild("waiting")).toBe(pageBuild);
+        await buildChecksDone().toBeGreaterThan(0);
         await expect(update).toHaveCount(0);
         await page.reload();
+        await buildChecksDone().toBeGreaterThan(0);
         await expect(update).toHaveCount(0);
 
         await deploy((worker) => worker.replaceAll(pageBuild, `${pageBuild}-newer`));
