@@ -77,7 +77,7 @@ const DesktopPreload = readFileSync(new URL("../../src/app/preload.js", import.m
 // The desktop app's own preload, given a stand-in for the electron module so the page sees what it would there.
 const DesktopPreloadScript = `((require) => { ${DesktopPreload} })(() => ({
     contextBridge: { exposeInMainWorld: (key, api) => (window[key] = api) },
-    ipcRenderer: { on: () => {}, send: () => {} },
+    ipcRenderer: { on: () => {}, send: () => {}, sendSync: () => 0 },
 }));`;
 
 test("the top bar is one row at laptop widths", async ({ beeb, page }) => {
