@@ -46,7 +46,7 @@ export const HwScrollSubtract = [8, 4, 10, 5];
 export const LineCountPeriod = 2500;
 
 const BitmapXPerClock = 8;
-const Ma13 = 1 << 13;
+export const Ma13 = 1 << 13;
 const WideCharacterTexels = 2 * BitmapXPerClock;
 // A ULA write shows from 4 - p texels into the character fetched in its own cycle, for a pixel period of p texels
 // before the write, at either clock rate: measured on a Master in 20, 40 and 80 columns (#1866). Indexed by control

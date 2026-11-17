@@ -1,3 +1,5 @@
+import { Ma13 } from "./video.js";
+
 /**
  * Which DRAM rows the video and the CPU refresh, and the decay of rows that nothing refreshes. There is no refresh
  * counter: RAS falls on every 2 MHz slot whatever is addressed, so each CPU cycle and each character the CRTC counts
@@ -23,7 +25,6 @@ const BitsPerWord = 32;
 const EveryCharacterRow = 0x01010101;
 const EvenRows = 0x55555555;
 const OddRows = ~EvenRows;
-const Ma13 = 1 << 13;
 const RefreshMa6 = 0x40;
 const MasterOddRaMa7 = 0x80;
 
