@@ -342,9 +342,10 @@ What the worker keeps, and when it changes:
 - A disc or tape served from this site is kept the first time it is used, so a game played once can be played
   offline. These are never evicted, and a changed one is served from the old copy once before the new one takes
   over. Discs from any other site (Bitshifters, GitHub, archive.org, Google Drive) always come from the network.
-- A new version installs in the background and then waits. The page shows an "A new version of jsbeeb is ready"
-  notice, and only its Reload button switches to the new version, because switching reloads the page and would lose a
-  running machine. A tab that stays open is checked for a new version whenever it comes back into view.
+- A new version installs in the background and then waits. If the page is older than the waiting worker (each reports
+  the commit it was built from), it shows an "A new version of jsbeeb is ready" notice, and only its Reload button
+  switches to the new version, because switching reloads the page and would lose a running machine. A page loaded
+  after a deploy is already the new build, so it shows nothing. A tab that stays open is checked for a new version whenever it comes back into view.
 - `npm run test:e2e` removes `navigator.serviceWorker` from its pages, so a worker never answers a request the tests
   route themselves; only `tests/playwright/pwa.spec.js` keeps it, in a fresh browser context of its own.
 
