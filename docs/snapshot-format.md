@@ -430,6 +430,20 @@ Present only when the AMX mouse was fitted. Absent means a fitted mouse drops an
 
 The levels on CB1 and CB2 are the user VIA's. The buttons are not saved: like the keyboard, they are host input.
 
+### VDFS (`state.vdfs`)
+
+Present when a folder is served (see [vdfs.md](vdfs.md)). It holds the device the ROM talks to, so that a snapshot taken
+while the ROM is partway through a call can be restored to the same place: `request` (the registers the ROM wrote),
+`nextStream`, `responseStream`, `selectedStream`, `busy` (whether a call was waiting for the store), and `streams`, each
+`[id, bytes, position]`, a response the ROM has not finished reading. A call that was `busy` is answered with "Disc
+changed" on restore, since the store it was waiting on is not the machine's.
+
+The host's own state is not kept. Its open files are the host's, so a restored snapshot has none open (they are written
+back), and the current directory and library are the root's. The OS's filing system vectors are in RAM and so still point
+at VDFS, and file calls go on being served, but the host forgets that it was selected, so commands such as `*DIR` are
+not claimed until `*VDFS` selects it again. A snapshot without `vdfs`, or loaded into a machine with no folder served,
+carries on without it. It was added without a version bump.
+
 ### Teletext adaptor (`state.teletextAdaptor`)
 
 Present only when the Acorn teletext adaptor was fitted. Absent means the adaptor, if one is fitted now, keeps its current state, the same fallback as a v1 snapshot's missing FDC. Because absence is already the well-defined case, adding this field did not need a format version bump: v3 readers that predate it ignore it, and readers that know it treat an older v3 snapshot as "adaptor state unchanged".

@@ -21,6 +21,7 @@ export function buildEmulationConfig({
     bankRoms,
     userPort,
     printer,
+    vdfsStore,
 }) {
     return machineSpec({
         keyLayout,
@@ -31,6 +32,7 @@ export function buildEmulationConfig({
         hasMusic5000: settings.hasMusic5000,
         hasTeletextAdaptor: settings.hasTeletextAdaptor,
         hasAmxMouse: settings.hasAmxMouse,
+        vdfsStore,
         fittedRoms: settings.fittedRoms,
         bankRoms,
         extraRoms,
@@ -56,6 +58,7 @@ export class Machine {
         stationId,
         userPort,
         printer,
+        vdfsStore = null,
         speechOutput,
         video,
         audioHandler,
@@ -96,6 +99,7 @@ export class Machine {
             bankRoms,
             userPort,
             printer,
+            vdfsStore,
         });
 
         this.processor = build(model, {

@@ -21,6 +21,7 @@ const SpecDefaults = {
     hasMusic5000: false,
     hasTeletextAdaptor: false,
     hasAmxMouse: false,
+    vdfsStore: null,
     fittedRoms: [],
     bankRoms: [],
     extraRoms: [],

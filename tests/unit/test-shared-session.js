@@ -1865,6 +1865,12 @@ describe("startSessionFromUrl", () => {
             { processor: Object.assign(fakeProcessor(), { hasTube: true }) },
             ["unsupported_machine"],
         ],
+        [
+            "a folder served as VDFS",
+            { server: "here" },
+            { processor: Object.assign(fakeProcessor(), { vdfs: {} }) },
+            ["unsupported_machine"],
+        ],
     ])("starts nothing for %s", async (_, params, contextOptions, failures) => {
         const sent = sentEvents();
         const { createRoom, join } = await started(params, contextOptions);

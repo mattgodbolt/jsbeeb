@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { fake6502 } from "../../src/fake6502.js";
-import { NmiSource } from "../../src/6502.js";
+import { NmiSource, NoReplayHooks } from "../../src/6502.js";
 import { Econet } from "../../src/econet.js";
 import { FakeVideo } from "../../src/video.js";
 import { Music5000 } from "../../src/music5000.js";
@@ -9,6 +9,9 @@ import { findModel, TEST_6502, TEST_65C02 } from "../../src/models.js";
 import { setNodeBasePath } from "../../src/loader.js";
 import { hexbyte, hexword } from "../../src/hex.js";
 import { expectSnapshotRoundTrips } from "../helpers/snapshot-round-trip.js";
+import { Channel } from "../../src/vdfs-channels.js";
+import { Call, Port, PortBase } from "../../src/vdfs-protocol.js";
+import { MemoryStore, file } from "../helpers/vdfs.js";
 import { machineWithRealChips } from "./helpers.js";
 
 const SeekDrive1 = 0x69;
@@ -907,5 +910,113 @@ describe("Cpu6502 paged memory", () => {
         expect(cpu.readmem(ShadowAddress)).toBe(0x55);
         expect(cpu.romBank(first)[0]).toBe(0x66);
         expect(cpu.romBank(second)[0]).not.toBe(0x66);
+    });
+});
+
+describe("Cpu6502 VDFS", () => {
+    const RomTitleOffset = 9;
+    const storeOf = (...items) => new MemoryStore(items);
+    const romTitles = (cpu) =>
+        Array.from({ length: 16 }, (_, bank) => {
+            const start = cpu.romOffset + bank * 16384 + RomTitleOffset;
+            return String.fromCharCode(...cpu.ramRomOs.subarray(start, start + 4));
+        });
+
+    it("fits its ROM when it is started, so that nothing else has to", async () => {
+        const cpu = fake6502(findModel("B-DFS1.2"), { vdfsStore: storeOf() });
+        expect(romTitles(cpu)).not.toContain("VDFS");
+        await cpu.initialise();
+        expect(romTitles(cpu)).toContain("VDFS");
+    });
+
+    it("fits its ROM into a higher bank than the ROMs the user adds, which take what is left", async () => {
+        const cpu = fake6502(findModel("B-DFS1.2"), { vdfsStore: storeOf(), extraRoms: ["ats-3.0.rom"] });
+        await cpu.initialise();
+        const titles = romTitles(cpu);
+        expect(titles.indexOf("VDFS")).toBeGreaterThan(titles.findIndex((title) => title.startsWith("ATS")));
+    });
+
+    it("fits no ROM, and has no host, without a store", async () => {
+        const cpu = fake6502(findModel("B-DFS1.2"));
+        await cpu.initialise();
+        expect(cpu.vdfs).toBeNull();
+        expect(romTitles(cpu)).not.toContain("VDFS");
+    });
+
+    it("does not ask the store anything until the BBC does", async () => {
+        const store = storeOf();
+        const asked = vi.spyOn(store, "list");
+        const cpu = fake6502(findModel("B-DFS1.2"), { vdfsStore: store });
+        await cpu.initialise();
+        expect(asked).not.toHaveBeenCalled();
+    });
+
+    it.each([["Atom"], ["BBC B (MOS 0.10)"]])("is refused by the %s, which it would break", (name) => {
+        expect(() => fake6502(findModel(name), { vdfsStore: storeOf() })).toThrow(/VDFS is not for/);
+    });
+
+    it("is peeked at as the rest of the hardware is: giving nothing, and changing nothing", () => {
+        const cpu = fake6502(findModel("B-DFS1.2"), { vdfsStore: storeOf() });
+        cpu.writemem(PortBase + Port.call, 0);
+        const before = cpu.vdfs.openStreams;
+        for (let offset = 0; offset < 8; offset++) expect(cpu.peekmem(PortBase + offset)).toBe(0xff);
+        expect(cpu.vdfs.openStreams).toBe(before);
+    });
+
+    it("keeps its files and where it was when a replay puts the machine back, and not when a snapshot is loaded", () => {
+        const cpu = machineWithRealChips(TEST_6502, { vdfsStore: storeOf(file("DATA", "x")) });
+        cpu.vdfs.selected = true;
+        cpu.vdfs.directory = ["SUB"];
+        const info = { load: 0, exec: 0, locked: false };
+        cpu.vdfs.channels.open(new Channel({ path: ["DATA"], data: Uint8Array.of(1), info, writable: false }));
+        cpu.restoreState(cpu.snapshotState(), { keepVdfs: true });
+        expect(cpu.vdfs).toMatchObject({ selected: true, directory: ["SUB"] });
+        expect(cpu.vdfs.channels.get(0x11)).toBeDefined();
+        cpu.restoreState(cpu.snapshotState());
+        expect(cpu.vdfs).toMatchObject({ selected: false, directory: [] });
+    });
+
+    it("gives a replay an idle host, and leaves the live one and its folder alone", () => {
+        const cpu = fake6502(findModel("B-DFS1.2"), { vdfsStore: storeOf() });
+        cpu.writemem(PortBase + Port.a, 1);
+        cpu.asReplay(NoReplayHooks, () => {
+            cpu.writemem(PortBase + Port.call, Call.args);
+            expect(cpu.readmem(PortBase + Port.id)).toBe(0x56);
+            expect([Port.call, Port.stream, Port.data].map((port) => cpu.readmem(PortBase + port))).toEqual([0, 0, 0]);
+        });
+        expect(cpu.vdfs.openStreams).toBe(0);
+        expect(cpu.readmem(PortBase + Port.call)).toBe(0);
+    });
+
+    it("keeps the device as the ROM was using it across a snapshot, partway through reading a response", () => {
+        const cpu = fake6502(findModel("B-DFS1.2"), { vdfsStore: storeOf() });
+        cpu.writemem(PortBase + Port.call, Call.service);
+        const stream = cpu.readmem(PortBase + Port.stream);
+        cpu.writemem(PortBase + Port.stream, stream);
+        cpu.readmem(PortBase + Port.data);
+        const state = cpu.snapshotState();
+        const restored = fake6502(findModel("B-DFS1.2"), { vdfsStore: storeOf() });
+        restored.restoreState(state);
+        restored.writemem(PortBase + Port.stream, stream);
+        cpu.writemem(PortBase + Port.stream, stream);
+        expect(restored.readmem(PortBase + Port.data)).toBe(cpu.readmem(PortBase + Port.data));
+        expect(restored.vdfs.openStreams).toBe(cpu.vdfs.openStreams);
+    });
+
+    it("has its ports where the ROM expects them, and nothing on a machine without it", () => {
+        const withHost = fake6502(findModel("B-DFS1.2"), { vdfsStore: storeOf() });
+        const without = fake6502(findModel("B-DFS1.2"));
+        expect(withHost.readmem(PortBase + Port.id)).toBe(0x56);
+        expect(without.readmem(PortBase + Port.id)).toBe(0xff);
+    });
+
+    it("goes back to the OS's own filing system, with no file open, when a snapshot is restored", () => {
+        const cpu = machineWithRealChips(TEST_6502, { vdfsStore: storeOf(file("DATA", "x")) });
+        cpu.vdfs.selected = true;
+        const info = { load: 0, exec: 0, locked: false };
+        cpu.vdfs.channels.open(new Channel({ path: ["DATA"], data: Uint8Array.of(1), info, writable: false }));
+        cpu.restoreState(cpu.snapshotState());
+        expect(cpu.vdfs.selected).toBe(false);
+        expect(() => cpu.vdfs.channels.get(0x11)).toThrow("Channel");
     });
 });
