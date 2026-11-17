@@ -1,0 +1,171 @@
+\ VDFS: a filing system whose files are the host's. Every call is forwarded to the host through
+\ the ports in contract.6502, which answers with a stream of ops for this ROM to carry out.
+
+INCLUDE "contract.6502"
+
+\ The filing system's scratch space in zero page.
+ZA_POOL &B0..&BF
+
+OsAsci      = &FFE3
+OsByte      = &FFF4
+RomLatch    = &F4
+OsbyteLanguageRom = &FC
+OsbyteRomPointerTable = &A8
+OsbyteServiceRequest = &8F
+ServiceVectorsClaimed = &0F
+RomSel      = &FE30
+FscVector   = &021E
+FscNewFilingSystem = 6
+OsVectors   = &0212
+ErrorBlock  = &0100
+ExtVectorOffset = 27
+NumVectors  = 7
+
+ServiceCommand = &04
+ServiceHelp = &09
+ServiceSelect = &12
+
+SECTION Rom, org = &8000, filename = "vdfs.rom", guard = &C000
+    EQUB 0, 0, 0
+    JMP service
+    EQUB &82
+    EQUB LO(copyright)
+    EQUB 1
+    EQUS "VDFS", 0
+    EQUS "0.1"
+.copyright
+    EQUB 0
+    EQUS "(C) jsbeeb contributors", 0
+
+.service
+    CMP #ServiceCommand : BEQ forward
+    CMP #ServiceHelp : BEQ forward
+    CMP #ServiceSelect : BEQ forward
+    RTS
+.forward
+\ Very defensive, see docs/vdfs.md.
+    PHA
+    LDA PortId : EOR #HostId : BNE absent
+    PLA : PHP : PHA : LDA #CallService : JMP enter
+.absent
+    PLA
+    RTS
+
+.vec_file   PHP : PHA : LDA #CallFile : JMP enter
+.vec_args   PHP : PHA : LDA #CallArgs : JMP enter
+.vec_bget   PHP : PHA : LDA #CallBget : JMP enter
+.vec_bput   PHP : PHA : LDA #CallBput : JMP enter
+.vec_gbpb   PHP : PHA : LDA #CallGbpb : JMP enter
+.vec_find   PHP : PHA : LDA #CallFind : JMP enter
+.vec_fsc    PHP : PHA : LDA #CallFsc : JMP enter
+
+\ The stack holds A and then the flags the caller had; A is the call's number.
+.enter
+    STX PortX : STY PortY
+    TAX
+    PLA : STA PortA
+    PLA : STA PortP
+    STX PortCall
+    .wait
+    BIT PortCall : BMI wait
+    LDX PortStream
+.next
+    STX PortStream
+    LDA PortData
+    BEQ finish
+    CMP #OpPrint : BEQ print
+    CMP #OpError : BEQ error
+    CMP #OpExec : BEQ exec
+    CMP #OpClaim : BEQ far_claim
+    BRK
+    EQUB &FF
+    EQUS "VDFS protocol error", 0
+.far_claim JMP claim
+
+.finish
+    LDA PortData : TAX
+    LDA PortData : TAY
+    LDA PortData : PHA
+    LDA PortData
+    PLP
+    RTS
+
+.print
+{
+    .loop
+    STX PortStream
+    LDA PortData
+    BEQ done
+    JSR OsAsci
+    JMP loop
+    .done
+    JMP next
+}
+
+.error
+{
+    LDA #0 : STA ErrorBlock
+    LDA PortData : STA ErrorBlock + 1
+    LDY #2
+    .loop
+    LDA PortData : STA ErrorBlock,Y
+    BEQ go
+    INY : BNE loop
+    .go
+    JMP ErrorBlock
+}
+
+\ The host sends the address less one, high byte first, for the RTS to add back. A program in a language
+\ ROM's place needs the language ROM paged in, which is done from RAM since this ROM is paged out by it.
+.exec
+{
+    LDA PortData : PHA
+    LDA PortData : PHA
+    LDA #OsbyteLanguageRom : LDX #0 : LDY #&FF : JSR OsByte
+    LDY #stub_end - stub - 1
+    .copy
+    LDA stub_rom,Y : STA ErrorBlock,Y
+    DEY : BPL copy
+    JMP ErrorBlock
+}
+
+.stub_rom
+SECTION PageLanguageRom, org = ErrorBlock
+.stub
+    STX RomLatch : STX RomSel : RTS
+.stub_end
+ENDSECTION
+
+.claim
+{
+    ZA_AUTO2 ext_table
+    TXA : PHA
+    LDA #FscNewFilingSystem : JSR call_fsc
+    LDX #2 * NumVectors - 1
+    .copy_os
+    LDA os_entries,X : STA OsVectors,X
+    DEX : BPL copy_os
+    LDA #OsbyteRomPointerTable : LDX #0 : LDY #&FF : JSR OsByte
+    STX ext_table : STY ext_table + 1
+    LDX #0 : LDY #ExtVectorOffset
+    .copy_ext
+    LDA handlers,X : STA (ext_table),Y : INX : INY
+    LDA handlers,X : STA (ext_table),Y : INX : INY
+    LDA RomLatch : STA (ext_table),Y : INY
+    CPX #2 * NumVectors : BNE copy_ext
+    LDA #OsbyteServiceRequest : LDX #ServiceVectorsClaimed : LDY #&FF : JSR OsByte
+    PLA : TAX
+    JMP next
+}
+
+.call_fsc
+    JMP (FscVector)
+
+.os_entries
+\ The OS's extended vector entry points; docs/vdfs.md says which ROMs have been checked.
+    EQUW &FF1B, &FF1E, &FF21, &FF24, &FF27, &FF2A, &FF2D
+.handlers
+    EQUW vec_file, vec_args, vec_bget, vec_bput, vec_gbpb, vec_find, vec_fsc
+
+    SKIPTO &C000
+ENDSECTION
