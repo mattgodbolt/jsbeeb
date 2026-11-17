@@ -78,12 +78,28 @@ describe("DRAM rows nothing refreshes", () => {
         expect(actual).toEqual(expected);
     });
 
+    const startedMaster = async () => {
+        const machine = new TestMachine("Master", { video: new Video(true, FbWidth * FbHeight, () => {}) });
+        await machine.initialise();
+        return machine.processor;
+    };
+
     it("snapshots and restores which rows were refreshed when", async () => {
-        const makeDevice = async () => {
-            const machine = new TestMachine("Master", { video: new Video(true, FbWidth * FbHeight, () => {}) });
-            await machine.initialise();
-            return machine.processor.dramRefresh;
-        };
-        await expectSnapshotRoundTrips(makeDevice, (dram) => dram.cpu.execute(StartUpCycles));
+        await expectSnapshotRoundTrips(
+            async () => (await startedMaster()).dramRefresh,
+            (dram) => dram.cpu.execute(StartUpCycles),
+        );
+    });
+
+    it("takes every row as just refreshed when a snapshot predates DRAM refresh", async () => {
+        const cpu = await startedMaster();
+        cpu.execute(StartUpCycles);
+        const { dram: _dram, ...olderState } = cpu.snapshotState();
+        const restored = await startedMaster();
+        restored.restoreState(olderState);
+        const epoch = restored.scheduler.epoch;
+        expect(restored.dramRefresh.lastRefreshedAt.every((at) => at === epoch)).toBe(true);
+        expect(restored.dramRefresh.lastCoveredAt).toBe(epoch);
+        expect(restored.tracksDramRows).toBe(false);
     });
 });
