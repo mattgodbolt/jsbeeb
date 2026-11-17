@@ -120,7 +120,7 @@ export class VdfsHost {
     /** A break: the OS has gone back to its own filing system, and files open on the old one are closed. */
     reset() {
         this.ports.reset();
-        this._background(this._writeBackEach(this.channels.takeAll()));
+        this._backgroundWriteBack(this.channels.takeAll());
         this.selected = false;
         this._reselecting = false;
         this.directory = [];
@@ -129,13 +129,13 @@ export class VdfsHost {
 
     /** @returns {Promise<void>} once what the BBC has written, open files included, is in the store */
     async flush() {
-        this._background(this._writeBackEach(this.channels.all()));
+        this._backgroundWriteBack(this.channels.all());
         await Promise.allSettled([...this._writes]);
     }
 
     /** Closes every file, written back, and the current directory and library are the root's. */
     async closeAll() {
-        this._background(this._writeBackEach(this.channels.takeAll()));
+        this._backgroundWriteBack(this.channels.takeAll());
         this.directory = [];
         this.library = [];
         await Promise.allSettled([...this._writes]);
@@ -147,6 +147,7 @@ export class VdfsHost {
      */
     async hold() {
         this.ports.abort(Errors.discChanged());
+        this.release();
         this._held = new Promise((resolve) => (this._release = resolve));
         await this.closeAll();
     }
@@ -165,13 +166,22 @@ export class VdfsHost {
             try {
                 await this._writeBack(channel, fs);
             } catch (error) {
-                this.onWriteFailure(error);
+                this._reportWriteFailure(error);
             }
         }
     }
 
-    _background(promise) {
-        const tracked = promise.catch(this.onWriteFailure).finally(() => this._writes.delete(tracked));
+    _reportWriteFailure(error) {
+        try {
+            this.onWriteFailure(error);
+        } catch (reporting) {
+            console.error("VDFS could not report a write failure:", reporting);
+        }
+    }
+
+    _backgroundWriteBack(channels) {
+        if (channels.length === 0) return;
+        const tracked = this._writeBackEach(channels).finally(() => this._writes.delete(tracked));
         this._writes.add(tracked);
     }
 

@@ -140,7 +140,7 @@ that has finished at once, as one with a store that is in Node's `fs` can, is no
 The host does what the call needs in memory, and writes the answer, only once its store has answered. A break while a
 call is waiting ends the call: its answer is not given, and it does not go on to change a machine that has restarted.
 A call that does not use the store, such as `OSBGET`, `OSBPUT`, the file pointer and extent, or a check for the end of a
-file, is not busy at all.
+file, is not busy at all, unless a folder change is being waited for or a file is still being written back, when every call waits.
 
 Some things follow from that:
 

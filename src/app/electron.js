@@ -61,7 +61,7 @@ export function initialise(args) {
 }
 
 /** How long the BBC is kept waiting for the folder to change, at most, if the main process does not say. */
-const HoldTimeoutMs = 10000;
+const HoldTimeoutMs = 30000;
 
 /** @returns {object | null} the store of the folder the app was asked to serve as VDFS, which its main process holds */
 export function desktopVdfsStore(query) {
@@ -76,9 +76,9 @@ export function attachDesktopVdfs(host, { notify }) {
     let safety;
     window.addEventListener("pagehide", () => host.flush());
     window.electronAPI.onVdfsFlush(async () => {
-        await host.hold();
         clearTimeout(safety);
         safety = setTimeout(() => host.release(), HoldTimeoutMs);
+        await host.hold();
     });
     window.electronAPI.onVdfsChanged(() => {
         clearTimeout(safety);

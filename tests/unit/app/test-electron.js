@@ -157,7 +157,7 @@ describe("the Electron hooks", () => {
                 vi.useFakeTimers();
                 const { host } = attached();
                 await window.electronAPI.onVdfsFlush.mock.calls[0][0]();
-                vi.advanceTimersByTime(10000);
+                vi.advanceTimersByTime(30000);
                 expect(host.release).toHaveBeenCalled();
                 vi.useRealTimers();
             });

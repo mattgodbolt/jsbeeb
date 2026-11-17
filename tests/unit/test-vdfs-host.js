@@ -764,6 +764,39 @@ describe("VDFS host", () => {
     });
 
     describe("a folder that is about to change", () => {
+        it("does not make a call wait after a break when there is nothing to write", () => {
+            const t = hostWith([file("DATA", "x")]);
+            t.host.reset();
+            for (const [port, value] of [
+                [Port.a, 0],
+                [Port.x, 0],
+                [Port.y, 0],
+            ])
+                t.host.write(port, value);
+            t.host.write(Port.call, Call.bget);
+            expect(t.host.read(Port.call)).toBe(0);
+        });
+
+        it("goes on after being held twice, and when a failure cannot be reported", async () => {
+            const t = hostWith([file("DATA", "x")]);
+            await t.host.hold();
+            await t.host.hold();
+            t.host.release();
+            t.host.onWriteFailure = () => {
+                throw new Error("nobody to tell");
+            };
+            const writing = (await t.open("OUT", Osfind.write)).a;
+            await t.call(Call.bput, { a: 0x41, y: writing });
+            t.store.writeFile = async () => {
+                throw new Error("disc full");
+            };
+            const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+            await t.host.closeAll();
+            expect(errors).toHaveBeenCalled();
+            errors.mockRestore();
+            expect(errorOf(await t.osfile(Osfile.readInformation, "DATA"))).toBeUndefined();
+        });
+
         it("ends the call that is waiting with Disc changed, writes what is open to the folder it came from, and waits", async () => {
             const t = hostWith([file("DATA", "HELLO")]);
             const writing = (await t.open("OUT", Osfind.write)).a;
