@@ -1,4 +1,5 @@
 import { hexbyte } from "./hex.js";
+import { tightLoopAt } from "./tight-loop.js";
 
 // BBC BASIC's workspace, the same in BASIC I, II and IV: https://8bs.com/basic/memory.htm
 const Lomem = 0x00;
@@ -21,6 +22,27 @@ const FunctionChain = 0x4f8;
 export const LanguageRomNumber = 0x28c;
 /** Where the OS's BRK handler leaves the address of the error block, its number then its message, low byte first. */
 export const ErrorBlockPointer = 0xfd;
+/** RDCHV, the vector the OS reads a character through, in the same map. */
+const ReadCharacterVector = 0x210;
+/**
+ * Far enough into the OS's read-character routine to take in its wait for a key, whose call into the keyboard buffer
+ * returns to &DEEF in OS 1.20 (the routine is at &DEC5) and to &E7E3 in MOS 3.20 (at &E7BC).
+ */
+const ReadCharacterBytes = 0x40;
+/**
+ * FILEV, which a filing system ROM extends: it then holds the OS's entry for an extended FILEV, and the OS's table of
+ * extended vectors holds the ROM's number.
+ */
+const FileVector = 0x212;
+const Vectors = 0x200;
+const ExtendedVectorEntries = 0xff00;
+const ExtendedVectors = 0xd9f;
+const ExtendedVectorBytes = 3;
+const ExtendedVectorRom = 2;
+/** The OS counts vsyncs here, and *FX19 waits for the count to change. */
+const VsyncCounter = 0x240;
+const StackPage = 0x100;
+const StackTop = 0xff;
 
 const RomTitle = 9;
 const RomBase = 0x8000;
@@ -59,6 +81,7 @@ const DispatchCompareOffset = 6;
 /** The keyword table starts with AND, its first token. */
 const FirstKeyword = [0x41, 0x4e, 0x44, FirstToken];
 const KeywordCharacters = /^[A-Z][A-Z$(]*$/;
+const KeyboardFunctions = new Set(["GET", "GET$", "INKEY", "INKEY$"]);
 
 function findBytes(rom, pattern) {
     const found = [];
@@ -259,6 +282,85 @@ export function readReportedError(peek, keywords) {
     if (expression < RomBase || expression >= RomEnd) return null;
     const block = word(peek, ErrorBlockPointer);
     return { number: peek(block), message: errorMessage(peek, block, keywords), lineNumber: word(peek, ErrorLine) };
+}
+
+/**
+ * Whether the CPU is in the OS's read-character routine: at `pc`, or below a call the routine made or an interrupt
+ * taken in it, either of which leaves an address in the routine on the stack.
+ */
+function readingCharacter(peek, pc, stackPointer) {
+    const routine = word(peek, ReadCharacterVector);
+    const inRoutine = (address) => address >= routine && address < routine + ReadCharacterBytes;
+    if (inRoutine(pc)) return true;
+    for (let at = stackPointer + 1; at < StackTop; ++at) if (inRoutine(word(peek, StackPage + at))) return true;
+    return false;
+}
+
+/** The ROM number of the filing system that has extended FILEV, or null where none has. */
+function filingSystemRom(peek) {
+    const vector = (FileVector - Vectors) / 2;
+    if (word(peek, FileVector) !== ExtendedVectorEntries + ExtendedVectorBytes * vector) return null;
+    return peek(ExtendedVectors + ExtendedVectorBytes * vector + ExtendedVectorRom);
+}
+
+/**
+ * Of the statement in `line` that BASIC's pointers are in, its first character after any spaces and its tokens up to
+ * the later pointer, not counting those in strings. The statement pointer can be on the colon before a statement that
+ * BASIC reads through the expression pointer, as it does one that does not start with a keyword, or on the colon after
+ * one it has finished, with the expression pointer left behind.
+ */
+function statementUpTo(peek, line, { reading, expression }) {
+    let first = null;
+    let tokens = [];
+    let quoted = false;
+    for (let at = line.start + LineHeaderBytes; at <= Math.max(reading, expression) && at < line.end; ++at) {
+        const code = peek(at);
+        if (code === Quote) quoted = !quoted;
+        if (quoted) continue;
+        if (code === Colon) {
+            if (at > reading || (at === reading && expression < reading)) break;
+            first = null;
+            tokens = [];
+            continue;
+        }
+        if (first === null && code !== Space) first = code;
+        if (code === LineNumberToken) at += 3;
+        else if (code >= FirstToken) tokens.push(code);
+    }
+    return { first, tokens };
+}
+
+/** The keyword a statement reading a key waits in: its last GET, GET$, INKEY or INKEY$, else INPUT or INPUT LINE. */
+function keyboardKeyword({ first, tokens }, keywords) {
+    const spelt = tokens.map((token) => keywords.get(token));
+    const reading = spelt.findLast((keyword) => KeyboardFunctions.has(keyword));
+    if (reading) return reading;
+    if (keywords.get(first) !== "INPUT") return null;
+    return spelt[1] === "LINE" ? "INPUT LINE" : "INPUT";
+}
+
+/**
+ * Where the machine is, of the places a program can wait, or null: "keyboard", in the OS's read-character routine, as
+ * GET, INKEY with a time limit and INPUT are, with the keyword of those the statement BASIC is in (in `line`) waits in,
+ * where it shows; "vsync", in a tight loop on the OS's count of vsyncs, as *FX19 is; "filing system", with the filing
+ * system's ROM paged in; "sound", in a SOUND statement, which only takes long while its channel's queue is full. Only the vsync
+ * loop is a wait in itself: a program passes through the others, as INKEY(0) does, and is waiting only if it stays.
+ * @param {import("./6502.js").Cpu6502} cpu
+ * @param {ProgramLine | null} line
+ * @param {Map<number, string>} keywords
+ * @returns {{kind: "keyboard" | "vsync" | "filing system" | "sound", keyword: string | null} | null}
+ */
+export function readWait(cpu, line, keywords) {
+    const peek = (address) => cpu.peekmemAsLanguage(address);
+    const { pc } = cpu;
+    const statement = line ? statementUpTo(peek, line, readPointers(peek)) : { first: null, tokens: [] };
+    if (readingCharacter(peek, pc, cpu.s)) return { kind: "keyboard", keyword: keyboardKeyword(statement, keywords) };
+    if (tightLoopAt(cpu.disassembler, pc)?.reads.includes(VsyncCounter)) return { kind: "vsync", keyword: null };
+    const filingSystem = filingSystemRom(peek);
+    if (filingSystem !== null && cpu.isBankPagedAt(cpu.bankPagedBy(filingSystem), pc))
+        return { kind: "filing system", keyword: null };
+    if (keywords.get(statement.first) === "SOUND") return { kind: "sound", keyword: null };
+    return null;
 }
 
 /**
