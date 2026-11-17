@@ -10,6 +10,7 @@ const CodeBase = 0x0e80;
 const PatternBase = 0x1000;
 const Pattern = 0x5a;
 const SettleCycles = 200000;
+const PalFieldsPerSecond = 50;
 // Part way through the MOS's start-up, before it programs the CRTC, so the rows are only partly refreshed.
 const StartUpCycles = 300000;
 const ModelBRows = 128;
@@ -37,8 +38,32 @@ function program(crtcWrites) {
 
 describe("DRAM rows nothing refreshes", () => {
     it.each([
-        { model: "B-DFS1.2", mode: 0, crtcWrites: [], videoRefreshes: () => true },
-        { model: "Master", mode: 7, crtcWrites: [], videoRefreshes: () => true },
+        { model: "B-DFS1.2", mode: 0, crtcWrites: [], videoRefreshes: () => true, coversEveryRow: true },
+        { model: "Master", mode: 7, crtcWrites: [], videoRefreshes: () => true, coversEveryRow: true },
+        // One-row MODE 7 frames from MA &2800: each character's two 1 MHz slots fetch rows &00-&7F, and on odd RA
+        // the flipped slot fetches with MA7 flipped too, reaching &C0-&FF.
+        {
+            model: "Master",
+            mode: 7,
+            crtcWrites: [
+                [4, 0],
+                [5, 0],
+                [8, 0],
+                [9, 0],
+            ],
+            videoRefreshes: (row) => row < 0x80,
+        },
+        {
+            model: "Master",
+            mode: 7,
+            crtcWrites: [
+                [4, 0],
+                [5, 0],
+                [8, 0],
+                [9, 1],
+            ],
+            videoRefreshes: (row) => row < 0x80 || row >= 0xc0,
+        },
         // R9 = 0 holds RA at 0, so a bitmap line refreshes only rows whose RA bits are 0.
         { model: "B-DFS1.2", mode: 0, crtcWrites: [[9, 0]], videoRefreshes: (row) => (row & 7) === 0 },
         { model: "Master", mode: 0, crtcWrites: [[9, 0]], videoRefreshes: (row) => (row & 7) === 0 },
@@ -55,30 +80,41 @@ describe("DRAM rows nothing refreshes", () => {
             ],
             videoRefreshes: (row) => row < 0x80,
         },
-    ])("$model MODE $mode with CRTC writes $crtcWrites", async ({ model, mode, crtcWrites, videoRefreshes }) => {
-        const isMaster = model === "Master";
-        const rows = isMaster ? MasterRows : ModelBRows;
-        const video = new Video(isMaster, FbWidth * FbHeight, () => {});
-        const machine = await bootedTestMachine(model, { video });
-        await machine.type(`MODE ${mode}`);
-        await machine.runUntilInput();
+    ])(
+        "$model MODE $mode with CRTC writes $crtcWrites",
+        async ({ model, mode, crtcWrites, videoRefreshes, coversEveryRow }) => {
+            const isMaster = model === "Master";
+            const rows = isMaster ? MasterRows : ModelBRows;
+            const video = new Video(isMaster, FbWidth * FbHeight, () => {});
+            const machine = await bootedTestMachine(model, { video });
+            await machine.type(`MODE ${mode}`);
+            await machine.runUntilInput();
 
-        const { code, loopRows } = program(crtcWrites);
-        code.forEach((byte, offset) => machine.writebyte(CodeBase + offset, byte));
-        await machine.type(`CALL &${CodeBase.toString(16).toUpperCase()}`);
-        await machine.runFor(SettleCycles);
-        for (let row = 0; row < rows; ++row) machine.writebyte(PatternBase + row, Pattern);
-        const readBack = () => Array.from({ length: rows }, (_, row) => machine.readbyte(PatternBase + row));
-        await machine.runFor((DramRetentionSeconds - 1) * machine.model.cyclesPerSecond);
-        expect(readBack()).toEqual(Array(rows).fill(Pattern));
-        await machine.runFor(2 * machine.model.cyclesPerSecond);
+            const { code, loopRows } = program(crtcWrites);
+            code.forEach((byte, offset) => machine.writebyte(CodeBase + offset, byte));
+            await machine.type(`CALL &${CodeBase.toString(16).toUpperCase()}`);
+            await machine.runFor(SettleCycles);
+            for (let row = 0; row < rows; ++row) machine.writebyte(PatternBase + row, Pattern);
+            const readBack = () => Array.from({ length: rows }, (_, row) => machine.readbyte(PatternBase + row));
+            await machine.runFor((DramRetentionSeconds - 1) * machine.model.cyclesPerSecond);
+            expect(readBack()).toEqual(Array(rows).fill(Pattern));
+            await machine.runFor(2 * machine.model.cyclesPerSecond);
 
-        const cpuRows = new Set(loopRows.map((address) => address & (rows - 1)));
-        const expected = Array.from({ length: rows }, (_, row) =>
-            videoRefreshes(row) || cpuRows.has(row) ? Pattern : DecayedByte,
-        );
-        expect(readBack()).toEqual(expected);
-    });
+            const cpuRows = new Set(loopRows.map((address) => address & (rows - 1)));
+            const expected = Array.from({ length: rows }, (_, row) =>
+                videoRefreshes(row) || cpuRows.has(row) ? Pattern : DecayedByte,
+            );
+            expect(readBack()).toEqual(expected);
+
+            const { processor } = machine;
+            if (coversEveryRow) {
+                expect(processor.scheduler.epoch - processor.dramRefresh.lastCoveredAt).toBeLessThan(
+                    (2 * processor.model.cyclesPerSecond) / PalFieldsPerSecond,
+                );
+                expect(processor.tracksDramRows).toBe(false);
+            }
+        },
+    );
 
     it("counts as refreshed exactly the rows a 2 MHz MA13 line fetches", async () => {
         const video = new Video(false, FbWidth * FbHeight, () => {});
@@ -110,8 +146,7 @@ describe("DRAM rows nothing refreshes", () => {
         };
         const endOfField = dram.endOfField.bind(dram);
         dram.endOfField = () => {
-            for (let row = 0; row < ModelBRows; ++row)
-                if ((dram.videoRows[row >>> 5] >>> (row & 31)) & 1) refreshed.add(row);
+            for (let row = 0; row < ModelBRows; ++row) if (dram.refreshedByVideo(row)) refreshed.add(row);
             endOfField();
         };
         await machine.runFor(SettleCycles);

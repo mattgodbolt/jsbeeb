@@ -32,8 +32,8 @@ function setRows(words, from, to) {
  * "Refresh Control").
  *
  * Normal running costs a few operations a scanline until the window's lines have refreshed every row. Only a window
- * that does not get there looks at rows one by one, and only one in CpuSampleWindows of those has the CPU take its
- * slow path to report the rows it touches.
+ * that does not get there looks at rows one by one, and only one ending on a multiple of CpuSampleWindows has the
+ * CPU take its slow path through the next window to report the rows it touches.
  */
 export class DramRefresh {
     /**
@@ -131,8 +131,7 @@ export class DramRefresh {
         }
         const cpuSampled = this.cpu.tracksDramRows;
         for (let row = 0; row < this.rowCount; ++row) {
-            const videoRefreshed = (this.videoRows[row >>> WordShift] >>> (row & (BitsPerWord - 1))) & 1;
-            if (videoRefreshed || (cpuSampled && this.cpuRows[row])) {
+            if (this.refreshedByVideo(row) || (cpuSampled && this.cpuRows[row])) {
                 this.lastRefreshedAt[row] = now;
             } else if (now - Math.max(this.lastRefreshedAt[row], this.lastCoveredAt) > this.retentionCycles) {
                 this.decayRow(row);
@@ -141,6 +140,10 @@ export class DramRefresh {
         }
         this.startWindow();
         this.cpu.trackDramRows(this.windows % CpuSampleWindows === 0);
+    }
+
+    refreshedByVideo(row) {
+        return ((this.videoRows[row >>> WordShift] >>> (row & (BitsPerWord - 1))) & 1) === 1;
     }
 
     startWindow() {
