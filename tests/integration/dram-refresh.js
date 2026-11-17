@@ -95,7 +95,8 @@ describe("DRAM rows nothing refreshes", () => {
             await machine.type(`CALL &${CodeBase.toString(16).toUpperCase()}`);
             await machine.runFor(SettleCycles);
             for (let row = 0; row < rows; ++row) machine.writebyte(PatternBase + row, Pattern);
-            const readBack = () => Array.from({ length: rows }, (_, row) => machine.readbyte(PatternBase + row));
+            const readBack = () =>
+                Array.from({ length: rows }, (_, row) => machine.processor.peekmem(PatternBase + row));
             await machine.runFor((DramRetentionSeconds - 1) * machine.model.cyclesPerSecond);
             expect(readBack()).toEqual(Array(rows).fill(Pattern));
             await machine.runFor(2 * machine.model.cyclesPerSecond);
