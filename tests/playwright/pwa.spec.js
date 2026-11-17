@@ -103,8 +103,10 @@ test("offers an update only when the worker is a newer build than the page", asy
             deployed = rewrite;
             await deployer.evaluate(async (pollMs) => {
                 const registration = await navigator.serviceWorker.ready;
+                const before = registration.waiting;
                 await registration.update();
-                while (!registration.waiting) await new Promise((resolve) => setTimeout(resolve, pollMs));
+                while (!registration.waiting || registration.waiting === before)
+                    await new Promise((resolve) => setTimeout(resolve, pollMs));
             }, WaitingPollMs);
         };
         const update = page.locator(".toast", { hasText: "A new version of jsbeeb is ready." });
