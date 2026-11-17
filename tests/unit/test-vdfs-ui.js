@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { browserVdfsStore } from "../../src/web/vdfs-folder.js";
 import { attachBrowserVdfs, attachVdfsMenu } from "../../src/web/vdfs-ui.js";
 import { teardownDom } from "./helpers.js";
 
@@ -11,6 +12,26 @@ const storeIn = (state, answer = "granted") => ({
 });
 
 describe("VDFS in a browser, the page's side", () => {
+    describe("the store of the folder the page was asked for", () => {
+        afterEach(() => {
+            delete window.showDirectoryPicker;
+            delete window.electronAPI;
+        });
+
+        it("is there when the page has a picker and was asked, and not otherwise", () => {
+            expect(browserVdfsStore({ vdfs: true })).toBeNull();
+            window.showDirectoryPicker = () => {};
+            expect(browserVdfsStore({ vdfs: true })).not.toBeNull();
+            expect(browserVdfsStore({})).toBeNull();
+        });
+
+        it("is not for the desktop app, which has a picker and a store of its own", () => {
+            window.showDirectoryPicker = () => {};
+            window.electronAPI = {};
+            expect(browserVdfsStore({ vdfs: true })).toBeNull();
+        });
+    });
+
     afterEach(() => {
         teardownDom();
         vi.restoreAllMocks();

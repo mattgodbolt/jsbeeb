@@ -1,6 +1,7 @@
 // The folder the user chose to serve as VDFS in a browser: kept in IndexedDB, which can hold a folder handle, so the
 // next page can use it. See docs/vdfs.md.
 
+import { isDesktopApp } from "../app/electron.js";
 import { FolderStore } from "./vdfs-folder-store.js";
 
 const DatabaseName = "jsbeeb-vdfs";
@@ -44,7 +45,7 @@ export const forgetFolder = () => inDatabase("readwrite", (store) => store.delet
 /** Asks the user for a folder, which needs a click. It is kept with `saveFolder` once it is to be used. */
 export const pickFolder = () => window.showDirectoryPicker({ id: "vdfs", mode: "readwrite" });
 
-/** @returns {FolderStore | null} the store of the folder the page was asked to serve, in a browser that can */
+/** @returns {FolderStore | null} the store of the folder the page was asked to serve, in a browser that can (not the app's) */
 export function browserVdfsStore(query) {
-    return query.vdfs && canChooseFolder() ? new FolderStore(savedFolder) : null;
+    return query.vdfs && canChooseFolder() && !isDesktopApp() ? new FolderStore(savedFolder) : null;
 }

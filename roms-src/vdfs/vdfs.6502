@@ -43,7 +43,7 @@ SECTION Rom, org = &8000, filename = "vdfs.rom", guard = &C000
     CMP #ServiceSelect : BEQ forward
     RTS
 .forward
-\ Very defensive: jsbeeb fits this ROM only with a host, but rom=vdfs.rom or a snapshot can put it in a machine without.
+\ Very defensive, see docs/vdfs.md.
     PHA
     LDA PortId : EOR #HostId : BNE absent
     PLA : PHP : PHA : LDA #CallService : JMP enter
@@ -162,7 +162,7 @@ ENDSECTION
     JMP (FscVector)
 
 .os_entries
-\ The extended vector entry points of every MOS and filing system ROM from DFS 0.9 to the Compact's.
+\ The OS's extended vector entry points; docs/vdfs.md says which ROMs have been checked.
     EQUW &FF1B, &FF1E, &FF21, &FF24, &FF27, &FF2A, &FF2D
 .handlers
     EQUW vec_file, vec_args, vec_bget, vec_bput, vec_gbpb, vec_find, vec_fsc

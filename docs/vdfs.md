@@ -33,8 +33,7 @@ page, and only for the folder the page was told of. What the page had not yet wr
 written to the new one: the page says so, as a notice for a write-back and as a Disc fault for a call.
 
 In a browser with the File System Access API (Chrome, Edge and other Chromium browsers; not Firefox or Safari), More,
-Serve a folder as VDFS... asks for a folder and starts the page again with it, as the desktop app does for its first
-folder. The folder is kept in the browser's IndexedDB, so a page opened with `?vdfs` finds it again. The browser asks
+Serve a folder as VDFS... asks for a folder and starts the page again with it. The folder is kept in the browser's IndexedDB, so a page opened with `?vdfs` finds it again. The browser asks
 again whether the page may use it in a new session, and only a click can answer; the page shows a notice with an Allow
 button when that is so, and until it is answered the BBC gets "Disc fault: The browser has not been told that the VDFS
 folder may be used". If the answer was no, the BBC gets a disc fault that says to allow it in the site settings. More,
@@ -113,7 +112,8 @@ restoring one closes them. `BGET` at the end of a file gives `&FE` with the carr
 
 ## The ROM and the host
 
-The ROM's code is about 400 bytes, in a 16K image like any other ROM's. It holds no state and no text, and does no
+The ROM's code is about 400 bytes, in a 16K image like any other ROM's. It is jsbeeb's own, written here, and under
+jsbeeb's licence. It holds no state and no text, and does no
 parsing; the host parses `*` commands, makes the `*CAT` listing and decides what is an error. The ROM hands over a call,
 waits for it, and does what it is told.
 

@@ -1,5 +1,5 @@
 // The page's side of a folder served as VDFS in a browser: what to do when the browser has to be asked again, and the
-// menu to choose the folder with. The desktop app has its own, in src/app/electron.js.
+// menu to choose the folder with.
 
 import { forgetFolder, pickFolder, saveFolder } from "./vdfs-folder.js";
 import { reloadAsMachine } from "./machine-switch.js";
