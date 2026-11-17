@@ -286,6 +286,36 @@ describe("VDFS protocol", () => {
             expect(waiting.read(Port.data)).toBe(Op.error);
         });
 
+        it.each([
+            ["nothing at all", undefined],
+            ["no streams", { streams: "none", request: null }],
+            ["numbers that are not bytes", { nextStream: 0, responseStream: 257, request: { a: 300, x: -1, y: "q" } }],
+            ["a stream with no bytes", { streams: [[1, "AB", 0], null, [2, [1, 2], 0.5]] }],
+        ])("puts back what it can of a snapshot that is %s, and does not throw", (_, state) => {
+            const ports = portsSaying(() => "A");
+            expect(() => ports.restoreState(state)).not.toThrow();
+            expect(ports.openStreams).toBe(0);
+            makeCall(ports, Call.file);
+            expect(readResponse(ports, {}).ops).toEqual([{ op: "print", text: "A" }]);
+        });
+
+        it("masks the numbers in a snapshot to bytes", () => {
+            const ports = portsSaying(() => "A");
+            ports.restoreState({
+                nextStream: 0,
+                responseStream: 257,
+                request: { a: 300 },
+                streams: [[258, [256, 3], 0]],
+            });
+            expect(ports.read(Port.stream)).toBe(1);
+            ports.write(Port.stream, 2);
+            expect([ports.read(Port.data), ports.read(Port.data)]).toEqual([0, 3]);
+            const next = portsSaying(() => "A");
+            next.restoreState({ nextStream: 0 });
+            makeCall(next, Call.file);
+            expect(next.read(Port.stream)).toBe(1);
+        });
+
         it("goes round the 255 numbers it has for responses, so one that is never read is replaced", () => {
             const ports = portsSaying(() => "A");
             const seen = new Set();

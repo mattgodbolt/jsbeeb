@@ -132,10 +132,7 @@ export class VdfsPorts {
         };
     }
 
-    /**
-     * A call that was waiting is answered with "Disc changed", since the store it was waiting on is not the machine's.
-     * A snapshot is a file, so what is not as `snapshotState` makes it is left out, and numbers are made bytes.
-     */
+    /** A call that was waiting is answered with "Disc changed". What a snapshot file has wrong is left out or made a byte. */
     restoreState(state) {
         this.reset();
         const byte = (value) => (Number.isInteger(value) ? value & 0xff : 0);
