@@ -343,8 +343,9 @@ function keyboardKeyword({ first, tokens }, keywords) {
  * Where the machine is, of the places a program can wait, or null: "keyboard", in the OS's read-character routine, as
  * GET, INKEY with a time limit and INPUT are, with the keyword of those the statement BASIC is in (in `line`) waits in,
  * where it shows; "vsync", in a tight loop on the OS's count of vsyncs, as *FX19 is; "filing system", with the filing
- * system's ROM paged in; "sound", in a SOUND statement, which only takes long while its channel's queue is full. Only the vsync
- * loop is a wait in itself: a program passes through the others, as INKEY(0) does, and is waiting only if it stays.
+ * system's ROM paged in; "sound", in a SOUND statement, which only takes long while its channel's queue is full. Only
+ * the vsync loop is a wait in itself: a program passes through the others, as INKEY(0) does, and is waiting only if it
+ * stays.
  * @param {import("./6502.js").Cpu6502} cpu
  * @param {ProgramLine | null} line
  * @param {Map<number, string>} keywords
