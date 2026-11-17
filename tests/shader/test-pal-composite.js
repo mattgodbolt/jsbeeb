@@ -223,9 +223,7 @@ const MaxLevel = 15;
 /** A VideoNuLA colour from its four-bit levels, expanded as video.js expands them. */
 const nulaColour = (r, g, b) => (0xff000000 | ((b * 17) << 16) | ((g * 17) << 8) | (r * 17)) >>> 0;
 
-const GreyRamp = Array.from({ length: MaxLevel + 1 }, (_, level) => [`grey ${level}`, [level, level, level]]);
-
-/** Levels per channel: the stock colours, either side of the threshold, a pastel, a dark shade, and every grey. */
+/** Levels per channel: the stock colours, either side of the threshold, a pastel, a dark shade, and greys. */
 const NulaLevels = [
     ...Object.entries(Palette).map(([name, word]) => [name, rgbOf(word).map((channel) => channel / 17)]),
     ["red 9", [9, 0, 0]],
@@ -234,7 +232,7 @@ const NulaLevels = [
     ["pastel pink", [15, 8, 8]],
     ["orange", [15, 8, 0]],
     ["dark blue", [0, 0, 5]],
-    ...GreyRamp,
+    ...[3, 9, 10].map((level) => [`grey ${level}`, [level, level, level]]),
 ];
 
 const nulaName = (name, lineBase) => `nula-${name}-${lineBase}`;

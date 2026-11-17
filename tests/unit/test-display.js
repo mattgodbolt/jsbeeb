@@ -5,6 +5,7 @@ import { Display } from "../../src/web/display.js";
 import { FakeAtomVideo, FakeVideo } from "../../src/video.js";
 import { PassthroughFilter } from "../../src/video-filters/passthrough-filter.js";
 import { LineGridRows } from "../../src/video-filters/pixel-grid.js";
+import { MasterChromaThreshold, ModelBChromaThreshold } from "../../src/video-filters/pal-composite.js";
 import { answerNulaOverComposite } from "../../src/web/video-nula-notice.js";
 import { domFromIndexHtml, fakeAnimationFrames, teardownDom, toasts } from "./helpers.js";
 
@@ -373,15 +374,35 @@ describe("Display", () => {
             expect(guessNotices()).toHaveLength(1);
         });
 
-        it("has the TV view take chroma from channels on or off only while a colour needs it", () => {
+        it("has the TV view take chroma from channels on or off for any field a colour needed it in", () => {
             const { display } = showing("pal");
-            const quantisedAfter = (red) => {
-                writeNulaColour(display, 1, red, 0, 0);
+            const paintField = (...reds) => {
+                for (const red of reds) writeNulaColour(display, 1, red, 0, 0);
                 display.onPaint(paintedFrom(), 0, 0, FbWidth, 8);
+            };
+            const presented = () => {
                 animationFrames.run();
                 return lastPainted().quantiseChroma;
             };
-            expect([15, 8, 0].map(quantisedAfter)).toEqual([false, true, false]);
+            paintField(15);
+            expect(presented()).toBe(false);
+            paintField(8, 15);
+            expect(presented()).toBe(true);
+            paintField();
+            expect(presented()).toBe(false);
+            paintField(8);
+            writeNulaColour(display, 1, 15, 0, 0);
+            expect(presented()).toBe(true);
+        });
+
+        it.each([
+            ["a Model B", false, ModelBChromaThreshold],
+            ["a Master", true, MasterChromaThreshold],
+        ])("gives the TV view the chroma threshold of %s", (_, isMaster, threshold) => {
+            const display = make({ mode: "pal", model: { isMaster, isAtom: false } });
+            display.onPaint(paintedFrom(), 0, 0, FbWidth, 8);
+            animationFrames.run();
+            expect(lastPainted().chromaThreshold).toBe(threshold);
         });
     });
 

@@ -46,6 +46,8 @@ export class Display {
         this.presentScheduled = false;
         this.presented = true;
         this.onNulaOverComposite = onNulaOverComposite;
+        this.partialNulaLevels = false;
+        this.partialNulaLevelsThisField = false;
 
         this.filterClass = canvasLib.getFilterForMode(mode);
         // Each mode says how many pixels it wants to draw into. Set this before
@@ -90,7 +92,8 @@ export class Display {
                       hasVideoNula,
                       onMissingVideoNula,
                       onPartialNulaLevelsChanged: (partial) => {
-                          display.pendingFrame.quantiseChroma = partial;
+                          display.partialNulaLevels = partial;
+                          if (partial) display.partialNulaLevelsThisField = true;
                           display.noteAnyNulaOverComposite();
                       },
                   },
@@ -138,7 +141,9 @@ export class Display {
             lineBaseOdd: video.lineBaseOdd,
             phaseBaseEven: video.phaseBaseEven,
             phaseBaseOdd: video.phaseBaseOdd,
+            quantiseChroma: this.partialNulaLevelsThisField,
         });
+        this.partialNulaLevelsThisField = this.partialNulaLevels;
         // How many fields the phosphor has decayed over since the frame the
         // canvas shows: one usually, more under a frame skip or when paints
         // outrun the animation frame, none for a repaint of the same frame, and
@@ -217,7 +222,7 @@ export class Display {
 
     /** Tells `onNulaOverComposite` when the TV picture shows NuLA levels its chroma can only guess at. */
     noteAnyNulaOverComposite() {
-        if (this.pendingFrame.quantiseChroma && this.filterClass === PALCompositeFilter) this.onNulaOverComposite?.();
+        if (this.partialNulaLevels && this.filterClass === PALCompositeFilter) this.onNulaOverComposite?.();
     }
 
     sizeCanvasFor(filterClass) {

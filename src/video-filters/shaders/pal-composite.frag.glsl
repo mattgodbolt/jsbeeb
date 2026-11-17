@@ -17,8 +17,7 @@ uniform vec2 uExtentCentre;
 uniform vec2 uExtentHalfSize;
 // How far the picture bows outwards at the middle of each edge, as a fraction of its half size
 uniform vec2 uCurvature;
-// Set while the palette has levels between off and full; the machine's encoder makes chroma from
-// each channel as on or off, switching at uChromaThreshold
+// Set while the palette has levels between off and full, when chroma takes each channel as on or off
 uniform bool uQuantiseChroma;
 uniform float uChromaThreshold;
 
