@@ -25,9 +25,12 @@ ROM waits for the answer, as it would for a disc.
 ## Using it
 
 In the desktop app, File, Serve VDFS Folder... chooses a folder. If none was being served the page starts again with it,
-which fits the ROM; if one was, the machine goes on, as though the disc had been swapped: a call that is waiting ends
-with "Disc changed", what is open is written to the old folder and closed, the current directory and library go back to
-the root, and the BBC's next call finds the new folder. Stop Serving VDFS Folder starts the page again without it.
+which fits the ROM, after asking, since the BBC restarts; if one was, the machine goes on, as though the disc had been
+swapped: a call that is waiting ends with "Disc changed", what is open is written to the old folder and closed, the
+current directory and library go back to the root, and the BBC's next call finds the new folder. Stop Serving VDFS
+Folder starts the page again without it, after asking. The folder is the main process's: it answers only the app's own
+page, and only for the folder the page was told of, so a write from before a change of folder that is still on its way
+is refused, and reported, and does not land in the new one.
 
 In a browser with the File System Access API (Chrome, Edge and other Chromium browsers; not Firefox or Safari), More,
 Serve a folder as VDFS... asks for a folder and starts the page again with it, as the desktop app does for its first
@@ -171,7 +174,12 @@ Some things follow from that:
 - A call that a break has ended may still have a request on its way to the store, and its result will not be used. An
   `OSFIND` for output that a break catches at the wrong moment may leave an empty file behind.
 - A store that never answers leaves the BBC waiting until BREAK. There is no timeout.
-- Cycle counts depend on how long the store takes, so a replay or a rewind over a VDFS call is not exact.
+- Cycle counts depend on how long the store takes, so a replay over a VDFS call is not exact. A replay (Call stack, step
+  back, trace) is told it cannot repeat one, as it is for a write to a disc, and stops short of it, so it cannot go back
+  past a call to the folder, which is thirty seconds or so of the run after one. It leaves the filing system as it was,
+  with its files open; a snapshot that is loaded does not, and closes them.
+- A response that a break or a restored snapshot took away is read as an error, "Disc changed", so a call that was
+  waiting when a snapshot was restored ends with that, and does not return as though it had done what it was asked.
 
 ### The response
 

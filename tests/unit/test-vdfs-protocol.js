@@ -224,6 +224,41 @@ describe("VDFS protocol", () => {
             expect(ports.openStreams).toBe(0);
         });
 
+        it("does not give a call's response the number of one that is being read, however many calls come between", () => {
+            const ports = portsSaying((call) => (call === Call.file ? "AB" : "X"));
+            makeCall(ports, Call.file);
+            const outer = ports.read(Port.stream);
+            const readOuter = () => {
+                ports.write(Port.stream, outer);
+                return ports.read(Port.data);
+            };
+            expect(readOuter()).toBe(Op.print);
+            expect(readOuter()).toBe("A".charCodeAt(0));
+            for (let nested = 0; nested < 600; nested++) {
+                makeCall(ports, Call.bput);
+                expect(readResponse(ports, {}).ops).toEqual([{ op: "print", text: "X" }]);
+            }
+            expect(readOuter()).toBe("B".charCodeAt(0));
+            expect(readOuter()).toBe(0);
+            expect(readOuter()).toBe(Op.done);
+        });
+
+        it("tells what reads a response that a break took that the disc changed", () => {
+            const ports = portsSaying(() => "AB");
+            makeCall(ports, Call.file);
+            const stream = ports.read(Port.stream);
+            ports.write(Port.stream, stream);
+            ports.read(Port.data);
+            ports.reset();
+            ports.write(Port.stream, stream);
+            const bytes = [];
+            for (let byte = ports.read(Port.data); bytes.length < 3 || byte !== 0; byte = ports.read(Port.data))
+                bytes.push(byte);
+            expect(bytes[0]).toBe(Op.error);
+            expect(bytes[1]).toBe(0xc9);
+            expect(String.fromCharCode(...bytes.slice(2))).toBe("Disc changed");
+        });
+
         it("goes round the 255 numbers it has for responses, so one that is never read is replaced", () => {
             const ports = portsSaying(() => "A");
             const seen = new Set();

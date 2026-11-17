@@ -95,6 +95,7 @@ describe("VDFS in a browser, the page's side", () => {
         let modals;
         let urlState;
         let notify;
+        let flush;
         let reloaded;
 
         const click = async (id) => {
@@ -112,6 +113,7 @@ describe("VDFS in a browser, the page's side", () => {
             modals = { confirm: vi.fn(async () => true) };
             reloaded = [];
             notify = vi.fn();
+            flush = vi.fn(async () => {});
             urlState = { urlWith: (params) => JSON.stringify(params) };
             vi.spyOn(window, "location", "get").mockReturnValue({
                 set href(url) {
@@ -121,15 +123,30 @@ describe("VDFS in a browser, the page's side", () => {
         });
 
         it("shows Serve, and Stop only when a folder is being served", () => {
-            attachVdfsMenu({ urlState, modals, notify, serving: false, folders });
+            attachVdfsMenu({ urlState, modals, notify, flush, serving: false, folders });
             expect(document.getElementById("vdfs-serve").hidden).toBe(false);
             expect(document.getElementById("vdfs-stop").hidden).toBe(true);
-            attachVdfsMenu({ urlState, modals, notify, serving: true, folders });
+            attachVdfsMenu({ urlState, modals, notify, flush, serving: true, folders });
             expect(document.getElementById("vdfs-stop").hidden).toBe(false);
         });
 
+        it("hands what is open to the folder it has before it keeps another and starts again", async () => {
+            const order = [];
+            flush.mockImplementation(async () => order.push("flush"));
+            folders.save.mockImplementation(async () => order.push("save"));
+            Object.defineProperty(urlState, "urlWith", {
+                value: () => {
+                    order.push("reload");
+                    return "x";
+                },
+            });
+            attachVdfsMenu({ urlState, modals, notify, flush, serving: false, folders });
+            await click("vdfs-serve");
+            expect(order).toEqual(["flush", "save", "reload"]);
+        });
+
         it("keeps the folder and starts again with it once the person says yes", async () => {
-            attachVdfsMenu({ urlState, modals, notify, serving: false, folders });
+            attachVdfsMenu({ urlState, modals, notify, flush, serving: false, folders });
             await click("vdfs-serve");
             expect(modals.confirm).toHaveBeenCalledWith(expect.stringContaining('"games"'), "Restart", "Cancel");
             expect(folders.save).toHaveBeenCalledWith({ name: "games" });
@@ -138,7 +155,7 @@ describe("VDFS in a browser, the page's side", () => {
         });
 
         it("keeps the folder it had, and does not restart, when the person says no or never picks one", async () => {
-            attachVdfsMenu({ urlState, modals, notify, serving: true, folders });
+            attachVdfsMenu({ urlState, modals, notify, flush, serving: true, folders });
             modals.confirm.mockResolvedValue(false);
             await click("vdfs-serve");
             folders.pick.mockRejectedValue(Object.assign(new Error("closed"), { name: "AbortError" }));
@@ -149,7 +166,7 @@ describe("VDFS in a browser, the page's side", () => {
         });
 
         it("does not start again if the folder cannot be kept or forgotten, or the picker fails, and says so", async () => {
-            attachVdfsMenu({ urlState, modals, notify, serving: true, folders });
+            attachVdfsMenu({ urlState, modals, notify, flush, serving: true, folders });
             folders.save.mockRejectedValue(new Error("no room"));
             await click("vdfs-serve");
             folders.forget.mockRejectedValue(new Error("locked"));
@@ -165,7 +182,7 @@ describe("VDFS in a browser, the page's side", () => {
         });
 
         it("says no to stopping, and forgets the folder before it starts again when told yes", async () => {
-            attachVdfsMenu({ urlState, modals, notify, serving: true, folders });
+            attachVdfsMenu({ urlState, modals, notify, flush, serving: true, folders });
             modals.confirm.mockResolvedValueOnce(false);
             await click("vdfs-stop");
             expect(folders.forget).not.toHaveBeenCalled();

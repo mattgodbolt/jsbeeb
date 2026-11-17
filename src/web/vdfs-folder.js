@@ -46,5 +46,5 @@ export const pickFolder = () => window.showDirectoryPicker({ id: "vdfs", mode: "
 
 /** @returns {FolderStore | null} the store of the folder the page was asked to serve, in a browser that can */
 export function browserVdfsStore(query) {
-    return query.vdfs && canChooseFolder() ? new FolderStore(() => savedFolder().catch(() => null)) : null;
+    return query.vdfs && canChooseFolder() ? new FolderStore(savedFolder) : null;
 }

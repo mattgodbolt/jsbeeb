@@ -1865,6 +1865,12 @@ describe("startSessionFromUrl", () => {
             { processor: Object.assign(fakeProcessor(), { hasTube: true }) },
             ["unsupported_machine"],
         ],
+        [
+            "a folder served as VDFS",
+            { server: "here" },
+            { processor: Object.assign(fakeProcessor(), { vdfs: {} }) },
+            ["unsupported_machine"],
+        ],
     ])("starts nothing for %s", async (_, params, contextOptions, failures) => {
         const sent = sentEvents();
         const { createRoom, join } = await started(params, contextOptions);
@@ -1967,6 +1973,7 @@ describe("joinLink", () => {
             "gp.fire1": "SPACE",
             FIRE: "SPACE",
             fire: "SPACE",
+            vdfs: true,
         };
         expect(joinLink("brave-owls-sing", "matt", params)).toBe(
             `${window.location.origin}/?client=brave-owls-sing&name=matt&audioLatencyMs=80&embed` +

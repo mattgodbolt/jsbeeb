@@ -1335,7 +1335,10 @@ export class Cpu6502 extends Base6502 {
                 break;
             case VdfsPortBase:
             case VdfsPortBase + 4:
-                if (this.vdfs) return this.vdfs.write(addr - VdfsPortBase, b);
+                if (this.vdfs) {
+                    if (addr === VdfsPortBase) this.inputLog?.refuse("a call to the VDFS folder");
+                    return this.vdfs.write(addr - VdfsPortBase, b);
+                }
                 break;
             case 0xfcfc:
                 if (addr === 0xfcff && this.hasMusic5000) {
@@ -1592,7 +1595,8 @@ export class Cpu6502 extends Base6502 {
         }
     }
 
-    restoreState(state) {
+    /** A replay puts the machine back to look at it, and passes `keepVdfs` so as not to close the files it has open. */
+    restoreState(state, { keepVdfs = false } = {}) {
         ++this.resetsAndLoads;
         // 1. Scheduler epoch first (so task offsets resolve correctly)
         this.scheduler.restoreState(state.scheduler);
@@ -1637,7 +1641,7 @@ export class Cpu6502 extends Base6502 {
         this.acia.restoreState(state.acia);
         this.adconverter.restoreState(state.adc);
         if (this.teletextAdaptor && state.teletextAdaptor) this.teletextAdaptor.restoreState(state.teletextAdaptor);
-        this.vdfs?.reset();
+        if (!keepVdfs) this.vdfs?.reset();
 
         // Touchscreen state, added without a version bump. Absent from an older snapshot, whose
         // touchscreen keeps its current state, unpolled.
@@ -2226,8 +2230,8 @@ export class AtomCpu6502 extends Cpu6502 {
     // This prevents super.restoreState() from corrupting the Atom memory map.
     romSelect() {}
 
-    restoreState(state) {
-        super.restoreState(state);
+    restoreState(state, options) {
+        super.restoreState(state, options);
 
         // Restore Atom-specific state after the parent has handled
         // CPU registers, memory, cycle tracking, and sub-components.

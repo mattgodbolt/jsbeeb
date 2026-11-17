@@ -186,6 +186,7 @@ export function readResponse(host, registersIn) {
         else if (op === Op.exec) {
             const high = readByte();
             ops.push({ op: "exec", address: ((high << 8) | readByte()) + 1 });
+            return { ops, ...registersIn };
         } else if (op === Op.error) {
             const number = readByte();
             ops.push({ op: "error", number, text: readText() });

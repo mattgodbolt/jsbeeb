@@ -2,7 +2,7 @@
 // number to, waits on while the host does the call, and then reads a stream of ops for it to carry out. See
 // docs/vdfs.md.
 
-import { VdfsError } from "./vdfs-errors.js";
+import { Errors, VdfsError } from "./vdfs-errors.js";
 
 export const PortBase = 0xfc60;
 export const Port = Object.freeze({ call: 0, a: 1, x: 2, y: 3, p: 4, stream: 5, data: 6, id: 7 });
@@ -152,9 +152,16 @@ export class VdfsPorts {
         }
     }
 
+    /** A stream that is not there was cut off by a break or a restored snapshot, and what reads it is told the disc changed. */
     _nextByte() {
-        const stream = this._streams.get(this._selectedStream);
-        if (!stream) return 0;
+        let stream = this._streams.get(this._selectedStream);
+        if (!stream) {
+            const response = new Response();
+            const { number, message } = Errors.discChanged();
+            response.error(number, message);
+            stream = { bytes: response.bytes, position: 0 };
+            this._streams.set(this._selectedStream, stream);
+        }
         const byte = stream.bytes[stream.position++];
         if (stream.position >= stream.bytes.length) this._streams.delete(this._selectedStream);
         return byte ?? 0;
@@ -195,9 +202,12 @@ export class VdfsPorts {
         else answer();
     }
 
+    /** A number not in use by a response still being read; if all are, the oldest unread one is replaced. */
     _newStream(bytes) {
-        const id = this._nextStream;
-        this._nextStream = id === LastStreamId ? 1 : id + 1;
+        const after = (id) => (id === LastStreamId ? 1 : id + 1);
+        let id = this._nextStream;
+        for (let tried = 0; this._streams.has(id) && tried < LastStreamId; tried++) id = after(id);
+        this._nextStream = after(id);
         this._streams.set(id, { bytes, position: 0 });
         return id;
     }

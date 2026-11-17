@@ -132,6 +132,13 @@ export class ChannelTable {
         return this._channels.filter(Boolean);
     }
 
+    /** Gives the channels of the file at `path` its new addresses or lock, so that closing one does not undo them. */
+    updateInfo(path, changes) {
+        for (const channel of this.all())
+            if (channel.path.length === path.length && channel.path.every((name, index) => sameName(name, path[index])))
+                channel.info = { ...channel.info, ...changes };
+    }
+
     /** Says that the file at `path` is no longer what its channels hold, as when it is deleted or replaced. */
     detachPath(path) {
         for (const channel of this.all())

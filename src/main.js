@@ -236,7 +236,7 @@ const machine = new Machine({
     stationId,
     userPort: accessibilitySwitches.userPort,
     printer,
-    vdfsStore: desktopVdfsStore(parsedQuery) ?? browserVdfsStore(parsedQuery),
+    vdfsStore: model.takesServiceRoms ? (desktopVdfsStore(parsedQuery) ?? browserVdfsStore(parsedQuery)) : null,
     speechOutput,
     video,
     audioHandler,
@@ -255,6 +255,8 @@ if (processor.vdfs) {
             offer: (message, label, run) => notifyVdfs(message, { action: { label, run } }),
         }).catch((error) => notifyVdfs(`The VDFS folder could not be set up (${error.message}).`));
     }
+} else if (parsedQuery.vdfs && !model.takesServiceRoms) {
+    notifyVdfs(`VDFS is not for the ${model.name}, so the folder is not being served.`);
 }
 panelArrangement.followMachine(() => machineMoment(processor));
 
@@ -295,8 +297,14 @@ const { keyboard } = new KeyboardSetup({
 });
 
 const modals = new Modals({ loop });
-if (!isDesktopApp() && canChooseFolder())
-    attachVdfsMenu({ urlState, modals, serving: !!processor.vdfs, notify: notifyVdfs });
+if (!isDesktopApp() && canChooseFolder() && model.takesServiceRoms)
+    attachVdfsMenu({
+        urlState,
+        modals,
+        serving: !!processor.vdfs,
+        notify: notifyVdfs,
+        flush: () => processor.vdfs?.flush(),
+    });
 openHelpOnTheTabForNow(() => loop.isPaused() || loop.mode === RunMode.debugging);
 
 const drives = new Drives({

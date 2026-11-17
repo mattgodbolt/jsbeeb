@@ -303,7 +303,7 @@ export class InputLog {
         this.sampleReplay = new SampleReplay(this.samples, from, this.samplesAt(from));
         try {
             restoreHostInputs(cpu, this.hostAt(from));
-            cpu.restoreState(snapshot);
+            cpu.restoreState(snapshot, { keepVdfs: true });
             cpu.debugInstruction.forgetStop();
             const startHash = stateHash(cpu);
             const reached = cpu.asReplay(hooks, () => {
@@ -804,7 +804,7 @@ export class ReplayHistory extends EventTarget {
         const { cpu } = this;
         this.log.withoutRecording(() => {
             restoreHostInputs(cpu, host);
-            cpu.restoreState(state);
+            cpu.restoreState(state, { keepVdfs: true });
         });
         cpu.video.fb32.set(picture);
         cpu.memStatOffset = memStatOffset;

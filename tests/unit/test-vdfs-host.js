@@ -746,6 +746,53 @@ describe("VDFS host", () => {
     });
 
     describe("writing files back", () => {
+        it("has flush wait for a save that is under way, as well as for the files it writes back", async () => {
+            const t = hostWith();
+            t.cpu.memory.set(new TextEncoder().encode("HI"), Data);
+            let release;
+            const gate = new Promise((resolve) => (release = resolve));
+            const writeFile = t.store.writeFile.bind(t.store);
+            t.store.writeFile = async (path, details) => {
+                await gate;
+                return writeFile(path, details);
+            };
+            const saving = t.osfile(Osfile.save, "OUT", { start: Data, end: Data + 2 });
+            await new Promise((resolve) => setImmediate(resolve));
+            let flushed = false;
+            const flushing = t.host.flush().then(() => (flushed = true));
+            await new Promise((resolve) => setImmediate(resolve));
+            expect(flushed).toBe(false);
+            release();
+            await flushing;
+            expect(text(t.get("OUT").data)).toBe("HI");
+            await saving;
+        });
+
+        it("keeps a lock or an address given to a file while it is open when it is closed", async () => {
+            const t = hostWith([file("DATA", "x")]);
+            const handle = (await t.open("DATA", Osfind.update)).a;
+            await t.command("SETINFO DATA 2000 2005");
+            await t.command("ACCESS DATA L");
+            await t.call(Call.bput, { a: 0x41, y: handle });
+            await t.call(Call.find, { a: Osfind.close, y: handle });
+            expect(t.get("DATA")).toMatchObject({ locked: true, load: 0x2000, exec: 0x2005 });
+            expect(text(t.get("DATA").data)).toBe("A");
+        });
+
+        it("shows a BBC nothing in the host's words that it would act on", async () => {
+            const t = hostWith();
+            t.store.writeFile = async () => {
+                throw new Error("bad\u0016reason\u007f");
+            };
+            t.cpu.memory.set([1], Data);
+            expect(errorOf(await t.osfile(Osfile.save, "OUT", { start: Data, end: Data + 1 })).text).toBe(
+                "Disc fault: bad?reason?",
+            );
+            t.store.skipped = ["x\u0016y"];
+            putString(t.cpu, Name, "");
+            expect(printed(await t.call(Call.fsc, { a: 5, ...xy(Name) }))).toContain("cannot name x?y");
+        });
+
         it("keeps every file open, to be written again, when one cannot be written as they are all closed", async () => {
             const t = hostWith();
             const [first, second] = [(await t.open("ONE", Osfind.write)).a, (await t.open("TWO", Osfind.write)).a];

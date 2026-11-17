@@ -65,15 +65,13 @@ export default defineConfig({
                 icons: PwaIcons,
             },
             injectManifest: {
-                // The big optional data (teletext, econet, benchmarks) and the discs stay out of the install, and so
-                // does the VDFS ROM, which only the desktop app fits.
+                // The big optional data (teletext, econet, benchmarks) and the discs stay out of the install.
                 globPatterns: [
                     "index.html",
                     "jsbeeb-icon.png",
                     "assets/*.{js,css}",
                     "{icons,images,fonts,sounds,roms}/**/*",
                 ],
-                globIgnores: ["roms/vdfs.rom"],
                 maximumFileSizeToCacheInBytes: LargestPrecachedFileBytes,
             },
         }),

@@ -6,6 +6,7 @@ import { ArgumentParser } from "argparse";
 
 import { getArguments } from "./args.js";
 import { FsStore } from "../vdfs-fs-store.js";
+import { isAppPage } from "./app-page.js";
 import { drainVdfs, pageKeepsRunning, swapVdfsFolder } from "./vdfs-swap.js";
 
 const store = new Store();
@@ -16,6 +17,9 @@ const isFolder = (folder) => typeof folder === "string" && fs.existsSync(folder)
 let vdfsStore = isFolder(savedFolder) ? new FsStore(savedFolder) : null;
 const pendingVdfsOperations = new Set();
 const FlushTimeoutMs = 3000;
+const AppPagePath = path.join(app.getAppPath(), "dist", "index.html");
+// Which folder the page believes it is talking to; a call from before a change is the old folder's, and is refused.
+let vdfsEpoch = 0;
 let readyToQuit = false;
 
 function vdfsOperation(run) {
@@ -30,26 +34,39 @@ function vdfsOperation(run) {
 const isNames = (value) => Array.isArray(value) && value.every((name) => typeof name === "string");
 const isPath = (value) => isNames(value) && value.length > 0;
 
-ipcMain.handle("vdfs-find", (event, directory, name) => {
+/** Answers `channel` for the app's own page, as the page it was served for. Whatever else the window shows has no folder. */
+function handleVdfs(channel, handler) {
+    ipcMain.handle(channel, (event, epoch, ...args) => {
+        if (!isAppPage(event, AppPagePath)) throw new Error("Only the app's own page may use the VDFS folder");
+        if (epoch !== vdfsEpoch) throw new Error("The VDFS folder has changed");
+        return handler(...args);
+    });
+}
+
+ipcMain.on("vdfs-epoch", (event) => {
+    event.returnValue = isAppPage(event, AppPagePath) ? vdfsEpoch : -1;
+});
+
+handleVdfs("vdfs-find", (directory, name) => {
     if (!isNames(directory) || typeof name !== "string") throw new Error("Not a VDFS name to find");
     return vdfsOperation((vdfs) => vdfs.find(directory, name));
 });
-ipcMain.handle("vdfs-list", (event, directory) => {
+handleVdfs("vdfs-list", (directory) => {
     if (!isNames(directory)) throw new Error("Not a VDFS directory to list");
     return vdfsOperation((vdfs) => vdfs.list(directory));
 });
-ipcMain.handle("vdfs-read", (event, volumePath) => {
+handleVdfs("vdfs-read", (volumePath) => {
     if (!isPath(volumePath)) throw new Error("Not a VDFS file to read");
     return vdfsOperation((vdfs) => vdfs.read(volumePath));
 });
-ipcMain.handle("vdfs-write-file", (event, volumePath, details) => {
+handleVdfs("vdfs-write-file", (volumePath, details) => {
     if (!isPath(volumePath) || !(details?.data instanceof Uint8Array)) throw new Error("Not a VDFS file to write");
     const { data, load, exec, locked } = details;
     return vdfsOperation((vdfs) =>
         vdfs.writeFile(volumePath, { data, load: load >>> 0, exec: exec >>> 0, locked: !!locked }),
     );
 });
-ipcMain.handle("vdfs-set-info", (event, volumePath, changes) => {
+handleVdfs("vdfs-set-info", (volumePath, changes) => {
     if (!isPath(volumePath) || typeof changes !== "object" || changes === null)
         throw new Error("Not VDFS information to set");
     const { load, exec, locked } = changes;
@@ -61,11 +78,11 @@ ipcMain.handle("vdfs-set-info", (event, volumePath, changes) => {
         }),
     );
 });
-ipcMain.handle("vdfs-make-directory", (event, volumePath) => {
+handleVdfs("vdfs-make-directory", (volumePath) => {
     if (!isPath(volumePath)) throw new Error("Not a VDFS directory to make");
     return vdfsOperation((vdfs) => vdfs.makeDirectory(volumePath));
 });
-ipcMain.handle("vdfs-remove", (event, volumePath) => {
+handleVdfs("vdfs-remove", (volumePath) => {
     if (!isPath(volumePath)) throw new Error("Not a VDFS file to remove");
     return vdfsOperation((vdfs) => vdfs.remove(volumePath));
 });
@@ -210,7 +227,7 @@ function askPageToFlush(browserWindow) {
             resolve();
         };
         const answered = (event) => {
-            if (event.sender === browserWindow.webContents) done();
+            if (event.sender === browserWindow.webContents && isAppPage(event, AppPagePath)) done();
         };
         const timer = setTimeout(done, FlushTimeoutMs);
         ipcMain.on("vdfs-flushed", answered);
@@ -218,29 +235,46 @@ function askPageToFlush(browserWindow) {
     });
 }
 
+/** The window a menu click was for, which on a Mac with none open is none. */
+const windowFor = (browserWindow) => browserWindow ?? BrowserWindow.getAllWindows()[0] ?? null;
+
 /** Serves `folder` as VDFS, or no folder, and starts the page again, which has to be built with it. */
-async function serveVdfsFolder(browserWindow, folder) {
+async function serveVdfsFolder(menuWindow, folder) {
+    const browserWindow = windowFor(menuWindow);
     // A page that has VDFS already has its ROM, and finds the new folder on its next call; any other starts again.
     const pageHasVdfs = pageKeepsRunning({ wasServing: vdfsStore !== null, folder });
+    if (browserWindow && !pageHasVdfs) {
+        const { response } = await dialog.showMessageBox(browserWindow, {
+            type: "question",
+            message: folder ? "Serve this folder as VDFS?" : "Stop serving the VDFS folder?",
+            detail: "The BBC restarts, and anything in it that is not saved is lost.",
+            buttons: ["Restart", "Cancel"],
+            defaultId: 0,
+            cancelId: 1,
+        });
+        if (response !== 0) return;
+    }
     await swapVdfsFolder({
-        flushPages: () => (vdfsStore ? [askPageToFlush(browserWindow)] : []),
+        flushPages: () => (vdfsStore && browserWindow ? [askPageToFlush(browserWindow)] : []),
         inFlight: () => pendingVdfsOperations,
         changeFolder: () => {
             if (folder) store.set("vdfsFolder", folder);
             else store.delete("vdfsFolder");
             vdfsStore = folder ? new FsStore(folder) : null;
+            vdfsEpoch++;
             setMenu(menuPanels);
         },
         loadPage: async () => {
-            if (browserWindow.isDestroyed()) return;
-            if (pageHasVdfs) browserWindow.webContents.send("vdfs-changed");
+            if (!browserWindow || browserWindow.isDestroyed()) return;
+            if (pageHasVdfs) browserWindow.webContents.send("vdfs-changed", vdfsEpoch);
             else await browserWindow.loadFile("dist/index.html", { query: pageQuery() });
         },
     });
 }
 
-async function chooseVdfsFolder(_, browserWindow) {
-    const result = await dialog.showOpenDialog(browserWindow, {
+async function chooseVdfsFolder(_, menuWindow) {
+    const browserWindow = windowFor(menuWindow);
+    const result = await dialog.showOpenDialog(...(browserWindow ? [browserWindow] : []), {
         title: "Choose a folder to serve as VDFS",
         properties: ["openDirectory", "createDirectory"],
     });

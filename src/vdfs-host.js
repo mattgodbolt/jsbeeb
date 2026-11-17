@@ -3,7 +3,7 @@
 // device the ROM talks to is vdfs-protocol.js. See docs/vdfs.md.
 
 import { Channel, ChannelTable, FirstHandle, LastHandle } from "./vdfs-channels.js";
-import { Errors, VdfsError } from "./vdfs-errors.js";
+import { Errors, VdfsError, printable } from "./vdfs-errors.js";
 import { GuestMemory } from "./vdfs-guest-memory.js";
 import { hexUpper } from "./hex.js";
 import { LockedAttribute, MaxNameLength, parsePath, sameName, wildcardMatcher } from "./vdfs-names.js";
@@ -101,6 +101,7 @@ export class VdfsHost {
         /** @type {(error: Error) => void} called when a file that was open could not be written, once the BBC has gone */
         this.onWriteFailure = (error) => console.error("VDFS could not write a file:", error);
         this._writes = new Set();
+        this._calls = new Set();
         /** @type {Promise<void> | null} while there is one, calls wait for it: the folder is changing */
         this._held = null;
         this._release = null;
@@ -143,7 +144,7 @@ export class VdfsHost {
     /** @returns {Promise<void>} once what the BBC has written, open files included, is in the store */
     async flush() {
         this._backgroundWriteBack(this.channels.all());
-        await Promise.allSettled([...this._writes]);
+        await this._settled();
     }
 
     /** Closes every file, written back, and the current directory and library are the root's. */
@@ -226,12 +227,26 @@ export class VdfsHost {
         return this._writes.size > 0 ? Promise.allSettled([...this._writes]) : null;
     }
 
+    /** @returns {Promise<unknown>} once the writes owed, and the calls that are under way, are over */
+    _settled() {
+        return Promise.allSettled([...this._writes, ...this._calls]);
+    }
+
     _dispatch(call, registers, response, turn) {
+        const result = this._route(call, registers, response, turn);
+        if (result instanceof Promise) {
+            const tracked = result.catch(() => {}).finally(() => this._calls.delete(tracked));
+            this._calls.add(tracked);
+        }
+        return result;
+    }
+
+    _route(call, registers, response, turn) {
         const waiting = this._mustWait();
         if (waiting)
             return waiting.then(() => {
                 turn.check();
-                return this._dispatch(call, registers, response, turn);
+                return this._route(call, registers, response, turn);
             });
         const fs = this._via(turn);
         switch (call) {
@@ -378,7 +393,8 @@ export class VdfsHost {
             case Osfile.writeLoad:
             case Osfile.writeExec:
             case Osfile.writeAttributes:
-                if (found.entry && !found.entry.isDirectory) await fs.setInfo(found.path, this._changes(action, block));
+                if (found.entry && !found.entry.isDirectory)
+                    await this._setInfoOf(found.path, this._changes(action, block), fs);
                 registers.a = this._objectType(found.entry);
                 break;
             case Osfile.readInformation:
@@ -645,7 +661,7 @@ export class VdfsHost {
         const [name, attributes = ""] = argument.split(/\s+/);
         if (!name) throw Errors.badName();
         const { path, entry } = await this._existing(name, fs);
-        if (!entry.isDirectory) await fs.setInfo(path, { locked: attributes.toUpperCase().includes("L") });
+        if (!entry.isDirectory) await this._setInfoOf(path, { locked: attributes.toUpperCase().includes("L") }, fs);
     }
 
     /** `*SETINFO name load [exec]`: the addresses are hexadecimal, and exec stays as it was if it is left out. */
@@ -663,7 +679,12 @@ export class VdfsHost {
         const { path, entry } = await this._existing(name, fs);
         if (entry.isDirectory) throw Errors.accessViolation();
         if (entry.locked) throw Errors.locked();
+        await this._setInfoOf(path, changes, fs);
+    }
+
+    async _setInfoOf(path, changes, fs) {
         await fs.setInfo(path, changes);
+        this.channels.updateInfo(path, changes);
     }
 
     /** Removes a file, or a directory with nothing in it, and puts the current directory and library back at the root if it was. */
@@ -717,7 +738,7 @@ export class VdfsHost {
         });
         if (!text.endsWith(Carriage)) text += Carriage;
         if (skipped.length > 0)
-            text += `${skipped.length} not shown: the BBC cannot name ${skipped.slice(0, 3).join(", ")}${skipped.length > 3 ? " and more" : ""}${Carriage}`;
+            text += `${skipped.length} not shown: the BBC cannot name ${printable(skipped.slice(0, 3).join(", "))}${skipped.length > 3 ? " and more" : ""}${Carriage}`;
         response.print(text);
     }
 

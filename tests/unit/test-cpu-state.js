@@ -10,7 +10,7 @@ import { setNodeBasePath } from "../../src/loader.js";
 import { hexbyte, hexword } from "../../src/hex.js";
 import { expectSnapshotRoundTrips } from "../helpers/snapshot-round-trip.js";
 import { Channel } from "../../src/vdfs-channels.js";
-import { Port, PortBase } from "../../src/vdfs-protocol.js";
+import { Call, Port, PortBase } from "../../src/vdfs-protocol.js";
 import { MemoryStore, file } from "../helpers/vdfs.js";
 import { machineWithRealChips } from "./helpers.js";
 
@@ -961,6 +961,28 @@ describe("Cpu6502 VDFS", () => {
         const before = cpu.vdfs.openStreams;
         for (let offset = 0; offset < 8; offset++) expect(cpu.peekmem(PortBase + offset)).toBe(0xff);
         expect(cpu.vdfs.openStreams).toBe(before);
+    });
+
+    it("keeps its files and where it was when a replay puts the machine back, and not when a snapshot is loaded", () => {
+        const cpu = machineWithRealChips(TEST_6502, { vdfsStore: storeOf(file("DATA", "x")) });
+        cpu.vdfs.selected = true;
+        cpu.vdfs.directory = ["SUB"];
+        const info = { load: 0, exec: 0, locked: false };
+        cpu.vdfs.channels.open(new Channel({ path: ["DATA"], data: Uint8Array.of(1), info, writable: false }));
+        cpu.restoreState(cpu.snapshotState(), { keepVdfs: true });
+        expect(cpu.vdfs).toMatchObject({ selected: true, directory: ["SUB"] });
+        expect(cpu.vdfs.channels.get(0x11)).toBeDefined();
+        cpu.restoreState(cpu.snapshotState());
+        expect(cpu.vdfs).toMatchObject({ selected: false, directory: [] });
+    });
+
+    it("tells a replay that it cannot repeat a call to the folder, since the folder would be called again", () => {
+        const cpu = fake6502(findModel("B-DFS1.2"), { vdfsStore: storeOf() });
+        const refused = [];
+        cpu.inputLog = { refuse: (reason) => refused.push(reason) };
+        cpu.writemem(PortBase + Port.a, 1);
+        cpu.writemem(PortBase + Port.call, Call.args);
+        expect(refused).toEqual(["a call to the VDFS folder"]);
     });
 
     it("has its ports where the ROM expects them, and nothing on a machine without it", () => {

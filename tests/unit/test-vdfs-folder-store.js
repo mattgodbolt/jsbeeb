@@ -32,6 +32,14 @@ describe("VDFS folder store, over a folder the browser handed over", () => {
             await expect(store.list([])).rejects.toThrow("No folder has been chosen");
         });
 
+        it("says why, and not that nothing was chosen, when it cannot find out what was", async () => {
+            store = new FolderStore(async () => {
+                throw new Error("database is damaged");
+            });
+            await expect(store.permission()).rejects.toThrow("database is damaged");
+            await expect(store.list([])).rejects.toThrow("database is damaged");
+        });
+
         it("tells a refusal from a question that has not been asked", async () => {
             root.permission = "denied";
             await expect(store.find([], "X")).rejects.toThrow("site settings");
