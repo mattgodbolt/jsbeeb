@@ -2,7 +2,7 @@
 // number to, waits on while the host does the call, and then reads a stream of ops for it to carry out. See
 // docs/vdfs.md.
 
-import { Errors, VdfsError } from "./vdfs-errors.js";
+import { Errors, VdfsError, printable } from "./vdfs-errors.js";
 
 export const PortBase = 0xfc60;
 export const Port = Object.freeze({ call: 0, a: 1, x: 2, y: 3, p: 4, stream: 5, data: 6, id: 7 });
@@ -10,6 +10,8 @@ export const HostId = 0x56;
 export const VdfsRom = "vdfs.rom";
 /** What a read of the call port gives while the host is still doing the call. */
 export const Busy = 0x80;
+/** What a read of a port gives while a replay runs the ROM, which must not reach the folder: a host that is idle. */
+export const inertRead = (offset) => (offset === Port.id ? HostId : 0);
 
 export const Call = Object.freeze({ service: 0, file: 1, args: 2, bget: 3, bput: 4, gbpb: 5, find: 6, fsc: 7 });
 export const Op = Object.freeze({ done: 0, print: 1, error: 2, exec: 3, claim: 4 });
@@ -113,6 +115,34 @@ export class VdfsPorts {
         this._busy = false;
     }
 
+    /** What the device holds between one of the ROM's reads and the next, for a snapshot to restore the ROM mid-call. */
+    snapshotState() {
+        return {
+            request: { ...this._request },
+            nextStream: this._nextStream,
+            responseStream: this._responseStream,
+            selectedStream: this._selectedStream,
+            busy: this._busy,
+            streams: [...this._streams].map(([id, { bytes, position }]) => [id, [...bytes], position]),
+        };
+    }
+
+    /** A call that was waiting is answered with "Disc changed", since the store it was waiting on is not the machine's. */
+    restoreState(state) {
+        this.reset();
+        this._request = { ...state.request };
+        this._nextStream = state.nextStream;
+        this._responseStream = state.responseStream;
+        this._selectedStream = state.selectedStream;
+        for (const [id, bytes, position] of state.streams) this._streams.set(id, { bytes: [...bytes], position });
+        if (state.busy) {
+            const response = new Response();
+            const { number, message } = Errors.discChanged();
+            response.error(number, message);
+            this._responseStream = this._newStream(response.bytes);
+        }
+    }
+
     /** A break: a call under way has no one to answer, and no response is left unread. */
     reset() {
         this._epoch++;
@@ -182,7 +212,7 @@ export class VdfsPorts {
             else if (error instanceof VdfsError) response.error(error.number, error.message);
             else {
                 console.error("VDFS host failure:", error);
-                response.error(HostFailureNumber, `VDFS host failure: ${error.message}`);
+                response.error(HostFailureNumber, `VDFS host failure: ${printable(error.message)}`);
             }
             this._responseStream = this._newStream(response.bytes);
             this._busy = false;
@@ -202,7 +232,7 @@ export class VdfsPorts {
         else answer();
     }
 
-    /** A number not in use by a response still being read; if all are, the oldest unread one is replaced. */
+    /** A number not in use by a response still being read; if all are, the one that would come next is replaced. */
     _newStream(bytes) {
         const after = (id) => (id === LastStreamId ? 1 : id + 1);
         let id = this._nextStream;

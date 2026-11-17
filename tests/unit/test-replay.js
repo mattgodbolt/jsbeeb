@@ -8,6 +8,7 @@ import { findModel } from "../../src/models.js";
 import { NoReplayHooks } from "../../src/6502.js";
 import { singleStep } from "../helpers/single-step.js";
 import { loadBytes } from "./helpers.js";
+import { MemoryStore } from "../helpers/vdfs.js";
 import { bankView, PagedView, ShadowView } from "../../src/paging.js";
 
 const CallAt = 0x2000;
@@ -322,6 +323,7 @@ describe("Finding the last write to a byte", () => {
 describe("ReplayHistory", () => {
     it.each([
         ["with Econet fitted", { econet: true }, () => {}, /Econet/],
+        ["with a folder served as VDFS", { vdfsStore: new MemoryStore() }, () => {}, /VDFS/],
         ["while the cassette motor runs", {}, (cpu) => cpu.acia.setMotor(true), /cassette motor runs/],
         [
             "while an Atom's tape plays",

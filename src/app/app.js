@@ -18,8 +18,8 @@ let vdfsStore = isFolder(savedFolder) ? new FsStore(savedFolder) : null;
 const pendingVdfsOperations = new Set();
 const FlushTimeoutMs = 3000;
 const AppPagePath = path.join(app.getAppPath(), "dist", "index.html");
-// Which folder the page believes it is talking to; a call from before a change is the old folder's, and is refused.
 let vdfsEpoch = 0;
+let mainWindow = null;
 let readyToQuit = false;
 
 function vdfsOperation(run) {
@@ -141,14 +141,14 @@ async function createWindow() {
     const iconPath = path.join(import.meta.dirname, "..", "..", "public", "jsbeeb-icon.png");
     const icon = nativeImage.createFromPath(iconPath);
 
-    const win = new BrowserWindow({
+    const win = (mainWindow = new BrowserWindow({
         width: 1280,
         height: 1024,
         icon: icon,
         webPreferences: {
             preload: path.join(import.meta.dirname, "preload.js"),
         },
-    });
+    }));
 
     // Load saved settings, then override with command-line args
     const query = pageQuery();
@@ -235,12 +235,12 @@ function askPageToFlush(browserWindow) {
     });
 }
 
-/** The window a menu click was for, which on a Mac with none open is none. */
-const windowFor = (browserWindow) => browserWindow ?? BrowserWindow.getAllWindows()[0] ?? null;
+/** The window the emulator is in, whichever window a menu click was for: the others have no folder to change. */
+const emulatorWindow = () => (mainWindow && !mainWindow.isDestroyed() ? mainWindow : null);
 
 /** Serves `folder` as VDFS, or no folder, and starts the page again, which has to be built with it. */
-async function serveVdfsFolder(menuWindow, folder) {
-    const browserWindow = windowFor(menuWindow);
+async function serveVdfsFolder(folder) {
+    const browserWindow = emulatorWindow();
     // A page that has VDFS already has its ROM, and finds the new folder on its next call; any other starts again.
     const pageHasVdfs = pageKeepsRunning({ wasServing: vdfsStore !== null, folder });
     if (browserWindow && !pageHasVdfs) {
@@ -272,13 +272,13 @@ async function serveVdfsFolder(menuWindow, folder) {
     });
 }
 
-async function chooseVdfsFolder(_, menuWindow) {
-    const browserWindow = windowFor(menuWindow);
+async function chooseVdfsFolder() {
+    const browserWindow = emulatorWindow();
     const result = await dialog.showOpenDialog(...(browserWindow ? [browserWindow] : []), {
         title: "Choose a folder to serve as VDFS",
         properties: ["openDirectory", "createDirectory"],
     });
-    if (!result.canceled) await serveVdfsFolder(browserWindow, result.filePaths[0]);
+    if (!result.canceled) await serveVdfsFolder(result.filePaths[0]);
 }
 
 function showModal(modalId) {
@@ -369,7 +369,7 @@ const template = (panels) => [
             {
                 label: "Stop Serving VDFS Folder",
                 enabled: vdfsStore !== null,
-                click: (_, browserWindow) => serveVdfsFolder(browserWindow, null),
+                click: () => serveVdfsFolder(null),
             },
             { type: "separator" },
             {

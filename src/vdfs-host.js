@@ -105,6 +105,7 @@ export class VdfsHost {
         /** @type {Promise<void> | null} while there is one, calls wait for it: the folder is changing */
         this._held = null;
         this._release = null;
+        this._folderGeneration = 0;
         this._commands = {
             ACCESS: (argument, response, fs) => this._access(argument, fs),
             CAT: (argument, response, fs) => this._catalogue(argument, response, fs),
@@ -141,6 +142,17 @@ export class VdfsHost {
         this.library = [];
     }
 
+    /** What a snapshot keeps of the host: the device the ROM talks to. Open files and the directory are not kept. */
+    snapshotState() {
+        return { ports: this.ports.snapshotState() };
+    }
+
+    /** Puts the device as the snapshot had it, and the filing system back to the OS's own, as a break does. */
+    restoreState(state) {
+        this.reset();
+        if (state?.ports) this.ports.restoreState(state.ports);
+    }
+
     /** @returns {Promise<void>} once what the BBC has written, open files included, is in the store */
     async flush() {
         this._backgroundWriteBack(this.channels.all());
@@ -168,6 +180,7 @@ export class VdfsHost {
 
     /** Lets the calls that have waited go on, to the store there is now. */
     release() {
+        this._folderGeneration++;
         this._release?.();
         this._held = null;
         this._release = null;
@@ -176,8 +189,11 @@ export class VdfsHost {
     /** Writes each file back, reporting the ones that cannot be, and going on to the rest. */
     async _writeBackEach(channels) {
         const fs = this._via(null);
+        const generation = this._folderGeneration;
         for (const channel of channels) {
             try {
+                if (generation !== this._folderGeneration)
+                    throw new Error("The VDFS folder changed before it was written");
                 await this._writeBack(channel, fs);
             } catch (error) {
                 this._reportWriteFailure(error);

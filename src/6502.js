@@ -9,7 +9,7 @@ import { AmxMouse } from "./amx-mouse.js";
 import { TeletextAdaptor } from "./teletext_adaptor.js";
 import { Filestore } from "./filestore.js";
 import { VdfsHost } from "./vdfs-host.js";
-import { PortBase as VdfsPortBase, VdfsRom } from "./vdfs-protocol.js";
+import { PortBase as VdfsPortBase, VdfsRom, inertRead } from "./vdfs-protocol.js";
 import { FakeRelayNoise } from "./relaynoise.js";
 import { AtomPPIA } from "./ppia.js";
 import { AtomMMC2 } from "./mmc.js";
@@ -1037,7 +1037,8 @@ export class Cpu6502 extends Base6502 {
                 break;
             case VdfsPortBase:
             case VdfsPortBase + 4:
-                if (this.vdfs) return this.vdfs.read(addr - VdfsPortBase);
+                if (this.vdfs)
+                    return this.replaying ? inertRead(addr - VdfsPortBase) : this.vdfs.read(addr - VdfsPortBase);
                 break;
             case 0xfe00:
             case 0xfe04:
@@ -1335,10 +1336,7 @@ export class Cpu6502 extends Base6502 {
                 break;
             case VdfsPortBase:
             case VdfsPortBase + 4:
-                if (this.vdfs) {
-                    if (addr === VdfsPortBase) this.inputLog?.refuse("a call to the VDFS folder");
-                    return this.vdfs.write(addr - VdfsPortBase, b);
-                }
+                if (this.vdfs && !this.replaying) return this.vdfs.write(addr - VdfsPortBase, b);
                 break;
             case 0xfcfc:
                 if (addr === 0xfcff && this.hasMusic5000) {
@@ -1568,6 +1566,7 @@ export class Cpu6502 extends Base6502 {
             touchScreen: this.touchScreen.snapshotState(),
             fdc: this.fdc.snapshotState(),
             teletextAdaptor: this.teletextAdaptor ? this.teletextAdaptor.snapshotState() : undefined,
+            ...(this.vdfs && { vdfs: this.vdfs.snapshotState() }),
             tube: this.hasTube ? this.tube.snapshotState({ includeRoms, into: into?.tube }) : undefined,
             ...(this.amxMouse && { amxMouse: this.amxMouse.snapshotState() }),
         };
@@ -1595,7 +1594,7 @@ export class Cpu6502 extends Base6502 {
         }
     }
 
-    /** A replay puts the machine back to look at it, and passes `keepVdfs` so as not to close the files it has open. */
+    /** A replay that puts the machine back afterwards passes `keepVdfs`, so as not to close the files it has open. */
     restoreState(state, { keepVdfs = false } = {}) {
         ++this.resetsAndLoads;
         // 1. Scheduler epoch first (so task offsets resolve correctly)
@@ -1641,7 +1640,7 @@ export class Cpu6502 extends Base6502 {
         this.acia.restoreState(state.acia);
         this.adconverter.restoreState(state.adc);
         if (this.teletextAdaptor && state.teletextAdaptor) this.teletextAdaptor.restoreState(state.teletextAdaptor);
-        if (!keepVdfs) this.vdfs?.reset();
+        if (!keepVdfs) this.vdfs?.restoreState(state.vdfs);
 
         // Touchscreen state, added without a version bump. Absent from an older snapshot, whose
         // touchscreen keeps its current state, unpolled.

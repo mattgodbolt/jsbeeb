@@ -259,6 +259,33 @@ describe("VDFS protocol", () => {
             expect(String.fromCharCode(...bytes.slice(2))).toBe("Disc changed");
         });
 
+        it("can be put back from a snapshot partway through reading a response, and ends a call that was waiting", async () => {
+            const ports = portsSaying(() => "AB");
+            makeCall(ports, Call.file);
+            const stream = ports.read(Port.stream);
+            ports.write(Port.stream, stream);
+            ports.read(Port.data);
+            ports.read(Port.data);
+            const state = JSON.parse(JSON.stringify(ports.snapshotState()));
+            const restored = portsSaying(() => "ZZ");
+            restored.restoreState(state);
+            restored.write(Port.stream, stream);
+            expect([restored.read(Port.data), restored.read(Port.data), restored.read(Port.data)]).toEqual([
+                "B".charCodeAt(0),
+                0,
+                Op.done,
+            ]);
+
+            const slow = new VdfsPorts(() => new Promise(() => {}));
+            makeCall(slow, Call.file);
+            expect(slow.read(Port.call)).toBe(Busy);
+            const waiting = portsSaying(() => "ZZ");
+            waiting.restoreState(JSON.parse(JSON.stringify(slow.snapshotState())));
+            expect(waiting.read(Port.call)).toBe(0);
+            waiting.write(Port.stream, waiting.read(Port.stream));
+            expect(waiting.read(Port.data)).toBe(Op.error);
+        });
+
         it("goes round the 255 numbers it has for responses, so one that is never read is replaced", () => {
             const ports = portsSaying(() => "A");
             const seen = new Set();

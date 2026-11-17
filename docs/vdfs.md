@@ -28,9 +28,9 @@ In the desktop app, File, Serve VDFS Folder... chooses a folder. If none was bei
 which fits the ROM, after asking, since the BBC restarts; if one was, the machine goes on, as though the disc had been
 swapped: a call that is waiting ends with "Disc changed", what is open is written to the old folder and closed, the
 current directory and library go back to the root, and the BBC's next call finds the new folder. Stop Serving VDFS
-Folder starts the page again without it, after asking. The folder is the main process's: it answers only the app's own
-page, and only for the folder the page was told of, so a write from before a change of folder that is still on its way
-is refused, and reported, and does not land in the new one.
+Folder starts the page again without it, after asking. The folder is the main process's: it answers only the app's own page, and only for the folder the page was told of.
+What the page had not yet written when the folder changed is not written to the new one: the page reports it, and so
+does the main process for a call that was on its way.
 
 In a browser with the File System Access API (Chrome, Edge and other Chromium browsers; not Firefox or Safari), More,
 Serve a folder as VDFS... asks for a folder and starts the page again with it, as the desktop app does for its first
@@ -107,8 +107,8 @@ DNFS) and the Master's and the Compact's MOS contain.
 Not done: `OSGBPB` 5 to 8, `OSFILE` 7, `OSARGS` with A=1 and Y=0 (the rest of the command line), `*RENAME`, `*COPY`,
 `*TITLE`, `*OPT` (it is accepted and ignored), `*ACCESS` of a wildcard (it takes one name), sector
 access (`OSWORD` &7F, or a game that drives the disc controller itself), and the second processor: an address that is
-not in the I/O processor (`&FFFFxxxx`) is an error when one is fitted. A snapshot does not hold open files, and
-restoring one closes them. `BGET` at the end of a file gives `&FE` with the carry set each time, where a DFS raises
+not in the I/O processor (`&FFFFxxxx`) is an error when one is fitted. A snapshot does not hold open
+files, and restoring one closes them. `BGET` at the end of a file gives `&FE` with the carry set each time, where a DFS raises
 "EOF" the second time, and a file can be opened twice: the DFS says "Open", this does not, and the last close wins.
 
 ## The ROM and the host
@@ -174,12 +174,13 @@ Some things follow from that:
 - A call that a break has ended may still have a request on its way to the store, and its result will not be used. An
   `OSFIND` for output that a break catches at the wrong moment may leave an empty file behind.
 - A store that never answers leaves the BBC waiting until BREAK. There is no timeout.
-- Cycle counts depend on how long the store takes, so a replay over a VDFS call is not exact. A replay (Call stack, step
-  back, trace) is told it cannot repeat one, as it is for a write to a disc, and stops short of it, so it cannot go back
-  past a call to the folder, which is thirty seconds or so of the run after one. It leaves the filing system as it was,
-  with its files open; a snapshot that is loaded does not, and closes them.
-- A response that a break or a restored snapshot took away is read as an error, "Disc changed", so a call that was
-  waiting when a snapshot was restored ends with that, and does not return as though it had done what it was asked.
+- Cycle counts depend on how long the store takes, so a replay cannot repeat a VDFS call. Step back, Call stack, trace
+  and the other searches that replay the run are not available while a folder is served, as with Econet. A replay the
+  Rewind panel makes, for a thumbnail or to land on a snapshot, runs the ROM against a host that is idle, and does not
+  reach the folder.
+- A snapshot holds the device the ROM was using, so one restored partway through a call carries on exactly, but not the
+  open files, the current directory or which filing system was selected, which a restore puts back as a break does. A
+  call that was waiting for the store when the snapshot was taken ends with "Disc changed" when it is restored.
 
 ### The response
 

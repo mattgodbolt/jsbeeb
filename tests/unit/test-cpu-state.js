@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { fake6502 } from "../../src/fake6502.js";
-import { NmiSource } from "../../src/6502.js";
+import { NmiSource, NoReplayHooks } from "../../src/6502.js";
 import { Econet } from "../../src/econet.js";
 import { FakeVideo } from "../../src/video.js";
 import { Music5000 } from "../../src/music5000.js";
@@ -976,13 +976,32 @@ describe("Cpu6502 VDFS", () => {
         expect(cpu.vdfs).toMatchObject({ selected: false, directory: [] });
     });
 
-    it("tells a replay that it cannot repeat a call to the folder, since the folder would be called again", () => {
+    it("gives a replay an idle host, and leaves the live one and its folder alone", () => {
         const cpu = fake6502(findModel("B-DFS1.2"), { vdfsStore: storeOf() });
-        const refused = [];
-        cpu.inputLog = { refuse: (reason) => refused.push(reason) };
         cpu.writemem(PortBase + Port.a, 1);
-        cpu.writemem(PortBase + Port.call, Call.args);
-        expect(refused).toEqual(["a call to the VDFS folder"]);
+        cpu.asReplay(NoReplayHooks, () => {
+            cpu.writemem(PortBase + Port.call, Call.args);
+            expect(cpu.readmem(PortBase + Port.id)).toBe(0x56);
+            expect([Port.call, Port.stream, Port.data].map((port) => cpu.readmem(PortBase + port))).toEqual([0, 0, 0]);
+        });
+        expect(cpu.vdfs.openStreams).toBe(0);
+        expect(cpu.readmem(PortBase + Port.call)).toBe(0);
+    });
+
+    it("keeps the device as the ROM was using it across a snapshot, and answers a call that was waiting with an error", () => {
+        const cpu = fake6502(findModel("B-DFS1.2"), { vdfsStore: storeOf() });
+        cpu.writemem(PortBase + Port.call, Call.service);
+        const stream = cpu.readmem(PortBase + Port.stream);
+        cpu.writemem(PortBase + Port.stream, stream);
+        const first = cpu.readmem(PortBase + Port.data);
+        const state = cpu.snapshotState();
+        const restored = fake6502(findModel("B-DFS1.2"), { vdfsStore: storeOf() });
+        restored.restoreState(state);
+        restored.writemem(PortBase + Port.stream, stream);
+        cpu.writemem(PortBase + Port.stream, stream);
+        expect(restored.readmem(PortBase + Port.data)).toBe(cpu.readmem(PortBase + Port.data));
+        expect(first).toBeDefined();
+        expect(restored.vdfs.openStreams).toBe(cpu.vdfs.openStreams);
     });
 
     it("has its ports where the ROM expects them, and nothing on a machine without it", () => {

@@ -432,7 +432,19 @@ The levels on CB1 and CB2 are the user VIA's. The buttons are not saved: like th
 
 ### VDFS
 
-A VDFS filing system (see [vdfs.md](vdfs.md)) adds nothing to a snapshot. Its open files are the host's, so a restored snapshot has none open. The OS's filing system vectors are in RAM and so still point at VDFS, and file calls go on being served, but the host forgets that it was selected, so commands such as `*DIR` are not claimed until `*VDFS` selects it again.
+### VDFS (`state.vdfs`)
+
+Present when a folder is served (see [vdfs.md](vdfs.md)). It holds the device the ROM talks to, so that a snapshot taken
+while the ROM is partway through a call can be restored to the same place: `request` (the registers the ROM wrote),
+`nextStream`, `responseStream`, `selectedStream`, `busy` (whether a call was waiting for the store), and `streams`, each
+`[id, bytes, position]`, a response the ROM has not finished reading. A call that was `busy` is answered with "Disc
+changed" on restore, since the store it was waiting on is not the machine's.
+
+The host's own state is not kept. Its open files are the host's, so a restored snapshot has none open (they are written
+back), and the current directory and library are the root's. The OS's filing system vectors are in RAM and so still point
+at VDFS, and file calls go on being served, but the host forgets that it was selected, so commands such as `*DIR` are
+not claimed until `*VDFS` selects it again. A snapshot without `vdfs`, or loaded into a machine with no folder served,
+carries on without it.
 
 ### Teletext adaptor (`state.teletextAdaptor`)
 
