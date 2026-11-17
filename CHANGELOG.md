@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.23.0](https://github.com/mattgodbolt/jsbeeb/compare/v2.22.1...v2.23.0) (2026-11-17)
+
+
+### Features
+
+* read the error BASIC reported, its expression pointer and statement read from basic-state ([#1876](https://github.com/mattgodbolt/jsbeeb/issues/1876)) ([578d878](https://github.com/mattgodbolt/jsbeeb/commit/578d878fa2d02d7e610c366ff867716177c3a099))
+
 ## [2.22.1](https://github.com/mattgodbolt/jsbeeb/compare/v2.22.0...v2.22.1) (2026-11-16)
 
 
