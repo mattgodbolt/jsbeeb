@@ -309,6 +309,7 @@ export const Parameters = {
     touchkeys: { type: ParamTypes.BOOL, localToPage: true },
     fasttape: { type: ParamTypes.BOOL },
     noseek: { type: ParamTypes.BOOL },
+    vdfs: { type: ParamTypes.BOOL },
     glEnabled: { type: ParamTypes.BOOL_DEFAULT_TRUE, localToPage: true },
     lowLatency: { type: ParamTypes.BOOL_DEFAULT_TRUE, localToPage: true },
     fakeVideo: { type: ParamTypes.BOOL, takenFromHost: true },

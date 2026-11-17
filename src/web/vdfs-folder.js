@@ -1,0 +1,51 @@
+// The folder the user chose to serve as VDFS in a browser: kept in IndexedDB, which can hold a folder handle, so the
+// next page can use it. See docs/vdfs.md.
+
+import { isDesktopApp } from "../app/electron.js";
+import { FolderStore } from "./vdfs-folder-store.js";
+
+const DatabaseName = "jsbeeb-vdfs";
+const StoreName = "folders";
+const FolderKey = "folder";
+
+export const canChooseFolder = () => typeof window.showDirectoryPicker === "function";
+
+function inDatabase(mode, work) {
+    return new Promise((resolve, reject) => {
+        const opening = indexedDB.open(DatabaseName, 1);
+        opening.onupgradeneeded = () => opening.result.createObjectStore(StoreName);
+        opening.onerror = () => reject(opening.error);
+        opening.onblocked = () => reject(new Error("The database of the VDFS folder is in use by another page"));
+        opening.onsuccess = () => {
+            const database = opening.result;
+            try {
+                const transaction = database.transaction(StoreName, mode);
+                const request = work(transaction.objectStore(StoreName));
+                transaction.oncomplete = () => {
+                    database.close();
+                    resolve(request.result);
+                };
+                transaction.onerror = transaction.onabort = () => {
+                    database.close();
+                    reject(transaction.error ?? new Error("The VDFS folder could not be stored"));
+                };
+            } catch (error) {
+                database.close();
+                reject(error);
+            }
+        };
+    });
+}
+
+export const savedFolder = () =>
+    inDatabase("readonly", (store) => store.get(FolderKey)).then((handle) => handle ?? null);
+export const saveFolder = (handle) => inDatabase("readwrite", (store) => store.put(handle, FolderKey));
+export const forgetFolder = () => inDatabase("readwrite", (store) => store.delete(FolderKey));
+
+/** Asks the user for a folder, which needs a click. It is kept with `saveFolder` once it is to be used. */
+export const pickFolder = () => window.showDirectoryPicker({ id: "vdfs", mode: "readwrite" });
+
+/** @returns {FolderStore | null} the store of the folder the page was asked to serve, in a browser that can (not the app's) */
+export function browserVdfsStore(query) {
+    return query.vdfs && canChooseFolder() && !isDesktopApp() ? new FolderStore(savedFolder) : null;
+}
