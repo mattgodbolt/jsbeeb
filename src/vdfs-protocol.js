@@ -84,6 +84,13 @@ class Turn {
     }
 }
 
+/** The response that raises `error` on the 6502. */
+function errorBytes({ number, message }) {
+    const response = new Response();
+    response.error(number, message);
+    return response.bytes;
+}
+
 export class VdfsPorts {
     /**
      * @param {(call: number, registers: {a: number, x: number, y: number, p: number}, response: Response, turn: Turn) => void | Promise<void>} dispatch
@@ -109,9 +116,7 @@ export class VdfsPorts {
     abort(error) {
         if (!this._busy) return;
         this._epoch++;
-        const response = new Response();
-        response.error(error.number, error.message);
-        this._responseStream = this._newStream(response.bytes);
+        this._responseStream = this._newStream(errorBytes(error));
         this._busy = false;
     }
 
@@ -127,20 +132,24 @@ export class VdfsPorts {
         };
     }
 
-    /** A call that was waiting is answered with "Disc changed", since the store it was waiting on is not the machine's. */
+    /**
+     * A call that was waiting is answered with "Disc changed", since the store it was waiting on is not the machine's.
+     * A snapshot is a file, so what is not as `snapshotState` makes it is left out, and numbers are made bytes.
+     */
     restoreState(state) {
         this.reset();
-        this._request = { ...state.request };
-        this._nextStream = state.nextStream;
-        this._responseStream = state.responseStream;
-        this._selectedStream = state.selectedStream;
-        for (const [id, bytes, position] of state.streams) this._streams.set(id, { bytes: [...bytes], position });
-        if (state.busy) {
-            const response = new Response();
-            const { number, message } = Errors.discChanged();
-            response.error(number, message);
-            this._responseStream = this._newStream(response.bytes);
+        const byte = (value) => (Number.isInteger(value) ? value & 0xff : 0);
+        const request = state?.request ?? {};
+        this._request = { a: byte(request.a), x: byte(request.x), y: byte(request.y), p: byte(request.p) };
+        this._nextStream = byte(state?.nextStream) || 1;
+        this._responseStream = byte(state?.responseStream);
+        this._selectedStream = byte(state?.selectedStream);
+        for (const entry of Array.isArray(state?.streams) ? state.streams : []) {
+            const [id, bytes, position] = Array.isArray(entry) ? entry : [];
+            if (Array.isArray(bytes) && Number.isInteger(position))
+                this._streams.set(byte(id), { bytes: bytes.map(byte), position });
         }
+        if (state?.busy) this._responseStream = this._newStream(errorBytes(Errors.discChanged()));
     }
 
     /** A break: a call under way has no one to answer, and no response is left unread. */
@@ -186,10 +195,7 @@ export class VdfsPorts {
     _nextByte() {
         let stream = this._streams.get(this._selectedStream);
         if (!stream) {
-            const response = new Response();
-            const { number, message } = Errors.discChanged();
-            response.error(number, message);
-            stream = { bytes: response.bytes, position: 0 };
+            stream = { bytes: errorBytes(Errors.discChanged()), position: 0 };
             this._streams.set(this._selectedStream, stream);
         }
         const byte = stream.bytes[stream.position++];

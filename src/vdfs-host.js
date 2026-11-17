@@ -173,14 +173,21 @@ export class VdfsHost {
      */
     async hold() {
         this.ports.abort(Errors.discChanged());
-        this.release();
+        this._unhold();
         this._held = new Promise((resolve) => (this._release = resolve));
         await this.closeAll();
     }
 
-    /** Lets the calls that have waited go on, to the store there is now. */
-    release() {
-        this._folderGeneration++;
+    /**
+     * Lets the calls that have waited go on, to the store there is now. A write-back that is still going stops: what it
+     * has left is for a folder that is gone. Pass `changed: false` if the folder never did change.
+     */
+    release({ changed = true } = {}) {
+        if (changed) this._folderGeneration++;
+        this._unhold();
+    }
+
+    _unhold() {
         this._release?.();
         this._held = null;
         this._release = null;

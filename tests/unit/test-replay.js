@@ -321,9 +321,29 @@ describe("Finding the last write to a byte", () => {
 });
 
 describe("ReplayHistory", () => {
+    it("puts the device and the filing system back as the snapshot had them when the machine lands on it", async () => {
+        const cpu = await machineAt(CallAt, { model: findModel("B-DFS1.2"), vdfsStore: new MemoryStore() });
+        loadBytes(cpu, CallAt, Call);
+        const history = new ReplayHistory(cpu);
+        cpu.writemem(0xfc60 + 1, 7);
+        const snapshot = cpu.snapshotState();
+        history.taken(snapshot, null);
+        cpu.vdfs.selected = true;
+        cpu.vdfs.directory = ["SUB"];
+        cpu.writemem(0xfc60 + 1, 9);
+        history.landAt(snapshot);
+        expect(cpu.vdfs).toMatchObject({ selected: false, directory: [] });
+        expect(cpu.vdfs.snapshotState().ports.request.a).toBe(7);
+    });
+
     it.each([
         ["with Econet fitted", { econet: true }, () => {}, /Econet/],
-        ["with a folder served as VDFS", { vdfsStore: new MemoryStore() }, () => {}, /VDFS/],
+        [
+            "with a folder served as VDFS",
+            { model: findModel("B-DFS1.2"), vdfsStore: new MemoryStore() },
+            () => {},
+            /VDFS/,
+        ],
         ["while the cassette motor runs", {}, (cpu) => cpu.acia.setMotor(true), /cassette motor runs/],
         [
             "while an Atom's tape plays",

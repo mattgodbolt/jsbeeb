@@ -430,8 +430,6 @@ Present only when the AMX mouse was fitted. Absent means a fitted mouse drops an
 
 The levels on CB1 and CB2 are the user VIA's. The buttons are not saved: like the keyboard, they are host input.
 
-### VDFS
-
 ### VDFS (`state.vdfs`)
 
 Present when a folder is served (see [vdfs.md](vdfs.md)). It holds the device the ROM talks to, so that a snapshot taken
@@ -444,7 +442,7 @@ The host's own state is not kept. Its open files are the host's, so a restored s
 back), and the current directory and library are the root's. The OS's filing system vectors are in RAM and so still point
 at VDFS, and file calls go on being served, but the host forgets that it was selected, so commands such as `*DIR` are
 not claimed until `*VDFS` selects it again. A snapshot without `vdfs`, or loaded into a machine with no folder served,
-carries on without it.
+carries on without it. It was added without a version bump.
 
 ### Teletext adaptor (`state.teletextAdaptor`)
 

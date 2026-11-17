@@ -858,6 +858,32 @@ describe("VDFS host", () => {
     });
 
     describe("a folder that is about to change", () => {
+        it("goes on writing what a break took to the folder it has, when the BBC is only held for a change", async () => {
+            const t = hostWith();
+            for (const name of ["ONE", "TWO", "THREE"]) {
+                const handle = (await t.open(name, Osfind.write)).a;
+                await t.call(Call.bput, { a: 1, y: handle });
+            }
+            const logged = t.store.log.length;
+            let open;
+            const gate = new Promise((resolve) => (open = resolve));
+            const writeFile = t.store.writeFile.bind(t.store);
+            t.store.writeFile = async (path, details) => {
+                await gate;
+                return writeFile(path, details);
+            };
+            const failures = [];
+            t.host.onWriteFailure = (error) => failures.push(error.message);
+            t.host.reset();
+            const holding = t.host.hold();
+            await new Promise((resolve) => setImmediate(resolve));
+            open();
+            await holding;
+            t.host.release({ changed: false });
+            expect(t.store.log.slice(logged).map(([, path]) => path)).toEqual(["ONE", "TWO", "THREE"]);
+            expect(failures).toEqual([]);
+        });
+
         it("does not write what was open to a folder that has changed before it could be, and says so", async () => {
             const t = hostWith();
             for (const name of ["ONE", "TWO", "THREE"]) {

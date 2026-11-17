@@ -1594,7 +1594,7 @@ export class Cpu6502 extends Base6502 {
         }
     }
 
-    /** A replay that puts the machine back afterwards passes `keepVdfs`, so as not to close the files it has open. */
+    /** A replay runs against an idle host and passes `keepVdfs`, so as not to close the files the machine has open. */
     restoreState(state, { keepVdfs = false } = {}) {
         ++this.resetsAndLoads;
         // 1. Scheduler epoch first (so task offsets resolve correctly)

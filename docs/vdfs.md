@@ -28,9 +28,9 @@ In the desktop app, File, Serve VDFS Folder... chooses a folder. If none was bei
 which fits the ROM, after asking, since the BBC restarts; if one was, the machine goes on, as though the disc had been
 swapped: a call that is waiting ends with "Disc changed", what is open is written to the old folder and closed, the
 current directory and library go back to the root, and the BBC's next call finds the new folder. Stop Serving VDFS
-Folder starts the page again without it, after asking. The folder is the main process's: it answers only the app's own page, and only for the folder the page was told of.
-What the page had not yet written when the folder changed is not written to the new one: the page reports it, and so
-does the main process for a call that was on its way.
+Folder starts the page again without it, after asking. The folder is the main process's: it answers only the app's own
+page, and only for the folder the page was told of. What the page had not yet written when the folder changed is not
+written to the new one: the page says so, as a notice for a write-back and as a Disc fault for a call.
 
 In a browser with the File System Access API (Chrome, Edge and other Chromium browsers; not Firefox or Safari), More,
 Serve a folder as VDFS... asks for a folder and starts the page again with it, as the desktop app does for its first
@@ -107,8 +107,8 @@ DNFS) and the Master's and the Compact's MOS contain.
 Not done: `OSGBPB` 5 to 8, `OSFILE` 7, `OSARGS` with A=1 and Y=0 (the rest of the command line), `*RENAME`, `*COPY`,
 `*TITLE`, `*OPT` (it is accepted and ignored), `*ACCESS` of a wildcard (it takes one name), sector
 access (`OSWORD` &7F, or a game that drives the disc controller itself), and the second processor: an address that is
-not in the I/O processor (`&FFFFxxxx`) is an error when one is fitted. A snapshot does not hold open
-files, and restoring one closes them. `BGET` at the end of a file gives `&FE` with the carry set each time, where a DFS raises
+not in the I/O processor (`&FFFFxxxx`) is an error when one is fitted. A snapshot does not hold open files, and
+restoring one closes them. `BGET` at the end of a file gives `&FE` with the carry set each time, where a DFS raises
 "EOF" the second time, and a file can be opened twice: the DFS says "Open", this does not, and the last close wins.
 
 ## The ROM and the host

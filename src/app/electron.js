@@ -77,7 +77,7 @@ export function attachDesktopVdfs(host, { notify }) {
     window.addEventListener("pagehide", () => host.flush());
     window.electronAPI.onVdfsFlush(async () => {
         clearTimeout(safety);
-        safety = setTimeout(() => host.release(), HoldTimeoutMs);
+        safety = setTimeout(() => host.release({ changed: false }), HoldTimeoutMs);
         await host.hold();
     });
     window.electronAPI.onVdfsChanged(() => {

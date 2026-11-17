@@ -988,19 +988,18 @@ describe("Cpu6502 VDFS", () => {
         expect(cpu.readmem(PortBase + Port.call)).toBe(0);
     });
 
-    it("keeps the device as the ROM was using it across a snapshot, and answers a call that was waiting with an error", () => {
+    it("keeps the device as the ROM was using it across a snapshot, partway through reading a response", () => {
         const cpu = fake6502(findModel("B-DFS1.2"), { vdfsStore: storeOf() });
         cpu.writemem(PortBase + Port.call, Call.service);
         const stream = cpu.readmem(PortBase + Port.stream);
         cpu.writemem(PortBase + Port.stream, stream);
-        const first = cpu.readmem(PortBase + Port.data);
+        cpu.readmem(PortBase + Port.data);
         const state = cpu.snapshotState();
         const restored = fake6502(findModel("B-DFS1.2"), { vdfsStore: storeOf() });
         restored.restoreState(state);
         restored.writemem(PortBase + Port.stream, stream);
         cpu.writemem(PortBase + Port.stream, stream);
         expect(restored.readmem(PortBase + Port.data)).toBe(cpu.readmem(PortBase + Port.data));
-        expect(first).toBeDefined();
         expect(restored.vdfs.openStreams).toBe(cpu.vdfs.openStreams);
     });
 
