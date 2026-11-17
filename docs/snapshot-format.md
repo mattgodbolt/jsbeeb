@@ -161,16 +161,16 @@ Scheduled tasks are not saved directly. Each component saves its task timing as 
 
 Absent on the Atom. Which DRAM rows the video and the CPU have refreshed, and when, so that rows nothing refreshes decay as they would have. Times are scheduler epochs. A row is a CPU address's low 7 bits on a B and low 8 bits on a Master.
 
-| Field             | Type         | Description                                                                             |
-| ----------------- | ------------ | --------------------------------------------------------------------------------------- |
-| `windowStart`     | number       | Epoch the current refresh window began, at a flyback                                    |
-| `windows`         | number       | Refresh windows ended so far; every eighth window that leaves rows over samples the CPU |
-| `lastCoveredAt`   | number       | Epoch the last window that the video alone refreshed every row in ended                 |
-| `lastRefreshedAt` | Float64Array | Per row, the epoch of the last window that refreshed it                                 |
-| `covered`         | boolean      | The video has refreshed every row in the current window                                 |
-| `videoRows`       | Int32Array   | Bitmap of the rows the video has refreshed in the current window                        |
-| `cpuRows`         | Uint8Array   | Per row, 1 if the CPU has touched it in the current window while sampled                |
-| `cpuSampled`      | boolean      | The CPU's memory accesses are sampled in the current window                             |
+| Field             | Type         | Description                                                                              |
+| ----------------- | ------------ | ---------------------------------------------------------------------------------------- |
+| `windowStart`     | number       | Epoch the current refresh window began, at a flyback                                     |
+| `windows`         | number       | Refresh windows ended so far; every seventh window that leaves rows over samples the CPU |
+| `lastCoveredAt`   | number       | Epoch the last window that the video alone refreshed every row in ended                  |
+| `lastRefreshedAt` | Float64Array | Per row, the epoch of the last window that refreshed or decayed it                       |
+| `covered`         | boolean      | The video has refreshed every row in the current window                                  |
+| `videoRows`       | Int32Array   | Bitmap of the rows the video has refreshed in the current window                         |
+| `cpuRows`         | Uint8Array   | Per row, 1 if the CPU has touched it in the current window while sampled                 |
+| `cpuSampled`      | boolean      | The CPU's memory accesses are sampled in the current window                              |
 
 Snapshots written before DRAM refresh was emulated lack it, and absent means every row was refreshed at the moment of restore, so it needed no format version bump.
 

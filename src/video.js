@@ -46,7 +46,7 @@ export const HwScrollSubtract = [8, 4, 10, 5];
 export const LineCountPeriod = 2500;
 
 const BitmapXPerClock = 8;
-export const Ma13 = 1 << 13;
+const Ma13 = 1 << 13;
 const WideCharacterTexels = 2 * BitmapXPerClock;
 // A ULA write shows from 4 - p texels into the character fetched in its own cycle, for a pixel period of p texels
 // before the write, at either clock rate: measured on a Master in 20, 40 and 80 columns (#1866). Indexed by control
@@ -518,6 +518,8 @@ export class Video {
         this.rightBorder = 3 * 16;
 
         this.paint_ext = paint_ext_param;
+        /** @type {import("./dram-refresh.js").DramRefresh | null} */
+        this.dramRefresh = null;
 
         this.debugPrevScreen = null;
 
@@ -1125,10 +1127,12 @@ export class Video {
         const dram = this.dramRefresh;
         if (dram !== null && !dram.covered) {
             const chars = this.regs[0] + 1;
+            const firstMa = (this.addr - chars) & 0x3fff;
             dram.refreshLine(
-                (this.addr - chars) & 0x3fff,
+                firstMa,
                 chars,
                 this.externalRowAddress(),
+                !!(firstMa & Ma13),
                 this.halfClock,
                 this.oddClock,
             );

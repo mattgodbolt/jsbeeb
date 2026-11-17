@@ -68,14 +68,57 @@ describe("DRAM rows nothing refreshes", () => {
         await machine.type(`CALL &${CodeBase.toString(16).toUpperCase()}`);
         await machine.runFor(SettleCycles);
         for (let row = 0; row < rows; ++row) machine.writebyte(PatternBase + row, Pattern);
-        await machine.runFor((DramRetentionSeconds + 1) * machine.model.cyclesPerSecond);
+        const readBack = () => Array.from({ length: rows }, (_, row) => machine.readbyte(PatternBase + row));
+        await machine.runFor((DramRetentionSeconds - 1) * machine.model.cyclesPerSecond);
+        expect(readBack()).toEqual(Array(rows).fill(Pattern));
+        await machine.runFor(2 * machine.model.cyclesPerSecond);
 
         const cpuRows = new Set(loopRows.map((address) => address & (rows - 1)));
         const expected = Array.from({ length: rows }, (_, row) =>
             videoRefreshes(row) || cpuRows.has(row) ? Pattern : DecayedByte,
         );
-        const actual = Array.from({ length: rows }, (_, row) => machine.readbyte(PatternBase + row));
-        expect(actual).toEqual(expected);
+        expect(readBack()).toEqual(expected);
+    });
+
+    it("counts as refreshed exactly the rows a 2 MHz MA13 line fetches", async () => {
+        const video = new Video(false, FbWidth * FbHeight, () => {});
+        const machine = await bootedTestMachine("B-DFS1.2", { video });
+        await machine.type("MODE 0");
+        await machine.runUntilInput();
+        // One-line frames of 64 characters from MA &2000, so each MA lands on the same 2 MHz phase every line.
+        const { code } = program([
+            [0, 63],
+            [2, 50],
+            [4, 0],
+            [5, 0],
+            [9, 0],
+            [12, 0x20],
+            [13, 0],
+        ]);
+        code.forEach((byte, offset) => machine.writebyte(CodeBase + offset, byte));
+        await machine.type(`CALL &${CodeBase.toString(16).toUpperCase()}`);
+        await machine.runFor(SettleCycles);
+
+        const cpu = machine.processor;
+        const dram = cpu.dramRefresh;
+        const fetched = new Set();
+        const refreshed = new Set();
+        const videoRead = cpu.videoRead.bind(cpu);
+        cpu.videoRead = (address) => {
+            fetched.add(address & (ModelBRows - 1));
+            return videoRead(address);
+        };
+        const endOfField = dram.endOfField.bind(dram);
+        dram.endOfField = () => {
+            for (let row = 0; row < ModelBRows; ++row)
+                if ((dram.videoRows[row >>> 5] >>> (row & 31)) & 1) refreshed.add(row);
+            endOfField();
+        };
+        await machine.runFor(SettleCycles);
+
+        const sorted = (rows) => [...rows].sort((a, b) => a - b);
+        expect(fetched.size).toBe(ModelBRows / 2);
+        expect(sorted(refreshed)).toEqual(sorted(fetched));
     });
 
     const startedMaster = async () => {

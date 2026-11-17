@@ -910,7 +910,8 @@ export class Cpu6502 extends Base6502 {
     mapPages(start, end, stat, offset) {
         this.memStat.fill(stat, start, end);
         this.memLook.fill(offset, start, end);
-        // While a debug hook is set, every access of its kind takes the slow path, which calls it.
+        // While a debug hook is set, every access of its kind takes the slow path, which calls it; while DRAM rows
+        // are tracked, every access does.
         this.readLook.fill(stat && !this._debugRead && !this._dramRows ? offset : SlowPathOffset, start, end);
         this.writeLook.fill(stat === 1 && !this._debugWrite && !this._dramRows ? offset : SlowPathOffset, start, end);
     }

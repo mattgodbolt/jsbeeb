@@ -1,4 +1,29 @@
-import { Ma13 } from "./video.js";
+// Placeholders until a bench probe measures them. The #1849 probe's Master failed after about half a minute.
+export const DramRetentionSeconds = 30;
+export const DecayedByte = 0xff;
+
+// Short enough that every PAL field ends one, long enough that the fields of an unprogrammed CRTC do not.
+const RefreshWindowSeconds = 0.01;
+// Odd, so that sampling does not lock to a program that alternates its work between fields.
+const CpuSampleWindows = 7;
+const ModelBRows = 128;
+const MasterRows = 256;
+const RowsPerCharacter = 8;
+const WordShift = 5;
+const BitsPerWord = 1 << WordShift;
+const EveryCharacterRow = 0x01010101;
+const EvenRows = 0x55555555;
+const OddRows = ~EvenRows;
+const RefreshMa6 = 0x40;
+const MasterOddRaMa7 = 0x80;
+
+function setRows(words, from, to) {
+    for (let word = from >>> WordShift; word * BitsPerWord < to; ++word) {
+        const low = Math.max(from - word * BitsPerWord, 0);
+        const high = Math.min(to - word * BitsPerWord, BitsPerWord);
+        words[word] |= (-1 << low) & (-1 >>> (BitsPerWord - high));
+    }
+}
 
 /**
  * Which DRAM rows the video and the CPU refresh, and the decay of rows that nothing refreshes. There is no refresh
@@ -10,32 +35,6 @@ import { Ma13 } from "./video.js";
  * that does not get there looks at rows one by one, and only one in CpuSampleWindows of those has the CPU take its
  * slow path to report the rows it touches.
  */
-
-// Placeholders until a bench probe measures them. The #1849 probe's Master failed after about half a minute.
-export const DramRetentionSeconds = 30;
-export const DecayedByte = 0xff;
-
-// Short enough that every PAL field ends one, long enough that the fields of an unprogrammed CRTC do not.
-const RefreshWindowSeconds = 0.01;
-const CpuSampleWindows = 8;
-const ModelBRows = 128;
-const MasterRows = 256;
-const RowsPerCharacter = 8;
-const BitsPerWord = 32;
-const EveryCharacterRow = 0x01010101;
-const EvenRows = 0x55555555;
-const OddRows = ~EvenRows;
-const RefreshMa6 = 0x40;
-const MasterOddRaMa7 = 0x80;
-
-function setRows(words, from, to) {
-    for (let word = from >>> 5; word * BitsPerWord < to; ++word) {
-        const low = Math.max(from - word * BitsPerWord, 0);
-        const high = Math.min(to - word * BitsPerWord, BitsPerWord);
-        words[word] |= (-1 << low) & (-1 >>> (BitsPerWord - high));
-    }
-}
-
 export class DramRefresh {
     /**
      * @param {import("./6502.js").Cpu6502} cpu
@@ -72,11 +71,11 @@ export class DramRefresh {
     }
 
     /**
-     * Notes the rows refreshed by a scanline of `chars` characters from `firstMa` with row address `ra`.
-     * `lastCharOnOddClock` is the 2 MHz phase of its last character.
+     * Notes the rows refreshed by a scanline of `chars` characters from `firstMa` with row address `ra`, fetched
+     * by teletext addressing when `ma13`. `lastCharOnOddClock` is the 2 MHz phase of its last character.
      */
-    refreshLine(firstMa, chars, ra, oneMhzCrtc, lastCharOnOddClock) {
-        if (firstMa & Ma13) this.refreshTeletextLine(firstMa, chars, ra, oneMhzCrtc, lastCharOnOddClock);
+    refreshLine(firstMa, chars, ra, ma13, oneMhzCrtc, lastCharOnOddClock) {
+        if (ma13) this.refreshTeletextLine(firstMa, chars, ra, oneMhzCrtc, lastCharOnOddClock);
         else this.refreshBitmapLine(firstMa, chars, ra);
         this.covered = this.videoRows.every((word) => word === -1);
     }
@@ -90,7 +89,7 @@ export class DramRefresh {
         }
         for (let i = 0; i < chars; ++i) {
             const row = (((firstMa + i) & (maValues - 1)) * RowsPerCharacter) | raRow;
-            this.videoRows[row >>> 5] |= 1 << (row & (BitsPerWord - 1));
+            this.videoRows[row >>> WordShift] |= 1 << (row & (BitsPerWord - 1));
         }
     }
 
@@ -110,7 +109,7 @@ export class DramRefresh {
         let flipped = -1;
         if (!oneMhzCrtc) {
             const lastMaOddRow = ((firstMa + chars - 1) & 1) === 1;
-            unflipped = lastMaOddRow === lastCharOnOddClock ? EvenRows : OddRows;
+            unflipped = lastMaOddRow === lastCharOnOddClock ? OddRows : EvenRows;
             flipped = ~unflipped;
         }
         for (let word = 0; word < line.length; ++word) {
@@ -132,7 +131,7 @@ export class DramRefresh {
         }
         const cpuSampled = this.cpu.tracksDramRows;
         for (let row = 0; row < this.rowCount; ++row) {
-            const videoRefreshed = (this.videoRows[row >>> 5] >>> (row & (BitsPerWord - 1))) & 1;
+            const videoRefreshed = (this.videoRows[row >>> WordShift] >>> (row & (BitsPerWord - 1))) & 1;
             if (videoRefreshed || (cpuSampled && this.cpuRows[row])) {
                 this.lastRefreshedAt[row] = now;
             } else if (now - Math.max(this.lastRefreshedAt[row], this.lastCoveredAt) > this.retentionCycles) {
