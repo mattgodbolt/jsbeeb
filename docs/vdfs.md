@@ -10,7 +10,10 @@ It is a sideways ROM (`public/roms/vdfs.rom`, from `roms-src/vdfs`) and a device
 side of it: it takes over the filing system vectors and forwards every call. The code is in:
 
 - `src/vdfs-protocol.js`: the device in FRED, and the responses the ROM reads (`VdfsPorts`, `Response`)
-- `src/vdfs-errors.js`: the errors
+- `src/vdfs-channels.js`: the open files; `src/vdfs-guest-memory.js`: the 6502's memory as the host may touch it
+- `src/vdfs-names.js`: the names the BBC can give a file, and how it spells a path; `src/vdfs-errors.js`: the errors
+- `src/vdfs-fs-store.js`: a folder in Node as a store; `src/vdfs-inf.js`: the `.inf` files and the host names both
+  stores share
 
 ## The ROM and the host
 
@@ -105,6 +108,23 @@ is a message on the BBC and not an exception in the emulator.
 Claiming the vectors is the filing system's selection as the DFS does it: tell the one in use with `FSCV` call 6,
 write the seven vectors to the OS's extended vector entries, put the extended vector table's entries in place
 (found with `OSBYTE &A8`), and issue service call &F.
+
+### The store
+
+The host is given an object with these calls, each returning a promise, and the text of what it throws is what the BBC's
+"Disc fault" says. A store may have more than this for its page: `FsStore.check()`. `src/vdfs-fs-store.js` is the one for a folder in Node.
+The names it is given and
+gives are the BBC's; matching them without regard to case, and keeping the addresses and lock, is its work.
+
+| Call                       | Gives                                                                                                                  |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `find(directory, name)`    | what is there, or null: `{name, isDirectory, size, load, exec, locked}`                                                |
+| `list(directory)`          | `{entries, skipped}`: what is in it, and the names of what the BBC cannot be given; null if there is no such directory |
+| `read(path)`               | the file's bytes                                                                                                       |
+| `writeFile(path, details)` | makes or replaces a file: `{data, load, exec, locked}`                                                                 |
+| `setInfo(path, changes)`   | changes any of `load`, `exec` and `locked`, and leaves what the file holds                                             |
+| `makeDirectory(path)`      |                                                                                                                        |
+| `remove(path)`             | a file or an empty directory                                                                                           |
 
 ## Building the ROM
 
