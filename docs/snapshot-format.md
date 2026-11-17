@@ -432,7 +432,7 @@ The levels on CB1 and CB2 are the user VIA's. The buttons are not saved: like th
 
 ### VDFS
 
-A VDFS filing system (see [vdfs.md](vdfs.md)) adds nothing to a snapshot. Its open files are the host's, so a restored snapshot has none open, and the filing system is not the selected one until `*VDFS` selects it again.
+A VDFS filing system (see [vdfs.md](vdfs.md)) adds nothing to a snapshot. Its open files are the host's, so a restored snapshot has none open. The OS's filing system vectors are in RAM and so still point at VDFS, and file calls go on being served, but the host forgets that it was selected, so commands such as `*DIR` are not claimed until `*VDFS` selects it again.
 
 ### Teletext adaptor (`state.teletextAdaptor`)
 

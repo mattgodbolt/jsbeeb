@@ -11,9 +11,13 @@ side of it: it takes over the filing system vectors and forwards every call. The
 - `src/vdfs-host.js`: what the OS's filing system calls and the commands do (`VdfsHost`)
 - `src/vdfs-channels.js`: the open files; `src/vdfs-guest-memory.js`: the 6502's memory as the host may touch it
 - `src/vdfs-names.js`: the names the BBC can give a file, and how it spells a path; `src/vdfs-errors.js`: the errors
-- `src/vdfs-fs-store.js`: a folder in Node as a store; `src/vdfs-inf.js`: the `.inf` files and the host names both stores share
-- `src/web/vdfs-folder-store.js`, `vdfs-folder.js`, `vdfs-ui.js`: a folder in a browser as a store, the folder kept for the next page, and the menu
-- `src/app/*vdfs*`, `src/app/preload.js`: the desktop app's side, which holds the folder in the main process
+- `src/vdfs-fs-store.js`: a folder in Node as a store; `src/vdfs-inf.js`: the `.inf` files and the host names both
+  stores share
+- `src/web/vdfs-folder-store.js`, `vdfs-folder.js`, `vdfs-ui.js`: a folder in a browser as a store, the folder kept
+  for the next page, and the menu
+- `src/app/app.js` (the IPC handlers, the change of folder, and writing open files as a window closes or the app
+  quits), `src/app/vdfs-swap.js`, `src/app/preload.js` and `src/app/electron.js` (the page's side): the desktop app's
+  side, which holds the folder in the main process
 
 There is no copy of the folder in memory. The host asks the store for what a call needs as the call is made, and the
 ROM waits for the answer, as it would for a disc.
@@ -52,11 +56,12 @@ take and so sees the boot service call first. `*VDFS` does it, and `autotype` ca
 
 ## Files
 
-- A file is a file and a directory a directory. Names are 1 to 10 characters, without `.` `:` `"` `*` `#` `|`, a space or
-  anything outside printable ASCII, and match whatever the case. A `.` in a host name is a `/` to the BBC, so `prog.bas`
-  is `prog/bas`.
-- A file whose name cannot be given to the BBC is not shown to it: a name that is too long, or has a space, or is not
-  plain ASCII. `*CAT` says how many, and names the first few.
+- A file is a file and a directory a directory. Names are 1 to 10 characters, without `.` `:` `"` `*` `#` `|`, a space
+  or anything outside printable ASCII, and match whatever the case. A `.` in a host name is a `/` to the BBC, so
+  `prog.bas` is `prog/bas`.
+- A file whose name cannot be given to the BBC is not shown to it: a name that is too long, or has a space, a `:` `"`
+  `*` `#` or `|`, or is not plain ASCII. `*CAT` says how many, and names the first few. The BBC cannot make a file
+  called `$`, `&`, `@`, `%` or `^`, or one whose name ends in `/inf`, which as a host file would be a `.inf` sidecar.
 - A file's load and exec addresses and its lock are in a `.inf` file beside it, `NAME.inf`, with a line like
   `$.NAME  FFFF1900 FFFF8023 00000A00 L`. These are the files BeebAsm, Baron (`--inf`) and b-em write and read, so
   Baron's `-p dir --inf` output is a folder VDFS serves. The name in the line is not used, the host's file name is. A
@@ -69,9 +74,10 @@ take and so sees the boot service call first. `*VDFS` does it, and `autotype` ca
   is used, since what runs on the BBC is not to be trusted with the rest of the disc.
 - A file opened for output is made as it is opened, empty, as a disc's catalogue would have it, and is filled as it is
   closed, by a close of handle 0, `OSARGS` with A=&FF, or a break. Closing every file stops at one that cannot be
-  written, and leaves it and the rest open to be written again. A machine that is stopped, as when the emulator is
-  closed, with a file open does not write it. A file that has been deleted or replaced while it is open is no longer
-  written.
+  written, and leaves it and the rest open to be written again. In Node, a machine that is stopped with a file open does
+  not write it until `flushVdfs()`. The desktop app writes what is open as a window closes or the app quits, and a
+  browser tries when the page is hidden or goes, which it cannot be made to finish. A file that has been deleted or
+  replaced while it is open is no longer written.
 - A transfer is of memory the 6502 has: no more than 64K at a time, not over the devices (`&FC00` to `&FEFF`), and not
   past the top. A file is at most 16 MB.
 - A store that cannot do what is asked, such as a full disc or a folder it may not write, gives the BBC an error,
@@ -95,10 +101,12 @@ and German MOS and the Master's MOS 3.20 (with the DFS, ADFS and ANFS). The fili
 the OS's extended vector entry points, `&FF1B` to `&FF2D`, which every filing system ROM jsbeeb has (DFS, ADFS, ANFS,
 DNFS) and the Master's and the Compact's MOS contain.
 
-Not done: `OSGBPB` 5 to 8, `OSFILE` 7, `*RENAME`, `*COPY`, `*TITLE`, `*OPT` (it is accepted and ignored), sector
+Not done: `OSGBPB` 5 to 8, `OSFILE` 7, `OSARGS` with A=1 and Y=0 (the rest of the command line), `*RENAME`, `*COPY`,
+`*TITLE`, `*OPT` (it is accepted and ignored), `*ACCESS` of a wildcard (it takes one name), sector
 access (`OSWORD` &7F, or a game that drives the disc controller itself), and the second processor: an address that is
 not in the I/O processor (`&FFFFxxxx`) is an error when one is fitted. A snapshot does not hold open files, and
-restoring one closes them.
+restoring one closes them. `BGET` at the end of a file gives `&FE` with the carry set each time, where a DFS raises
+"EOF" the second time, and a file can be opened twice: the DFS says "Open", this does not, and the last close wins.
 
 ## The ROM and the host
 
@@ -146,8 +154,9 @@ service entry, with A the service number, X the ROM's slot and Y the parameter. 
 ### Waiting
 
 A call may take as long as the store does. After writing CALL the ROM reads it until bit 7 is clear, with
-`BIT PortCall : BMI wait`, and the 6502 goes on running, interrupts and all, as it would waiting on a disc. The call
-that has finished at once, as one with a store that is in Node's `fs` can, is not busy when it is first looked at.
+`BIT PortCall : BMI wait`, and the 6502 goes on running, interrupts and all, as it would waiting on a disc. A call
+that uses the store is always busy when it is first looked at, since the store answers on a later turn of the event
+loop, however quick it is.
 
 The host does what the call needs in memory, and writes the answer, only once its store has answered. A break while a
 call is waiting ends the call: its answer is not given, and it does not go on to change a machine that has restarted.

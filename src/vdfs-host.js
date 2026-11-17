@@ -30,7 +30,7 @@ const Title = "VDFS";
 const Version = "0.1";
 
 const Syntax = Object.freeze({
-    ACCESS: "<afsp> (L)",
+    ACCESS: "<fsp> (L)",
     CAT: "(<dir>)",
     CDIR: "<dir>",
     DELETE: "<fsp>",

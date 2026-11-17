@@ -729,7 +729,7 @@ describe("VDFS host", () => {
             expect(help.ops).toEqual([{ op: "print", text: "  VDFS 0.1\r" }]);
             expect(help.a).toBe(9);
             const lines = (await t.service(9, { line: "VDFS" })).ops[0].text.split("\r");
-            expect(lines.slice(0, 3)).toEqual(["VDFS 0.1", "  ACCESS <afsp> (L)", "  CAT (<dir>)"]);
+            expect(lines.slice(0, 3)).toEqual(["VDFS 0.1", "  ACCESS <fsp> (L)", "  CAT (<dir>)"]);
             expect(lines.filter((line) => line.trim() === "VDFS")).toEqual(["  VDFS"]);
             expect(lines.at(-2)).toBe("  VDFS");
             expect((await t.service(9, { line: "OTHER" })).ops).toEqual([]);
