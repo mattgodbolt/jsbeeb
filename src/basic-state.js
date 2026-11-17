@@ -20,7 +20,7 @@ const FunctionChain = 0x4f8;
 /** Where the OS notes the language ROM's number, in the Advanced User Guide's map of page &02. */
 export const LanguageRomNumber = 0x28c;
 /** Where the OS's BRK handler leaves the address of the error block, its number then its message, low byte first. */
-export const ErrorBlock = 0xfd;
+export const ErrorBlockPointer = 0xfd;
 
 const RomTitle = 9;
 const RomBase = 0x8000;
@@ -52,7 +52,7 @@ const MostLines = 0x4000;
 /**
  * Every BASIC jsbeeb carries reads each statement's first non-space character with `LDA (&0B),Y`, skipping spaces with
  * `CMP #&20: BEQ`, then tells a keyword from an assignment with `CMP #&CF`, the first statement token. The search finds
- * that `CMP`, run once for every statement.
+ * that `LDA` (statementRead) and that `CMP` (statementStart), which runs once for every statement.
  */
 const StatementDispatch = [0xb1, 0x0b, 0xc9, 0x20, 0xf0, null, 0xc9, 0xcf];
 const DispatchCompareOffset = 6;
@@ -249,7 +249,7 @@ function errorMessage(peek, block, keywords) {
  * The error BASIC's own handler last reported, with its tokens spelt out as REPORT prints them, or null. That handler,
  * which reports an error no ON ERROR takes and any numbered 0 such as STOP, is BASIC text in the ROM, so this lasts
  * until BASIC next reads text through its expression pointer, as LIST does not. The line number is 0 for an error in a
- * command typed at the prompt.
+ * command typed at the prompt. The caller checks that BASIC is the language running.
  * @param {(address: number) => number} peek
  * @param {Map<number, string>} keywords
  * @returns {{number: number, message: string, lineNumber: number} | null}
@@ -257,7 +257,7 @@ function errorMessage(peek, block, keywords) {
 export function readReportedError(peek, keywords) {
     const expression = word(peek, ExpressionPointerBase);
     if (expression < RomBase || expression >= RomEnd) return null;
-    const block = word(peek, ErrorBlock);
+    const block = word(peek, ErrorBlockPointer);
     return { number: peek(block), message: errorMessage(peek, block, keywords), lineNumber: word(peek, ErrorLine) };
 }
 

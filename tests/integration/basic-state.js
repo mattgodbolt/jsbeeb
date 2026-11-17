@@ -15,6 +15,7 @@ describe.each(["B-DFS1.2", "Master"])("readReportedError on a %s", (model) => {
         ["10 PRINT 1/0", ["RUN", "LIST"], DivisionByZero],
         ["10 PRINT 1/0", ["RUN", "PRINT ERL"], null],
         ["", ["PRINT 1/0"], { ...DivisionByZero, lineNumber: 0 }],
+        ["", [], null],
     ])("reads %j after %j as %j", async (program, commands, expected) => {
         const machine = await bootedTestMachine(model);
         const cpu = machine.processor;

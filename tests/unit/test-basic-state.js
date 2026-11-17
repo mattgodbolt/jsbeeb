@@ -2,7 +2,14 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { basicRom, formatReal, listStatements, readPointers, readVariables } from "../../src/basic-state.js";
+import {
+    basicRom,
+    formatReal,
+    listStatements,
+    readPointers,
+    readReportedError,
+    readVariables,
+} from "../../src/basic-state.js";
 import { RepoRoot } from "../../src/test-machine.js";
 
 const RomBankBytes = 16 * 1024;
@@ -63,6 +70,34 @@ describe("readPointers", () => {
         ]);
         const { reading, expression } = readPointers(peek);
         expect([reading, expression]).toEqual([0x1902, 0x1914]);
+    });
+});
+
+describe("readReportedError", () => {
+    const keywords = new Map([[0xf1, "PRINT"]]);
+    const division = [18, ...ascii("Division by zero"), 0];
+
+    it.each([
+        ["an expression pointer below the ROM", 0x7fff, division, null],
+        ["one at the ROM's start", 0x8000, division, { number: 18, message: "Division by zero", lineNumber: 10 }],
+        ["one at its last byte", 0xbfff, division, { number: 18, message: "Division by zero", lineNumber: 10 }],
+        ["one past it", 0xc000, division, null],
+        ["tokens", 0x8000, [27, 0x8d, 0x29, 0x20, 0xf1, 0], { number: 27, message: "Missing ) PRINT", lineNumber: 10 }],
+        ["what does not print", 0x8000, [1, 0x07, 0x7f, 0xfe, 0], { number: 1, message: "...", lineNumber: 10 }],
+        [
+            "a block with no end",
+            0x8000,
+            new Array(300).fill(0x41),
+            { number: 0x41, message: "A".repeat(255), lineNumber: 10 },
+        ],
+    ])("reads %s", (_, expression, block, expected) => {
+        const peek = memory([
+            [0x08, [10, 0]],
+            [0x19, [expression & 0xff, expression >> 8]],
+            [0xfd, [0x00, 0x30]],
+            [0x3000, block],
+        ]);
+        expect(readReportedError(peek, keywords)).toEqual(expected);
     });
 });
 
