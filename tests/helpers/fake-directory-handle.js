@@ -23,7 +23,11 @@ class FakeFile {
                 pending = typeof data === "string" ? new TextEncoder().encode(data) : Uint8Array.from(data);
             },
             close: async () => {
+                if (this.failWrites) throw new DOMException("no room", "QuotaExceededError");
                 this.bytes = pending;
+            },
+            abort: async () => {
+                this.aborted = (this.aborted ?? 0) + 1;
             },
         };
     }

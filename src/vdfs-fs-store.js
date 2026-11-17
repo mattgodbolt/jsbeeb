@@ -7,7 +7,7 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 
 import { InfSuffix, NoInformation, formatInf, parseInf, toBbcName, toHostName } from "./vdfs-inf.js";
-import { isValidName, sameName } from "./vdfs-names.js";
+import { isValidName, requireWritableName, sameName } from "./vdfs-names.js";
 
 const isUnderRoot = (root, candidate) => candidate === root || candidate.startsWith(root + path.sep);
 const isMissing = (error) => error?.code === "ENOENT" || error?.code === "ENOTDIR";
@@ -97,12 +97,6 @@ export class FsStore {
         return { entries: described.filter(Boolean), skipped: found.skipped };
     }
 
-    /** The BBC can only be given names it could have made, and not the root. */
-    _requireWritable(volumePath) {
-        if (volumePath.length === 0 || !volumePath.every(isValidName))
-            throw new Error(`${volumePath.join(".") || "$"} is not a name VDFS can write`);
-    }
-
     async read(volumePath) {
         const hostPath = await this._hostPath(volumePath);
         return new Uint8Array(await fs.readFile(hostPath));
@@ -129,7 +123,7 @@ export class FsStore {
     }
 
     async writeFile(volumePath, { data, load, exec, locked }) {
-        this._requireWritable(volumePath);
+        requireWritableName(volumePath);
         const hostPath = await this._hostPath(volumePath);
         await this._removeOtherCases(hostPath);
         await fs.writeFile(hostPath, data);
@@ -138,7 +132,7 @@ export class FsStore {
 
     /** Changes a file's addresses or lock, as many of them as are given, and leaves what it holds. */
     async setInfo(volumePath, changes) {
-        this._requireWritable(volumePath);
+        requireWritableName(volumePath);
         const hostPath = await this._hostPath(volumePath);
         const { size } = await fs.lstat(hostPath).catch((error) => {
             throw isMissing(error) ? new Error(`${volumePath.join(".")} is not there`) : error;
@@ -148,12 +142,12 @@ export class FsStore {
     }
 
     async makeDirectory(volumePath) {
-        this._requireWritable(volumePath);
+        requireWritableName(volumePath);
         await fs.mkdir(await this._hostPath(volumePath), { recursive: true });
     }
 
     async remove(volumePath) {
-        this._requireWritable(volumePath);
+        requireWritableName(volumePath);
         const hostPath = await this._hostPath(volumePath);
         const stat = await fs.lstat(hostPath);
         if (stat.isDirectory()) await fs.rmdir(hostPath);

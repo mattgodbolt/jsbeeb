@@ -14,18 +14,24 @@ function inDatabase(mode, work) {
         const opening = indexedDB.open(DatabaseName, 1);
         opening.onupgradeneeded = () => opening.result.createObjectStore(StoreName);
         opening.onerror = () => reject(opening.error);
+        opening.onblocked = () => reject(new Error("The database of the VDFS folder is in use by another page"));
         opening.onsuccess = () => {
             const database = opening.result;
-            const transaction = database.transaction(StoreName, mode);
-            const request = work(transaction.objectStore(StoreName));
-            transaction.oncomplete = () => {
+            try {
+                const transaction = database.transaction(StoreName, mode);
+                const request = work(transaction.objectStore(StoreName));
+                transaction.oncomplete = () => {
+                    database.close();
+                    resolve(request.result);
+                };
+                transaction.onerror = transaction.onabort = () => {
+                    database.close();
+                    reject(transaction.error ?? new Error("The VDFS folder could not be stored"));
+                };
+            } catch (error) {
                 database.close();
-                resolve(request.result);
-            };
-            transaction.onerror = transaction.onabort = () => {
-                database.close();
-                reject(transaction.error);
-            };
+                reject(error);
+            }
         };
     });
 }
@@ -35,12 +41,8 @@ export const savedFolder = () =>
 export const saveFolder = (handle) => inDatabase("readwrite", (store) => store.put(handle, FolderKey));
 export const forgetFolder = () => inDatabase("readwrite", (store) => store.delete(FolderKey));
 
-/** Asks the user for a folder, which needs a click, and keeps it for the next page. */
-export async function chooseFolder() {
-    const handle = await window.showDirectoryPicker({ id: "vdfs", mode: "readwrite" });
-    await saveFolder(handle);
-    return handle;
-}
+/** Asks the user for a folder, which needs a click. It is kept with `saveFolder` once it is to be used. */
+export const pickFolder = () => window.showDirectoryPicker({ id: "vdfs", mode: "readwrite" });
 
 /** @returns {FolderStore | null} the store of the folder the page was asked to serve, in a browser that can */
 export function browserVdfsStore(query) {

@@ -32,6 +32,13 @@ describe("VDFS folder store, over a folder the browser handed over", () => {
             await expect(store.list([])).rejects.toThrow("No folder has been chosen");
         });
 
+        it("tells a refusal from a question that has not been asked", async () => {
+            root.permission = "denied";
+            await expect(store.find([], "X")).rejects.toThrow("site settings");
+            root.permission = "prompt";
+            await expect(store.find([], "X")).rejects.toThrow("has not been told");
+        });
+
         it("will not touch a folder it has not been allowed to use", async () => {
             root.permission = "prompt";
             await expect(store.find([], "X")).rejects.toThrow("may be used");
@@ -97,6 +104,28 @@ describe("VDFS folder store, over a folder the browser handed over", () => {
             await store.writeFile(["prog"], written([6]));
             expect(root.namesIn()).toEqual(["prog"]);
             expect([...(await store.read(["PROG"]))]).toEqual([6]);
+        });
+
+        it("will not write over a directory, and does not remove one that has the name in another case", async () => {
+            root.put("PROG/INNER", "x");
+            await expect(store.writeFile(["PROG"], written())).rejects.toThrow();
+            await store.writeFile(["prog"], written());
+            expect(root.namesIn()).toEqual(["PROG", "prog"]);
+            expect(root.namesIn("PROG")).toEqual(["INNER"]);
+        });
+
+        it("says a directory is not a file to read or change", async () => {
+            root.put("DIR/INNER", "x");
+            await expect(store.read(["DIR"])).rejects.toThrow("DIR is not there");
+            await expect(store.setInfo(["DIR"], { locked: true })).rejects.toThrow("DIR is not there");
+        });
+
+        it("gives up the file it was writing if it cannot finish, and says why", async () => {
+            await store.writeFile(["A"], written());
+            const file = [...root.children.values()].find((child) => child.name === "A");
+            file.failWrites = true;
+            await expect(store.writeFile(["A"], written([2]))).rejects.toThrow("no room");
+            expect(file.aborted).toBe(1);
         });
 
         it("writes a name with a slash in it as a dot", async () => {

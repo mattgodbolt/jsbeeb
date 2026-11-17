@@ -245,14 +245,16 @@ const machine = new Machine({
 });
 const processor = machine.processor;
 if (processor.vdfs) {
-    toast("A folder is being served as VDFS. Type *VDFS to use it.", { title: "VDFS", quietKey: "quietVdfs" });
-    const notify = (message) => toast(message, { title: "VDFS" });
-    if (isDesktopApp()) attachDesktopVdfs(processor.vdfs, { notify });
-    else
+    const notify = (message, options = {}) => toast(message, { title: "VDFS", ...options });
+    if (isDesktopApp()) {
+        notify("A folder is being served as VDFS. Type *VDFS to use it.", { quietKey: "quietVdfs" });
+        attachDesktopVdfs(processor.vdfs, { notify });
+    } else {
         attachBrowserVdfs(processor.vdfs, {
             notify,
-            offer: (message, label, run) => toast(message, { title: "VDFS", action: { label, run } }),
-        });
+            offer: (message, label, run) => notify(message, { action: { label, run } }),
+        }).catch((error) => notify(`The VDFS folder could not be set up (${error.message}).`));
+    }
 }
 panelArrangement.followMachine(() => machineMoment(processor));
 

@@ -47,3 +47,9 @@ export function parsePath(text) {
     if (!rest.every((part) => part === "^" || part === "@" || isValidName(part))) throw Errors.badName();
     return { base, parts: rest };
 }
+
+/** Throws for a path the BBC could not have made, and for the root, which no store writes. */
+export function requireWritableName(volumePath) {
+    if (volumePath.length === 0 || !volumePath.every(isValidName))
+        throw new Error(`${volumePath.join(".") || "$"} is not a name VDFS can write`);
+}

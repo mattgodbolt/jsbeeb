@@ -2,7 +2,7 @@
 // `FsStore`, over a `FileSystemDirectoryHandle`. See docs/vdfs.md.
 
 import { InfSuffix, NoInformation, formatInf, parseInf, toBbcName, toHostName } from "../vdfs-inf.js";
-import { isValidName, sameName } from "../vdfs-names.js";
+import { isValidName, requireWritableName, sameName } from "../vdfs-names.js";
 
 const Mode = { mode: "readwrite" };
 const isMissing = (error) => error?.name === "NotFoundError" || error?.name === "TypeMismatchError";
@@ -34,6 +34,8 @@ export class FolderStore {
     async _root() {
         const state = await this.permission();
         if (state === "none") throw new Error("No folder has been chosen to serve as VDFS");
+        if (state === "denied")
+            throw new Error("The browser will not let the page use the VDFS folder; allow it in the site settings");
         if (state !== "granted") throw new Error("The browser has not been told that the VDFS folder may be used");
         return this._loadedRoot();
     }
@@ -123,15 +125,15 @@ export class FolderStore {
         return new Uint8Array(await (await entry.getFile()).arrayBuffer());
     }
 
-    _requireWritable(volumePath) {
-        if (volumePath.length === 0 || !volumePath.every(isValidName))
-            throw new Error(`${volumePath.join(".") || "$"} is not a name VDFS can write`);
-    }
-
     async _writeBytes(parent, hostName, data) {
         const writable = await (await parent.getFileHandle(hostName, { create: true })).createWritable();
-        await writable.write(data);
-        await writable.close();
+        try {
+            await writable.write(data);
+            await writable.close();
+        } catch (error) {
+            await writable.abort().catch(() => {});
+            throw error;
+        }
     }
 
     async _removeIfThere(parent, hostName) {
@@ -149,12 +151,13 @@ export class FolderStore {
     }
 
     async writeFile(volumePath, { data, load, exec, locked }) {
-        this._requireWritable(volumePath);
+        requireWritableName(volumePath);
         const parent = await this._directory(volumePath.slice(0, -1));
         if (!parent) throw new Error(`${volumePath.slice(0, -1).join(".")} is not there`);
         const hostName = toHostName(volumePath.at(-1));
         for (const other of await this._entries(parent)) {
-            if (other.name === hostName || other.name.toLowerCase() !== hostName.toLowerCase()) continue;
+            const isOtherCase = other.name !== hostName && other.name.toLowerCase() === hostName.toLowerCase();
+            if (other.kind !== "file" || !isOtherCase) continue;
             await this._removeIfThere(parent, other.name);
             await this._removeIfThere(parent, other.name + InfSuffix);
         }
@@ -163,7 +166,7 @@ export class FolderStore {
     }
 
     async setInfo(volumePath, changes) {
-        this._requireWritable(volumePath);
+        requireWritableName(volumePath);
         const { parent, entry } = await this._entry(volumePath, "file");
         if (!entry) throw new Error(`${volumePath.join(".")} is not there`);
         const { size } = await entry.getFile();
@@ -172,7 +175,7 @@ export class FolderStore {
     }
 
     async makeDirectory(volumePath) {
-        this._requireWritable(volumePath);
+        requireWritableName(volumePath);
         let handle = await this._root();
         for (const name of volumePath) {
             const existing = (await this._entries(handle)).find(
@@ -183,7 +186,7 @@ export class FolderStore {
     }
 
     async remove(volumePath) {
-        this._requireWritable(volumePath);
+        requireWritableName(volumePath);
         const { parent, entry } = await this._entry(volumePath);
         if (!entry) throw new Error(`${volumePath.join(".")} is not there`);
         await parent.removeEntry(entry.name);
