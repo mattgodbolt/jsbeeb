@@ -608,6 +608,27 @@ describe("VDFS host", () => {
             expect(errorOf(await t.command("SETINFO NOPE 2000")).text).toBe("Not found");
         });
 
+        it.each([
+            ["SETINFO PLAIN ffffffff", undefined, 0xffffffff],
+            ["SETINFO PLAIN 123456789", "Bad address", 0],
+            ["SETINFO PLAIN &", "Bad address", 0],
+            ["SETINFO LOCKED 2000", "Locked", 0],
+            ["SETINFO PLAIN 2000 2000", undefined, 0x2000],
+        ])("*%s gives %s", async (line, error, load) => {
+            const t = hostWith([file("PLAIN", "x"), file("LOCKED", "x", { locked: true })]);
+            expect(errorOf(await t.command(line))?.text).toBe(error);
+            expect(t.get("PLAIN").load).toBe(load);
+        });
+
+        it("runs a file once *SETINFO has given it an exec address", async () => {
+            const t = hostWith([file("PLAIN", "x")]);
+            await t.command("SETINFO PLAIN 2000 2005");
+            putString(t.cpu, Name, "PLAIN");
+            const run = await t.call(Call.fsc, { a: 4, ...xy(Name) });
+            expect(run.ops).toContainEqual({ op: "exec", address: 0x2005 });
+            expect(t.cpu.memory[0x2000]).toBe("x".charCodeAt(0));
+        });
+
         it.each([["CDIR"], ["DELETE"], ["ACCESS"], ["SETINFO"]])("says Bad name for *%s with no name", async (name) => {
             const t = hostWith(items);
             expect(errorOf(await t.command(name)).text).toBe("Bad name");

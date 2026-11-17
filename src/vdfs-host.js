@@ -642,7 +642,7 @@ export class VdfsHost {
         const parse = (text) => {
             const digits = text.replace(/^&/, "");
             if (!/^[0-9a-f]{1,8}$/i.test(digits)) throw Errors.badAddress();
-            return parseInt(digits, 16) >>> 0;
+            return parseInt(digits, 16);
         };
         if (load === undefined) throw Errors.badAddress();
         const changes = { load: parse(load) };
