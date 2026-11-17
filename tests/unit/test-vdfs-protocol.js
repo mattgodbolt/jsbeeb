@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { VdfsError } from "../../src/vdfs-errors.js";
 import { Busy, Call, HostId, Op, Port, PortBase, Superseded, VdfsPorts } from "../../src/vdfs-protocol.js";
 import { RepoRoot } from "../integration/helpers.js";
-import { readResponse } from "../helpers/vdfs.js";
+import { readResponse } from "../helpers/vdfs-response.js";
 
 const upperFirst = (name) => name[0].toUpperCase() + name.slice(1);
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { GuestMemory } from "../../src/vdfs-guest-memory.js";
-import { fakeCpu, poke, putString } from "../helpers/vdfs.js";
+import { fakeCpu, poke, putString } from "../helpers/vdfs-memory.js";
 
 const memoryOf = (options) => {
     const cpu = fakeCpu(options);

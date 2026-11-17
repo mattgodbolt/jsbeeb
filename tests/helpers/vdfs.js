@@ -1,5 +1,7 @@
 import { VdfsHost } from "../../src/vdfs-host.js";
-import { Busy, Call, Op, Port } from "../../src/vdfs-protocol.js";
+import { Busy, Call, Port } from "../../src/vdfs-protocol.js";
+import { fakeCpu, putLong, putString } from "./vdfs-memory.js";
+import { readResponse } from "./vdfs-response.js";
 
 export const Block = 0x2000;
 export const Name = 0x2100;
@@ -116,85 +118,6 @@ export const text = (bytes) => new TextDecoder().decode(bytes);
 /** The X and Y registers that point at `address`. */
 export const xy = (address) => ({ x: address & 0xff, y: address >> 8 });
 
-/** Just enough of a machine for the host: 64K of memory it can look at and change. */
-export function fakeCpu({ hasTube = false } = {}) {
-    const memory = new Uint8Array(0x10000);
-    return {
-        memory,
-        hasTube,
-        peekmem: (address) => memory[address & 0xffff],
-        writemem: (address, value) => {
-            memory[address & 0xffff] = value;
-        },
-    };
-}
-
-export function poke(cpu, address, bytes) {
-    for (const [index, byte] of [...bytes].entries())
-        cpu.memory[address + index] = typeof byte === "string" ? byte.charCodeAt(0) : byte;
-}
-
-/** Puts a string, with its return, in memory and gives its address. */
-export function putString(cpu, address, string) {
-    poke(cpu, address, [...string, 0x0d]);
-    return address;
-}
-
-export function putLong(cpu, address, value) {
-    for (let index = 0; index < 4; index++) cpu.memory[address + index] = (value >>> (8 * index)) & 0xff;
-}
-
-export function getLong(cpu, address) {
-    return (
-        (cpu.memory[address] |
-            (cpu.memory[address + 1] << 8) |
-            (cpu.memory[address + 2] << 16) |
-            (cpu.memory[address + 3] << 24)) >>>
-        0
-    );
-}
-
-export const errorOf = (result) => result.ops.find((op) => op.op === "error");
-
-export const printed = (result) =>
-    result.ops
-        .filter((op) => op.op === "print")
-        .map((op) => op.text)
-        .join("");
-
-/** Reads a whole response from `host` as the ROM does: the ops, and the registers it ends with. */
-export function readResponse(host, registersIn) {
-    const stream = host.read(Port.stream);
-    const readByte = () => {
-        host.write(Port.stream, stream);
-        return host.read(Port.data);
-    };
-    const readText = () => {
-        let result = "";
-        for (let byte = readByte(); byte !== 0; byte = readByte()) result += String.fromCharCode(byte);
-        return result;
-    };
-    const ops = [];
-    for (;;) {
-        const op = readByte();
-        if (op === Op.done) {
-            const [x, y, p, a] = [readByte(), readByte(), readByte(), readByte()];
-            return { ops, a, x, y, p };
-        }
-        if (op === Op.print) ops.push({ op: "print", text: readText() });
-        else if (op === Op.claim) ops.push({ op: "claim" });
-        else if (op === Op.exec) {
-            const high = readByte();
-            ops.push({ op: "exec", address: ((high << 8) | readByte()) + 1 });
-            return { ops, ...registersIn };
-        } else if (op === Op.error) {
-            const number = readByte();
-            ops.push({ op: "error", number, text: readText() });
-            return { ops, ...registersIn };
-        } else throw new Error(`unknown op ${op}`);
-    }
-}
-
 const MaxSettlingTurns = 1000;
 
 /**
@@ -255,3 +178,6 @@ export function hostWith(items = [], { hasTube = false, store = new MemoryStore(
 
     return { host, store, cpu, call, osfile, open, command, service, get: (dotted) => store.get(dotted) };
 }
+
+export * from "./vdfs-memory.js";
+export * from "./vdfs-response.js";

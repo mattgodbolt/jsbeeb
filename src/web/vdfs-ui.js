@@ -3,8 +3,7 @@
 
 import { forgetFolder, pickFolder, saveFolder } from "./vdfs-folder.js";
 import { reloadAsMachine } from "./machine-switch.js";
-
-export const ServedMessage = "A folder is being served as VDFS. Type *VDFS to use it.";
+import { ServedMessage } from "./vdfs-notice.js";
 
 /**
  * Has the page hand its open files to the folder when it is going away, and says through `notify` what the person
