@@ -74,10 +74,10 @@ describe("VDFS protocol", () => {
             expect(readResponse(ports, {})).toEqual({ ops: [], a: 5, x: 2, y: 3, p: 0x31 });
         });
 
-        it("never lets a NUL end the text early, since the ROM takes it for the end", () => {
-            const ports = portsSaying(() => "a\u0000b");
+        it("shows a control code as a question mark, a NUL too since the ROM takes it for the end, but not a return", () => {
+            const ports = portsSaying(() => "a\u0000b\u001bc\u0016d\re");
             makeCall(ports, Call.file);
-            expect(readResponse(ports, {}).ops).toEqual([{ op: "print", text: "a?b" }]);
+            expect(readResponse(ports, {}).ops).toEqual([{ op: "print", text: "a?b?c?d\re" }]);
         });
 
         it("shows what the BBC cannot print as a question mark, and not as another character", () => {
