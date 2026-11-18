@@ -127,10 +127,12 @@ export class FsStore {
     async _removeOtherCases(hostPath) {
         const directory = path.dirname(hostPath);
         const name = path.basename(hostPath);
-        for (const other of await fs.readdir(directory, { withFileTypes: true })) {
-            const isOtherCase = other.name !== name && other.name.toLowerCase() === name.toLowerCase();
-            if (!isOtherCase) continue;
-            if (other.isDirectory()) throw new Error(`${other.name} is a directory`);
+        const others = (await fs.readdir(directory, { withFileTypes: true })).filter(
+            (other) => other.name !== name && other.name.toLowerCase() === name.toLowerCase(),
+        );
+        const directoryAmongThem = others.find((other) => other.isDirectory());
+        if (directoryAmongThem) throw new Error(`${directoryAmongThem.name} is a directory`);
+        for (const other of others) {
             await fs.rm(path.join(directory, other.name), { force: true });
             await fs.rm(path.join(directory, other.name + InfSuffix), { force: true });
         }
@@ -156,13 +158,11 @@ export class FsStore {
     async setInfo(volumePath, changes) {
         requireWritableName(volumePath);
         const hostPath = await this._hostPath(volumePath);
-        const { size, ...stat } = await fs.lstat(hostPath).then(
-            (found) => ({ size: found.size, isFile: found.isFile() }),
-            (error) => {
-                throw isMissing(error) ? new Error(`${volumePath.join(".")} is not there`) : error;
-            },
-        );
-        if (!stat.isFile) throw new Error(`${volumePath.join(".")} is not a file`);
+        const found = await fs.lstat(hostPath).catch((error) => {
+            throw isMissing(error) ? new Error(`${volumePath.join(".")} is not there`) : error;
+        });
+        if (!found.isFile()) throw new Error(`${volumePath.join(".")} is not a file`);
+        const { size } = found;
         const current = await this._readSidecar(hostPath + InfSuffix);
         await this._writeInformation(hostPath, volumePath.at(-1), { ...current, ...changes }, size);
     }
