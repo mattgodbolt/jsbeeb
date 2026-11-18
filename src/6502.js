@@ -761,7 +761,7 @@ function isModelB1MHzAccess(addr) {
     return addr >= 0xfc00 && addr < 0xff00 && (addr < 0xfe00 || FEslowdown[(addr >>> 5) & 7]);
 }
 
-// As a Master 128 measures (#1885): VIDPROC is 2MHz, though the Master Reference Manual (F.6-8) lists it as 1MHz.
+// VIDPROC (&FE20-&FE27) is 2MHz as measured on a Master 128, though the Master Reference Manual (F.6-8) lists it as 1MHz.
 function isMaster1MHzAccess(addr) {
     return (
         addr >= 0xfc00 &&
