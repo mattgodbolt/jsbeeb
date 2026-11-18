@@ -913,6 +913,7 @@ describe("Cpu6502 paged memory", () => {
 describe("Master ACCCON IRR", () => {
     const Acccon = 0xfe34;
     const AccconIrr = 0x80;
+    const IrrIrqSource = 0x10;
     const HandlerStart = 0x2100;
     const IrqCount = 0x70;
     const IrqsBeforeHandlerClearsIrr = 10;
@@ -978,5 +979,14 @@ describe("Master ACCCON IRR", () => {
         restored.restoreState(snapshot);
 
         expect(irqsCounted(restored)).toBe(IrqsBeforeHandlerClearsIrr);
+    });
+
+    it("drops the IRQ on a hard reset", async () => {
+        const cpu = await masterReadyToCount(AccconIrr);
+        expect(cpu.interrupt & IrrIrqSource).toBe(IrrIrqSource);
+
+        cpu.reset(true);
+
+        expect(cpu.interrupt & IrrIrqSource).toBe(0);
     });
 });
