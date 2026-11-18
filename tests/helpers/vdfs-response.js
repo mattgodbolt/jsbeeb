@@ -15,7 +15,6 @@ export const printed = (result) =>
 export function readResponse(host, registersIn) {
     const wantsOps = host.read(Port.go) & OpsWaiting;
     const stream = host.read(Port.stream);
-    host.write(Port.stream, stream);
     const readByte = () => {
         host.write(Port.stream, stream);
         return host.read(Port.data);
