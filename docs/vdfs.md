@@ -168,7 +168,7 @@ Some things follow from that:
 
 - A call made while files from before a break are still being written waits for them, so that it sees them.
 - The filing system is not re-entrant, as the DFS is not: a call made from an interrupt while one is waiting ends the
-  one that was waiting, which then returns nothing.
+  one that was waiting, which then returns zero in A, X and Y with the carry clear.
 - A call that a break has ended may still have a request on its way to the store, and its result will not be used. An
   `OSFIND` for output that a break catches at the wrong moment may leave an empty file behind.
 - A store that never answers leaves the BBC waiting until BREAK. There is no timeout.
@@ -189,8 +189,8 @@ ending in `Done`. The ROM reads STREAM for the response's number, then reads DAT
 to STREAM before each read that could follow a call it made (the OS can call the filing system again while the ROM
 prints, with `*SPOOL`). Responses are one per call, so a nested call does not disturb the one being read.
 
-A call that only returns registers has no ops, and the ROM reads its registers straight away. Reading A out is the last
-thing the ROM does with a response, and frees it.
+A call that only returns registers has no ops, and the ROM reads its registers straight away, from the response the
+finished call selected. Reading A out is the last thing the ROM does with a response, and frees it.
 
 | Op  | Name  | Bytes after it                             | The ROM                                                             |
 | --- | ----- | ------------------------------------------ | ------------------------------------------------------------------- |
