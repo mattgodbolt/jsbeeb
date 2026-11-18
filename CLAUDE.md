@@ -164,7 +164,7 @@ nobody asked.
 - The snapshot JSON format is documented in `docs/snapshot-format.md` — **keep it up to date** if you add new fields to any component's `snapshotState()` or change the format version
 - Each component owns its own `snapshotState()` / `restoreState()` methods
 - Scheduler tasks are not serialized directly — each component saves its task offset relative to `scheduler.epoch` and re-registers on restore
-- `interrupt` is not saved in the CPU snapshot — it is reconstructed by VIA/ACIA `restoreState()` calls and, on a
+- `interrupt` is not saved in the CPU snapshot; it is reconstructed by VIA/ACIA `restoreState()` calls and, on a
   Master, by restoring ACCCON (IRR)
 - `soundChip.lastRunEpoch` is always synced to the scheduler epoch on restore, not saved
 

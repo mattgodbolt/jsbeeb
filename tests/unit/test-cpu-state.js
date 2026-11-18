@@ -966,7 +966,7 @@ describe("Master ACCCON IRR", () => {
     it.each([
         [0, 0],
         [AccconIrr, IrqsBeforeHandlerClearsIrr],
-    ])("with ACCCON at %i takes an IRQ for as long as IRR is set: %i of them", async (acccon, irqs) => {
+    ])("with ACCCON at %i, counts %i IRQs from a handler that clears IRR on its tenth", async (acccon, irqs) => {
         expect(irqsCounted(await masterReadyToCount(acccon))).toBe(irqs);
     });
 
