@@ -756,9 +756,18 @@ class InstructionHook extends DebugHook {
     }
 }
 
-function is1MHzAccess(addr) {
+function isModelB1MHzAccess(addr) {
     const FEslowdown = [true, false, true, true, false, false, true, false];
     return addr >= 0xfc00 && addr < 0xff00 && (addr < 0xfe00 || FEslowdown[(addr >>> 5) & 7]);
+}
+
+// As a Master 128 measures (#1885): VIDPROC is 2MHz, though the Master Reference Manual (F.6-8) lists it as 1MHz.
+function isMaster1MHzAccess(addr) {
+    return (
+        addr >= 0xfc00 &&
+        addr < 0xff00 &&
+        (addr < 0xfe20 || (addr >= 0xfe28 && addr < 0xfe2c) || (addr >= 0xfe40 && addr < 0xfea0))
+    );
 }
 
 export class Cpu6502 extends Base6502 {
@@ -1740,16 +1749,14 @@ export class Cpu6502 extends Base6502 {
     // Bake in the 1MHz bus check at construction time. On the Master, ACCCON
     // TST (bit 6) remaps FRED, JIM, and SHEILA reads (&FC00-&FEFF) to the
     // internal 2MHz bus, but writes still go through the external 1MHz bus.
-    // Non-Master machines just use the static address check with no ACCCON
-    // awareness.
     buildIs1MHzAccess() {
         if (this.model.isMaster) {
             return (addr, isWrite) => {
-                if (!isWrite && this.acccon & 0x40 && addr >= 0xfc00 && addr < 0xff00) return false;
-                return is1MHzAccess(addr);
+                if (!isWrite && this.acccon & 0x40) return false;
+                return isMaster1MHzAccess(addr);
             };
         }
-        return is1MHzAccess;
+        return isModelB1MHzAccess;
     }
 
     buildPolltime() {
