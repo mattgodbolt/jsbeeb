@@ -54,13 +54,30 @@ describe("Master hardware", () => {
         ]);
     });
 
-    // With no instruction run, the CRTC's address and the video's byte are wherever reset left them, so all of RAM
-    // holds the screen byte.
+    // All of RAM holds the screen byte, so the video reads it wherever reset left the CRTC.
     it.each([
-        { model: "Master", romsel: EmptyBank, address: 0x9000, read: ScreenByte, what: "the video's byte" },
-        { model: "Master", romsel: 0x80 | EmptyBank, address: 0x8000, read: WrittenByte, what: "ANDY, paged over it" },
-        { model: "B-DFS1.2", romsel: EmptyBank, address: 0x9000, read: 0, what: "zero on a Model B, unmeasured" },
-    ])("reads $what from an empty socket written to on a $model", async ({ model, romsel, address, read }) => {
+        {
+            what: "a Master's empty socket reads the video's byte, dropping a write",
+            model: "Master",
+            romsel: EmptyBank,
+            address: 0x9000,
+            read: ScreenByte,
+        },
+        {
+            what: "ANDY paged over a Master's empty socket reads back a write",
+            model: "Master",
+            romsel: 0x80 | EmptyBank,
+            address: 0x8000,
+            read: WrittenByte,
+        },
+        {
+            what: "a Model B's empty socket, unmeasured, reads zero",
+            model: "B-DFS1.2",
+            romsel: EmptyBank,
+            address: 0x9000,
+            read: 0,
+        },
+    ])("$what", async ({ model, romsel, address, read }) => {
         const machine = new TestMachine(model, { video: new Video(model === "Master", FramebufferPixels, () => {}) });
         await machine.initialise();
         for (let ramAddress = 0; ramAddress < SidewaysStart; ++ramAddress) machine.writebyte(ramAddress, ScreenByte);
