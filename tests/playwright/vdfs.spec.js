@@ -64,6 +64,8 @@ const folderText = (page, name) =>
     }, name);
 
 test.describe("VDFS from a folder in the browser", () => {
+    test.skip(({ browserName }) => browserName !== "chromium", "needs the File System Access API");
+
     test("lists the folder, and saves into it", async ({ beeb, page }) => {
         await beeb.open();
         await chooseFolderWith(page, { HELLO: "hi", "HELLO.inf": "$.HELLO  FFFF2000 FFFF2000 00000002\n" });

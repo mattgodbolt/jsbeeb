@@ -298,7 +298,8 @@ if (!isDesktopApp() && canChooseFolder() && model.takesServiceRoms)
         modals,
         serving: !!processor.vdfs,
         notify: notifyVdfs,
-        flush: () => processor.vdfs?.flush(),
+        hold: () => processor.vdfs?.hold(),
+        release: () => processor.vdfs?.release({ changed: false }),
     });
 openHelpOnTheTabForNow(() => loop.isPaused() || loop.mode === RunMode.debugging);
 

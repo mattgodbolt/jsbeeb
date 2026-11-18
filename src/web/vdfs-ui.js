@@ -49,10 +49,19 @@ export async function attachBrowserVdfs(host, { notify, offer }) {
 const RealFolders = { pick: pickFolder, save: saveFolder, forget: forgetFolder };
 
 /**
- * Serving a folder starts the machine again with it, so the menu asks first, hands what is open to the folder it has,
- * and keeps or forgets the folder only once the answer is yes.
+ * Serving a folder starts the machine again with it, so the menu asks first, then holds the BBC and hands what is open
+ * to the folder it has, and keeps or forgets the folder only once the answer is yes. The BBC is let go again if that
+ * fails.
  */
-export function attachVdfsMenu({ urlState, modals, serving, notify, flush = async () => {}, folders = RealFolders }) {
+export function attachVdfsMenu({
+    urlState,
+    modals,
+    serving,
+    notify,
+    hold = async () => {},
+    release = () => {},
+    folders = RealFolders,
+}) {
     const serve = document.getElementById("vdfs-serve");
     const stop = document.getElementById("vdfs-stop");
     serve.hidden = false;
@@ -68,6 +77,17 @@ export function attachVdfsMenu({ urlState, modals, serving, notify, flush = asyn
             }
         });
 
+    const restart = async (change, params) => {
+        await hold();
+        try {
+            await change();
+        } catch (error) {
+            release();
+            throw error;
+        }
+        reloadAsMachine(urlState, params);
+    };
+
     onClick(serve, async () => {
         let handle;
         try {
@@ -78,14 +98,10 @@ export function attachVdfsMenu({ urlState, modals, serving, notify, flush = asyn
         }
         const message = `Serve "${handle.name}" as VDFS? The BBC restarts, and then *VDFS selects it.`;
         if (!(await modals.confirm(message, "Restart", "Cancel"))) return;
-        await flush();
-        await folders.save(handle);
-        reloadAsMachine(urlState, { vdfs: true });
+        await restart(() => folders.save(handle), { vdfs: true });
     });
     onClick(stop, async () => {
         if (!(await modals.confirm("Stop serving the VDFS folder? The BBC restarts.", "Restart", "Cancel"))) return;
-        await flush();
-        await folders.forget();
-        reloadAsMachine(urlState, { vdfs: undefined });
+        await restart(() => folders.forget(), { vdfs: undefined });
     });
 }
