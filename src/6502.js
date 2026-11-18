@@ -919,7 +919,7 @@ export class Cpu6502 extends Base6502 {
         this.romSelect(this.romsel);
     }
 
-    /** Whether reading memStat's `page` reaches an empty socket; no range mapPages maps straddles &8000 or &C000. */
+    /** Whether reading memStat's `page` reaches an empty socket. */
     readsEmptySocket(page) {
         const addressPage = page & 0xff;
         return this.pagedBankEmpty && this.memStat[page] === RomStat && addressPage >= 0x80 && addressPage < 0xc0;
@@ -929,8 +929,12 @@ export class Cpu6502 extends Base6502 {
         this.memStat.fill(stat, start, end);
         this.memLook.fill(offset, start, end);
         // While a debug hook is set, every access of its kind takes the slow path, which calls it.
-        const readsFast = stat && !this._debugRead && !this.readsEmptySocket(start);
-        this.readLook.fill(readsFast ? offset : SlowPathOffset, start, end);
+        this.readLook.fill(stat && !this._debugRead ? offset : SlowPathOffset, start, end);
+        if (this.pagedBankEmpty) {
+            for (let page = start; page < end; ++page) {
+                if (this.readsEmptySocket(page)) this.readLook[page] = SlowPathOffset;
+            }
+        }
         this.writeLook.fill(stat === 1 && !this._debugWrite ? offset : SlowPathOffset, start, end);
     }
 

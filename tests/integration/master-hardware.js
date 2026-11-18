@@ -9,6 +9,8 @@ const Romsel = 0xfe30;
 const SidewaysStart = 0x8000;
 const EmptyBank = 8;
 const RomByte = 0xa5;
+const ScreenByte = 0x41;
+const WrittenByte = 0x42;
 
 // Tom Seddon's FLOAT, from https://github.com/mattgodbolt/jsbeeb/issues/1888, with its results on his Master 128.
 const Float = `
@@ -50,6 +52,21 @@ describe("Master hardware", () => {
             "MODE 1, screen &41: &41x64",
             "MODE 1, screen &5A: &5Ax64",
         ]);
+    });
+
+    // With no instruction run, the CRTC's address and the video's byte are wherever reset left them, so all of RAM
+    // holds the screen byte.
+    it.each([
+        { model: "Master", romsel: EmptyBank, address: 0x9000, read: ScreenByte, what: "the video's byte" },
+        { model: "Master", romsel: 0x80 | EmptyBank, address: 0x8000, read: WrittenByte, what: "ANDY, paged over it" },
+        { model: "B-DFS1.2", romsel: EmptyBank, address: 0x9000, read: 0, what: "zero on a Model B, unmeasured" },
+    ])("reads $what from an empty socket written to on a $model", async ({ model, romsel, address, read }) => {
+        const machine = new TestMachine(model, { video: new Video(model === "Master", FramebufferPixels, () => {}) });
+        await machine.initialise();
+        for (let ramAddress = 0; ramAddress < SidewaysStart; ++ramAddress) machine.writebyte(ramAddress, ScreenByte);
+        machine.writebyte(Romsel, romsel);
+        machine.writebyte(address, WrittenByte);
+        expect(machine.readbyte(address)).toBe(read);
     });
 
     it("reads a ROM put in the empty socket, and in a fresh Master restored from a snapshot of it", async () => {
