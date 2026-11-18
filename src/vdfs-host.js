@@ -445,6 +445,18 @@ export class VdfsHost {
         }
     }
 
+    /** Does `change` to the file at `path`, which the channels open on it do not write over, unless it fails. */
+    async _detachedWhile(path, change) {
+        const attached = this.channels.all().filter((channel) => !channel.detached && samePath(channel.path, path));
+        this.channels.detachPath(path);
+        try {
+            await change();
+        } catch (error) {
+            for (const channel of attached) channel.detached = false;
+            throw error;
+        }
+    }
+
     async _save(block, { path, entry }, fs) {
         const [load, exec, start, end] = [OsfileBlock.load, OsfileBlock.exec, OsfileBlock.start, OsfileBlock.end].map(
             (offset) => this.memory.long(block + offset),
@@ -453,8 +465,7 @@ export class VdfsHost {
         if (entry?.isDirectory) throw Errors.isDirectory();
         if (entry?.locked) throw Errors.locked();
         const data = this.memory.read(start, end - start);
-        this.channels.detachPath(path);
-        await fs.writeFile(path, { data, load, exec, locked: false });
+        await this._detachedWhile(path, () => fs.writeFile(path, { data, load, exec, locked: false }));
     }
 
     /** What an OSFILE that writes a file's information changes: the addresses, the lock, or all of them. */
@@ -496,10 +507,9 @@ export class VdfsHost {
         if (mode === Osfind.write) {
             if (entry?.locked) throw Errors.locked();
             this.channels.requireRoom();
-            this.channels.detachPath(path);
             data = new Uint8Array(0);
             info = { load: 0, exec: 0, locked: false };
-            await fs.writeFile(path, { data, ...info });
+            await this._detachedWhile(path, () => fs.writeFile(path, { data, ...info }));
         } else {
             if (!entry) {
                 registers.a = 0;
@@ -718,8 +728,7 @@ export class VdfsHost {
             const listing = await fs.list(path);
             if (listing && (listing.entries.length > 0 || listing.skipped.length > 0)) throw Errors.notEmpty();
         }
-        this.channels.detachPath(path);
-        await fs.remove(path);
+        await this._detachedWhile(path, () => fs.remove(path));
         if (samePath(this.directory, path)) this.directory = [];
         if (samePath(this.library, path)) this.library = [];
     }
