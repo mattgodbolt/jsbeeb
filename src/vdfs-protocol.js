@@ -234,7 +234,7 @@ export class VdfsPorts {
         return (waiting ? OpsWaiting : 0) | (selected?.results?.carry ? CarryOut : 0);
     }
 
-    /** The A the call returns, which is the last thing the ROM reads of a response without ops, and so frees it. */
+    /** The A the call returns, which is the last thing the ROM reads of a response, and so frees it. */
     _takeResult(register) {
         const stream = this._streams.get(this._selectedStream);
         if (!stream?.results) return 0;
