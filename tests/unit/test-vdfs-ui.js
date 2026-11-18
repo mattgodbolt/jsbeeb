@@ -205,6 +205,16 @@ describe("VDFS in a browser, the page's side", () => {
             ]);
         });
 
+        it("lets the BBC go again if holding it fails, and says so", async () => {
+            attachVdfsMenu({ urlState, modals, notify, hold, release, serving: true, folders });
+            hold.mockRejectedValueOnce(new Error("no way"));
+            await click("vdfs-serve");
+            expect(release).toHaveBeenCalledTimes(1);
+            expect(folders.save).not.toHaveBeenCalled();
+            expect(reloaded).toEqual([]);
+            expect(notify).toHaveBeenCalledWith(expect.stringContaining("no way"));
+        });
+
         it("does not hold the BBC when the person says no, or when no folder was picked", async () => {
             attachVdfsMenu({ urlState, modals, notify, hold, release, serving: true, folders });
             modals.confirm.mockResolvedValue(false);

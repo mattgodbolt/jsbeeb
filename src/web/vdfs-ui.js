@@ -78,8 +78,8 @@ export function attachVdfsMenu({
         });
 
     const restart = async (change, params) => {
-        await hold();
         try {
+            await hold();
             await change();
         } catch (error) {
             release();
