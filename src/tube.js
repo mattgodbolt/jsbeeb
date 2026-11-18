@@ -330,6 +330,7 @@ export class Tube {
         this.updateInterrupts();
         return result;
     }
+
     /**
      * The control flags (P, V, M, J, I and Q), each register's status as the host and the parasite read it, the bytes
      * queued in each direction, oldest first, and whether the ULA is asking the parasite for an NMI.

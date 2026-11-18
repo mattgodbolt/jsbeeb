@@ -884,13 +884,8 @@ export class MachineSession {
     /**
      * Reads the emulated hardware's internal state without changing it: no flag is cleared and no port driven, and a
      * VIA's timers are caught up to now as the machine's next access would. Each device gives a plain, JSON-ready
-     * dictionary of its registers, named as its datasheet names them, and whatever more its debugger panel draws.
-     *
-     * The devices, where the machine has them: `sysvia` and `uservia` (6522), `crtc` (6845), `ula` and with a
-     * VideoNuLA fitted `nula`, `sound` (SN76489), `fdc` (8271 or 1770), `acia` (6850), `serial` (the serial ULA),
-     * `adc` (uPD7002), `tube` (the Tube ULA, with a second processor), `cmos` (the Master's MC146818) and `paging`
-     * (ROMSEL, the bank it pages, and the Master's ACCCON); on an Atom, `via` (6522), `ppia` (8255) and, with disc
-     * drives, `fdc`.
+     * dictionary of its registers, named as its datasheet names them. The devices a machine has are named in the
+     * error thrown for one it lacks.
      *
      * @param {string} [device] one device to read; all of them when left out
      * @returns {Object<string, Object>} the device's dictionary, or every device's by name

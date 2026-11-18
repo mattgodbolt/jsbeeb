@@ -278,6 +278,7 @@ export class Cmos {
         // - Address Select low.
         // - Data Select high.
         // - Read high.
+
         if (!this.addressSelect && this.dataSelect && this.isRead) {
             return this._registerValue(this.cmosAddr, this.cmosAddr < ClockRegisters ? this.bbcDateTime() : null);
         }
