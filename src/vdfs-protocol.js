@@ -20,6 +20,8 @@ const RegisterOfPort = Object.freeze({ [Port.a]: "a", [Port.x]: "x", [Port.y]: "
 const MaxErrorText = 80;
 const HostFailureNumber = 0xff;
 const LastAscii = 0x7e;
+const FirstPrintable = 0x20;
+const CarriageReturn = 0x0d;
 const Unprintable = "?".charCodeAt(0);
 const LastStreamId = 0xff;
 
@@ -34,7 +36,11 @@ export class Response {
     }
 
     _text(text) {
-        for (const char of text) this.bytes.push(char.charCodeAt(0) <= LastAscii ? char.charCodeAt(0) : Unprintable);
+        for (const char of text) {
+            const code = char.charCodeAt(0);
+            const isPrintable = (code >= FirstPrintable && code <= LastAscii) || code === CarriageReturn;
+            this.bytes.push(isPrintable ? code : Unprintable);
+        }
         this.bytes.push(0);
     }
 

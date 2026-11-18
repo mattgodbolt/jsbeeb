@@ -31,7 +31,7 @@ export function readResponse(host, registersIn) {
         else if (op === Op.claim) ops.push({ op: "claim" });
         else if (op === Op.exec) {
             const high = readByte();
-            ops.push({ op: "exec", address: ((high << 8) | readByte()) + 1 });
+            ops.push({ op: "exec", address: (((high << 8) | readByte()) + 1) & 0xffff });
             return { ops, ...registersIn };
         } else if (op === Op.error) {
             const number = readByte();
