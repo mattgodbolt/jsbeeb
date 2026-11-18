@@ -26,8 +26,8 @@ export const ErrorBlockPointer = 0xfd;
 const ReadCharacterVector = 0x210;
 /**
  * How much of the read-character routine counts as in it, for the PC and for an address on the stack alike: enough
- * to take in its wait for a key, whose call into the keyboard buffer returns to &DEEF in OS 1.20 (the routine is at
- * &DEC5) and to &E7E3 in MOS 3.20 (at &E7BC). Measured on those two only.
+ * to take in its wait for a key, whose call into the keyboard buffer returns &2A bytes in on OS 1.20 (&DEEF) and the
+ * US OS (&DEC6), &27 on MOS 3.20 (&E7E3) and &26 on MOS 0.10 (&DFCB).
  */
 const ReadCharacterBytes = 0x40;
 const FileVector = 0x212;
@@ -337,7 +337,8 @@ function keywordsUpTo(peek, line, keywords, { reading, expression }) {
  *   those keywords in the statement BASIC is in, up to its pointer, or null where there is none (as with no `line`);
  * - "vsync": in a tight loop on the OS's count of vsyncs, as *FX19 is;
  * - "filing system": running the filing system's ROM, as the OS also does for a moment for each service call it
- *   offers every ROM; a sample in an interrupt taken there is null;
+ *   offers every ROM; a sample in an interrupt taken there is null, as is the tape filing system, which is in the OS
+ *   (MOS 0.10's only one);
  * - "sound": in a SOUND statement, which only takes long while its channel's queue is full.
  * Only the vsync loop is a wait in itself: a program passes through the others without waiting, as an INKEY(0) or a
  * SOUND with room in its queue does, so it is waiting only if it stays.

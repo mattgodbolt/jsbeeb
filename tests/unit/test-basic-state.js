@@ -195,6 +195,19 @@ describe("readWait", () => {
         const { cpu, line } = machine(parts, { ...pointers, pc: 0x2000 });
         expect(readWait(cpu, line, keywords)).toEqual(sound ? { kind: "sound", keyword: null } : null);
     });
+
+    // ROM 9's address and number in FILEV's three bytes of the extended vector table, and ROM 9 paged in at the PC.
+    it.each([
+        ["extended by ROM 9", 0xff1b, { kind: "filing system", keyword: null }],
+        ["the OS's own, as the tape filing system is", 0xf247, null],
+    ])("reads a PC in ROM 9 with FILEV %s", (_, filev, expected) => {
+        const { cpu, line } = machine(["X=1"], { reading: 0, pc: 0x8100 });
+        const peek = cpu.peekmemAsLanguage;
+        const fileVector = { 0x212: filev & 0xff, 0x213: filev >> 8, 0xdba: 0x00, 0xdbb: 0x81, 0xdbc: 9 };
+        cpu.peekmemAsLanguage = (address) => fileVector[address] ?? peek(address);
+        cpu.isBankPagedAt = (bank, address) => bank === 9 && address === cpu.pc;
+        expect(readWait(cpu, line, keywords)).toEqual(expected);
+    });
 });
 
 describe("formatReal", () => {
