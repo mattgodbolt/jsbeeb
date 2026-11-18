@@ -22,23 +22,24 @@ const FunctionChain = 0x4f8;
 export const LanguageRomNumber = 0x28c;
 /** Where the OS's BRK handler leaves the address of the error block, its number then its message, low byte first. */
 export const ErrorBlockPointer = 0xfd;
-/** RDCHV, the vector the OS reads a character through, in the same map. */
+/** RDCHV, the vector the OS reads a character through, which holds the address of its read-character routine. */
 const ReadCharacterVector = 0x210;
 /**
- * Far enough into the OS's read-character routine to take in its wait for a key, whose call into the keyboard buffer
- * returns to &DEEF in OS 1.20 (the routine is at &DEC5) and to &E7E3 in MOS 3.20 (at &E7BC).
+ * How much of the read-character routine counts as in it, for the PC and for an address on the stack alike: enough
+ * to take in its wait for a key, whose call into the keyboard buffer returns to &DEEF in OS 1.20 (the routine is at
+ * &DEC5) and to &E7E3 in MOS 3.20 (at &E7BC). Measured on those two only.
  */
 const ReadCharacterBytes = 0x40;
-/**
- * FILEV, which a filing system ROM extends: it then holds the OS's entry for an extended FILEV, and the OS's table of
- * extended vectors holds the ROM's number.
- */
 const FileVector = 0x212;
-const Vectors = 0x200;
+const FirstVector = 0x200;
+/**
+ * A ROM extends a vector by pointing it at the OS's entry for it, three bytes per vector from &FF00, and putting its
+ * own address and ROM number in the vector's three bytes in the table at &0D9F.
+ */
 const ExtendedVectorEntries = 0xff00;
-const ExtendedVectors = 0xd9f;
+const ExtendedVectorTable = 0x0d9f;
 const ExtendedVectorBytes = 3;
-const ExtendedVectorRom = 2;
+const ExtendedVectorRomNumber = 2;
 /** The OS counts vsyncs here, and *FX19 waits for the count to change. */
 const VsyncCounter = 0x240;
 const StackPage = 0x100;
@@ -81,7 +82,8 @@ const DispatchCompareOffset = 6;
 /** The keyword table starts with AND, its first token. */
 const FirstKeyword = [0x41, 0x4e, 0x44, FirstToken];
 const KeywordCharacters = /^[A-Z][A-Z$(]*$/;
-const KeyboardFunctions = new Set(["GET", "GET$", "INKEY", "INKEY$"]);
+const KeyboardKeywords = new Set(["GET", "GET$", "INKEY", "INKEY$", "INPUT", "INPUT LINE"]);
+const SoundOrBranch = new Set(["SOUND", "THEN", "ELSE"]);
 
 function findBytes(rom, pattern) {
     const found = [];
@@ -298,54 +300,47 @@ function readingCharacter(peek, pc, stackPointer) {
 
 /** The ROM number of the filing system that has extended FILEV, or null where none has. */
 function filingSystemRom(peek) {
-    const vector = (FileVector - Vectors) / 2;
+    const vector = (FileVector - FirstVector) / 2;
     if (word(peek, FileVector) !== ExtendedVectorEntries + ExtendedVectorBytes * vector) return null;
-    return peek(ExtendedVectors + ExtendedVectorBytes * vector + ExtendedVectorRom);
+    return peek(ExtendedVectorTable + ExtendedVectorBytes * vector + ExtendedVectorRomNumber);
 }
 
 /**
- * Of the statement in `line` that BASIC's pointers are in, its first character after any spaces and its tokens up to
- * the later pointer, not counting those in strings. The statement pointer can be on the colon before a statement that
- * BASIC reads through the expression pointer, as it does one that does not start with a keyword, or on the colon after
- * one it has finished, with the expression pointer left behind.
+ * The keywords of the statement in `line` that BASIC's pointers are in, up to the later pointer, outside strings, with
+ * null for each other character but a space; INPUT with LINE next is one, "INPUT LINE", as BASIC only takes LINE
+ * there (`INPUT SPC(3) LINE A$` is a syntax error in BASIC II and IV). The statement pointer can be on the colon
+ * before a statement that BASIC reads through the expression pointer, as it does one that does not start with a
+ * keyword, or on the colon after one it has finished, with the expression pointer left behind.
  */
-function statementUpTo(peek, line, { reading, expression }) {
-    let first = null;
-    let tokens = [];
+function keywordsUpTo(peek, line, keywords, { reading, expression }) {
+    let spelt = [];
     let quoted = false;
     for (let at = line.start + LineHeaderBytes; at <= Math.max(reading, expression) && at < line.end; ++at) {
         const code = peek(at);
         if (code === Quote) quoted = !quoted;
-        if (quoted) continue;
-        if (code === Colon) {
+        else if (quoted || code === Space) continue;
+        else if (code === Colon) {
             if (at > reading || (at === reading && expression < reading)) break;
-            first = null;
-            tokens = [];
+            spelt = [];
             continue;
         }
-        if (first === null && code !== Space) first = code;
-        if (code === LineNumberToken) at += 3;
-        else if (code >= FirstToken) tokens.push(code);
+        const keyword = code >= FirstToken ? keywords.get(code) : null;
+        if (keyword === "LINE" && spelt.at(-1) === "INPUT") spelt[spelt.length - 1] = "INPUT LINE";
+        else spelt.push(keyword ?? null);
     }
-    return { first, tokens };
-}
-
-/** The keyword a statement reading a key waits in: its last GET, GET$, INKEY or INKEY$, else INPUT or INPUT LINE. */
-function keyboardKeyword({ first, tokens }, keywords) {
-    const spelt = tokens.map((token) => keywords.get(token));
-    const reading = spelt.findLast((keyword) => KeyboardFunctions.has(keyword));
-    if (reading) return reading;
-    if (keywords.get(first) !== "INPUT") return null;
-    return spelt[1] === "LINE" ? "INPUT LINE" : "INPUT";
+    return spelt;
 }
 
 /**
- * Where the machine is, of the places a program can wait, or null: "keyboard", in the OS's read-character routine, as
- * GET, INKEY with a time limit and INPUT are, with the keyword of those the statement BASIC is in (in `line`) waits in,
- * where it shows; "vsync", in a tight loop on the OS's count of vsyncs, as *FX19 is; "filing system", with the filing
- * system's ROM paged in; "sound", in a SOUND statement, which only takes long while its channel's queue is full. Only
- * the vsync loop is a wait in itself: a program passes through the others, as INKEY(0) does, and is waiting only if it
- * stays.
+ * Where the machine is, of the places a program can wait, or null:
+ * - "keyboard": in the OS's read-character routine, as GET, INKEY with a time limit and INPUT are, with the last of
+ *   those keywords in the statement BASIC is in, up to its pointer, or null where there is none (as with no `line`);
+ * - "vsync": in a tight loop on the OS's count of vsyncs, as *FX19 is;
+ * - "filing system": running the filing system's ROM, as the OS also does for a moment for each service call it
+ *   offers every ROM; a sample in an interrupt taken there is null;
+ * - "sound": in a SOUND statement, which only takes long while its channel's queue is full.
+ * Only the vsync loop is a wait in itself: a program passes through the others without waiting, as an INKEY(0) or a
+ * SOUND with room in its queue does, so it is waiting only if it stays.
  * @param {import("./6502.js").Cpu6502} cpu
  * @param {ProgramLine | null} line
  * @param {Map<number, string>} keywords
@@ -354,13 +349,14 @@ function keyboardKeyword({ first, tokens }, keywords) {
 export function readWait(cpu, line, keywords) {
     const peek = (address) => cpu.peekmemAsLanguage(address);
     const { pc } = cpu;
-    const statement = line ? statementUpTo(peek, line, readPointers(peek)) : { first: null, tokens: [] };
-    if (readingCharacter(peek, pc, cpu.s)) return { kind: "keyboard", keyword: keyboardKeyword(statement, keywords) };
+    const spelt = line ? keywordsUpTo(peek, line, keywords, readPointers(peek)) : [];
+    if (readingCharacter(peek, pc, cpu.s))
+        return { kind: "keyboard", keyword: spelt.findLast((keyword) => KeyboardKeywords.has(keyword)) ?? null };
     if (tightLoopAt(cpu.disassembler, pc)?.reads.includes(VsyncCounter)) return { kind: "vsync", keyword: null };
     const filingSystem = filingSystemRom(peek);
-    if (filingSystem !== null && cpu.isBankPagedAt(cpu.bankPagedBy(filingSystem), pc))
+    if (filingSystem !== null && pc >= RomBase && pc < RomEnd && cpu.isBankPagedAt(cpu.bankPagedBy(filingSystem), pc))
         return { kind: "filing system", keyword: null };
-    if (keywords.get(statement.first) === "SOUND") return { kind: "sound", keyword: null };
+    if (spelt.findLast((keyword) => SoundOrBranch.has(keyword)) === "SOUND") return { kind: "sound", keyword: null };
     return null;
 }
 

@@ -13,6 +13,7 @@ import { bootedTestMachine } from "./helpers.js";
 const Frame = 40000;
 const SamplesTaken = 12;
 const Keyboard = (keyword) => ({ kind: "keyboard", keyword });
+const FilingSystem = { kind: "filing system", keyword: null };
 
 const DivisionByZero = { number: 18, message: "Division by zero", lineNumber: 10 };
 
@@ -63,8 +64,10 @@ describe.each(["B-DFS1.2", "Master"])("readWait on a %s", (model) => {
             }
             return found;
         };
-        return { machine, samples };
+        return { machine, samples, read };
     }
+
+    const kinds = (waits) => new Set(waits.map((wait) => JSON.stringify(wait)));
 
     it.each([
         ["10 G=GET", Keyboard("GET")],
@@ -73,30 +76,63 @@ describe.each(["B-DFS1.2", "Master"])("readWait on a %s", (model) => {
         ["10 A$=INKEY$(500)", Keyboard("INKEY$")],
         ["10 INPUT X", Keyboard("INPUT")],
         ['10 INPUT LINE "Name: " A$', Keyboard("INPUT LINE")],
+        ['10 A$="":IF A$="" THEN INPUT A$', Keyboard("INPUT")],
+        ['10 A$="":IF A$<>"" THEN X=1 ELSE INPUT LINE A$', Keyboard("INPUT LINE")],
+        ["10 REPEAT INPUT A$ UNTIL FALSE", Keyboard("INPUT")],
+        ["10 X=GET:INPUT A$", Keyboard("GET")],
         ["10 CALL &FFE0", Keyboard(null)],
-        ['10 CHAIN "X"', { kind: "filing system", keyword: null }],
         ["10 REPEAT:SOUND 1,-15,100,200:UNTIL FALSE", { kind: "sound", keyword: null }],
+        ["10 IF TRUE THEN SOUND 1,-15,100,200:GOTO 10", { kind: "sound", keyword: null }],
+        // Machine code that leaves the filing system's ROM paged in while it runs in RAM.
+        ["10 DIM C% 20:P%=C%\n20 [OPT 0:LDA &DBC:STA &F4:STA &FE30:.l JMP l:]\n30 CALL C%", null],
     ])("reads %j as waiting in %j wherever it is sampled", async (program, expected) => {
         const { samples } = await running(program);
-        expect(new Set((await samples()).map((wait) => JSON.stringify(wait)))).toEqual(
-            new Set([JSON.stringify(expected)]),
-        );
+        expect(kinds(await samples())).toEqual(kinds([expected]));
     });
 
+    it("reads BASIC's prompt as reading the keyboard, with no keyword as there is no line", async () => {
+        const machine = await bootedTestMachine(model);
+        const cpu = machine.processor;
+        const { keywords } = basicRom(cpu.romBank(cpu.bankPagedBy(cpu.peekmemAsLanguage(LanguageRomNumber))));
+        expect(readWait(cpu, null, keywords)).toEqual(Keyboard(null));
+    });
+
+    // A sample can fall in the interrupt that ends the wait, or in *FX19's own call through the ROMs.
     it("reads *FX19 as waiting for vsync when sampled in its loop, as most samples are", async () => {
         const { samples } = await running("10 REPEAT:*FX19\n20 UNTIL FALSE");
-        const vsync = (await samples()).filter((wait) => wait?.kind === "vsync");
-        expect(vsync.length).toBeGreaterThan(SamplesTaken / 2);
+        const found = await samples();
+        expect(found.filter((wait) => wait?.kind === "vsync").length).toBeGreaterThan(SamplesTaken / 2);
+        expect(found.filter((wait) => wait?.kind === "keyboard" || wait?.kind === "sound")).toEqual([]);
     });
 
-    it.each(["10 REPEAT:X=X+1:UNTIL FALSE", "10 REPEAT:A=INKEY(0):UNTIL FALSE"])(
-        "reads %j mostly as not at a wait",
-        async (program) => {
-            const { samples } = await running(program);
-            const waits = (await samples()).filter((wait) => wait !== null);
-            expect(waits.length).toBeLessThan(SamplesTaken / 4);
-        },
-    );
+    it("reads CHAIN with no disc as in the filing system, but for a sample in an interrupt taken there", async () => {
+        const { samples } = await running('10 CHAIN "X"');
+        const found = await samples();
+        expect([...kinds(found)].every((wait) => kinds([null, FilingSystem]).has(wait))).toBe(true);
+        expect(found.filter((wait) => wait?.kind === "filing system").length).toBeGreaterThan((SamplesTaken * 3) / 4);
+    });
+
+    it("reads a program that never waits as at no wait", async () => {
+        const { samples } = await running("10 REPEAT:X=X+1:UNTIL FALSE");
+        expect(kinds(await samples())).toEqual(kinds([null]));
+    });
+
+    // These pass through a place a program can wait without waiting, and a sample can land there; only how long the
+    // program stays tells them from a wait.
+    it.each([
+        ["10 REPEAT:A=INKEY(0):UNTIL FALSE", [null, Keyboard("INKEY")]],
+        // Offers every ROM in turn a service call that none of them takes.
+        ["10 REPEAT:*FX143,96\n20 UNTIL FALSE", [null, FilingSystem]],
+        [
+            "10 REPEAT:SOUND 1,0,0,1:T%=TIME:REPEAT UNTIL TIME>T%+10:UNTIL FALSE",
+            [null, { kind: "sound", keyword: null }],
+        ],
+    ])("reads %j only as at no wait, or passing through %j", async (program, expected) => {
+        const { samples } = await running(program);
+        const found = await samples();
+        expect([...kinds(found)].every((wait) => kinds(expected).has(wait))).toBe(true);
+        expect(found.filter((wait) => wait === null).length).toBeGreaterThan(SamplesTaken / 2);
+    });
 
     it("moves from GET to GET$ in one statement as a key is pressed", async () => {
         const { machine, samples } = await running("10 PRINT GET;GET$");

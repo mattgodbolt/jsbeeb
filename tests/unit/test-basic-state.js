@@ -9,6 +9,7 @@ import {
     readPointers,
     readReportedError,
     readVariables,
+    readWait,
 } from "../../src/basic-state.js";
 import { RepoRoot } from "../../src/test-machine.js";
 
@@ -114,6 +115,85 @@ describe("listStatements", () => {
                 ({ text }) => text,
             ),
         ).toEqual([" *FX 200,3:X=1"]);
+    });
+});
+
+describe("readWait", () => {
+    const keywords = new Map([
+        [0xa5, "GET"],
+        [0xbe, "GET$"],
+        [0xa6, "INKEY"],
+        [0xe8, "INPUT"],
+        [0x86, "LINE"],
+        [0xe7, "IF"],
+        [0x8c, "THEN"],
+        [0x8b, "ELSE"],
+        [0xf5, "REPEAT"],
+        [0xfd, "UNTIL"],
+        [0xd4, "SOUND"],
+        [0xf1, "PRINT"],
+    ]);
+    const tokens = Object.fromEntries([...keywords].map(([token, keyword]) => [keyword, token]));
+    const Text = 0x1904;
+    const ReadCharacter = 0xdec5;
+
+    /**
+     * A CPU at `pc` with an empty stack over memory holding a line of `parts` (text, or a keyword's token), BASIC's
+     * statement pointer at the part numbered `reading` and its expression pointer at the part numbered `expression`.
+     */
+    function machine(parts, { reading, expression = reading, pc = ReadCharacter }) {
+        const bytes = parts.flatMap((part) => (part in tokens ? [tokens[part]] : ascii(part)));
+        const at = (part) =>
+            Text + parts.slice(0, part).reduce((length, p) => length + (p in tokens ? 1 : p.length), 0);
+        const pointer = (address) => [1, address & 0xff, address >> 8];
+        const peek = memory([
+            [0x0a, pointer(at(reading))],
+            [0x1b - 2, [at(expression) & 0xff, at(expression) >> 8, 1]],
+            [0x210, [ReadCharacter & 0xff, ReadCharacter >> 8]],
+            [Text, [...bytes, 0x0d]],
+        ]);
+        const line = { number: 10, start: Text - 4, end: Text + bytes.length };
+        const cpu = {
+            peekmemAsLanguage: peek,
+            pc,
+            s: 0xff,
+            disassembler: { instructionAt: () => ({ accesses: [], flow: "return", next: pc + 1 }) },
+            isBankPagedAt: () => false,
+            bankPagedBy: (rom) => rom,
+        };
+        return { cpu, line };
+    }
+
+    it.each([
+        ["GET at the expression pointer", ["A=", "GET"], { reading: 0, expression: 1 }, "GET"],
+        ["the later of two", ["PRINT", "GET", ";", "GET$"], { reading: 0, expression: 3 }, "GET$"],
+        ["the earlier while it waits there", ["PRINT", "GET", ";", "GET$"], { reading: 0, expression: 1 }, "GET"],
+        ["INPUT after THEN", ['A$="":', "IF", 'A$="" ', "THEN", " ", "INPUT", " A$"], { reading: 6 }, "INPUT"],
+        ["INPUT LINE after ELSE", ["IF", "X ", "ELSE", "INPUT", " ", "LINE", " A$"], { reading: 6 }, "INPUT LINE"],
+        ["INPUT after REPEAT", ["REPEAT", " ", "INPUT", " A$ ", "UNTIL", "0"], { reading: 3 }, "INPUT"],
+        ["LINE only straight after INPUT", ["INPUT", "SPC(3) ", "LINE", "A$"], { reading: 3 }, "INPUT"],
+        ["a colon in a string", ["INPUT", ' "a:b" A$'], { reading: 1 }, "INPUT"],
+        ["the statement after the colon", ["A=", "GET", ":", "INPUT", " B"], { reading: 4 }, "INPUT"],
+        ["a statement read from the colon before it", ["X=1", ":", "A=", "GET"], { reading: 1, expression: 3 }, "GET"],
+        ["none in this statement", ["INPUT", " A:", "X=USR(&FFE0)"], { reading: 2 }, null],
+    ])("names the keyword a key is waited for in: %s", (_, parts, pointers, keyword) => {
+        const { cpu, line } = machine(parts, pointers);
+        expect(readWait(cpu, line, keywords)).toEqual({ kind: "keyboard", keyword });
+    });
+
+    it("names no keyword without a line", () => {
+        const { cpu } = machine(["A=", "GET"], { reading: 1 });
+        expect(readWait(cpu, null, keywords)).toEqual({ kind: "keyboard", keyword: null });
+    });
+
+    it.each([
+        ["in SOUND, on the colon after it", ["SOUND", "1,2,3,4", ":X=1"], { reading: 2, expression: 1 }, true],
+        ["after THEN", ["IF", "1 ", "THEN", "SOUND", "1,2,3,4"], { reading: 4 }, true],
+        ["in the ELSE part after it", ["IF", "0 ", "THEN", "SOUND", "1,2,3,4 ", "ELSE", "X=1"], { reading: 6 }, false],
+        ["in the statement after it", ["SOUND", "1,2,3,4", ":X=1"], { reading: 2, expression: 2 }, false],
+    ])("reads a SOUND statement %s", (_, parts, pointers, sound) => {
+        const { cpu, line } = machine(parts, { ...pointers, pc: 0x2000 });
+        expect(readWait(cpu, line, keywords)).toEqual(sound ? { kind: "sound", keyword: null } : null);
     });
 });
 
