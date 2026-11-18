@@ -1013,19 +1013,6 @@ describe("Via peek", () => {
         expect(via.peek(IFR) & Timer1Int).toBe(0);
     });
 
-    it("gives the timers as the 16-bit values a program reads, caught up", () => {
-        via.write(T1CL, 0x1e);
-        via.write(T1CH, 0x4e);
-        via.write(T2CL, 0x34);
-        via.write(T2CH, 0x12);
-        runMicroseconds(100);
-        const timers = via.peekTimers();
-        expect(timers.t1l).toBe(0x4e1e);
-        expect(timers.t2l).toBe(0x1234);
-        expect(timers.t1c).toBe(via.read(T1CL) | (via.read(T1CH) << 8));
-        expect(timers.t2c).toBe(via.read(T2CL) | (via.read(T2CH) << 8));
-    });
-
     it("leaves the port interrupts raised when peeking the ports", () => {
         via.setca1(true);
         via.setcb1(true);
@@ -1052,7 +1039,7 @@ describe("Via inspect", () => {
         cpu = makeFakeCpu();
     });
 
-    it("gives the registers as written, the pins, the latched inputs and the timers caught up", () => {
+    it("gives the registers as written, the pins, the latched inputs and the timers caught up as a program reads them", () => {
         const via = new UserVia(cpu, scheduler, { read: () => PeripheralPortB, write: () => {} });
         via.write(DDRA, 0xf0);
         via.write(ORA, 0x42);
@@ -1072,11 +1059,11 @@ describe("Via inspect", () => {
 
         const portA = 0x4f;
         const portB = 0xa1;
-        const { t1c, t2c } = via.peekTimers();
-        expect(via.inspect()).toEqual({
-            t1c,
+        const state = via.inspect();
+        expect(state).toEqual({
+            t1c: via.read(T1CL) | (via.read(T1CH) << 8),
             t1l: 0x1234,
-            t2c,
+            t2c: via.read(T2CL) | (via.read(T2CH) << 8),
             t2l: 0x5678,
             orb: 0x03,
             ora: 0x42,
@@ -1095,12 +1082,6 @@ describe("Via inspect", () => {
             ca2: false,
             cb1: true,
             cb2: false,
-        });
-        expect(via.peekTimers()).toEqual({
-            t1c: expect.any(Number),
-            t1l: 0x1234,
-            t2c: expect.any(Number),
-            t2l: 0x5678,
         });
     });
 

@@ -564,32 +564,22 @@ class Via {
         return this._registerValue(addr);
     }
 
-    /** The timers as 16-bit values, read as {@link peek} would; T2L, which no register reads back, as last written. */
-    peekTimers() {
-        const word = (low, high) => (this.peek(high) << 8) | this.peek(low);
-        return {
-            t1c: word(T1CL, T1CH),
-            t1l: word(T1LL, T1LH),
-            t2c: word(T2CL, T2CH),
-            t2l: (this.t2l >>> 1) & 0xffff,
-        };
-    }
-
     /**
      * The registers, pins and control lines by the 6522 datasheet's names, read as {@link peek} would. ORA and ORB are
-     * as last written, portA and portB the pins, and IRA and IRB as last latched.
+     * as last written, portA and portB the pins, IRA and IRB as last latched, the timers as 16-bit values, and T2L,
+     * which no register reads back, as last written.
      */
     inspect() {
-        const { t1c, t1l, t2c, t2l } = this.peekTimers();
+        const word = (low, high) => (this.peek(high) << 8) | this.peek(low);
         return {
             orb: this.orb,
             ora: this.ora,
             ddrb: this.ddrb,
             ddra: this.ddra,
-            t1c,
-            t1l,
-            t2c,
-            t2l,
+            t1c: word(T1CL, T1CH),
+            t1l: word(T1LL, T1LH),
+            t2c: word(T2CL, T2CH),
+            t2l: (this.t2l >>> 1) & 0xffff,
             sr: this.sr,
             acr: this.acr,
             pcr: this.pcr,
