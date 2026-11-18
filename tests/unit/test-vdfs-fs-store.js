@@ -181,6 +181,31 @@ describe("VDFS folder store", () => {
         });
     });
 
+    describe("a directory spelled in another case than the BBC spelled it", () => {
+        it("is the one that is meant, whatever the case a path gives it", async () => {
+            await store.makeDirectory(["Games"]);
+            await store.writeFile(["Games", "ELITE"], written([1, 2]));
+            await store.writeFile(["games", "Zalaga"], written([3]));
+            expect((await fs.readdir(root)).sort()).toEqual(["Games"]);
+            expect((await fs.readdir(path.join(root, "Games"))).sort()).toEqual(["ELITE", "Zalaga"]);
+            expect((await store.find(["GAMES"], "elite")).size).toBe(2);
+            expect([...(await store.read(["gAmEs", "ZALAGA"]))]).toEqual([3]);
+            expect((await store.list(["games"])).entries).toHaveLength(2);
+        });
+
+        it("is left alone when a file is saved under its name in another case, and the save is refused", async () => {
+            await fs.mkdir(path.join(root, "ABC"));
+            await expect(store.writeFile(["abc"], written())).rejects.toThrow("ABC is a directory");
+            expect(await fs.readdir(root)).toEqual(["ABC"]);
+        });
+
+        it("is not a file to give information to", async () => {
+            await fs.mkdir(path.join(root, "DIR"));
+            await expect(store.setInfo(["DIR"], { locked: true })).rejects.toThrow("DIR is not a file");
+            expect(await fs.readdir(root)).toEqual(["DIR"]);
+        });
+    });
+
     describe("writing only what the BBC could have made", () => {
         it.each([
             ["a name that would be a .inf file", () => store.writeFile(["a/inf"], written())],
