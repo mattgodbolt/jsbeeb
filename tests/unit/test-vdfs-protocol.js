@@ -74,6 +74,12 @@ describe("VDFS protocol", () => {
             expect(readResponse(ports, {})).toEqual({ ops: [], a: 5, x: 2, y: 3, p: 0x31 });
         });
 
+        it("never lets a NUL end the text early, since the ROM takes it for the end", () => {
+            const ports = portsSaying(() => "a\u0000b");
+            makeCall(ports, Call.file);
+            expect(readResponse(ports, {}).ops).toEqual([{ op: "print", text: "a?b" }]);
+        });
+
         it("shows what the BBC cannot print as a question mark, and not as another character", () => {
             const ports = portsSaying(() => "tést");
             makeCall(ports, Call.file);
@@ -202,6 +208,12 @@ describe("VDFS protocol", () => {
             makeCall(ports, Call.file);
             readResponse(ports, {});
             expect(ports.openStreams).toBe(0);
+        });
+
+        it("hands the ROM an exec address of zero as zero, though its RTS takes one less", () => {
+            const ports = new VdfsPorts((call, registers, response) => response.exec(0));
+            makeCall(ports, Call.file);
+            expect(readResponse(ports, {}).ops).toEqual([{ op: "exec", address: 0 }]);
         });
 
         it.each([

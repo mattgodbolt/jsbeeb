@@ -34,7 +34,10 @@ export class Response {
     }
 
     _text(text) {
-        for (const char of text) this.bytes.push(char.charCodeAt(0) <= LastAscii ? char.charCodeAt(0) : Unprintable);
+        for (const char of text) {
+            const code = char.charCodeAt(0);
+            this.bytes.push(code === 0 || code > LastAscii ? Unprintable : code);
+        }
         this.bytes.push(0);
     }
 

@@ -5,7 +5,7 @@
  * use is pinned in .github/workflows/vdfs-rom.yml.
  */
 
-import { execFileSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -18,12 +18,12 @@ const Installed = path.join("public", "roms", RomName);
 function assemble(baron = process.env.BARON ?? "baron") {
     const out = fs.mkdtempSync(path.join(os.tmpdir(), "vdfs-rom-"));
     try {
-        const output = execFileSync(baron, ["--warn", "2", "-p", out, "vdfs.6502"], {
-            cwd: SourceDir,
-            encoding: "utf8",
-            stdio: ["ignore", "pipe", "pipe"],
-        });
-        if (output.includes("warning:")) throw new Error(`Baron warned:\n${output}`);
+        const run = spawnSync(baron, ["--warn", "2", "-p", out, "vdfs.6502"], { cwd: SourceDir, encoding: "utf8" });
+        if (run.error) throw run.error;
+        // Baron reports its diagnostics, warnings included, on stderr.
+        const output = `${run.stdout}${run.stderr}`;
+        if (run.status !== 0) throw new Error(`Baron failed:\n${output}`);
+        if (/\bwarning\b/i.test(output)) throw new Error(`Baron warned:\n${output}`);
         return fs.readFileSync(path.join(out, RomName));
     } finally {
         fs.rmSync(out, { recursive: true, force: true });
@@ -49,7 +49,7 @@ if (import.meta.main) {
     try {
         process.exit(main(process.argv.slice(2)));
     } catch (error) {
-        console.error(error.stderr?.toString() || error.message);
+        console.error(error.message);
         process.exit(1);
     }
 }
