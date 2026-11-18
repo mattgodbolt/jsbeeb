@@ -24,18 +24,26 @@ waits for it, and does what it is told.
 
 ### The ports
 
-Eight bytes in FRED, at `&FC60` to `&FC67`. These are not an Acorn allocation, they are jsbeeb's.
+Sixteen bytes in FRED, `&FC60` to `&FC6F`, ten of them used. These are not an Acorn allocation, they are jsbeeb's. They
+are what a board on the 1MHz bus could be: the 6502 pokes its arguments in, pokes a go code, waits, and reads the
+results out. Nothing here needs the host to see the CPU.
 
-| Offset | Name   | Write                                    | Read                                                     |
-| ------ | ------ | ---------------------------------------- | -------------------------------------------------------- |
-| 0      | CALL   | The call's number, which starts the call | Bit 7 set while the host is still doing the call, else 0 |
-| 1      | A      | A as the caller had it                   |                                                          |
-| 2      | X      | X as the caller had it                   |                                                          |
-| 3      | Y      | Y as the caller had it                   |                                                          |
-| 4      | P      | The flags as the caller had them         |                                                          |
-| 5      | STREAM | Chooses the stream DATA reads            | The stream that has the last call's response             |
-| 6      | DATA   |                                          | The next byte of the chosen stream                       |
-| 7      | ID     |                                          | `&56`                                                    |
+| Offset | Name   | Write                                                 | Read                                                                             |
+| ------ | ------ | ----------------------------------------------------- | -------------------------------------------------------------------------------- |
+| 0      | GO     | The call's number, which starts the call              | Status: bit 7 busy, bit 6 ops for the ROM to carry out, bit 0 the carry returned |
+| 1      | A in   | A as the caller had it                                |                                                                                  |
+| 2      | X in   | X as the caller had it                                |                                                                                  |
+| 3      | Y in   | Y as the caller had it                                |                                                                                  |
+| 4      | A out  |                                                       | The A the call returns, which frees the response                                 |
+| 5      | X out  |                                                       | The X the call returns                                                           |
+| 6      | Y out  |                                                       | The Y the call returns                                                           |
+| 7      | STREAM | Chooses the response that DATA and the results are of | The response of the last call                                                    |
+| 8      | DATA   |                                                       | The next byte of the ops of the chosen response                                  |
+| 9      | ID     |                                                       | `&56`                                                                            |
+
+None of these calls takes the flags as an input, and carry is the only flag one returns, so the ROM neither pokes nor
+loads them. It never changes I or D, which the caller's flags keep. N, Z and V come back as whatever the last
+instructions left, which the OS does not promise anything about for these calls.
 
 The ROM reads ID before it forwards a service call, and hands the call back to the OS untouched if there is no host.
 That is very defensive: jsbeeb fits the ROM only with a host, but `rom=vdfs.rom` or a snapshot can put it in a machine
@@ -43,7 +51,7 @@ that has none, and it would crash there.
 
 ### Calls
 
-Calls 1 to 7 are the filing system's vectors, with the registers and flags the OS gave them; call 0 is the ROM's
+Calls 1 to 7 are the filing system's vectors, with the A, X and Y the OS gave them; call 0 is the ROM's
 service entry, with A the service number, X the ROM's slot and Y the parameter. The ROM forwards services 4 (command),
 9 (help) and &12 (filing system selected). The numbers are in `roms-src/vdfs/contract.6502`, and
 `tests/unit/test-vdfs-protocol.js` fails if `src/vdfs-protocol.js` has different ones.
@@ -61,8 +69,8 @@ service entry, with A the service number, X the ROM's slot and Y the parameter. 
 
 ### Waiting
 
-A call may take as long as the store does. After writing CALL the ROM reads it until bit 7 is clear, with
-`BIT PortCall : BMI wait`, and the 6502 goes on running, interrupts and all, as it would waiting on a disc. A call
+A call may take as long as the store does. After writing GO the ROM reads it until bit 7 is clear, with
+`BIT PortGo : BMI wait`, and the 6502 goes on running, interrupts and all, as it would waiting on a disc. A call
 that uses the store is always busy when it is first looked at, since the store answers on a later turn of the event
 loop, however quick it is.
 
@@ -89,21 +97,27 @@ Some things follow from that:
 
 ### The response
 
-When the call is no longer busy there is a stream: a list of ops for the ROM to do, ending in `Done` and the registers to
-return. The ROM reads STREAM for its number, then reads DATA for each byte, writing the number back to STREAM before each
-read that could follow a call it made (the OS can call the filing system again while the ROM prints, with `*SPOOL`).
-Streams are one per call, so a nested call does not disturb the one being read.
+When the call is no longer busy its response has two parts. The registers it returns are read from the A out, X out and
+Y out ports and bit 0 of the status. They are the response's own, so a call made while the ROM is carrying out ops does
+not change them. The ops, if bit 6 of the status says there are any, are a stream: a list of things for the ROM to do,
+ending in `Done`. The ROM reads STREAM for the response's number, then reads DATA for each byte, writing the number back
+to STREAM before each read that could follow a call it made (the OS can call the filing system again while the ROM
+prints, with `*SPOOL`). Responses are one per call, so a nested call does not disturb the one being read.
+
+A call that only returns registers has no ops, and the ROM reads its registers straight away. Reading A out is the last
+thing the ROM does with a response, and frees it.
 
 | Op  | Name  | Bytes after it                             | The ROM                                                             |
 | --- | ----- | ------------------------------------------ | ------------------------------------------------------------------- |
-| 0   | Done  | X, Y, P, A                                 | returns them, and the flags, to the caller                          |
+| 0   | Done  | none                                       | has no more ops, and returns the registers to the caller            |
 | 1   | Print | text, 0                                    | writes it with `OSASCI`                                             |
 | 2   | Error | error number, text, 0                      | raises it, as a `BRK` built in page 1; it does not return           |
 | 3   | Exec  | high byte, low byte, of the address less 1 | pages in the language ROM and jumps to the address; does not return |
 | 4   | Claim | none                                       | takes over the filing system vectors, and carries on                |
 
-A stream with a `Done` returns normally. The host answers every failure of its own as an error, so a bug in the host
-is a message on the BBC and not an exception in the emulator.
+A response that ends in an error or an exec has no registers, since the ROM does not come back for them. The host
+answers every failure of its own as an error, so a bug in the host is a message on the BBC and not an exception in the
+emulator.
 
 Claiming the vectors is the filing system's selection as the DFS does it: tell the one in use with `FSCV` call 6,
 write the seven vectors to the OS's extended vector entries, put the extended vector table's entries in place

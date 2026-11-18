@@ -3,7 +3,19 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { VdfsError } from "../../src/vdfs-errors.js";
-import { Busy, Call, HostId, Op, Port, PortBase, Superseded, VdfsPorts } from "../../src/vdfs-protocol.js";
+import {
+    Busy,
+    Call,
+    CarryOut,
+    HostId,
+    Op,
+    OpsWaiting,
+    Port,
+    PortBase,
+    PortBytes,
+    Superseded,
+    VdfsPorts,
+} from "../../src/vdfs-protocol.js";
 import { RepoRoot } from "../integration/helpers.js";
 import { readResponse } from "../helpers/vdfs-response.js";
 
@@ -13,9 +25,9 @@ const upperFirst = (name) => name[0].toUpperCase() + name.slice(1);
 const portsSaying = (says) => new VdfsPorts((call, registers, response) => response.print(says(call)));
 
 function makeCall(ports, call, registers = {}) {
-    for (const [port, value] of Object.entries({ a: 0, x: 0, y: 0, p: 0, ...registers }))
+    for (const [port, value] of Object.entries({ aIn: 0, xIn: 0, yIn: 0, ...registers }))
         ports.write(Port[port], value);
-    ports.write(Port.call, call);
+    ports.write(Port.go, call);
 }
 
 /** A promise, and the way to settle it, to stand for a store that takes its time. */
@@ -56,8 +68,13 @@ describe("VDFS protocol", () => {
             });
         });
 
-        it("makes the busy flag the one the ROM tests with BIT, which is the top bit", () => {
-            expect(Busy).toBe(0x80);
+        it("puts the status where the ROM tests it: busy in the top bit and ops in the next, which BIT copies, and the carry in the bottom", () => {
+            expect([Busy, OpsWaiting, CarryOut]).toEqual([0x80, 0x40, 0x01]);
+        });
+
+        it("takes the ports from the start of FRED's window for them, a whole number of bytes", () => {
+            expect(PortBase).toBe(0xfc60);
+            expect(Math.max(...Object.values(Port)) < PortBytes).toBe(true);
         });
     });
 
@@ -66,12 +83,49 @@ describe("VDFS protocol", () => {
             expect(portsSaying(() => "").read(Port.id)).toBe(HostId);
         });
 
-        it("gives the registers a call was made with, and returns the ones it ended with", () => {
+        it("gives the registers a call was made with, and returns the ones it ended with and the carry", () => {
             const ports = new VdfsPorts((call, registers) => {
                 registers.a = registers.x + registers.y;
+                registers.p |= 1;
             });
-            makeCall(ports, Call.file, { x: 2, y: 3, p: 0x31 });
-            expect(readResponse(ports, {})).toEqual({ ops: [], a: 5, x: 2, y: 3, p: 0x31 });
+            makeCall(ports, Call.file, { xIn: 2, yIn: 3 });
+            expect(readResponse(ports, {})).toEqual({ ops: [], a: 5, x: 2, y: 3, p: 1 });
+        });
+
+        it("has no ops waiting for a call that does not ask for any, and ops waiting until they are read for one that does", () => {
+            const quiet = new VdfsPorts(() => {});
+            makeCall(quiet, Call.bget);
+            expect(quiet.read(Port.go) & OpsWaiting).toBe(0);
+            const talking = portsSaying(() => "A");
+            makeCall(talking, Call.file);
+            expect(talking.read(Port.go) & OpsWaiting).toBe(OpsWaiting);
+            readResponse(talking, {});
+            expect(talking.read(Port.go) & OpsWaiting).toBe(0);
+        });
+
+        it("keeps each response's own registers, so a call made while its ops are being read does not change them", () => {
+            const ports = new VdfsPorts((call, registers, response) => {
+                registers.a = call === Call.file ? 0x11 : 0x22;
+                registers.p = call === Call.file ? 1 : 0;
+                response.print(call === Call.file ? "AB" : "X");
+            });
+            makeCall(ports, Call.file);
+            const outer = ports.read(Port.stream);
+            for (let read = 0; read < 2; read++) {
+                ports.write(Port.stream, outer);
+                ports.read(Port.data);
+            }
+            makeCall(ports, Call.args);
+            expect(readResponse(ports, {})).toMatchObject({ a: 0x22, p: 0 });
+            ports.write(Port.stream, outer);
+            for (let read = 0; read < 3; read++) {
+                ports.write(Port.stream, outer);
+                ports.read(Port.data);
+            }
+            expect([ports.read(Port.xRes), ports.read(Port.go) & CarryOut, ports.read(Port.aRes)]).toEqual([
+                0, 1, 0x11,
+            ]);
+            expect(ports.openStreams).toBe(0);
         });
 
         it("shows a control code as a question mark, a NUL too since the ROM takes it for the end, but not a return", () => {
@@ -141,13 +195,13 @@ describe("VDFS protocol", () => {
                 registers.a = 7;
                 return waiting.promise;
             });
-            expect(ports.read(Port.call)).toBe(0);
+            expect(ports.read(Port.go) & Busy).toBe(0);
             makeCall(ports, Call.file);
-            expect(ports.read(Port.call)).toBe(Busy);
+            expect(ports.read(Port.go) & Busy).toBe(Busy);
             waiting.resolve();
             await waiting.promise;
             await Promise.resolve();
-            expect(ports.read(Port.call)).toBe(0);
+            expect(ports.read(Port.go) & Busy).toBe(0);
             expect(readResponse(ports, {}).a).toBe(7);
         });
 
@@ -158,7 +212,7 @@ describe("VDFS protocol", () => {
             );
             makeCall(ports, Call.file);
             ports.reset();
-            expect(ports.read(Port.call)).toBe(0);
+            expect(ports.read(Port.go) & Busy).toBe(0);
             makeCall(ports, Call.args);
             const answered = ports.read(Port.stream);
             waiting.resolve();
@@ -173,7 +227,7 @@ describe("VDFS protocol", () => {
             const ports = new VdfsPorts(() => waiting.promise);
             makeCall(ports, Call.file);
             ports.abort(new VdfsError(0xc9, "Disc changed"));
-            expect(ports.read(Port.call)).toBe(0);
+            expect(ports.read(Port.go) & Busy).toBe(0);
             expect(readResponse(ports, {}).ops).toEqual([{ op: "error", number: 0xc9, text: "Disc changed" }]);
             waiting.resolve();
             await waiting.promise;
@@ -290,10 +344,10 @@ describe("VDFS protocol", () => {
 
             const slow = new VdfsPorts(() => new Promise(() => {}));
             makeCall(slow, Call.file);
-            expect(slow.read(Port.call)).toBe(Busy);
+            expect(slow.read(Port.go) & Busy).toBe(Busy);
             const waiting = portsSaying(() => "ZZ");
             waiting.restoreState(JSON.parse(JSON.stringify(slow.snapshotState())));
-            expect(waiting.read(Port.call)).toBe(0);
+            expect(waiting.read(Port.go) & Busy).toBe(0);
             waiting.write(Port.stream, waiting.read(Port.stream));
             expect(waiting.read(Port.data)).toBe(Op.error);
         });
