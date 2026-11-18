@@ -746,6 +746,28 @@ describe("VDFS host", () => {
     });
 
     describe("writing files back", () => {
+        it.each([
+            ["a save over it", (t) => t.osfile(Osfile.save, "OUT", { start: Data, end: Data + 1 }), "writeFile"],
+            ["opening it for output again", (t) => t.open("OUT", Osfind.write), "writeFile"],
+            ["a delete of it", (t) => t.osfile(Osfile.delete, "OUT"), "remove"],
+        ])(
+            "still writes what an open file holds when it is closed, if %s could not be done by the store",
+            async (_, attempt, method) => {
+                const t = hostWith();
+                const handle = (await t.open("OUT", Osfind.write)).a;
+                await t.call(Call.bput, { a: 0x41, y: handle });
+                t.cpu.memory[Data] = 1;
+                const real = t.store[method].bind(t.store);
+                t.store[method] = async () => {
+                    throw new Error("disc full");
+                };
+                expect(errorOf(await attempt(t)).text).toBe("Disc fault: disc full");
+                t.store[method] = real;
+                await t.call(Call.find, { a: Osfind.close, y: handle });
+                expect(text(t.get("OUT").data)).toBe("A");
+            },
+        );
+
         it("has flush wait for a save that is under way, as well as for the files it writes back", async () => {
             const t = hostWith();
             t.cpu.memory.set(new TextEncoder().encode("HI"), Data);
