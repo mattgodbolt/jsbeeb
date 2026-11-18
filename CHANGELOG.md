@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.25.0](https://github.com/mattgodbolt/jsbeeb/compare/v2.24.0...v2.25.0) (2026-11-18)
+
+
+### Features
+
+* read every emulated device's state without side effects ([#1893](https://github.com/mattgodbolt/jsbeeb/issues/1893)) ([a540506](https://github.com/mattgodbolt/jsbeeb/commit/a540506020bd88a364990bbd4b974488014ce213))
+
 ## [2.24.0](https://github.com/mattgodbolt/jsbeeb/compare/v2.23.0...v2.24.0) (2026-11-18)
 
 
