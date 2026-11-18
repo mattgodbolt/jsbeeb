@@ -47,6 +47,7 @@ export const LineCountPeriod = 2500;
 
 const BitmapXPerClock = 8;
 const Ma13 = 1 << 13;
+const CrtcRegisters = 18;
 const WideCharacterTexels = 2 * BitmapXPerClock;
 // A ULA write shows from 4 - p texels into the character fetched in its own cycle, for a pixel period of p texels
 // before the write, at either clock rate: measured on a Master in 20, 40 and 80 columns (#1866). Indexed by control
@@ -173,6 +174,32 @@ class Ula {
             disabled: this.disabled,
             attributeMode: this.attributeMode,
             attributeText: this.attributeText,
+        };
+    }
+
+    /** The control register and palette as written, and the colour each palette entry draws now, as 0xAABBGGRR. */
+    inspect() {
+        const { ulactrl, actualPal, ulaPal } = this.video;
+        return {
+            control: ulactrl,
+            palette: Array.from(actualPal),
+            paletteColours: Array.from(ulaPal, (abgr) => abgr >>> 0),
+        };
+    }
+
+    /** What VideoNuLA's registers have set, its palette write half done, and its sixteen colours as 0xAABBGGRR. */
+    inspectNula() {
+        return {
+            disabled: this.disabled,
+            paletteMode: this.paletteMode,
+            horizontalOffset: this.horizontalOffset,
+            leftBlank: this.leftBlank,
+            attributeMode: this.attributeMode,
+            attributeText: this.attributeText,
+            flash: Array.from(this.flash),
+            palette: Array.from(this.collook, (abgr) => abgr >>> 0),
+            paletteWriteFlag: this.paletteWriteFlag,
+            paletteFirstByte: this.paletteFirstByte,
         };
     }
 
@@ -321,6 +348,34 @@ class Crtc {
 
     snapshotState() {
         return { curReg: this.curReg };
+    }
+
+    /**
+     * R0 to R17, the address register and the counters, with what the BBC wires around the 6845 that decides what its
+     * addresses read: the ULA's clock rate, IC32's screen size and whether this is a Master.
+     */
+    inspect() {
+        const video = this.video;
+        return {
+            regs: Array.from(video.regs.subarray(0, CrtcRegisters)),
+            addressRegister: this.curReg,
+            horizCounter: video.horizCounter,
+            scanlineCounter: video.scanlineCounter,
+            vertCounter: video.vertCounter,
+            addr: video.addr,
+            lineStartAddr: video.lineStartAddr,
+            rowAddress: video.externalRowAddress(),
+            dispEnabled: video.dispEnabled,
+            inHSync: video.inHSync,
+            inVSync: video.inVSync,
+            inVertAdjust: video.inVertAdjust,
+            inDummyRaster: video.inDummyRaster,
+            evenField: video.doEvenFrameLogic,
+            cursorOnThisFrame: video.cursorOnThisFrame,
+            halfClock: video.halfClock,
+            screenSubtract: video.screenSubtract,
+            isMaster: video.isMaster,
+        };
     }
 
     restoreState(state) {

@@ -1,7 +1,7 @@
 import { hexbyte } from "../hex.js";
 import { decodedPanel, DecodedRegisters, fixed, lit } from "./decoded-registers.js";
 import { Centred, StartEdge } from "./panel-layout.js";
-import { controlSection, portsSection, TimersSection, viaState } from "./via-registers.js";
+import { controlSection, portsSection, TimersSection } from "./via-registers.js";
 
 const MinPanelSize = { w: 240, h: 120 };
 const PortLines = 8;
@@ -80,7 +80,7 @@ export class UserViaPanel {
     }
 
     update() {
-        const state = viaState(this._via);
+        const state = this._via.inspect();
         for (const registers of this._registers) registers.update(state);
     }
 }

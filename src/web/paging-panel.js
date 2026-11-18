@@ -16,7 +16,7 @@ const AccconBits = [
     { name: "IRR", title: "IRR: an interrupt request to the CPU" },
 ];
 
-/** @typedef {{romsel: number, acccon: number, bank: number}} PagingState */
+/** @typedef {{romsel: number, bank: number, acccon?: number}} PagingState */
 
 function decodeRomsel(romsel, { bank }, isMaster) {
     const meanings = [fixed(`bank ${bankName(bank)}`, `Sideways bank ${bankName(bank)} is paged in at &8000 to &BFFF`)];
@@ -119,7 +119,7 @@ export class PagingPanel {
     update() {
         const cpu = this._cpu;
         /** @type {PagingState} */
-        const state = { romsel: cpu.romsel, acccon: cpu.acccon, bank: cpu.pagedBank };
+        const state = cpu.inspectPaging();
         this._registers.update(state);
         for (const { bank, socket, contents } of this._sockets) {
             const text = describeBank(cpu, bank);

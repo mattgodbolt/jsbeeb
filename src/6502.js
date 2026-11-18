@@ -881,6 +881,11 @@ export class Cpu6502 extends Base6502 {
         }
     }
 
+    /** ROMSEL as last written, the sideways bank it pages in, and on a Master ACCCON. */
+    inspectPaging() {
+        return { romsel: this.romsel, bank: this.pagedBank, ...(this.model.isMaster && { acccon: this.acccon }) };
+    }
+
     /** The sideways bank ROMSEL pages in. */
     get pagedBank() {
         return this.bankPagedBy(this.romsel);

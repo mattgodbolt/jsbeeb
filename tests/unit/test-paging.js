@@ -116,3 +116,19 @@ describe("paging views", () => {
         expect(describeBank(cpu, 3)).toBe("A.B 1.0");
     });
 });
+
+describe("inspectPaging", () => {
+    it.each([
+        [ModelB, 0x0e, 0x04, { romsel: 0x0e, bank: 14 }],
+        [FourSocketB, 0x01, 0, { romsel: 0x01, bank: 13 }],
+        [Master, RomselAndy | 0x04, AccconX, { romsel: RomselAndy | 0x04, bank: 4, acccon: AccconX }],
+    ])(
+        "gives %s's ROMSEL as written, the bank it pages, and only on a Master ACCCON",
+        async (model, romsel, acccon, expected) => {
+            const cpu = await machine(model);
+            cpu.romSelect(romsel);
+            if (model.isMaster) cpu.writeAcccon(acccon);
+            expect(cpu.inspectPaging()).toEqual(expected);
+        },
+    );
+});

@@ -849,10 +849,58 @@ export class MachineSession {
      * @returns {{romsel: number, bank: number, acccon?: number}}
      */
     pagingState() {
+        return this._machine.processor.inspectPaging();
+    }
+
+    /** Each device this machine has, by name, with the function that reads it. */
+    _inspectors() {
         const cpu = this._machine.processor;
-        const state = { romsel: cpu.romsel, bank: cpu.pagedBank };
-        if (cpu.model.isMaster) state.acccon = cpu.acccon;
-        return state;
+        const { model } = cpu;
+        if (model.isAtom) {
+            return {
+                via: () => cpu.uservia.inspect(),
+                ppia: () => cpu.atomppia.inspect(),
+                ...(model.hasDiscDrives && { fdc: () => cpu.fdc.inspect() }),
+            };
+        }
+        const { ula } = cpu.video;
+        return {
+            sysvia: () => cpu.sysvia.inspect(),
+            uservia: () => cpu.uservia.inspect(),
+            crtc: () => cpu.video.crtc.inspect(),
+            ula: () => ula.inspect(),
+            ...(ula.hasVideoNula && { nula: () => ula.inspectNula() }),
+            sound: () => cpu.soundChip.inspect(),
+            fdc: () => cpu.fdc.inspect(),
+            acia: () => cpu.acia.inspect(),
+            serial: () => cpu.serial.inspect(),
+            adc: () => cpu.adconverter.inspect(),
+            ...(cpu.hasTube && { tube: () => cpu.tube.tube.inspect() }),
+            ...(model.isMaster && { cmos: () => cpu.cmos.inspect() }),
+            paging: () => cpu.inspectPaging(),
+        };
+    }
+
+    /**
+     * Reads the emulated hardware's internal state without changing it: no flag is cleared and no port driven, and a
+     * VIA's timers are caught up to now as the machine's next access would. Each device gives a plain, JSON-ready
+     * dictionary of its registers, named as its datasheet names them. The devices a machine has are named in the
+     * error thrown for one it lacks.
+     *
+     * @param {string} [device] one device to read; all of them when left out
+     * @returns {Object<string, Object>} the device's dictionary, or every device's by name
+     * @throws {Error} naming the devices this machine has, when it has no `device`
+     */
+    inspectHardware(device) {
+        const inspectors = this._inspectors();
+        if (device === undefined)
+            return Object.fromEntries(Object.entries(inspectors).map(([name, read]) => [name, read()]));
+        if (!Object.hasOwn(inspectors, device)) {
+            throw new Error(
+                `This ${this.modelName} has no device "${device}"; it has ${Object.keys(inspectors).join(", ")}`,
+            );
+        }
+        return inspectors[device]();
     }
 
     /**

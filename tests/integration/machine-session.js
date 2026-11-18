@@ -1201,3 +1201,95 @@ describe("MachineSession history", () => {
         expect(session.elapsedCycles - oldestCycle).toBeLessThan((Seconds + 1) * CyclesPerSecond);
     });
 });
+
+describe("MachineSession inspectHardware", () => {
+    const BbcDevices = ["sysvia", "uservia", "crtc", "ula", "sound", "fdc", "acia", "serial", "adc", "paging"];
+
+    it.each([
+        ["B-DFS1.2", {}, BbcDevices],
+        [
+            "Master",
+            { tube: true, hasVideoNula: true },
+            [
+                "sysvia",
+                "uservia",
+                "crtc",
+                "ula",
+                "nula",
+                "sound",
+                "fdc",
+                "acia",
+                "serial",
+                "adc",
+                "tube",
+                "cmos",
+                "paging",
+            ],
+        ],
+        ["Atom-Tape", {}, ["via", "ppia"]],
+        ["Atom-DOS", {}, ["via", "ppia", "fdc"]],
+    ])(
+        "reads %s's devices, each alone as among the rest, refusing one it lacks",
+        async (model, opts, devices) => {
+            const session = await bootedSession(model, opts);
+            const all = session.inspectHardware();
+            const crtcRefusal = devices.includes("crtc") ? [] : [session.inspectHardware.bind(session, "crtc")];
+            const each = Object.fromEntries(devices.map((device) => [device, session.inspectHardware(device)]));
+            const refusal = () => session.inspectHardware("hal9000");
+            session.destroy();
+
+            expect(Object.keys(all)).toEqual(devices);
+            expect(JSON.parse(JSON.stringify(all))).toEqual(all);
+            expect(each).toEqual(all);
+            expect(refusal).toThrow(`has no device "hal9000"; it has ${devices.join(", ")}`);
+            for (const absent of crtcRefusal) expect(absent).toThrow(/no device "crtc"/);
+        },
+        BootTimeout,
+    );
+
+    describe("changes nothing the machine does", () => {
+        const RunCycles = 3 * CyclesPerSecond;
+        const InspectEveryCycles = 9973;
+        const WallClockMs = Date.UTC(1986, 0, 1);
+
+        // Both runs read the Master's clock at the same time of day.
+        beforeEach(() => vi.spyOn(Date, "now").mockReturnValue(WallClockMs));
+        afterEach(() => vi.restoreAllMocks());
+
+        async function runWithKeyHeld(model, opts, inspect) {
+            const session = await bootedSession(model, opts);
+            const run = async (cycles) => {
+                for (let ran = 0; ran < cycles; ran += InspectEveryCycles) {
+                    await session.runFor(InspectEveryCycles);
+                    if (inspect) session.inspectHardware();
+                }
+            };
+            session.keyDown("KeyA");
+            await run(RunCycles);
+            session.keyUp("KeyA");
+            await run(RunCycles);
+            // Reading catches the VIAs' counters up to now, as the machine's next access to them would.
+            const last = session.inspectHardware();
+            const { machine } = session.snapshot({ includeRoms: false });
+            const screen = session.drainOutput().screenText;
+            session.destroy();
+            return { last, machine, screen };
+        }
+
+        it.each([
+            ["B-DFS1.2", {}],
+            ["Master", { tube: true, hasVideoNula: true }],
+        ])(
+            "on a %s, read throughout a key press",
+            async (model, opts) => {
+                const [read, unread] = [
+                    await runWithKeyHeld(model, opts, true),
+                    await runWithKeyHeld(model, opts, false),
+                ];
+                expect(read.screen).toContain("A");
+                expect(read).toEqual(unread);
+            },
+            4 * BootTimeout,
+        );
+    });
+});
