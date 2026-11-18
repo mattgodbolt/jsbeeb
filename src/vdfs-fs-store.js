@@ -24,12 +24,12 @@ export class FsStore {
     }
 
     /** The host path for a volume path, which has to stay inside the root whatever the names in it say. */
-    async _hostPath(volumePath) {
+    async _hostPath(volumePath, { newName = false } = {}) {
         if (volumePath.length === 0) return this.root;
-        const names = volumePath.map(toHostName);
-        if (names.some((name) => name === "." || name === ".." || name.includes(path.sep)))
+        const given = volumePath.map(toHostName);
+        if (given.some((name) => name === "." || name === ".." || name.includes(path.sep)))
             throw new Error(`${volumePath.join(".")} is not a name that stays in the volume's folder`);
-        const hostPath = path.join(this.root, ...names);
+        const hostPath = path.join(this.root, ...(await this._storedSpellings(volumePath, given, newName)));
         const realRoot = await fs.realpath(this.root);
         const realParent = await fs.realpath(path.dirname(hostPath));
         if (!isUnderRoot(realRoot, realParent)) throw new Error(`${hostPath} is outside ${this.root}`);
@@ -38,6 +38,27 @@ export class FsStore {
             if (existing?.isSymbolicLink()) throw new Error(`${candidate} is a symbolic link`);
         }
         return hostPath;
+    }
+
+    /**
+     * The names a path has on the host, which may spell any of it in another case than the BBC did. A file about to be
+     * written under `newName` keeps the spelling it is given.
+     */
+    async _storedSpellings(volumePath, given, newName) {
+        const spelled = [];
+        let directory = this.root;
+        for (const [index, name] of (newName ? volumePath.slice(0, -1) : volumePath).entries()) {
+            const entries = await fs.readdir(directory).catch((error) => {
+                if (isMissing(error)) return [];
+                throw error;
+            });
+            const stored = entries.includes(given[index])
+                ? given[index]
+                : entries.find((entry) => !entry.toLowerCase().endsWith(InfSuffix) && sameName(toBbcName(entry), name));
+            spelled.push(stored ?? given[index]);
+            directory = path.join(directory, stored ?? given[index]);
+        }
+        return newName ? [...spelled, given.at(-1)] : spelled;
     }
 
     async _readSidecar(sidecarPath) {
@@ -106,11 +127,14 @@ export class FsStore {
     async _removeOtherCases(hostPath) {
         const directory = path.dirname(hostPath);
         const name = path.basename(hostPath);
-        for (const other of await fs.readdir(directory)) {
-            const isOtherCase = other !== name && other.toLowerCase() === name.toLowerCase();
-            if (!isOtherCase) continue;
-            await fs.rm(path.join(directory, other), { force: true });
-            await fs.rm(path.join(directory, other + InfSuffix), { force: true });
+        const others = (await fs.readdir(directory, { withFileTypes: true })).filter(
+            (other) => other.name !== name && other.name.toLowerCase() === name.toLowerCase(),
+        );
+        const directoryAmongThem = others.find((other) => other.isDirectory());
+        if (directoryAmongThem) throw new Error(`${directoryAmongThem.name} is a directory`);
+        for (const other of others) {
+            await fs.rm(path.join(directory, other.name), { force: true });
+            await fs.rm(path.join(directory, other.name + InfSuffix), { force: true });
         }
     }
 
@@ -124,7 +148,7 @@ export class FsStore {
 
     async writeFile(volumePath, { data, load, exec, locked }) {
         requireWritableName(volumePath);
-        const hostPath = await this._hostPath(volumePath);
+        const hostPath = await this._hostPath(volumePath, { newName: true });
         await this._removeOtherCases(hostPath);
         await fs.writeFile(hostPath, data);
         await this._writeInformation(hostPath, volumePath.at(-1), { load, exec, locked }, data.length);
@@ -134,9 +158,11 @@ export class FsStore {
     async setInfo(volumePath, changes) {
         requireWritableName(volumePath);
         const hostPath = await this._hostPath(volumePath);
-        const { size } = await fs.lstat(hostPath).catch((error) => {
+        const found = await fs.lstat(hostPath).catch((error) => {
             throw isMissing(error) ? new Error(`${volumePath.join(".")} is not there`) : error;
         });
+        if (!found.isFile()) throw new Error(`${volumePath.join(".")} is not a file`);
+        const { size } = found;
         const current = await this._readSidecar(hostPath + InfSuffix);
         await this._writeInformation(hostPath, volumePath.at(-1), { ...current, ...changes }, size);
     }
