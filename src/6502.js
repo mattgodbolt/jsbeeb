@@ -1037,6 +1037,8 @@ export class Cpu6502 extends Base6502 {
                 break;
             case VdfsPortBase:
             case VdfsPortBase + 4:
+            case VdfsPortBase + 8:
+            case VdfsPortBase + 12:
                 if (this.vdfs)
                     return this.replaying ? inertRead(addr - VdfsPortBase) : this.vdfs.read(addr - VdfsPortBase);
                 break;
@@ -1207,6 +1209,8 @@ export class Cpu6502 extends Base6502 {
                 break;
             case VdfsPortBase:
             case VdfsPortBase + 4:
+            case VdfsPortBase + 8:
+            case VdfsPortBase + 12:
                 if (this.vdfs) return UnpeekableDevice;
                 break;
             case 0xfe00:
@@ -1336,6 +1340,8 @@ export class Cpu6502 extends Base6502 {
                 break;
             case VdfsPortBase:
             case VdfsPortBase + 4:
+            case VdfsPortBase + 8:
+            case VdfsPortBase + 12:
                 if (this.vdfs && !this.replaying) return this.vdfs.write(addr - VdfsPortBase, b);
                 break;
             case 0xfcfc:

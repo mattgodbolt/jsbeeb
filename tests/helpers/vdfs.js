@@ -8,7 +8,6 @@ export const Name = 0x2100;
 export const Data = 0x3000;
 const CommandLine = 0x2200;
 const OsfileBlock = Object.freeze({ load: 2, exec: 6, start: 10, end: 14 });
-const IdleFlags = 0x30;
 const ServiceRomSlot = 13;
 
 const keyOf = (path) => path.map((name) => name.toUpperCase()).join("\u0000");
@@ -128,20 +127,19 @@ export function hostWith(items = [], { hasTube = false, store = new MemoryStore(
     const cpu = fakeCpu({ hasTube });
     const host = new VdfsHost(cpu, store);
 
-    async function call(number, { a = 0, x = 0, y = 0, p = IdleFlags } = {}) {
+    async function call(number, { a = 0, x = 0, y = 0 } = {}) {
         for (const [port, value] of [
-            [Port.a, a],
-            [Port.x, x],
-            [Port.y, y],
-            [Port.p, p],
+            [Port.aIn, a],
+            [Port.xIn, x],
+            [Port.yIn, y],
         ])
             host.write(port, value);
-        host.write(Port.call, number);
-        for (let turn = 0; host.read(Port.call) & Busy; turn++) {
+        host.write(Port.go, number);
+        for (let turn = 0; host.read(Port.go) & Busy; turn++) {
             if (turn === MaxSettlingTurns) throw new Error("the call never finished");
             await new Promise((resolve) => setImmediate(resolve));
         }
-        return readResponse(host, { a, x, y, p });
+        return readResponse(host, { a, x, y });
     }
 
     /** OSFILE `action` on `name`, with the rest of the control block as `fields`. */
