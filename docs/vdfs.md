@@ -28,7 +28,9 @@ swapped: a call that is waiting ends with "Disc changed", what is open is writte
 current directory and library go back to the root, and the BBC's next call finds the new folder. Stop Serving VDFS
 Folder starts the page again without it, after asking. The folder is the main process's: it answers only the app's own
 page, and only for the folder the page was told of. What the page had not yet written when the folder changed is not
-written to the new one: the page says so, as a notice for a write-back and as a Disc fault for a call.
+written to the new one: the page says so, as a notice for a write-back and as a Disc fault for a call. A page that goes for another reason, such as a machine switch or a reload, hands what is open to the main
+process as it goes, which it cannot be made to finish: what the BBC wrote since a file was last closed or flushed may be
+lost.
 
 In Node, give `MachineSession` a folder:
 

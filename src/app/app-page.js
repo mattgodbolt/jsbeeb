@@ -6,7 +6,7 @@ export function isAppPage(event, appPagePath) {
     if (!frame || frame !== event.sender?.mainFrame) return false;
     try {
         const url = new URL(frame.url);
-        return url.protocol === "file:" && url.pathname === pathToFileURL(appPagePath).pathname;
+        return url.protocol === "file:" && url.host === "" && url.pathname === pathToFileURL(appPagePath).pathname;
     } catch {
         return false;
     }

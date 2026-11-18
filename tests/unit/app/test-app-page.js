@@ -12,6 +12,8 @@ describe("the app's own page", () => {
     it.each([
         ["file:///opt/jsbeeb/dist/index.html", true],
         ["file:///opt/jsbeeb/dist/index.html?vdfs=1&disc1=file%3A%2F%2F%2Fa.ssd#top", true],
+        ["file://attacker/opt/jsbeeb/dist/index.html", false],
+        ["file://localhost/opt/jsbeeb/dist/index.html", true],
         ["https://example.com/opt/jsbeeb/dist/index.html", false],
         ["http://www.example.com/", false],
         ["file:///tmp/evil/index.html", false],
