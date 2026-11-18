@@ -122,3 +122,31 @@ describe("Tube ULA", () => {
         });
     });
 });
+
+describe("Tube ULA inspect", () => {
+    const R2Data = 3;
+    const StatusAddresses = [0, 2, 4, 6];
+
+    it("gives the flags, each status as either side reads it, and the bytes queued each way", () => {
+        const tube = new Tube(fakeCpu(), fakeCpu());
+        tube.reset(true);
+        tube.hostWrite(R1Status, SetControlFlags | TwoByteR3);
+        tube.hostWrite(R1Data, 0x77);
+        tube.hostWrite(R3Data, 0x11);
+        tube.parasiteWrite(R1Data, 0x01);
+        tube.parasiteWrite(R1Data, 0x02);
+        tube.parasiteWrite(R2Data, 0x22);
+
+        const state = tube.inspect();
+        expect(state).toEqual({
+            controlFlags: TwoByteR3,
+            hostStatus: [0x90, 0xff, 0xff, 0x7f],
+            parasiteStatus: [0xd0, 0x3f, 0x7f, 0x7f],
+            parasiteToHost: [[0x01, 0x02], [0x22], [0x00], []],
+            hostToParasite: [[0x77], [], [0x11], []],
+            parasiteNmi: false,
+        });
+        expect(StatusAddresses.map((address) => tube.hostRead(address))).toEqual(state.hostStatus);
+        expect(StatusAddresses.map((address) => tube.parasiteRead(address))).toEqual(state.parasiteStatus);
+    });
+});

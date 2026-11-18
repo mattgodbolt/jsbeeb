@@ -330,6 +330,44 @@ export class Tube {
         this.updateInterrupts();
         return result;
     }
+    /**
+     * The control flags (P, V, M, J, I and Q), each register's status as the host and the parasite read it, the bytes
+     * queued in each direction, oldest first, and whether the ULA is asking the parasite for an NMI.
+     */
+    inspect() {
+        const controlFlags = this.internalStatusRegister & TUBE_ULA_CONTROL_FLAG_MASK;
+        const flowControl = TUBE_ULA_FLAG_DATA_AVAILABLE | TUBE_ULA_FLAG_DATA_REGISTER_NOT_FULL;
+        const queued = (status, i) => (status[i] & TUBE_ULA_FLAG_DATA_AVAILABLE ? 1 : 0);
+        const parasiteToHostCounts = [
+            this.parasiteToHostFifoByteCount1,
+            queued(this.hostStatus, TUBE_ULA_R2),
+            this.parasiteToHostFifoByteCount3,
+            queued(this.hostStatus, TUBE_ULA_R4),
+        ];
+        const hostToParasiteCounts = [
+            queued(this.parasiteStatus, TUBE_ULA_R1),
+            queued(this.parasiteStatus, TUBE_ULA_R2),
+            this.hostToParasiteFifoByteCount3,
+            queued(this.parasiteStatus, TUBE_ULA_R4),
+        ];
+        return {
+            controlFlags,
+            hostStatus: Array.from(this.hostStatus, (status, i) =>
+                i === TUBE_ULA_R1 ? (status & flowControl) | controlFlags : status,
+            ),
+            parasiteStatus: Array.from(this.parasiteStatus, (status, i) =>
+                i === TUBE_ULA_R1 ? status | controlFlags : status,
+            ),
+            parasiteToHost: this.parasiteToHostData.map((fifo, i) =>
+                Array.from(fifo.subarray(0, parasiteToHostCounts[i])),
+            ),
+            hostToParasite: this.hostToParasiteData.map((fifo, i) =>
+                Array.from(fifo.subarray(0, hostToParasiteCounts[i])),
+            ),
+            parasiteNmi: this.parasiteNmi,
+        };
+    }
+
     snapshotState() {
         return {
             internalStatusRegister: this.internalStatusRegister,

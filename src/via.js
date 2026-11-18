@@ -54,6 +54,7 @@ const IdlePins = 0xff;
 const ScanCounterColumns = 16;
 const TicksPerScanColumn = 2;
 const KeyboardColumns = 13;
+const KeyboardRows = 8;
 
 // The joystick FIRE buttons pull PB4 and PB5 low (AUG p418).
 const JoystickFire1 = 1 << 4;
@@ -574,6 +575,37 @@ class Via {
         };
     }
 
+    /**
+     * The registers, pins and control lines by the 6522 datasheet's names, read as {@link peek} would. ORA and ORB are
+     * as last written, portA and portB the pins, and IRA and IRB as last latched.
+     */
+    inspect() {
+        const { t1c, t1l, t2c, t2l } = this.peekTimers();
+        return {
+            orb: this.orb,
+            ora: this.ora,
+            ddrb: this.ddrb,
+            ddra: this.ddra,
+            t1c,
+            t1l,
+            t2c,
+            t2l,
+            sr: this.sr,
+            acr: this.acr,
+            pcr: this.pcr,
+            ifr: this.ifr,
+            ier: this.peek(IER),
+            irb: this.irb,
+            ira: this.ira,
+            portB: this.portbpins,
+            portA: this.portapins,
+            ca1: this.ca1,
+            ca2: this.ca2,
+            cb1: this.cb1,
+            cb2: this.cb2,
+        };
+    }
+
     _registerValue(addr) {
         switch (addr & 0xf) {
             case ORA:
@@ -868,6 +900,17 @@ export class SysVia extends WithKeyMatrix(Via) {
             else this.cmos.followLines(this.portbpins, this.IC32);
         }
         this.recalculatePortAPins();
+    }
+
+    /** As {@link Via#inspect}, with IC32, the keys held by column and row, and the column the autoscan is on. */
+    inspect() {
+        return {
+            ...super.inspect(),
+            ic32: this.IC32,
+            keys: this.keys.slice(0, KeyboardColumns).map((rows) => Array.from(rows.subarray(0, KeyboardRows))),
+            scanColumn: this.scanColumn(),
+            isMaster: !!this.isMaster,
+        };
     }
 
     get capsLockLight() {

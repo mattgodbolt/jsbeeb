@@ -151,16 +151,8 @@ class PPIA {
             case PORTA:
                 this.recalculatePortAPins();
                 return this.portapins;
-            case PORTB: {
-                const keyrow = this.portapins & 0x0f;
-                const n = this.keys[keyrow];
-                let r = 0xff; // all keys unpressed
-                for (let b = 0; b <= 9; b++) r &= ~(n[b] << b);
-                // CTRL and SHIFT are always readable regardless of row selection
-                const ctrl_shift = (this.keys[0][7] << 7) | (this.keys[0][6] << 6);
-                r &= ~(ctrl_shift & 0xc0);
-                return r;
-            }
+            case PORTB:
+                return this._portBValue();
             case PORTC: {
                 this.recalculatePortCPins();
 
@@ -186,6 +178,22 @@ class PPIA {
             default:
                 return addr >>> 8; // CREG and unmapped registers return open bus
         }
+    }
+
+    _portBValue() {
+        const keyrow = this.portapins & 0x0f;
+        const n = this.keys[keyrow];
+        let r = 0xff; // all keys unpressed
+        for (let b = 0; b <= 9; b++) r &= ~(n[b] << b);
+        // CTRL and SHIFT are always readable regardless of row selection
+        const ctrl_shift = (this.keys[0][7] << 7) | (this.keys[0][6] << 6);
+        r &= ~(ctrl_shift & 0xc0);
+        return r;
+    }
+
+    /** Port A's and port C's pins, port B as a read of it gives it now, and the control word as last written. */
+    inspect() {
+        return { portA: this.portapins, portB: this._portBValue(), portC: this.portcpins, control: this.creg };
     }
 
     recalculatePortAPins() {

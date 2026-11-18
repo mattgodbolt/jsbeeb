@@ -344,3 +344,16 @@ describe("AtomPPIA natural keyboard shift override", () => {
         expect(atomKeyPressed(ATOM.SHIFT)).toBe(true);
     });
 });
+
+describe("AtomPPIA inspect", () => {
+    it("gives ports A and C's pins, port B as a read gives it, and the control word as written", () => {
+        const { ppia } = makePPIA();
+        const BsrSetSpeaker = 0x05;
+        ppia.keyDownRaw([6, 1]);
+        ppia.write(0xb000, 6);
+        ppia.write(0xb003, BsrSetSpeaker);
+
+        expect(ppia.inspect()).toEqual({ portA: 6, portB: 0xfd, portC: 0x04, control: BsrSetSpeaker });
+        expect(ppia.read(0xb001)).toBe(0xfd);
+    });
+});
