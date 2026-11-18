@@ -30,6 +30,7 @@ export const BaseRamBytes = 64 * 1024;
 export const RomBankBytes = 16 * 1024;
 export const NumRomBanks = 16;
 const RomselAndy = 0x80;
+const RomStat = 2;
 const AndyStart = 0x8000;
 const AndyEnd = 0x9000;
 const RomOffset = BaseRamBytes;
@@ -801,6 +802,8 @@ export class Cpu6502 extends Base6502 {
         this.osOffset = OsOffset;
         this.romsel = 0;
         this.acccon = 0;
+        this.emptyBanks = 0;
+        this.pagedBankEmpty = false;
         // Where the instruction running started, kept only on the slow path, for the debug hooks.
         this.instructionPc = 0;
         this.resetLine = true;
@@ -871,6 +874,7 @@ export class Cpu6502 extends Base6502 {
     romSelect(b) {
         this.romsel = b;
         const bank = this.pagedBank;
+        this.pagedBankEmpty = !!(this.emptyBanks & (1 << bank));
         const offset = bank * RomBankBytes + this.romOffset - 0x8000;
         const swram = this.model.swram[bank] ? 1 : 2;
         this.mapBothHalves(0x80, 0xc0, swram, offset);
@@ -902,11 +906,31 @@ export class Cpu6502 extends Base6502 {
         return this.pagedBank === bank;
     }
 
+    /**
+     * Marks the Master's sideways ROM banks that hold nothing, every byte zero, as empty sockets. Call after anything
+     * loads a ROM bank. A Model B's empty socket is unmeasured, so it reads as zeros.
+     */
+    findEmptyBanks() {
+        this.emptyBanks = 0;
+        if (!this.model.isMaster) return;
+        for (let bank = 0; bank < NumRomBanks; ++bank) {
+            if (!this.model.swram[bank] && this.romBank(bank).every((byte) => byte === 0)) this.emptyBanks |= 1 << bank;
+        }
+        this.romSelect(this.romsel);
+    }
+
+    /** Whether reading memStat's `page` reaches an empty socket; no range mapPages maps straddles &8000 or &C000. */
+    readsEmptySocket(page) {
+        const addressPage = page & 0xff;
+        return this.pagedBankEmpty && this.memStat[page] === RomStat && addressPage >= 0x80 && addressPage < 0xc0;
+    }
+
     mapPages(start, end, stat, offset) {
         this.memStat.fill(stat, start, end);
         this.memLook.fill(offset, start, end);
         // While a debug hook is set, every access of its kind takes the slow path, which calls it.
-        this.readLook.fill(stat && !this._debugRead ? offset : SlowPathOffset, start, end);
+        const readsFast = stat && !this._debugRead && !this.readsEmptySocket(start);
+        this.readLook.fill(readsFast ? offset : SlowPathOffset, start, end);
         this.writeLook.fill(stat === 1 && !this._debugWrite ? offset : SlowPathOffset, start, end);
     }
 
@@ -1143,7 +1167,8 @@ export class Cpu6502 extends Base6502 {
         let res;
         if (this.memStat[statOffset]) {
             offset = this.memLook[statOffset];
-            res = this.ramRomOs[offset + addr];
+            // The empty socket drives nothing, so the bus keeps what the video read on its half of the cycle.
+            res = this.readsEmptySocket(statOffset) ? this.video.readVideoMem() : this.ramRomOs[offset + addr];
         } else {
             res = this.readDevice(addr);
         }
@@ -1501,9 +1526,8 @@ export class Cpu6502 extends Base6502 {
         const isRamOrNamed = (bank) => isRam(bank) || isNamed(bank);
         for (const rom of this.config.extraRoms)
             place(emptySockets.length ? emptySockets.shift() : nextFreeBank(isRamOrNamed), rom);
-        return await Promise.all(
-            placed.map(({ bank, rom }) => this.loadRom(rom, this.romOffset + bank * RomBankBytes)),
-        );
+        await Promise.all(placed.map(({ bank, rom }) => this.loadRom(rom, this.romOffset + bank * RomBankBytes)));
+        this.findEmptyBanks();
     }
 
     setReset(resetOn) {
@@ -1598,6 +1622,7 @@ export class Cpu6502 extends Base6502 {
             this.ramRomOs.set(state.roms.slice(0, NumRomBanks * RomBankBytes), this.romOffset);
         }
         if (state.swram) this.restoreSidewaysRam(state.swram, state.swramBankMask);
+        if (state.roms) this.findEmptyBanks();
         this.videoDisplayPage = state.videoDisplayPage;
         this.music5000PageSel = state.music5000PageSel;
 

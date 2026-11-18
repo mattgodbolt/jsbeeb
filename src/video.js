@@ -1523,6 +1523,10 @@ export class FakeVideo {
 
     setScreenHwScroll() {}
 
+    readVideoMem() {
+        return 0;
+    }
+
     /** @returns {BeamPosition} */
     beamPosition() {
         const sinceSync = this.cycles - (this.fieldCycles - this.syncCycles);
