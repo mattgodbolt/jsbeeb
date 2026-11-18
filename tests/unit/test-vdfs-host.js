@@ -239,20 +239,20 @@ describe("VDFS host", () => {
             t.cpu.memory[Block + 1] = Name >> 8;
             putLong(t.cpu, Block + 2, Data);
             for (const [port, value] of [
-                [Port.a, Osfile.load],
-                [Port.x, Block & 0xff],
-                [Port.y, Block >> 8],
+                [Port.aIn, Osfile.load],
+                [Port.xIn, Block & 0xff],
+                [Port.yIn, Block >> 8],
             ])
                 t.host.write(port, value);
-            t.host.write(Port.call, Call.file);
+            t.host.write(Port.go, Call.file);
             await new Promise((resolve) => setImmediate(resolve));
-            expect(t.host.read(Port.call)).toBe(Busy);
+            expect(t.host.read(Port.go) & Busy).toBe(Busy);
             t.host.reset();
-            expect(t.host.read(Port.call)).toBe(0);
+            expect(t.host.read(Port.go) & Busy).toBe(0);
             release();
             await new Promise((resolve) => setImmediate(resolve));
             expect(t.cpu.memory.subarray(Data, Data + 5)).toEqual(new Uint8Array(5));
-            expect(t.host.read(Port.call)).toBe(0);
+            expect(t.host.read(Port.go) & Busy).toBe(0);
         });
     });
 
@@ -860,7 +860,7 @@ describe("VDFS host", () => {
             const flushing = t.host.flush();
             const putting = t.call(Call.bput, { a: 0x42, y: handle });
             await new Promise((resolve) => setImmediate(resolve));
-            expect(t.host.read(Port.call)).toBe(Busy);
+            expect(t.host.read(Port.go) & Busy).toBe(Busy);
             release();
             await flushing;
             await putting;
@@ -935,13 +935,13 @@ describe("VDFS host", () => {
             const t = hostWith([file("DATA", "x")]);
             t.host.reset();
             for (const [port, value] of [
-                [Port.a, 0],
-                [Port.x, 0],
-                [Port.y, 0],
+                [Port.aIn, 0],
+                [Port.xIn, 0],
+                [Port.yIn, 0],
             ])
                 t.host.write(port, value);
-            t.host.write(Port.call, Call.bget);
-            expect(t.host.read(Port.call)).toBe(0);
+            t.host.write(Port.go, Call.bget);
+            expect(t.host.read(Port.go) & Busy).toBe(0);
         });
 
         it("goes on after being held twice, and when a failure cannot be reported", async () => {
@@ -992,18 +992,18 @@ describe("VDFS host", () => {
             t.cpu.memory[Block] = Name & 0xff;
             t.cpu.memory[Block + 1] = Name >> 8;
             for (const [port, value] of [
-                [Port.a, Osfile.readInformation],
-                [Port.x, Block & 0xff],
-                [Port.y, Block >> 8],
+                [Port.aIn, Osfile.readInformation],
+                [Port.xIn, Block & 0xff],
+                [Port.yIn, Block >> 8],
             ])
                 t.host.write(port, value);
-            t.host.write(Port.call, Call.file);
+            t.host.write(Port.go, Call.file);
             await new Promise((resolve) => setImmediate(resolve));
-            expect(t.host.read(Port.call)).toBe(Busy);
+            expect(t.host.read(Port.go) & Busy).toBe(Busy);
             t.host.store = new MemoryStore([file("NEW", "abc")]);
             t.host.release();
             await new Promise((resolve) => setImmediate(resolve));
-            expect(t.host.read(Port.call)).toBe(0);
+            expect(t.host.read(Port.go) & Busy).toBe(0);
             t.host.write(Port.stream, t.host.read(Port.stream));
             expect(getLong(t.cpu, Block + 10)).toBe(3);
         });
@@ -1030,10 +1030,10 @@ describe("VDFS host", () => {
             const t = hostWith([file("DATA", "x")]);
             await t.open("DATA", Osfind.read);
             const { call, registers } = make();
-            for (const [port, value] of Object.entries({ a: 0, x: 0, y: 0, p: 0, ...registers }))
-                t.host.write(Port[port], value);
-            t.host.write(Port.call, call);
-            expect(t.host.read(Port.call)).toBe(0);
+            for (const [port, value] of Object.entries({ a: 0, x: 0, y: 0, ...registers }))
+                t.host.write(Port[`${port}In`], value);
+            t.host.write(Port.go, call);
+            expect(t.host.read(Port.go) & Busy).toBe(0);
         });
 
         it("is the store, for a call that uses it", async () => {
@@ -1043,9 +1043,9 @@ describe("VDFS host", () => {
                 a: Osfind.read,
                 ...Object.fromEntries(Object.entries(xy(Name))),
             }))
-                t.host.write(Port[port], value);
-            t.host.write(Port.call, Call.find);
-            expect(t.host.read(Port.call)).toBe(Busy);
+                t.host.write(Port[`${port}In`], value);
+            t.host.write(Port.go, Call.find);
+            expect(t.host.read(Port.go) & Busy).toBe(Busy);
         });
 
         it("is a disc fault, with the reason and not the IPC's wrapping of it, when the main process's store fails", async () => {
@@ -1090,7 +1090,7 @@ describe("VDFS host", () => {
 
         it("keeps nothing of a response across a break", async () => {
             const t = hostWith();
-            t.host.write(Port.call, Call.args);
+            t.host.write(Port.go, Call.args);
             await new Promise((resolve) => setImmediate(resolve));
             expect(t.host.openStreams).toBe(1);
             t.host.reset();

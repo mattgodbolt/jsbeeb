@@ -957,9 +957,9 @@ describe("Cpu6502 VDFS", () => {
 
     it("is peeked at as the rest of the hardware is: giving nothing, and changing nothing", () => {
         const cpu = fake6502(findModel("B-DFS1.2"), { vdfsStore: storeOf() });
-        cpu.writemem(PortBase + Port.call, 0);
+        cpu.writemem(PortBase + Port.go, 0);
         const before = cpu.vdfs.openStreams;
-        for (let offset = 0; offset < 8; offset++) expect(cpu.peekmem(PortBase + offset)).toBe(0xff);
+        for (let offset = 0; offset < 16; offset++) expect(cpu.peekmem(PortBase + offset)).toBe(0xff);
         expect(cpu.vdfs.openStreams).toBe(before);
     });
 
@@ -978,19 +978,19 @@ describe("Cpu6502 VDFS", () => {
 
     it("gives a replay an idle host, and leaves the live one and its folder alone", () => {
         const cpu = fake6502(findModel("B-DFS1.2"), { vdfsStore: storeOf() });
-        cpu.writemem(PortBase + Port.a, 1);
+        cpu.writemem(PortBase + Port.aIn, 1);
         cpu.asReplay(NoReplayHooks, () => {
-            cpu.writemem(PortBase + Port.call, Call.args);
+            cpu.writemem(PortBase + Port.go, Call.args);
             expect(cpu.readmem(PortBase + Port.id)).toBe(0x56);
-            expect([Port.call, Port.stream, Port.data].map((port) => cpu.readmem(PortBase + port))).toEqual([0, 0, 0]);
+            expect([Port.go, Port.stream, Port.data].map((port) => cpu.readmem(PortBase + port))).toEqual([0, 0, 0]);
         });
         expect(cpu.vdfs.openStreams).toBe(0);
-        expect(cpu.readmem(PortBase + Port.call)).toBe(0);
+        expect(cpu.readmem(PortBase + Port.go)).toBe(0);
     });
 
     it("keeps the device as the ROM was using it across a snapshot, partway through reading a response", () => {
         const cpu = fake6502(findModel("B-DFS1.2"), { vdfsStore: storeOf() });
-        cpu.writemem(PortBase + Port.call, Call.service);
+        cpu.writemem(PortBase + Port.go, Call.service);
         const stream = cpu.readmem(PortBase + Port.stream);
         cpu.writemem(PortBase + Port.stream, stream);
         cpu.readmem(PortBase + Port.data);

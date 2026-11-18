@@ -333,7 +333,7 @@ describe("ReplayHistory", () => {
         cpu.writemem(0xfc60 + 1, 9);
         history.landAt(snapshot);
         expect(cpu.vdfs).toMatchObject({ selected: false, directory: [] });
-        expect(cpu.vdfs.snapshotState().ports.request.a).toBe(7);
+        expect(cpu.vdfs.snapshotState().ports.inputs.a).toBe(7);
     });
 
     it.each([
