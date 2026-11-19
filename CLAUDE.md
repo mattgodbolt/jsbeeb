@@ -22,6 +22,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   fails against a plain `npm start` or `npm run build`).
   Chrome uses the machine's GPU when it has one and the software renderer otherwise, which is what CI runs;
   `E2E_GL=software` or `E2E_GL=hardware` forces one
+- `npm run build:vdfs-rom` - Assemble the VDFS ROM from `roms-src/vdfs` with Baron (`$BARON` or on the PATH) into
+  `public/roms/vdfs.rom`, which is checked in; `npm run check:vdfs-rom` says whether it is what the source gives, and
+  CI runs that in `.github/workflows/vdfs-rom.yml`. See `docs/vdfs.md`
 - `npm run ci-checks` - Run ESLint, Prettier and the check that every `test:*` script has a CI workflow step
 - `npm run benchmark` - Time the benchmark workloads in Node (`tests/bench`, one file per model and kind of video,
   run one after another); CI does not run it
