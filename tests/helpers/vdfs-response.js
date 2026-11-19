@@ -1,4 +1,4 @@
-import { CarryOut, Op, OpsWaiting, Port } from "../../src/vdfs-protocol.js";
+import { CarryOut, Op, Port } from "../../src/vdfs-protocol.js";
 
 export const errorOf = (result) => result.ops.find((op) => op.op === "error");
 
@@ -9,23 +9,18 @@ export const printed = (result) =>
         .join("");
 
 /**
- * Reads a whole response from `host` as the ROM does: the ops, if the status says there are any, and then the registers
- * it returns. `p` is the carry, the only flag a response has.
+ * Reads a whole response from `host` as the ROM does: the ops up to Done, then X, Y, the carry and, last, A. `p` is the
+ * carry, the only flag a response has.
  */
 export function readResponse(host, registersIn) {
-    const wantsOps = host.read(Port.go) & OpsWaiting;
-    const stream = host.read(Port.stream);
-    const readByte = () => {
-        host.write(Port.stream, stream);
-        return host.read(Port.data);
-    };
+    const readByte = () => host.read(Port.a);
     const readText = () => {
         let result = "";
         for (let byte = readByte(); byte !== 0; byte = readByte()) result += String.fromCharCode(byte);
         return result;
     };
     const ops = [];
-    for (let op = wantsOps ? readByte() : Op.done; op !== Op.done; op = readByte()) {
+    for (let op = readByte(); op !== Op.done; op = readByte()) {
         if (op === Op.print) ops.push({ op: "print", text: readText() });
         else if (op === Op.claim) ops.push({ op: "claim" });
         else if (op === Op.exec) {
@@ -38,7 +33,7 @@ export function readResponse(host, registersIn) {
             return { ops, ...registersIn };
         } else throw new Error(`unknown op ${op}`);
     }
-    const [x, y] = [host.read(Port.xRes), host.read(Port.yRes)];
-    const p = host.read(Port.go) & CarryOut;
-    return { ops, a: host.read(Port.aRes), x, y, p };
+    const [x, y] = [host.read(Port.x), host.read(Port.y)];
+    const p = host.read(Port.go) & CarryOut ? 1 : 0;
+    return { ops, a: readByte(), x, y, p };
 }
