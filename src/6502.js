@@ -35,6 +35,8 @@ export const DeviceStat = 0;
 export const RamStat = 1;
 export const RomStat = 2;
 const RomselAndy = 0x80;
+const AccconIrr = 0x80;
+const IrrIrqSource = 0x10;
 const AndyStart = 0x8000;
 const AndyEnd = 0x9000;
 const RomOffset = BaseRamBytes;
@@ -967,6 +969,8 @@ export class Cpu6502 extends Base6502 {
 
     writeAcccon(b) {
         this.acccon = b;
+        if (b & AccconIrr) this.interrupt |= IrrIrqSource;
+        else this.interrupt &= ~IrrIrqSource;
         // ACCCON is
         // IRR TST IJF ITU  Y  X  E  D
         //  7   6   5   4   3  2  1  0
@@ -1628,7 +1632,7 @@ export class Cpu6502 extends Base6502 {
 
         // 2. CPU registers
         this.restoreRegisters(state);
-        // interrupt is rebuilt by sub-component restores (VIA updateIFR, ACIA updateIrq)
+        // interrupt is rebuilt by writeAcccon (IRR) and sub-component restores (VIA updateIFR, ACIA updateIrq)
         this.interrupt = 0;
         this._nmiSources = 0;
         this.halted = state.halted;

@@ -955,3 +955,84 @@ describe("Cpu6502 paged memory", () => {
         expect(cpu.romBank(second)[0]).not.toBe(0x66);
     });
 });
+
+describe("Master ACCCON IRR", () => {
+    const Acccon = 0xfe34;
+    const AccconIrr = 0x80;
+    const IrrIrqSource = 0x10;
+    const HandlerStart = 0x2100;
+    const IrqCount = 0x70;
+    const IrqsBeforeHandlerClearsIrr = 10;
+    const ProgramRunCycles = 50 * 1000;
+    // prettier-ignore
+    const CountingProgram = [
+        0x78,                               // SEI
+        0xa9, 0x7f,                         // LDA #$7F
+        0x8d, 0x4e, 0xfe,                   // STA $FE4E
+        0x8d, 0x6e, 0xfe,                   // STA $FE6E
+        0xa9, HandlerStart & 0xff,          // LDA #<handler
+        0x8d, 0x04, 0x02,                   // STA IRQ1V
+        0xa9, HandlerStart >> 8,            // LDA #>handler
+        0x8d, 0x05, 0x02,                   // STA IRQ1V+1
+        0xa9, 0x00,                         // LDA #0
+        0x85, IrqCount,                     // STA count
+        0x58,                               // CLI
+        0xa2, 0x00,                         // LDX #0
+        0xca,                               // wait: DEX
+        0xd0, 0xfd,                         // BNE wait
+        0x78,                               // SEI
+        0x4c, 0x1e, 0x20,                   // done: JMP done
+    ];
+    // prettier-ignore
+    const LeavesIrrSetHandler = [
+        0xe6, IrqCount,                     // INC count
+        0xa5, IrqCount,                     // LDA count
+        0xc9, IrqsBeforeHandlerClearsIrr,   // CMP #10
+        0x90, 0x05,                         // BCC exit
+        0xa9, 0x00,                         // LDA #0
+        0x8d, 0x34, 0xfe,                   // STA ACCCON
+        0xa5, 0xfc,                         // exit: LDA $FC
+        0x40,                               // RTI
+    ];
+
+    async function masterReadyToCount(acccon) {
+        const cpu = fake6502(findModel("Master"));
+        await cpu.initialise();
+        cpu.ramRomOs.set(CountingProgram, ProgramStart);
+        cpu.ramRomOs.set(LeavesIrrSetHandler, HandlerStart);
+        cpu.writemem(Acccon, acccon);
+        cpu.pc = ProgramStart;
+        return cpu;
+    }
+
+    function irqsCounted(cpu) {
+        cpu.execute(ProgramRunCycles);
+        return cpu.readmem(IrqCount);
+    }
+
+    it.each([
+        [0, 0],
+        [AccconIrr, IrqsBeforeHandlerClearsIrr],
+    ])("with ACCCON at %i, counts %i IRQs from a handler that clears IRR on its tenth", async (acccon, irqs) => {
+        expect(irqsCounted(await masterReadyToCount(acccon))).toBe(irqs);
+    });
+
+    it("holds the IRQ on a machine restored with IRR set", async () => {
+        const snapshot = (await masterReadyToCount(AccconIrr)).snapshotState();
+        const restored = fake6502(findModel("Master"));
+        await restored.initialise();
+
+        restored.restoreState(snapshot);
+
+        expect(irqsCounted(restored)).toBe(IrqsBeforeHandlerClearsIrr);
+    });
+
+    it("drops the IRQ on a hard reset", async () => {
+        const cpu = await masterReadyToCount(AccconIrr);
+        expect(cpu.interrupt & IrrIrqSource).toBe(IrrIrqSource);
+
+        cpu.reset(true);
+
+        expect(cpu.interrupt & IrrIrqSource).toBe(0);
+    });
+});
