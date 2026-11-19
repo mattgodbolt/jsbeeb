@@ -114,8 +114,7 @@ restoring one closes them. `BGET` at the end of a file gives `&FE` with the carr
 ## The ROM and the host
 
 The ROM's code is about 400 bytes, in a 16K image like any other ROM's. Its source is jsbeeb's own, written here, and
-dedicated to the public domain under CC0 1.0 (`roms-src/vdfs/LICENSE`), unlike the rest of jsbeeb, so that others
-may use the names in it. It holds no state and no text, and does no
+dedicated to the public domain under CC0 1.0 (`roms-src/vdfs/LICENSE`), unlike the rest of jsbeeb. It holds no state and no text, and does no
 parsing; the host parses `*` commands, makes the `*CAT` listing and decides what is an error. The ROM hands over a call,
 waits for it, and does what it is told.
 

@@ -644,7 +644,8 @@ and posted the [video up on YouTube](https://www.youtube.com/watch?v=37jyHQT7fXQ
 ## License
 
 This project is licensed under the GNU General Public License v3.0 (or later); see the [LICENSE](LICENSE) file for
-details.
+details. The exception is the source of the VDFS ROM in [roms-src/vdfs](roms-src/vdfs), which is dedicated to the public
+domain under CC0 1.0; see its [LICENSE](roms-src/vdfs/LICENSE).
 
 ## Contact
 
