@@ -1,6 +1,6 @@
 \ VDFS: a filing system whose files are the host's. Every call is forwarded to the host through
 \ the ports in contract.6502: the caller's A, X and Y go in, then the call's number to start it, and when the host is
-\ done A, X, Y and the carry come back. What the host wants the 6502 to do on the way, it says as a stream of ops.
+\ done A, X, Y and the carry come back. What the host wants the 6502 to do on the way, it says as a list of ops.
 
 INCLUDE "contract.6502"
 
