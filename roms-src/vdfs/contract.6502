@@ -1,3 +1,4 @@
+\ SPDX-License-Identifier: CC0-1.0
 \ The ports and codes the VDFS ROM shares with the host (docs/vdfs.md, which says what each port does). The host's copy is in
 \ src/vdfs-protocol.js, and tests/unit/test-vdfs-protocol.js fails if the two differ.
 
