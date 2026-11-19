@@ -1973,6 +1973,7 @@ describe("joinLink", () => {
             "gp.fire1": "SPACE",
             FIRE: "SPACE",
             fire: "SPACE",
+            vdfs: true,
         };
         expect(joinLink("brave-owls-sing", "matt", params)).toBe(
             `${window.location.origin}/?client=brave-owls-sing&name=matt&audioLatencyMs=80&embed` +

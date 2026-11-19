@@ -512,6 +512,7 @@ sudo rpm -i out/dist/jsbeeb-<version>.x86_64.rpm
   failure it stays stopped. `fakeVideo`, `frameSkip`, `cpuMultiplier`, `videoCyclesBatch` and `lowLatency` are
   refused alongside it, as they change what is measured, and so is a machine fitted otherwise than the workload's
   `fittings` there say (a co-processor, Music 5000, teletext adaptor, Econet or VideoNuLA).
+- `vdfs` - set by the desktop app's File, Serve VDFS Folder: it serves the folder that was chosen as the VDFS filing system (`*VDFS` selects it). It needs the folder, so it is no use in a link. See [docs/vdfs.md](docs/vdfs.md).
 - `noseek` - no disc drive noise: the motor, the head's clicks and runs all silent, and nothing scheduled for them.
 - `audioDebug` - show the audio lead chart, and log one console line per second in which the emulator tick ran late or the sound stalled or skipped.
 - `audioLatencyMs` - how far the sound runs behind the emulator, in milliseconds (default 20). Raising it lets the sound ride out longer stalls of the emulator, at the cost of lagging the picture by that much.
