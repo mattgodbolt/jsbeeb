@@ -109,28 +109,22 @@ waits for it, and does what it is told.
 
 ### The ports
 
-Sixteen bytes in FRED, `&FC60` to `&FC6F`, ten of them used. These are not an Acorn allocation, they are jsbeeb's. They
-are what a board on the 1MHz bus could be: the 6502 pokes its arguments in, pokes a go code, waits, and reads the
-results out. Nothing here needs the host to see the CPU.
+Four bytes in FRED, `&FC60` to `&FC63`. These are not an Acorn allocation, they are jsbeeb's. They are what a board on
+the 1MHz bus could be: the 6502 pokes its arguments in, pokes a go code, waits, and reads the results out. Nothing
+here needs the host to see the CPU.
 
-| Offset | Name   | Write                                                 | Read                                                                             |
-| ------ | ------ | ----------------------------------------------------- | -------------------------------------------------------------------------------- |
-| 0      | GO     | The call's number, which starts the call              | Status: bit 7 busy, bit 6 ops for the ROM to carry out, bit 0 the carry returned |
-| 1      | A in   | A as the caller had it                                |                                                                                  |
-| 2      | X in   | X as the caller had it                                |                                                                                  |
-| 3      | Y in   | Y as the caller had it                                |                                                                                  |
-| 4      | A out  |                                                       | The A the call returns, which frees the response                                 |
-| 5      | X out  |                                                       | The X the call returns                                                           |
-| 6      | Y out  |                                                       | The Y the call returns                                                           |
-| 7      | STREAM | Chooses the response that DATA and the results are of | The response of the last call                                                    |
-| 8      | DATA   |                                                       | The next byte of the ops of the chosen response                                  |
-| 9      | ID     |                                                       | `&56`                                                                            |
+| Offset | Name | Write                                    | Read                                                                                    |
+| ------ | ---- | ---------------------------------------- | --------------------------------------------------------------------------------------- |
+| 0      | GO   | The call's number, which starts the call | Status: bit 7 busy, bit 6 the carry the call returns, bits 0 to 5 the host's ID (`&16`) |
+| 1      | A    | A as the caller had it                   | The next byte of the response: its ops, `Done`, then the A the call returns             |
+| 2      | X    | X as the caller had it                   | The X the call returns                                                                  |
+| 3      | Y    | Y as the caller had it                   | The Y the call returns                                                                  |
 
 None of these calls takes the flags as an input, and carry is the only flag one returns, so the ROM neither pokes nor
 loads them. It never changes I or D, which the caller's flags keep. N, Z and V come back as whatever the last
 instructions left, which the OS does not promise anything about for these calls.
 
-The ROM reads ID before it forwards a service call, and hands the call back to the OS untouched if there is no host.
+The ROM reads the ID in the status before it forwards a service call, and hands the call back to the OS untouched if there is no host.
 That is very defensive: jsbeeb fits the ROM only with a host, but `rom=vdfs.rom` or a snapshot can put it in a machine
 that has none, and it would crash there.
 
@@ -168,7 +162,8 @@ Some things follow from that:
 
 - A call made while files from before a break are still being written waits for them, so that it sees them.
 - The filing system is not re-entrant, as the DFS is not: a call made from an interrupt while one is waiting ends the
-  one that was waiting, which then returns zero in A, X and Y with the carry clear.
+  one that was waiting, which then gets a "Disc changed" error. A call from an interrupt that lands between
+  the ROM's pokes of A, X and Y and its poke of GO changes what the interrupted call is given.
 - A call that a break has ended may still have a request on its way to the store, and its result will not be used. An
   `OSFIND` for output that a break catches at the wrong moment may leave an empty file behind.
 - A store that never answers leaves the BBC waiting until BREAK. There is no timeout.
@@ -182,15 +177,16 @@ Some things follow from that:
 
 ### The response
 
-When the call is no longer busy its response has two parts. The registers it returns are read from the A out, X out and
-Y out ports and bit 0 of the status. They are the response's own, so a call made while the ROM is carrying out ops does
-not change them. The ops, if bit 6 of the status says there are any, are a stream: a list of things for the ROM to do,
-ending in `Done`. The ROM reads STREAM for the response's number, then reads DATA for each byte, writing the number back
-to STREAM before each read that could follow a call it made (the OS can call the filing system again while the ROM
-prints, with `*SPOOL`). Responses are one per call, so a nested call does not disturb the one being read.
+When the call is no longer busy the ROM reads its response from A a byte at a time. The response is a list of things for
+the ROM to do (the ops below), then `Done`, then the A the call returns; the last byte frees it. X and Y are read from
+their ports, and the carry from bit 6 of the status, after `Done` and before that last byte. They are the response's
+own. Responses are a stack: a call the ROM makes while it carries out ops (the OS can call the filing system again
+while the ROM prints, with `*SPOOL`) is a response above the one being read, and is read to its end before the ROM goes
+on with the outer one, so the outer one is left whole. An error ends them all once it is read, since the `BRK` it raises never returns into the ROM's frames.
 
-A call that only returns registers has no ops, and the ROM reads its registers straight away, from the response the
-finished call selected. Reading A out is the last thing the ROM does with a response, and frees it.
+A call that only returns registers has no ops, so the first byte the ROM reads is `Done`. A read with no response to
+give, because a break or a restored snapshot took it, or a call made from an interrupt finished it, is told "Disc
+changed" as an error.
 
 | Op  | Name  | Bytes after it                             | The ROM                                                             |
 | --- | ----- | ------------------------------------------ | ------------------------------------------------------------------- |

@@ -129,9 +129,9 @@ export function hostWith(items = [], { hasTube = false, store = new MemoryStore(
 
     async function call(number, { a = 0, x = 0, y = 0 } = {}) {
         for (const [port, value] of [
-            [Port.aIn, a],
-            [Port.xIn, x],
-            [Port.yIn, y],
+            [Port.a, a],
+            [Port.x, x],
+            [Port.y, y],
         ])
             host.write(port, value);
         host.write(Port.go, number);

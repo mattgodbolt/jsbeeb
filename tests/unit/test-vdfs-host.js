@@ -239,9 +239,9 @@ describe("VDFS host", () => {
             t.cpu.memory[Block + 1] = Name >> 8;
             putLong(t.cpu, Block + 2, Data);
             for (const [port, value] of [
-                [Port.aIn, Osfile.load],
-                [Port.xIn, Block & 0xff],
-                [Port.yIn, Block >> 8],
+                [Port.a, Osfile.load],
+                [Port.x, Block & 0xff],
+                [Port.y, Block >> 8],
             ])
                 t.host.write(port, value);
             t.host.write(Port.go, Call.file);
@@ -935,9 +935,9 @@ describe("VDFS host", () => {
             const t = hostWith([file("DATA", "x")]);
             t.host.reset();
             for (const [port, value] of [
-                [Port.aIn, 0],
-                [Port.xIn, 0],
-                [Port.yIn, 0],
+                [Port.a, 0],
+                [Port.x, 0],
+                [Port.y, 0],
             ])
                 t.host.write(port, value);
             t.host.write(Port.go, Call.bget);
@@ -992,9 +992,9 @@ describe("VDFS host", () => {
             t.cpu.memory[Block] = Name & 0xff;
             t.cpu.memory[Block + 1] = Name >> 8;
             for (const [port, value] of [
-                [Port.aIn, Osfile.readInformation],
-                [Port.xIn, Block & 0xff],
-                [Port.yIn, Block >> 8],
+                [Port.a, Osfile.readInformation],
+                [Port.x, Block & 0xff],
+                [Port.y, Block >> 8],
             ])
                 t.host.write(port, value);
             t.host.write(Port.go, Call.file);
@@ -1004,7 +1004,6 @@ describe("VDFS host", () => {
             t.host.release();
             await new Promise((resolve) => setImmediate(resolve));
             expect(t.host.read(Port.go) & Busy).toBe(0);
-            t.host.write(Port.stream, t.host.read(Port.stream));
             expect(getLong(t.cpu, Block + 10)).toBe(3);
         });
     });
@@ -1031,7 +1030,7 @@ describe("VDFS host", () => {
             await t.open("DATA", Osfind.read);
             const { call, registers } = make();
             for (const [port, value] of Object.entries({ a: 0, x: 0, y: 0, ...registers }))
-                t.host.write(Port[`${port}In`], value);
+                t.host.write(Port[port], value);
             t.host.write(Port.go, call);
             expect(t.host.read(Port.go) & Busy).toBe(0);
         });
@@ -1043,7 +1042,7 @@ describe("VDFS host", () => {
                 a: Osfind.read,
                 ...Object.fromEntries(Object.entries(xy(Name))),
             }))
-                t.host.write(Port[`${port}In`], value);
+                t.host.write(Port[port], value);
             t.host.write(Port.go, Call.find);
             expect(t.host.read(Port.go) & Busy).toBe(Busy);
         });
@@ -1092,9 +1091,9 @@ describe("VDFS host", () => {
             const t = hostWith();
             t.host.write(Port.go, Call.args);
             await new Promise((resolve) => setImmediate(resolve));
-            expect(t.host.openStreams).toBe(1);
+            expect(t.host.openResponses).toBe(1);
             t.host.reset();
-            expect(t.host.openStreams).toBe(0);
+            expect(t.host.openResponses).toBe(0);
         });
 
         it("may be a store of any kind that has the calls", async () => {
