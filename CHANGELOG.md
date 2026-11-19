@@ -1,5 +1,21 @@
 # Changelog
 
+## [2.26.0](https://github.com/mattgodbolt/jsbeeb/compare/v2.25.0...v2.26.0) (2026-11-19)
+
+
+### Features
+
+* serve a folder as VDFS in Chromium browsers ([#1875](https://github.com/mattgodbolt/jsbeeb/issues/1875)) ([bec529e](https://github.com/mattgodbolt/jsbeeb/commit/bec529e0d6638040e106f1a3b7beacae79c180b1))
+* serve a folder as VDFS in the desktop app ([#1874](https://github.com/mattgodbolt/jsbeeb/issues/1874)) ([534b1e0](https://github.com/mattgodbolt/jsbeeb/commit/534b1e0b913b790fcee1a4cbffb74591e931a5aa))
+* VDFS, a filing system whose files are a host folder's, for Node ([#1873](https://github.com/mattgodbolt/jsbeeb/issues/1873)) ([b59866b](https://github.com/mattgodbolt/jsbeeb/commit/b59866b1d6e43959131b2819c16075beed268751))
+
+
+### Bug Fixes
+
+* raise a held IRQ while the Master's ACCCON IRR bit is set ([#1889](https://github.com/mattgodbolt/jsbeeb/issues/1889)) ([20101a0](https://github.com/mattgodbolt/jsbeeb/commit/20101a02fe635fc09e35127d34f334df4e9cfbd0))
+* read the video's byte from an empty sideways socket on the Master ([#1894](https://github.com/mattgodbolt/jsbeeb/issues/1894)) ([1f7b9e5](https://github.com/mattgodbolt/jsbeeb/commit/1f7b9e58c1e1f2f155c849677a7fb043565ae8eb))
+* stretch the Master's 1 MHz accesses by its own address map ([#1891](https://github.com/mattgodbolt/jsbeeb/issues/1891)) ([2e94ce5](https://github.com/mattgodbolt/jsbeeb/commit/2e94ce5d3a9d38c3246c88605bcfcded5c6d4bd3))
+
 ## [2.25.0](https://github.com/mattgodbolt/jsbeeb/compare/v2.24.0...v2.25.0) (2026-11-18)
 
 
