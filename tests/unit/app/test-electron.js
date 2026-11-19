@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { initialise } from "../../../src/app/electron.js";
+import { attachDesktopVdfs, desktopVdfsStore, initialise } from "../../../src/app/electron.js";
 import { teardownDom } from "../helpers.js";
 
 describe("the Electron hooks", () => {
@@ -109,5 +109,70 @@ describe("the Electron hooks", () => {
         expect(api.saveSettings).toHaveBeenCalledWith({ disc: undefined, disc1: "file:///discs/b.ssd" });
         deps.media.slots.dispatchEvent(new CustomEvent("changed", { detail: { slot: { ...slot, busy: {} } } }));
         expect(api.saveSettings).toHaveBeenCalledTimes(1);
+    });
+
+    describe("VDFS", () => {
+        it("gives the machine the main process's store, when the app was started with a folder to serve", () => {
+            const store = { find: vi.fn() };
+            window.electronAPI = { vdfs: store };
+            expect(desktopVdfsStore({ vdfs: true })).toBe(store);
+        });
+
+        it("gives nothing when there is no folder, or no app", () => {
+            window.electronAPI = { vdfs: {} };
+            expect(desktopVdfsStore({})).toBeNull();
+            delete window.electronAPI;
+            expect(desktopVdfsStore({ vdfs: true })).toBeNull();
+        });
+
+        describe("attached to the page", () => {
+            const attached = () => {
+                const host = {
+                    flush: vi.fn(),
+                    hold: vi.fn().mockResolvedValue(),
+                    release: vi.fn(),
+                    onWriteFailure: null,
+                };
+                window.electronAPI = { onVdfsFlush: vi.fn(), onVdfsChanged: vi.fn() };
+                const notify = vi.fn();
+                attachDesktopVdfs(host, { notify });
+                return { host, notify };
+            };
+
+            it("holds the BBC, with its files written, when the main process is about to change folder", async () => {
+                const { host } = attached();
+                await window.electronAPI.onVdfsFlush.mock.calls[0][0]();
+                expect(host.hold).toHaveBeenCalled();
+                expect(host.release).not.toHaveBeenCalled();
+            });
+
+            it("lets the BBC go on when the main process says the folder has changed", async () => {
+                const { host } = attached();
+                await window.electronAPI.onVdfsFlush.mock.calls[0][0]();
+                window.electronAPI.onVdfsChanged.mock.calls[0][0]();
+                expect(host.release).toHaveBeenCalled();
+            });
+
+            it("lets the BBC go on anyway if the main process never does", async () => {
+                vi.useFakeTimers();
+                const { host } = attached();
+                await window.electronAPI.onVdfsFlush.mock.calls[0][0]();
+                vi.advanceTimersByTime(30000);
+                expect(host.release).toHaveBeenCalled();
+                vi.useRealTimers();
+            });
+
+            it("hands over what has been written when the page goes", () => {
+                const { host } = attached();
+                window.dispatchEvent(new Event("pagehide"));
+                expect(host.flush).toHaveBeenCalled();
+            });
+
+            it("says so when the main process cannot keep what was written", () => {
+                const { host, notify } = attached();
+                host.onWriteFailure(new Error("disc full"));
+                expect(notify).toHaveBeenCalledWith(expect.stringContaining("disc full"));
+            });
+        });
     });
 });
