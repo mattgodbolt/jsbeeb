@@ -4,16 +4,87 @@ VDFS is a filing system whose files are the host's: a folder on this computer is
 BBC's files, and what the BBC saves is in the folder. It is the same idea as b-em's VDFS and MMFS on a Pi, with a
 host that is jsbeeb.
 
-(The host that does the work is in later parts of the stack; this describes the design as a whole.)
-
 It is a sideways ROM (`public/roms/vdfs.rom`, from `roms-src/vdfs`) and a device the ROM talks to. The ROM is the OS's
-side of it: it takes over the filing system vectors and forwards every call. The code is in:
+side of it: it takes over the filing system vectors and forwards every call. The host does the work, in:
 
 - `src/vdfs-protocol.js`: the device in FRED, and the responses the ROM reads (`VdfsPorts`, `Response`)
+- `src/vdfs-host.js`: what the OS's filing system calls and the commands do (`VdfsHost`)
 - `src/vdfs-channels.js`: the open files; `src/vdfs-guest-memory.js`: the 6502's memory as the host may touch it
 - `src/vdfs-names.js`: the names the BBC can give a file, and how it spells a path; `src/vdfs-errors.js`: the errors
 - `src/vdfs-fs-store.js`: a folder in Node as a store; `src/vdfs-inf.js`: the `.inf` files and the host names both
   stores share
+
+There is no copy of the folder in memory. The host asks the store for what a call needs as the call is made, and the
+ROM waits for the answer, as it would for a disc.
+
+## Using it
+
+In Node, give `MachineSession` a folder:
+
+```js
+const session = new MachineSession("B-DFS1.2", { vdfsFolder: "/path/to/games" });
+await session.initialise();
+await session.boot();
+await session.type("*VDFS");
+```
+
+`*VDFS` selects the filing system. Files the BBC writes reach the folder as they are closed, saved or flushed;
+`await session.flushVdfs()` is the way to know that open files have, for a test that then looks in the folder.
+
+VDFS is not the filing system a break starts with, because the DFS sits in a higher ROM bank than a fitted ROM can
+take and so sees the boot service call first. `*VDFS` does it, and `autotype` can type it.
+
+## Files
+
+- A file is a file and a directory a directory. Names are 1 to 10 characters, without `.` `:` `"` `*` `#` `|`, a space
+  or anything outside printable ASCII, and match whatever the case. A `.` in a host name is a `/` to the BBC, so
+  `prog.bas` is `prog/bas`.
+- A file whose name cannot be given to the BBC is not shown to it: a name that is too long, or has a space, a `:` `"`
+  `*` `#` or `|`, or is not plain ASCII. `*CAT` says how many, and names the first few. The BBC cannot make a file
+  called `$`, `&`, `@`, `%` or `^`, or one whose name ends in `/inf`, which as a host file would be a `.inf` sidecar.
+- A file's load and exec addresses and its lock are in a `.inf` file beside it, `NAME.inf`, with a line like
+  `$.NAME  FFFF1900 FFFF8023 00000A00 L`. These are the files BeebAsm, Baron (`--inf`) and b-em write and read, so
+  Baron's `-p dir --inf` output is a folder VDFS serves. The name in the line is not used, the host's file name is. A
+  file with no `.inf` has load and exec 0, and an unlocked file with both 0 gets no `.inf` when it is saved. Such a
+  file can be loaded where you say (`*LOAD NAME 3000`), but not run, or loaded at its own address, since that is
+  address 0.
+- The folder is looked at when a call needs it, so a file added to it, or changed, is there for the next call. A file
+  that is open has been read when it was opened, and is not read again.
+- A symbolic link is not followed, in either direction. Every host path is checked to be inside the folder before it
+  is used, since what runs on the BBC is not to be trusted with the rest of the disc.
+- A file opened for output is made as it is opened, empty, as a disc's catalogue would have it, and is filled as it is
+  closed, by a close of handle 0, `OSARGS` with A=&FF, or a break. Closing every file stops at one that cannot be
+  written, and leaves it and the rest open to be written again. In Node, a machine that is stopped with a file open does
+  not write it until `flushVdfs()`. A file that has been deleted or
+  replaced while it is open is no longer written.
+- A transfer is of memory the 6502 has: no more than 64K at a time, not over the devices (`&FC00` to `&FEFF`), and not
+  past the top. A file is at most 16 MB.
+- A store that cannot do what is asked, such as a full disc or a folder it may not write, gives the BBC an error,
+  "Disc fault" and the reason. A file that cannot be written once the BBC has gone, as at a break, is reported through `VdfsHost.onWriteFailure`.
+
+## What it does
+
+Filing system calls: `OSFILE` 0 to 6, 8 and &FF; `OSFIND`, `OSBGET`, `OSBPUT`, `OSARGS` (the file's pointer and
+extent, and the filing system's number), `OSGBPB` 1 to 4, and `FSC` for EOF, `*RUN`, `*CAT`, `*EX`, `*INFO` and
+unrecognised commands, which are run as a program if they name a file in the current directory or the library.
+
+Commands: `*VDFS`, `*CAT`, `*DIR`, `*LIB`, `*CDIR`, `*DELETE`, `*ACCESS` (`L` or nothing), `*SETINFO name load [exec]`
+(hexadecimal; a file with no `.inf` has load and exec 0 and cannot be run until one of them is set), `*INFO` and `*EX`
+(with `*` and `#` wildcards), and `*HELP VDFS`. Directories are as ADFS has them: `$` is the root, `@` the current directory, `%`
+the library, `^` the parent, and a `:0.` drive is ignored.
+
+VDFS needs a MOS that takes service ROMs, so it is for the BBC models other than the Atom and MOS 0.10, which takes the
+first ROM in its sockets for its language and does not boot with one that is not. It has been run on MOS 1.20, the US
+and German MOS and the Master's MOS 3.20 (with the DFS, ADFS and ANFS). The filing system vectors are claimed through
+the OS's extended vector entry points, `&FF1B` to `&FF2D`, which every filing system ROM jsbeeb has (DFS, ADFS, ANFS,
+DNFS) and the Master's and the Compact's MOS contain.
+
+Not done: `OSGBPB` 5 to 8, `OSFILE` 7, `OSARGS` with A=1 and Y=0 (the rest of the command line), `*RENAME`, `*COPY`,
+`*TITLE`, `*OPT` (it is accepted and ignored), `*ACCESS` of a wildcard (it takes one name), sector
+access (`OSWORD` &7F, or a game that drives the disc controller itself), and the second processor: an address that is
+not in the I/O processor (`&FFFFxxxx`) is an error when one is fitted. A snapshot does not hold open files, and
+restoring one closes them. `BGET` at the end of a file gives `&FE` with the carry set each time, where a DFS raises
+"EOF" the second time, and a file can be opened twice: the DFS says "Open", this does not, and the last close wins.
 
 ## The ROM and the host
 
@@ -149,3 +220,7 @@ npm run check:vdfs-rom
 
 The check is for CI too (`.github/workflows/vdfs-rom.yml`, which builds the Baron release it names), and says whether
 the checked-in ROM is what the source gives.
+
+## Not yet done
+
+- `jsbeeb-mcp` could give an assistant a working folder with `vdfsFolder`.

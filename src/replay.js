@@ -303,7 +303,7 @@ export class InputLog {
         this.sampleReplay = new SampleReplay(this.samples, from, this.samplesAt(from));
         try {
             restoreHostInputs(cpu, this.hostAt(from));
-            cpu.restoreState(snapshot);
+            cpu.restoreState(snapshot, { keepVdfs: true });
             cpu.debugInstruction.forgetStop();
             const startHash = stateHash(cpu);
             const reached = cpu.asReplay(hooks, () => {
@@ -680,6 +680,7 @@ export class ReplayHistory extends EventTarget {
     _unavailable(what, nothing) {
         const { cpu } = this;
         if (cpu.econet) return `${what} is not available with Econet, whose network a replay cannot repeat.`;
+        if (cpu.vdfs) return `${what} is not available with VDFS, whose folder a replay cannot repeat.`;
         if (cpu.tapeInterface.motorOn) return `${what} is not available while the cassette motor runs.`;
         return this._earlier(cycleCount(cpu)).length ? null : nothing;
     }
@@ -804,7 +805,7 @@ export class ReplayHistory extends EventTarget {
         const { cpu } = this;
         this.log.withoutRecording(() => {
             restoreHostInputs(cpu, host);
-            cpu.restoreState(state);
+            cpu.restoreState(state, { keepVdfs: true });
         });
         cpu.video.fb32.set(picture);
         cpu.memStatOffset = memStatOffset;
@@ -1022,6 +1023,7 @@ export class ReplayHistory extends EventTarget {
         const holding = hostInputs(this.cpu);
         const cycle = snapshotCycle(this.cpu, snapshot);
         this.log.replay(snapshot, cycle, true, NoReplayHooks);
+        this.cpu.vdfs?.restoreState(snapshot.vdfs);
         this._landedAt(cycle, holding);
     }
 

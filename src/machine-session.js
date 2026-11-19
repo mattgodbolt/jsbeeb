@@ -25,6 +25,7 @@ import { recentInstructions } from "./instruction-trace.js";
 import { RewindBuffer } from "./rewind.js";
 import { cycleCount } from "./lockstep.js";
 import { FramesPerSecond } from "./emulation-tick.js";
+import { FsStore } from "./vdfs-fs-store.js";
 
 // BBC framebuffer is 1024×625 pixels
 const FB_WIDTH = 1024;
@@ -72,6 +73,9 @@ export class MachineSession {
      * @param {string[]} [opts.extraRoms] - sideways ROMs for the free banks, highest first, as the page's `rom=`
      *   takes them: a name or path under roms/, a `file:` or `http(s):` URL, or a `github:` reference; an empty
      *   name is skipped, as the page skips it
+     * @param {string} [opts.vdfsFolder] - a folder on this machine to serve to the BBC as the VDFS filing system,
+     *   selected with `*VDFS`; files saved in it are in it, and files put in it are there to load. Await
+     *   flushVdfs() before looking at the folder after the BBC has written to it
      * @param {{bank: number, rom: string}[]} [opts.bankRoms] - sideways ROMs for the banks they name, as the page's
      *   `rom.N=`, skipping one with an empty name; initialise() throws for a bank the model has no socket for, one
      *   the model or its fittings fill, or one named twice
@@ -114,8 +118,11 @@ export class MachineSession {
         // toneGenerator); FakeSoundChip provides compatible no-op stubs for headless mode.
         this._soundChip = modelObj.isAtom ? new FakeSoundChip() : new InstrumentedSoundChip();
 
+        this._vdfsStore = opts.vdfsFolder ? new FsStore(opts.vdfsFolder) : null;
+
         // TestMachine forwards these to fake6502
         this._machine = new TestMachine(modelName, {
+            vdfsStore: this._vdfsStore,
             video: this._video,
             soundChip: this._soundChip,
             tube: opts.tube,
@@ -143,11 +150,19 @@ export class MachineSession {
 
     /** Load ROMs and hardware; call once before anything else */
     async initialise() {
+        await this._vdfsStore?.check().catch((cause) => {
+            throw new Error(`Cannot read the VDFS folder ${this._opts.vdfsFolder}`, { cause });
+        });
         await this._machine.initialise();
         if (this._opts.discImage) {
             this.loadDisc(this._opts.discImage);
         }
         this._machine.onVduChar((c) => this._capture.onChar(c));
+    }
+
+    /** Resolves once everything the BBC has written to the VDFS folder is in it. */
+    async flushVdfs() {
+        await this._machine.processor.vdfs?.flush();
     }
 
     /**

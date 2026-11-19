@@ -8,6 +8,8 @@ import { TouchScreen } from "./touchscreen.js";
 import { AmxMouse } from "./amx-mouse.js";
 import { TeletextAdaptor } from "./teletext_adaptor.js";
 import { Filestore } from "./filestore.js";
+import { VdfsHost } from "./vdfs-host.js";
+import { PortBase as VdfsPortBase, VdfsRom, inertRead } from "./vdfs-protocol.js";
 import { FakeRelayNoise } from "./relaynoise.js";
 import { AtomPPIA } from "./ppia.js";
 import { AtomMMC2 } from "./mmc.js";
@@ -832,6 +834,9 @@ export class Cpu6502 extends Base6502 {
         this.hasMusic5000 = !!this.config.hasMusic5000;
         this.hasTeletextAdaptor = !!this.config.hasTeletextAdaptor;
         this.teletextAdaptor = this.hasTeletextAdaptor ? new TeletextAdaptor(this) : null;
+        if (this.config.vdfsStore && !model.takesServiceRoms)
+            throw new Error(`VDFS is not for the ${model.name}: it is for a BBC with a MOS that takes service ROMs`);
+        this.vdfs = this.config.vdfsStore ? new VdfsHost(this, this.config.vdfsStore) : null;
         this.tube = this.hasTube
             ? new Tube6502(this.config.tube, this, { cpuMultiplier: this.config.tubeCpuMultiplier })
             : new FakeTube();
@@ -1080,6 +1085,10 @@ export class Cpu6502 extends Base6502 {
             case 0xfc10:
                 if (this.hasTeletextAdaptor) return this.teletextAdaptor.read(addr - 0xfc10);
                 break;
+            case VdfsPortBase:
+                if (this.vdfs)
+                    return this.replaying ? inertRead(addr - VdfsPortBase) : this.vdfs.read(addr - VdfsPortBase);
+                break;
             case 0xfe00:
             case 0xfe04:
                 return this.crtc.read(addr);
@@ -1246,6 +1255,9 @@ export class Cpu6502 extends Base6502 {
             case 0xfc10:
                 if (this.hasTeletextAdaptor) return UnpeekableDevice;
                 break;
+            case VdfsPortBase:
+                if (this.vdfs) return UnpeekableDevice;
+                break;
             case 0xfe00:
             case 0xfe04:
                 return this.crtc.read(addr);
@@ -1370,6 +1382,9 @@ export class Cpu6502 extends Base6502 {
         switch (addr & ~0x0003) {
             case 0xfc10:
                 if (this.hasTeletextAdaptor) return this.teletextAdaptor.write(addr - 0xfc10, b);
+                break;
+            case VdfsPortBase:
+                if (this.vdfs && !this.replaying) return this.vdfs.write(addr - VdfsPortBase, b);
                 break;
             case 0xfcfc:
                 if (addr === 0xfcff && this.hasMusic5000) {
@@ -1531,7 +1546,7 @@ export class Cpu6502 extends Base6502 {
             filledBy.set(bank, rom);
             place(bank, rom);
         }
-        for (const rom of this.config.fittedRoms) {
+        for (const rom of [...this.config.fittedRoms, ...(this.vdfs ? [VdfsRom] : [])]) {
             const bank = emptySockets.length ? emptySockets.shift() : nextFreeBank(isRam);
             filledBy.set(bank, rom);
             place(bank, rom);
@@ -1598,6 +1613,7 @@ export class Cpu6502 extends Base6502 {
             touchScreen: this.touchScreen.snapshotState(),
             fdc: this.fdc.snapshotState(),
             teletextAdaptor: this.teletextAdaptor ? this.teletextAdaptor.snapshotState() : undefined,
+            ...(this.vdfs && { vdfs: this.vdfs.snapshotState() }),
             tube: this.hasTube ? this.tube.snapshotState({ includeRoms, into: into?.tube }) : undefined,
             ...(this.amxMouse && { amxMouse: this.amxMouse.snapshotState() }),
         };
@@ -1625,7 +1641,8 @@ export class Cpu6502 extends Base6502 {
         }
     }
 
-    restoreState(state) {
+    /** A replay runs against an idle host and passes `keepVdfs`, so as not to close the files the machine has open. */
+    restoreState(state, { keepVdfs = false } = {}) {
         ++this.resetsAndLoads;
         // 1. Scheduler epoch first (so task offsets resolve correctly)
         this.scheduler.restoreState(state.scheduler);
@@ -1671,6 +1688,7 @@ export class Cpu6502 extends Base6502 {
         this.acia.restoreState(state.acia);
         this.adconverter.restoreState(state.adc);
         if (this.teletextAdaptor && state.teletextAdaptor) this.teletextAdaptor.restoreState(state.teletextAdaptor);
+        if (!keepVdfs) this.vdfs?.restoreState(state.vdfs);
 
         // Touchscreen state, added without a version bump. Absent from an older snapshot, whose
         // touchscreen keeps its current state, unpolled.
@@ -1773,6 +1791,7 @@ export class Cpu6502 extends Base6502 {
         this.video.reset(this, this.sysvia, hard);
         this.soundChip.reset(hard);
         if (this.teletextAdaptor) this.teletextAdaptor.reset(hard);
+        this.vdfs?.reset();
         if (this.music5000) this.music5000.reset(hard);
         if (hard && this.econet) {
             this.econet.reset();
@@ -2256,8 +2275,8 @@ export class AtomCpu6502 extends Cpu6502 {
     // This prevents super.restoreState() from corrupting the Atom memory map.
     romSelect() {}
 
-    restoreState(state) {
-        super.restoreState(state);
+    restoreState(state, options) {
+        super.restoreState(state, options);
 
         // Restore Atom-specific state after the parent has handled
         // CPU registers, memory, cycle tracking, and sub-components.

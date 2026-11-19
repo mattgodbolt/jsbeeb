@@ -1347,6 +1347,8 @@ export function roomFrom(text) {
 export function sessionRefusal({ model, processor }) {
     if (model.isAtom || processor.hasTube)
         return "Shared sessions need a BBC Model B or Master, without a second processor.";
+    if (processor.vdfs)
+        return "Shared sessions cannot run while a folder is served as VDFS: each machine would see its own.";
     return null;
 }
 
