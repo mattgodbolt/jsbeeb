@@ -10,7 +10,7 @@ import { setNodeBasePath } from "../../src/loader.js";
 import { hexbyte, hexword } from "../../src/hex.js";
 import { expectSnapshotRoundTrips } from "../helpers/snapshot-round-trip.js";
 import { Channel } from "../../src/vdfs-channels.js";
-import { Call, Port, PortBase } from "../../src/vdfs-protocol.js";
+import { Call, HostId, IdMask, Port, PortBase } from "../../src/vdfs-protocol.js";
 import { MemoryStore, file } from "../helpers/vdfs.js";
 import { machineWithRealChips } from "./helpers.js";
 
@@ -958,9 +958,9 @@ describe("Cpu6502 VDFS", () => {
     it("is peeked at as the rest of the hardware is: giving nothing, and changing nothing", () => {
         const cpu = fake6502(findModel("B-DFS1.2"), { vdfsStore: storeOf() });
         cpu.writemem(PortBase + Port.go, 0);
-        const before = cpu.vdfs.openStreams;
-        for (let offset = 0; offset < 16; offset++) expect(cpu.peekmem(PortBase + offset)).toBe(0xff);
-        expect(cpu.vdfs.openStreams).toBe(before);
+        const before = cpu.vdfs.openResponses;
+        for (let offset = 0; offset < 4; offset++) expect(cpu.peekmem(PortBase + offset)).toBe(0xff);
+        expect(cpu.vdfs.openResponses).toBe(before);
     });
 
     it("keeps its files and where it was when a replay puts the machine back, and not when a snapshot is loaded", () => {
@@ -978,36 +978,32 @@ describe("Cpu6502 VDFS", () => {
 
     it("gives a replay an idle host, and leaves the live one and its folder alone", () => {
         const cpu = fake6502(findModel("B-DFS1.2"), { vdfsStore: storeOf() });
-        cpu.writemem(PortBase + Port.aIn, 1);
+        cpu.writemem(PortBase + Port.a, 1);
         cpu.asReplay(NoReplayHooks, () => {
             cpu.writemem(PortBase + Port.go, Call.args);
-            expect(cpu.readmem(PortBase + Port.id)).toBe(0x56);
-            expect([Port.go, Port.stream, Port.data].map((port) => cpu.readmem(PortBase + port))).toEqual([0, 0, 0]);
+            expect(cpu.readmem(PortBase + Port.go) & IdMask).toBe(HostId);
+            expect([Port.a, Port.x, Port.y].map((port) => cpu.readmem(PortBase + port))).toEqual([0, 0, 0]);
         });
-        expect(cpu.vdfs.openStreams).toBe(0);
-        expect(cpu.readmem(PortBase + Port.go)).toBe(0);
+        expect(cpu.vdfs.openResponses).toBe(0);
+        expect(cpu.readmem(PortBase + Port.go)).toBe(HostId);
     });
 
     it("keeps the device as the ROM was using it across a snapshot, partway through reading a response", () => {
         const cpu = fake6502(findModel("B-DFS1.2"), { vdfsStore: storeOf() });
         cpu.writemem(PortBase + Port.go, Call.service);
-        const stream = cpu.readmem(PortBase + Port.stream);
-        cpu.writemem(PortBase + Port.stream, stream);
-        cpu.readmem(PortBase + Port.data);
+        cpu.readmem(PortBase + Port.a);
         const state = cpu.snapshotState();
         const restored = fake6502(findModel("B-DFS1.2"), { vdfsStore: storeOf() });
         restored.restoreState(state);
-        restored.writemem(PortBase + Port.stream, stream);
-        cpu.writemem(PortBase + Port.stream, stream);
-        expect(restored.readmem(PortBase + Port.data)).toBe(cpu.readmem(PortBase + Port.data));
-        expect(restored.vdfs.openStreams).toBe(cpu.vdfs.openStreams);
+        expect(restored.readmem(PortBase + Port.a)).toBe(cpu.readmem(PortBase + Port.a));
+        expect(restored.vdfs.openResponses).toBe(cpu.vdfs.openResponses);
     });
 
     it("has its ports where the ROM expects them, and nothing on a machine without it", () => {
         const withHost = fake6502(findModel("B-DFS1.2"), { vdfsStore: storeOf() });
         const without = fake6502(findModel("B-DFS1.2"));
-        expect(withHost.readmem(PortBase + Port.id)).toBe(0x56);
-        expect(without.readmem(PortBase + Port.id)).toBe(0xff);
+        expect(withHost.readmem(PortBase + Port.go) & IdMask).toBe(HostId);
+        expect(without.readmem(PortBase + Port.go)).toBe(0xff);
     });
 
     it("goes back to the OS's own filing system, with no file open, when a snapshot is restored", () => {

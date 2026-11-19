@@ -434,9 +434,9 @@ The levels on CB1 and CB2 are the user VIA's. The buttons are not saved: like th
 
 Present when a folder is served (see [vdfs.md](vdfs.md)). It holds the device the ROM talks to, so that a snapshot taken
 while the ROM is partway through a call can be restored to the same place: `inputs` (the `a`, `x` and `y` the ROM
-poked in), `nextStream`, `responseStream`, `selectedStream`, `busy` (whether a call was waiting for the store), and
-`streams`, each `[id, bytes, position, results]`, a response the ROM has not finished reading (`results` being the `a`,
-`x`, `y` and `carry` it will read out, or null for a response that ends in an error or an exec). A call that was `busy` is answered with "Disc
+poked in), `busy` (whether a call was waiting for the store), and `responses`, oldest first, each `[bytes, position,
+results]`: a response the ROM has not finished reading, with the `x`, `y` and `carry` it will return (null for a response
+that ends in an error or an exec). A call that was `busy` is answered with "Disc
 changed" on restore, since the store it was waiting on is not the machine's.
 
 The host's own state is not kept. Its open files are the host's, so a restored snapshot has none open (they are written
