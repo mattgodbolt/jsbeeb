@@ -314,6 +314,7 @@ export class TestMachine {
      */
     loadSidewaysRam(slot, data) {
         this.processor.romBank(slot).set(data.subarray(0, RomBankBytes));
+        this.processor.findEmptyBanks();
     }
 
     writebyte(addr, val) {

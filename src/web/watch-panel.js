@@ -1,5 +1,5 @@
 import { hexword } from "../hex.js";
-import { RamStat, RomStat } from "../paging.js";
+import { RamStat, RomStat } from "../6502.js";
 import { formatWatch, parseCondition, WatchFormats, writeStops } from "../watches.js";
 import { FloatingPanel, MenuGroup } from "./floating-panel.js";
 import { StartEdge } from "./panel-layout.js";
