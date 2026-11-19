@@ -28,6 +28,9 @@ function fullStore(bytes) {
 // the ROM jsbeeb ships has that byte patched to &20 (#362), so every year it shows is 20yy.
 const MosCentury = 2000;
 
+const ClockRegisters = 10;
+const MsPerSecond = 1000;
+
 function toBcd(value) {
     return parseInt(value.toString(10), 16);
 }
@@ -211,12 +214,16 @@ export class Cmos {
 
     // Whole seconds, all the clock keeps, so that a replay is handed the second each read saw.
     clockMs() {
-        const ms = Math.floor(this.now() / 1000) * 1000;
+        const ms = this._wholeSecondsMs();
         return this.inputLog ? this.inputLog.sample("rtc", ms) : ms;
     }
 
-    bbcDateTime() {
-        const result = new Date(this.clockMs() + this.timeOffset);
+    _wholeSecondsMs() {
+        return Math.floor(this.now() / MsPerSecond) * MsPerSecond;
+    }
+
+    bbcDateTime(clockMs = this.clockMs()) {
+        const result = new Date(clockMs + this.timeOffset);
         result.setMilliseconds(0);
         return this.utc ? utcView(result) : result;
     }
@@ -273,28 +280,45 @@ export class Cmos {
         // - Read high.
 
         if (!this.addressSelect && this.dataSelect && this.isRead) {
-            // The first 10 bytes of CMOS RAM store the RTC clock
-            if (this.cmosAddr < 10) {
-                const current = this.bbcDateTime();
-                switch (this.cmosAddr) {
-                    case 0:
-                    case 2:
-                    case 4:
-                        return this.heldTime[this.cmosAddr] ?? toBcd(TimeRegisters[this.cmosAddr].get(current));
-                    case 6:
-                        return toBcd(current.getDay() + 1);
-                    case 7:
-                        return this.calendarRegisters(current).day;
-                    case 8:
-                        return this.calendarRegisters(current).month;
-                    case 9:
-                        return this.calendarRegisters(current).year;
-                }
-            } else {
-                return this.store[this.cmosAddr] & 0xff;
-            }
+            return this._registerValue(this.cmosAddr, this.cmosAddr < ClockRegisters ? this.bbcDateTime() : null);
         }
         return 0xff;
+    }
+
+    _registerValue(address, current) {
+        // The first 10 bytes of CMOS RAM store the RTC clock
+        if (address >= ClockRegisters) return this.store[address] & 0xff;
+        switch (address) {
+            case 0:
+            case 2:
+            case 4:
+                return this.heldTime[address] ?? toBcd(TimeRegisters[address].get(current));
+            case 6:
+                return toBcd(current.getDay() + 1);
+            case 7:
+                return this.calendarRegisters(current).day;
+            case 8:
+                return this.calendarRegisters(current).month;
+            case 9:
+                return this.calendarRegisters(current).year;
+        }
+        return 0xff;
+    }
+
+    /**
+     * The MC146818's lines as port B and IC32 drive them, the address it has latched, and its 64 registers as a read
+     * of each would give them now. The clock is read without being recorded for a replay.
+     */
+    inspect() {
+        const current = this.bbcDateTime(this._wholeSecondsMs());
+        return {
+            chipEnable: this.enabled,
+            addressStrobe: this.addressSelect,
+            dataStrobe: this.dataSelect,
+            read: this.isRead,
+            address: this.cmosAddr,
+            registers: this.store.map((_, address) => this._registerValue(address, current)),
+        };
     }
 
     /** Takes up the select and read lines as port B and IC32 drive them, making no access. */

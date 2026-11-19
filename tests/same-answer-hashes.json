@@ -26,20 +26,20 @@
       "peripherals": "354c5c792e21ae6b"
     },
     "master-shadow": {
-      "framebuffer": "141af5b06f5e5401",
-      "registers": "5ab7398e5c055106",
-      "memory": "b2c6bf71b69d9137",
-      "cycles": "ab7338e49dc4186a",
-      "sound": "3d4f07d58f3a5f74",
-      "peripherals": "4e6d3d11effe2b52"
+      "framebuffer": "5a6a0bd3263225a0",
+      "registers": "dffe59ffdc2598b4",
+      "memory": "97978b43156bdc43",
+      "cycles": "a4e445deffb5a01e",
+      "sound": "2beada8d6c919064",
+      "peripherals": "cef198fe016cec83"
     },
     "master-disc-cat": {
-      "framebuffer": "8617b689336a52a0",
-      "registers": "b4572d1e61839611",
-      "memory": "a661716929660526",
-      "cycles": "142ddb6ab6ab1944",
-      "sound": "e3c59d2740ed9e36",
-      "peripherals": "fdc0e6c025289371"
+      "framebuffer": "45e6d37568a9b293",
+      "registers": "80fb004962ccd0b9",
+      "memory": "b3fba27c77e91bfa",
+      "cycles": "c82aa622a757b6a2",
+      "sound": "0a42779e9df42d58",
+      "peripherals": "f884d7ffb6518da2"
     }
   }
 }

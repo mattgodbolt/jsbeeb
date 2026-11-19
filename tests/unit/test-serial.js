@@ -154,3 +154,16 @@ describe("Serial", () => {
         });
     });
 });
+
+describe("Serial inspect", () => {
+    it("gives the control register as written and the rates its fields select", () => {
+        const serial = new Serial({ setSerialReceive() {}, setSerialTransmit() {}, setMotor() {}, selectRs423() {} });
+        const MotorOnReceive300Transmit9600 = 0x80 | (5 << 3) | 4;
+        serial.write(0, MotorOnReceive300Transmit9600);
+        expect(serial.inspect()).toEqual({
+            control: MotorOnReceive300Transmit9600,
+            transmitBaud: 9600,
+            receiveBaud: 300,
+        });
+    });
+});

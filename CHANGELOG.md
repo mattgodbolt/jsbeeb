@@ -1,5 +1,31 @@
 # Changelog
 
+## [2.25.0](https://github.com/mattgodbolt/jsbeeb/compare/v2.24.0...v2.25.0) (2026-11-18)
+
+
+### Features
+
+* read every emulated device's state without side effects ([#1893](https://github.com/mattgodbolt/jsbeeb/issues/1893)) ([a540506](https://github.com/mattgodbolt/jsbeeb/commit/a540506020bd88a364990bbd4b974488014ce213))
+
+## [2.24.0](https://github.com/mattgodbolt/jsbeeb/compare/v2.23.0...v2.24.0) (2026-11-18)
+
+
+### Features
+
+* read where a BASIC program can be waiting, in basic-state ([#1884](https://github.com/mattgodbolt/jsbeeb/issues/1884)) ([d3740c2](https://github.com/mattgodbolt/jsbeeb/commit/d3740c2256a4466cc613e38ca1294583d431977c))
+
+
+### Bug Fixes
+
+* offer an update only when the waiting worker is a different build from the page ([#1879](https://github.com/mattgodbolt/jsbeeb/issues/1879)) ([7644663](https://github.com/mattgodbolt/jsbeeb/commit/7644663f52e470a3a0719d6717ff43230075be88))
+
+## [2.23.0](https://github.com/mattgodbolt/jsbeeb/compare/v2.22.1...v2.23.0) (2026-11-17)
+
+
+### Features
+
+* read the error BASIC reported, its expression pointer and statement read from basic-state ([#1876](https://github.com/mattgodbolt/jsbeeb/issues/1876)) ([578d878](https://github.com/mattgodbolt/jsbeeb/commit/578d878fa2d02d7e610c366ff867716177c3a099))
+
 ## [2.22.1](https://github.com/mattgodbolt/jsbeeb/compare/v2.22.0...v2.22.1) (2026-11-16)
 
 

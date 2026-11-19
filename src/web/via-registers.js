@@ -1,7 +1,5 @@
 import { lit, namedBits, noMeaning, register, spelt } from "./decoded-registers.js";
 
-const IerReadsSet = 0x80;
-
 const ControlLineModes = [
     "falling edge",
     "falling edge, independent",
@@ -49,31 +47,6 @@ const CountForms = ["65535 cycles", "65535 pulses"];
  * @property {string} title
  * @property {(pins: number, state: object) => import("./decoded-registers.js").Meaning[]} decode
  */
-
-/**
- * The registers every VIA has, as the decoded panels show them. Reading changes nothing the machine sees: the timers
- * are caught up as {@link Via#peekTimers} does, which is also what brings the interrupt flags up to date.
- * @param {import("../via.js").Via} via
- */
-export function viaState(via) {
-    const { t1c, t1l, t2c, t2l } = via.peekTimers();
-    return {
-        ora: via.ora,
-        ddra: via.ddra,
-        portA: via.portapins,
-        orb: via.orb,
-        ddrb: via.ddrb,
-        portB: via.portbpins,
-        pcr: via.pcr,
-        acr: via.acr,
-        ifr: via.ifr,
-        ier: via.ier | IerReadsSet,
-        t1c,
-        t1l,
-        t2c,
-        t2l,
-    };
-}
 
 function controlLineForms(line) {
     return ControlLineModes.map((mode) => `${line.name} ${line.wiring}: ${mode}`);

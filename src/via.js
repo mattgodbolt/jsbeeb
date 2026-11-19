@@ -54,6 +54,7 @@ const IdlePins = 0xff;
 const ScanCounterColumns = 16;
 const TicksPerScanColumn = 2;
 const KeyboardColumns = 13;
+const KeyboardRows = 8;
 
 // The joystick FIRE buttons pull PB4 and PB5 low (AUG p418).
 const JoystickFire1 = 1 << 4;
@@ -563,14 +564,35 @@ class Via {
         return this._registerValue(addr);
     }
 
-    /** The timers as 16-bit values, read as {@link peek} would; T2L, which no register reads back, as last written. */
-    peekTimers() {
+    /**
+     * The registers, pins and control lines by the 6522 datasheet's names, read as {@link peek} would. ORA and ORB are
+     * as last written, portA and portB the pins, IRA and IRB as last latched, the timers as 16-bit values, and T2L,
+     * which no register reads back, as last written.
+     */
+    inspect() {
         const word = (low, high) => (this.peek(high) << 8) | this.peek(low);
         return {
+            orb: this.orb,
+            ora: this.ora,
+            ddrb: this.ddrb,
+            ddra: this.ddra,
             t1c: word(T1CL, T1CH),
             t1l: word(T1LL, T1LH),
             t2c: word(T2CL, T2CH),
             t2l: (this.t2l >>> 1) & 0xffff,
+            sr: this.sr,
+            acr: this.acr,
+            pcr: this.pcr,
+            ifr: this.ifr,
+            ier: this.peek(IER),
+            irb: this.irb,
+            ira: this.ira,
+            portB: this.portbpins,
+            portA: this.portapins,
+            ca1: this.ca1,
+            ca2: this.ca2,
+            cb1: this.cb1,
+            cb2: this.cb2,
         };
     }
 
@@ -868,6 +890,17 @@ export class SysVia extends WithKeyMatrix(Via) {
             else this.cmos.followLines(this.portbpins, this.IC32);
         }
         this.recalculatePortAPins();
+    }
+
+    /** As {@link Via#inspect}, with IC32, the keys held by column and row, and the column the autoscan is on. */
+    inspect() {
+        return {
+            ...super.inspect(),
+            ic32: this.IC32,
+            keys: this.keys.slice(0, KeyboardColumns).map((rows) => Array.from(rows.subarray(0, KeyboardRows))),
+            scanColumn: this.scanColumn(),
+            isMaster: !!this.isMaster,
+        };
     }
 
     get capsLockLight() {

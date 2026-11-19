@@ -4,7 +4,7 @@ import { HwScrollSubtract } from "../video.js";
 import { setText } from "./dom-utils.js";
 import { decodedPanel, DecodedRegisters, fixed, lit, register, spelt, widest } from "./decoded-registers.js";
 import { Centred, StartEdge } from "./panel-layout.js";
-import { controlSection, portsSection, TimersSection, viaState } from "./via-registers.js";
+import { controlSection, portsSection, TimersSection } from "./via-registers.js";
 
 // The keypad's columns, 10 to 12, are scanned on a B as well, and the host's keypad reaches them.
 const MatrixColumns = 13;
@@ -180,20 +180,6 @@ const Sections = {
     control: controlSection(Wiring),
 };
 
-/**
- * The system VIA and its keyboard as the panel shows them; see viaState.
- * @param {import("../via.js").SysVia} via
- */
-export function sysViaState(via) {
-    return {
-        ...viaState(via),
-        ic32: via.IC32,
-        isMaster: !!via.isMaster,
-        keys: via.keys,
-        scanColumn: via.scanColumn(),
-    };
-}
-
 /** The keyboard's matrix of keys, with those held and the column being scanned or read marked. */
 class KeyMatrix {
     constructor(container, status) {
@@ -288,7 +274,7 @@ export class SysViaPanel {
     }
 
     update() {
-        const state = sysViaState(this._via);
+        const state = this._via.inspect();
         for (const registers of this._registers) registers.update(state);
         this._matrix.update(state);
     }

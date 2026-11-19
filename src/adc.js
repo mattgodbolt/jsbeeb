@@ -106,6 +106,16 @@ export class Adc {
         return 0x40;
     }
 
+    /** The uPD7002's status and data bytes, and whether a conversion is under way. */
+    inspect() {
+        return {
+            status: this.status,
+            dataHigh: this.high,
+            dataLow: this.low,
+            converting: this.task.scheduled(),
+        };
+    }
+
     /**
      * Write to the ADC control register
      * @param {number} addr - The address to write to

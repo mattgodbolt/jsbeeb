@@ -6,8 +6,8 @@
 
 import { applyInput, cycleCount, stateHash } from "./lockstep.js";
 import { tickCycles } from "./emulation-tick.js";
-import { NoReplayHooks } from "./6502.js";
-import { RamStat, RomStat, SidewaysEnd, SidewaysStart, viewedByte } from "./paging.js";
+import { NoReplayHooks, RamStat, RomStat } from "./6502.js";
+import { SidewaysEnd, SidewaysStart, viewedByte } from "./paging.js";
 
 /** How much history the page keeps: snapshots at each of the last `recent` frames, and one a second for `seconds`. */
 export const PageHistory = Object.freeze({ recent: 3, seconds: 30 });

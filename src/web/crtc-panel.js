@@ -261,29 +261,6 @@ const Sections = {
     },
 };
 
-/** @param {import("../video.js").Video} video */
-function crtcState(video) {
-    return {
-        regs: video.regs,
-        halfClock: video.halfClock,
-        screenSubtract: video.screenSubtract,
-        isMaster: video.isMaster,
-        horizCounter: video.horizCounter,
-        scanlineCounter: video.scanlineCounter,
-        vertCounter: video.vertCounter,
-        addr: video.addr,
-        lineStartAddr: video.lineStartAddr,
-        rowAddress: video.externalRowAddress(),
-        dispEnabled: video.dispEnabled,
-        inHSync: video.inHSync,
-        inVSync: video.inVSync,
-        inVertAdjust: video.inVertAdjust,
-        inDummyRaster: video.inDummyRaster,
-        evenField: video.doEvenFrameLogic,
-        cursorOnThisFrame: video.cursorOnThisFrame,
-    };
-}
-
 /** A floating panel showing the 6845 CRTC decoded: its registers by what they set, and where its counters are. */
 export class CrtcPanel {
     /** Whether the machine has a 6845 to show: the Atom's video is a 6847, and `?fakeVideo` has none at all. */
@@ -297,7 +274,7 @@ export class CrtcPanel {
      * @param {import("./floating-panel.js").PanelArrangement} options.arrangement
      */
     constructor({ cpu, arrangement }) {
-        this._video = cpu.video;
+        this._crtc = cpu.video.crtc;
         const { floating, body, part } = decodedPanel({
             id: "crtc",
             title: "6845 CRTC",
@@ -317,7 +294,7 @@ export class CrtcPanel {
     }
 
     update() {
-        const state = crtcState(this._video);
+        const state = this._crtc.inspect();
         for (const registers of this._registers) registers.update(state);
     }
 }

@@ -1,13 +1,17 @@
 import { hexbyte } from "./hex.js";
+import { tightLoopAt } from "./tight-loop.js";
 
 // BBC BASIC's workspace, the same in BASIC I, II and IV: https://8bs.com/basic/memory.htm
 const Lomem = 0x00;
 const VariablesEnd = 0x02;
 const Himem = 0x06;
-const TextPointerOffset = 0x0a;
-const TextPointerBase = 0x0b;
+const ErrorLine = 0x08;
+export const TextPointerOffset = 0x0a;
+export const TextPointerBase = 0x0b;
 const Top = 0x12;
 const PageHigh = 0x18;
+const ExpressionPointerBase = 0x19;
+const ExpressionPointerOffset = 0x1b;
 const ResidentIntegers = 0x400;
 const ResidentIntegerCount = 27;
 const FirstVariableInitial = 0x40;
@@ -16,9 +20,34 @@ const ProcedureChain = 0x4f6;
 const FunctionChain = 0x4f8;
 /** Where the OS notes the language ROM's number, in the Advanced User Guide's map of page &02. */
 export const LanguageRomNumber = 0x28c;
+/** Where the OS's BRK handler leaves the address of the error block, its number then its message, low byte first. */
+export const ErrorBlockPointer = 0xfd;
+/** RDCHV, the vector the OS reads a character through, which holds the address of its read-character routine. */
+const ReadCharacterVector = 0x210;
+/**
+ * How much of the read-character routine counts as in it, for the PC and for an address on the stack alike: enough
+ * to take in its wait for a key, whose call into the keyboard buffer returns &2A bytes in on OS 1.20 (&DEEF) and the
+ * US OS (&DEC6), &27 on MOS 3.20 (&E7E3) and &26 on MOS 0.10 (&DFCB).
+ */
+const ReadCharacterBytes = 0x40;
+const FileVector = 0x212;
+const FirstVector = 0x200;
+/**
+ * A ROM extends a vector by pointing it at the OS's entry for it, three bytes per vector from &FF00, and putting its
+ * own address and ROM number in the vector's three bytes in the table at &0D9F.
+ */
+const ExtendedVectorEntries = 0xff00;
+const ExtendedVectorTable = 0x0d9f;
+const ExtendedVectorBytes = 3;
+const ExtendedVectorRomNumber = 2;
+/** The OS counts vsyncs here, and *FX19 waits for the count to change. */
+const VsyncCounter = 0x240;
+const StackPage = 0x100;
+const StackTop = 0xff;
 
 const RomTitle = 9;
 const RomBase = 0x8000;
+const RomEnd = 0xc000;
 const FirstToken = 0x80;
 const LineNumberToken = 0x8d;
 const Return = 0x0d;
@@ -37,19 +66,24 @@ const MantissaSign = 0x80;
 const SignificantDigits = 9;
 const LargestFixedExponent = 8;
 const SmallestFixedExponent = -1;
+const MostMessageBytes = 255;
+/** BASIC IV keeps "Missing " in its messages as a token of its own, which is not a keyword. */
+const MissingToken = 0x8d;
 /** More lines than fit in memory, so that a walk over memory that is not a program ends. */
 const MostLines = 0x4000;
 
 /**
  * Every BASIC jsbeeb carries reads each statement's first non-space character with `LDA (&0B),Y`, skipping spaces with
  * `CMP #&20: BEQ`, then tells a keyword from an assignment with `CMP #&CF`, the first statement token. The search finds
- * that `CMP`, run once for every statement.
+ * that `LDA` (statementRead) and that `CMP` (statementStart), which runs once for every statement.
  */
 const StatementDispatch = [0xb1, 0x0b, 0xc9, 0x20, 0xf0, null, 0xc9, 0xcf];
 const DispatchCompareOffset = 6;
 /** The keyword table starts with AND, its first token. */
 const FirstKeyword = [0x41, 0x4e, 0x44, FirstToken];
 const KeywordCharacters = /^[A-Z][A-Z$(]*$/;
+const KeyboardKeywords = new Set(["GET", "GET$", "INKEY", "INKEY$", "INPUT", "INPUT LINE"]);
+const SoundOrBranch = new Set(["SOUND", "THEN", "ELSE"]);
 
 function findBytes(rom, pattern) {
     const found = [];
@@ -74,15 +108,16 @@ function keywordsIn(rom) {
 }
 
 /**
- * What a language ROM shows of BASIC: where it starts each statement, and its keywords; null for a ROM that is not a
- * BASIC this can follow.
+ * What a language ROM shows of BASIC: where it reads each statement's first character, where it starts each statement,
+ * and its keywords; null for a ROM that is not a BASIC this can follow.
  * @param {Uint8Array} rom
- * @returns {{statementStart: number, keywords: Map<number, string>} | null}
+ * @returns {{statementRead: number, statementStart: number, keywords: Map<number, string>} | null}
  */
 export function basicRom(rom) {
     const dispatches = findBytes(rom, StatementDispatch);
     if (dispatches.length !== 1) return null;
-    return { statementStart: RomBase + dispatches[0] + DispatchCompareOffset, keywords: keywordsIn(rom) };
+    const statementRead = RomBase + dispatches[0];
+    return { statementRead, statementStart: statementRead + DispatchCompareOffset, keywords: keywordsIn(rom) };
 }
 
 /** A sideways ROM's title, from its header. */
@@ -93,6 +128,7 @@ export function romTitle(rom) {
 
 const word = (peek, address) => peek(address) | (peek(address + 1) << 8);
 const int32 = (peek, address) => word(peek, address) | (word(peek, address + 2) << 16);
+const textReading = (peek, base, offset) => (word(peek, base) + peek(offset) - 1) & 0xffff;
 
 function real(peek, address) {
     const exponent = peek(address);
@@ -216,8 +252,113 @@ export function readPointers(peek) {
         lomem: word(peek, Lomem),
         himem: word(peek, Himem),
         /** The character last read: in a statement, the statement's, and at the start of one, its first. */
-        reading: (word(peek, TextPointerBase) + peek(TextPointerOffset) - 1) & 0xffff,
+        reading: textReading(peek, TextPointerBase, TextPointerOffset),
+        /** The character last read of an expression in the statement. */
+        expression: textReading(peek, ExpressionPointerBase, ExpressionPointerOffset),
     };
+}
+
+function errorMessage(peek, block, keywords) {
+    let message = "";
+    for (let at = block + 1; at <= block + MostMessageBytes; ++at) {
+        const code = peek(at & 0xffff);
+        if (code === 0) break;
+        if (code === MissingToken) message += "Missing ";
+        else if (code >= FirstToken) message += keywords.get(code) ?? ".";
+        else message += code >= Space && code <= LastPrintable ? String.fromCharCode(code) : ".";
+    }
+    return message;
+}
+
+/**
+ * The error BASIC's own handler last reported, with its tokens spelt out as REPORT prints them, or null. That handler,
+ * which reports an error no ON ERROR takes and any numbered 0 such as STOP, is BASIC text in the ROM, so this lasts
+ * until BASIC next reads text through its expression pointer, as LIST does not. The line number is 0 for an error in a
+ * command typed at the prompt. The caller checks that BASIC is the language running.
+ * @param {(address: number) => number} peek
+ * @param {Map<number, string>} keywords
+ * @returns {{number: number, message: string, lineNumber: number} | null}
+ */
+export function readReportedError(peek, keywords) {
+    const expression = word(peek, ExpressionPointerBase);
+    if (expression < RomBase || expression >= RomEnd) return null;
+    const block = word(peek, ErrorBlockPointer);
+    return { number: peek(block), message: errorMessage(peek, block, keywords), lineNumber: word(peek, ErrorLine) };
+}
+
+/**
+ * Whether the CPU is in the OS's read-character routine: at `pc`, or below a call the routine made or an interrupt
+ * taken in it, either of which leaves an address in the routine on the stack.
+ */
+function readingCharacter(peek, pc, stackPointer) {
+    const routine = word(peek, ReadCharacterVector);
+    const inRoutine = (address) => address >= routine && address < routine + ReadCharacterBytes;
+    if (inRoutine(pc)) return true;
+    for (let at = stackPointer + 1; at < StackTop; ++at) if (inRoutine(word(peek, StackPage + at))) return true;
+    return false;
+}
+
+/** The ROM number of the filing system that has extended FILEV, or null where none has. */
+function filingSystemRom(peek) {
+    const vector = (FileVector - FirstVector) / 2;
+    if (word(peek, FileVector) !== ExtendedVectorEntries + ExtendedVectorBytes * vector) return null;
+    return peek(ExtendedVectorTable + ExtendedVectorBytes * vector + ExtendedVectorRomNumber);
+}
+
+/**
+ * The keywords of the statement in `line` that BASIC's pointers are in, up to the later pointer, outside strings, with
+ * null for each other character but a space; INPUT with LINE next is one, "INPUT LINE", as BASIC only takes LINE
+ * there (`INPUT SPC(3) LINE A$` is a syntax error in BASIC II and IV). The statement pointer can be on the colon
+ * before a statement that BASIC reads through the expression pointer, as it does one that does not start with a
+ * keyword, or on the colon after one it has finished, with the expression pointer left behind.
+ */
+function keywordsUpTo(peek, line, keywords, { reading, expression }) {
+    let spelt = [];
+    let quoted = false;
+    for (let at = line.start + LineHeaderBytes; at <= Math.max(reading, expression) && at < line.end; ++at) {
+        const code = peek(at);
+        if (code === Quote) quoted = !quoted;
+        else if (quoted || code === Space) continue;
+        else if (code === Colon) {
+            if (at > reading || (at === reading && expression < reading)) break;
+            spelt = [];
+            continue;
+        }
+        const keyword = code >= FirstToken ? keywords.get(code) : null;
+        if (keyword === "LINE" && spelt.at(-1) === "INPUT") spelt[spelt.length - 1] = "INPUT LINE";
+        else spelt.push(keyword ?? null);
+    }
+    return spelt;
+}
+
+/**
+ * Where the machine is, of the places a program can wait, or null:
+ * - "keyboard": in the OS's read-character routine, as GET, INKEY with a time limit and INPUT are, with the last of
+ *   those keywords in the statement BASIC is in, up to its pointer, or null where there is none (as with no `line`);
+ * - "vsync": in a tight loop on the OS's count of vsyncs, as *FX19 is;
+ * - "filing system": running the filing system's ROM, as the OS also does for a moment for each service call it
+ *   offers every ROM; a sample in an interrupt taken there is null, as is the tape filing system, which is in the OS
+ *   (MOS 0.10's only one);
+ * - "sound": in a SOUND statement, which only takes long while its channel's queue is full.
+ * Only the vsync loop is a wait in itself: a program passes through the others without waiting, as an INKEY(0) or a
+ * SOUND with room in its queue does, so it is waiting only if it stays.
+ * @param {import("./6502.js").Cpu6502} cpu
+ * @param {ProgramLine | null} line
+ * @param {Map<number, string>} keywords
+ * @returns {{kind: "keyboard" | "vsync" | "filing system" | "sound", keyword: string | null} | null}
+ */
+export function readWait(cpu, line, keywords) {
+    const peek = (address) => cpu.peekmemAsLanguage(address);
+    const { pc } = cpu;
+    const spelt = line ? keywordsUpTo(peek, line, keywords, readPointers(peek)) : [];
+    if (readingCharacter(peek, pc, cpu.s))
+        return { kind: "keyboard", keyword: spelt.findLast((keyword) => KeyboardKeywords.has(keyword)) ?? null };
+    if (tightLoopAt(cpu.disassembler, pc)?.reads.includes(VsyncCounter)) return { kind: "vsync", keyword: null };
+    const filingSystem = filingSystemRom(peek);
+    if (filingSystem !== null && pc >= RomBase && pc < RomEnd && cpu.isBankPagedAt(cpu.bankPagedBy(filingSystem), pc))
+        return { kind: "filing system", keyword: null };
+    if (spelt.findLast((keyword) => SoundOrBranch.has(keyword)) === "SOUND") return { kind: "sound", keyword: null };
+    return null;
 }
 
 /**

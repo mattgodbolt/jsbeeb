@@ -2,17 +2,9 @@ import { describe, expect, it, vi } from "vitest";
 
 import { TestMachine } from "../../src/test-machine.js";
 import { Video } from "../../src/video.js";
-import { bootedTestMachine, mode7Text } from "./helpers.js";
+import { bootedTestMachine, screenLines } from "./helpers.js";
 
-const ScreenColumns = 40;
 const FramebufferPixels = 1024 * 1024;
-
-function screenLines(machine) {
-    const text = mode7Text(machine);
-    const lines = [];
-    for (let i = 0; i < text.length; i += ScreenColumns) lines.push(text.slice(i, i + ScreenColumns).trim());
-    return lines.filter((line) => line !== "");
-}
 
 describe.each([
     { model: "B-DFS1.2", startup: ["BBC Computer 32K", "Acorn DFS", "BASIC", ">"], vsyncAddress: 0xdd15 },

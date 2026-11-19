@@ -506,3 +506,31 @@ describe("InstrumentedSoundChip capture", () => {
         ]);
     });
 });
+
+describe("SoundChip inspect", () => {
+    it.each([
+        ["tone 1's period from a latch and a data byte", [0xa5, 0x12], { tone: [0, 0x125, 0], latched: 2 }],
+        ["the noise control", [0xe5], { noise: 5, latched: 6 }],
+        ["tone 2's attenuation, and its register latched", [0xd7], { attenuation: [8, 8, 7, 8], latched: 5 }],
+        ["a data byte going to the latched register", [0x81, 0x3f], { tone: [0x3f1, 0, 0], latched: 0 }],
+    ])("gives %s", (_, writes, expected) => {
+        const { chip } = makeSoundChip();
+        chip.reset(true);
+        for (const value of writes) chip.poke(value);
+        expect(chip.inspect()).toEqual({
+            tone: [0, 0, 0],
+            noise: 0,
+            attenuation: [8, 8, 8, 8],
+            latched: 0,
+            ...expected,
+        });
+    });
+
+    it("leaves InstrumentedSoundChip's getState agreeing with it", () => {
+        const chip = new InstrumentedSoundChip();
+        chip.setScheduler(new Scheduler());
+        for (const value of [0xa5, 0x12, 0xe5, 0xd7]) chip.poke(value);
+        const { tone, noise, attenuation } = chip.inspect();
+        expect(chip.getState()).toMatchObject({ tone, noise, volume: attenuation, latchedRegister: 0x50 });
+    });
+});
