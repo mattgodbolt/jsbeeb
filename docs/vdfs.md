@@ -16,6 +16,8 @@ side of it: it takes over the filing system vectors and forwards every call. The
 - `src/app/app.js` (the IPC handlers, the change of folder, and writing open files as a window closes or the app
   quits), `src/app/vdfs-swap.js`, `src/app/preload.js` and `src/app/electron.js` (the page's side): the desktop app's
   side, which holds the folder in the main process
+- `src/web/vdfs-folder-store.js`, `vdfs-folder.js`, `vdfs-ui.js`: a folder in a browser as a store, the folder kept
+  for the next page, and the menu
 
 There is no copy of the folder in memory. The host asks the store for what a call needs as the call is made, and the
 ROM waits for the answer, as it would for a disc.
@@ -31,6 +33,15 @@ page, and only for the folder the page was told of. What the page had not yet wr
 written to the new one: the page says so, as a notice for a write-back and as a Disc fault for a call. A page that
 goes for another reason, such as a machine switch or a reload, hands what is open to the main process as it goes,
 which it cannot be made to finish: what the BBC wrote since a file was last closed or flushed may be lost.
+
+In a browser with the File System Access API (Chrome, Edge and other Chromium browsers; not Firefox or Safari), More,
+Serve a folder as VDFS... asks for a folder and starts the page again with it. The folder is kept in the browser's IndexedDB, so a page opened with `?vdfs` finds it again. The browser asks
+again whether the page may use it in a new session, and only a click can answer; the page shows a notice with an Allow
+button when that is so, and until it is answered the BBC gets "Disc fault: The browser has not been told that the VDFS
+folder may be used". If the answer was no, the BBC gets a disc fault that says to allow it in the site settings. More,
+Stop serving the VDFS folder forgets it. A browser cannot be made to write a file as the page goes, so a program that
+has a file open when the tab is closed may lose what it wrote since it last closed or flushed it; the page writes what
+is open when it is hidden, which is the best that can be done.
 
 In Node, give `MachineSession` a folder:
 
@@ -68,7 +79,7 @@ take and so sees the boot service call first. `*VDFS` does it, and `autotype` ca
 - A file opened for output is made as it is opened, empty, as a disc's catalogue would have it, and is filled as it is
   closed, by a close of handle 0, `OSARGS` with A=&FF, or a break. Closing every file stops at one that cannot be
   written, and leaves it and the rest open to be written again. In Node, a machine that is stopped with a file open does
-  not write it until `flushVdfs()`. The desktop app writes what is open as a window closes or the app quits. A file that has been deleted or
+  not write it until `flushVdfs()`. The desktop app writes what is open as a window closes or the app quits, and a browser tries when the page is hidden or goes, which it cannot be made to finish. A file that has been deleted or
   replaced while it is open is no longer written.
 - A transfer is of memory the 6502 has: no more than 64K at a time, not over the devices (`&FC00` to `&FEFF`), and not
   past the top. A file is at most 16 MB.
@@ -207,7 +218,7 @@ write the seven vectors to the OS's extended vector entries, put the extended ve
 ### The store
 
 The host is given an object with these calls, each returning a promise, and the text of what it throws is what the BBC's
-"Disc fault" says. A store may have more than this for its page: `FsStore.check()`. `src/vdfs-fs-store.js` is the one for a folder in Node, and the desktop app's is the same, over IPC to its main process.
+"Disc fault" says. A store may have more than this for its page: `FsStore.check()`, and the browser's `permission()` and `requestPermission()`, which a folder the browser has to be asked about needs. `src/vdfs-fs-store.js` is the one for a folder in Node, the desktop app's is the same over IPC to its main process, and `src/web/vdfs-folder-store.js` is the one for a folder in a browser.
 The names it is given and
 gives are the BBC's; matching them without regard to case, and keeping the addresses and lock, is its work.
 

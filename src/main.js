@@ -8,6 +8,8 @@ import { fillHelp, openHelpOnTheTabForNow } from "./web/help.js";
 import { DebugMenu } from "./web/debug-menu.js";
 import { PanelKeys } from "./web/panel-keys.js";
 import { GamePad } from "./web/gamepads.js";
+import { canChooseFolder, browserVdfsStore } from "./web/vdfs-folder.js";
+import { attachBrowserVdfs, attachVdfsMenu } from "./web/vdfs-ui.js";
 import { ServedMessage } from "./web/vdfs-notice.js";
 import { attachDesktopVdfs, desktopVdfsStore, initialise as electron, isDesktopApp } from "./app/electron.js";
 import { AudioHandler } from "./web/audio-handler.js";
@@ -235,7 +237,7 @@ const machine = new Machine({
     stationId,
     userPort: accessibilitySwitches.userPort,
     printer,
-    vdfsStore: model.takesServiceRoms ? desktopVdfsStore(parsedQuery) : null,
+    vdfsStore: model.takesServiceRoms ? (desktopVdfsStore(parsedQuery) ?? browserVdfsStore(parsedQuery)) : null,
     speechOutput,
     video,
     audioHandler,
@@ -245,8 +247,15 @@ const machine = new Machine({
 const processor = machine.processor;
 const notifyVdfs = (message, options = {}) => toast(message, { title: "VDFS", ...options });
 if (processor.vdfs) {
-    notifyVdfs(ServedMessage, { quietKey: "quietVdfs" });
-    attachDesktopVdfs(processor.vdfs, { notify: notifyVdfs });
+    if (isDesktopApp()) {
+        notifyVdfs(ServedMessage, { quietKey: "quietVdfs" });
+        attachDesktopVdfs(processor.vdfs, { notify: notifyVdfs });
+    } else {
+        attachBrowserVdfs(processor.vdfs, {
+            notify: notifyVdfs,
+            offer: (message, label, run) => notifyVdfs(message, { action: { label, run } }),
+        }).catch((error) => notifyVdfs(`The VDFS folder could not be set up (${error.message}).`));
+    }
 } else if (parsedQuery.vdfs && !model.takesServiceRoms) {
     notifyVdfs(`VDFS is not for the ${model.name}, so the folder is not being served.`);
 }
@@ -289,6 +298,15 @@ const { keyboard } = new KeyboardSetup({
 });
 
 const modals = new Modals({ loop });
+if (!isDesktopApp() && canChooseFolder() && model.takesServiceRoms)
+    attachVdfsMenu({
+        urlState,
+        modals,
+        serving: !!processor.vdfs,
+        notify: notifyVdfs,
+        hold: () => processor.vdfs?.hold(),
+        release: () => processor.vdfs?.release({ changed: false }),
+    });
 openHelpOnTheTabForNow(() => loop.isPaused() || loop.mode === RunMode.debugging);
 
 const drives = new Drives({
