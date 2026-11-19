@@ -3,4 +3,4 @@ use provided you actually own these ROMs. I would be happy to remove these if
 anyone wishes me to, but they make it very much easier to enjoy emulation if
 they're here.
 
-vdfs.rom is the exception: it is jsbeeb's own, from roms-src/vdfs, under jsbeeb's licence. See docs/vdfs.md.
+vdfs.rom is the exception: it is jsbeeb's own, built from roms-src/vdfs, whose source is CC0 1.0. See docs/vdfs.md.
