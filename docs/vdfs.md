@@ -148,7 +148,8 @@ Some things follow from that:
 
 - A call made while files from before a break are still being written waits for them, so that it sees them.
 - The filing system is not re-entrant, as the DFS is not: a call made from an interrupt while one is waiting ends the
-  one that was waiting, which then gets a "Disc changed" error.
+  one that was waiting, which then gets a "Disc changed" error. A call from an interrupt that lands between
+  the ROM's pokes of A, X and Y and its poke of GO changes what the interrupted call is given.
 - A call that a break has ended may still have a request on its way to the store, and its result will not be used. An
   `OSFIND` for output that a break catches at the wrong moment may leave an empty file behind.
 - A store that never answers leaves the BBC waiting until BREAK. There is no timeout.
@@ -167,7 +168,7 @@ the ROM to do (the ops below), then `Done`, then the A the call returns; the las
 their ports, and the carry from bit 6 of the status, after `Done` and before that last byte. They are the response's
 own. Responses are a stack: a call the ROM makes while it carries out ops (the OS can call the filing system again
 while the ROM prints, with `*SPOOL`) is a response above the one being read, and is read to its end before the ROM goes
-on with the outer one, so the outer one is left whole.
+on with the outer one, so the outer one is left whole. An error ends them all once it is read, since the `BRK` it raises never returns into the ROM's frames.
 
 A call that only returns registers has no ops, so the first byte the ROM reads is `Done`. A read with no response to
 give, because a break or a restored snapshot took it, or a call made from an interrupt finished it, is told "Disc

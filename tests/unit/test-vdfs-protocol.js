@@ -88,8 +88,9 @@ describe("VDFS protocol", () => {
             expect(ports.read(Port.go) & IdMask).toBe(HostId);
             makeCall(ports, Call.file);
             expect(ports.read(Port.go) & IdMask).toBe(HostId);
-            makeCall(ports, Call.file);
-            expect(ports.read(Port.go) & IdMask).toBe(HostId);
+            const slow = new VdfsPorts(() => new Promise(() => {}));
+            makeCall(slow, Call.file);
+            expect(slow.read(Port.go) & IdMask).toBe(HostId);
         });
 
         it("gives the registers a call was made with, and returns the ones it ended with and the carry", () => {
@@ -289,6 +290,17 @@ describe("VDFS protocol", () => {
             expect(ports.openResponses).toBe(0);
         });
 
+        it("drops what is below an error once it is read, since the BRK it raises never returns to it", () => {
+            const ports = new VdfsPorts((call, registers, response) =>
+                call === Call.file ? response.print("AB") : response.error(1, "x"),
+            );
+            makeCall(ports, Call.file);
+            ports.read(Port.a);
+            makeCall(ports, Call.args);
+            expect(readResponse(ports, {}).ops).toEqual([{ op: "error", number: 1, text: "x" }]);
+            expect(ports.openResponses).toBe(0);
+        });
+
         it("keeps nothing across a break", () => {
             const ports = portsSaying(() => "A");
             makeCall(ports, Call.file);
@@ -340,6 +352,13 @@ describe("VDFS protocol", () => {
             expect(ports.openResponses).toBe(0);
             makeCall(ports, Call.file);
             expect(readResponse(ports, {}).ops).toEqual([{ op: "print", text: "A" }]);
+        });
+
+        it("keeps no more of a snapshot's responses than it would hold, with their positions inside them", () => {
+            const ports = portsSaying(() => "A");
+            ports.restoreState({ responses: Array.from({ length: 100 }, () => [[1, 2], -5, null]) });
+            expect(ports.openResponses).toBeLessThan(100);
+            expect(ports.read(Port.a)).toBe(1);
         });
 
         it("masks the numbers in a snapshot to bytes", () => {
