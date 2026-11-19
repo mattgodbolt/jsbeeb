@@ -19,6 +19,10 @@ const EventProgressCycles = 4000;
 // The tone counters are 10 bits wide and wrap, so a period of 0 counts this many steps.
 export const ToneCounterSteps = 1024;
 
+const Channels = 4;
+const NoiseRegister = 3;
+const LatchedRegisterShift = 4;
+
 export const volumeTable = new Float32Array(16);
 (() => {
     let f = 1.0;
@@ -266,6 +270,19 @@ export class SoundChip {
         for (let i = 1; i < volumeTable.length; ++i)
             if (Math.abs(volumeTable[i] - volume) < Math.abs(volumeTable[nearest] - volume)) nearest = i;
         return nearest;
+    }
+
+    /**
+     * The tone periods, the noise control and the four attenuations (0 loudest, 15 silent), and the register, R0 to R7,
+     * a data byte goes to. The chip is not caught up, so nothing is rendered.
+     */
+    inspect() {
+        return {
+            tone: Array.from(this.registers.subarray(0, NoiseRegister)),
+            noise: this.registers[NoiseRegister],
+            attenuation: Array.from({ length: Channels }, (_, channel) => this.attenuation(channel)),
+            latched: this.latchedRegister >>> LatchedRegisterShift,
+        };
     }
 
     catchUp() {
@@ -632,15 +649,13 @@ export class InstrumentedSoundChip extends SoundChip {
         }
     }
 
-    /** Read current SN76489 register state in a friendly format. */
+    /**
+     * Read current SN76489 register state in a friendly format.
+     * @deprecated {@link SoundChip#inspect}, or MachineSession's `inspectHardware("sound")`, reads the same registers
+     */
     getState() {
-        return {
-            tone: [this.registers[0], this.registers[1], this.registers[2]],
-            noise: this.registers[3],
-            volume: [this.attenuation(0), this.attenuation(1), this.attenuation(2), this.attenuation(3)],
-            lfsr: this.lfsr,
-            latchedRegister: this.latchedRegister,
-        };
+        const { tone, noise, attenuation } = this.inspect();
+        return { tone, noise, volume: attenuation, lfsr: this.lfsr, latchedRegister: this.latchedRegister };
     }
 }
 

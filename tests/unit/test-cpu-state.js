@@ -75,6 +75,8 @@ function expectAdlcStatusAtEveryMirror(cpu) {
 const ProgramStart = 0x2000;
 const ProgramCycles = 12345;
 const RomSelect = 0xfe30;
+const Acccon = 0xfe34;
+const AccconTst = 0x40;
 const SysViaOrb = 0xfe40;
 const SysViaOra = 0xfe41;
 const SysViaDdrb = 0xfe42;
@@ -508,6 +510,52 @@ describe("cycle counter rollover", () => {
     });
 });
 
+describe("1 MHz bus stretching", () => {
+    const LdaAbsolute = 0xad;
+    const LdaAbsoluteCycles = 4;
+
+    async function readCycles(name, addr, { tst = false } = {}) {
+        const cpu = fake6502(findModel(name));
+        await cpu.initialise();
+        if (tst) cpu.writemem(Acccon, AccconTst);
+        cpu.ramRomOs.set([LdaAbsolute, addr & 0xff, addr >>> 8], ProgramStart);
+        cpu.p.i = true;
+        cpu.pc = ProgramStart;
+        const before = cpu.currentCycles;
+        cpu.execute(1);
+        return cpu.currentCycles - before;
+    }
+
+    it.each(
+        [
+            ["Master", 0xfc00, false, true],
+            ["Master", 0xfe1f, false, true],
+            ["Master", 0xfe20, false, false],
+            ["Master", 0xfe24, false, false],
+            ["Master", 0xfe28, false, true],
+            ["Master", 0xfe2b, false, true],
+            ["Master", 0xfe2c, false, false],
+            ["Master", 0xfe34, false, false],
+            ["Master", 0xfe4f, false, true],
+            ["Master", 0xfe80, false, true],
+            ["Master", 0xfe9f, false, true],
+            ["Master", 0xfea0, false, false],
+            ["Master", 0xfec0, false, false],
+            ["Master", 0xfee0, false, false],
+            ["Master", 0xfe28, true, false],
+            ["Master", 0xfe4f, true, false],
+            ["Master", 0xfe80, true, false],
+            ["B-DFS1.2", 0xfe28, false, false],
+            ["B-DFS1.2", 0xfe4f, false, true],
+            ["B-DFS1.2", 0xfe80, false, false],
+            ["B-DFS1.2", 0xfec0, false, true],
+        ].map(([name, addr, tst, stretched]) => [name, hexword(addr), addr, tst, stretched]),
+    )("on %s, a read of &%s with TST %s is stretched: %s", async (name, _hex, addr, tst, stretched) => {
+        const cycles = await readCycles(name, addr, { tst });
+        expect(cycles > LdaAbsoluteCycles).toBe(stretched);
+    });
+});
+
 describe("the chips a machine names", () => {
     it("puts the keyboard and tape on the system VIA and ACIA of a BBC", () => {
         const cpu = fake6502(findModel("B-DFS1.2"));
@@ -553,8 +601,6 @@ describe("peeking at the hardware", () => {
     const UserViaOrb = 0xfe60;
     const ViaRegisterCount = 16;
     const FdcResult = 0xfe81;
-    const Acccon = 0xfe34;
-    const AccconTst = 0x40;
     const EconetStationId = 0xfe18;
     const Music5000PageSelect = 0xfcff;
     const Music5000WaveRamPage = 0x30;
@@ -1014,5 +1060,86 @@ describe("Cpu6502 VDFS", () => {
         cpu.restoreState(cpu.snapshotState());
         expect(cpu.vdfs.selected).toBe(false);
         expect(() => cpu.vdfs.channels.get(0x11)).toThrow("Channel");
+    });
+});
+
+describe("Master ACCCON IRR", () => {
+    const Acccon = 0xfe34;
+    const AccconIrr = 0x80;
+    const IrrIrqSource = 0x10;
+    const HandlerStart = 0x2100;
+    const IrqCount = 0x70;
+    const IrqsBeforeHandlerClearsIrr = 10;
+    const ProgramRunCycles = 50 * 1000;
+    // prettier-ignore
+    const CountingProgram = [
+        0x78,                               // SEI
+        0xa9, 0x7f,                         // LDA #$7F
+        0x8d, 0x4e, 0xfe,                   // STA $FE4E
+        0x8d, 0x6e, 0xfe,                   // STA $FE6E
+        0xa9, HandlerStart & 0xff,          // LDA #<handler
+        0x8d, 0x04, 0x02,                   // STA IRQ1V
+        0xa9, HandlerStart >> 8,            // LDA #>handler
+        0x8d, 0x05, 0x02,                   // STA IRQ1V+1
+        0xa9, 0x00,                         // LDA #0
+        0x85, IrqCount,                     // STA count
+        0x58,                               // CLI
+        0xa2, 0x00,                         // LDX #0
+        0xca,                               // wait: DEX
+        0xd0, 0xfd,                         // BNE wait
+        0x78,                               // SEI
+        0x4c, 0x1e, 0x20,                   // done: JMP done
+    ];
+    // prettier-ignore
+    const LeavesIrrSetHandler = [
+        0xe6, IrqCount,                     // INC count
+        0xa5, IrqCount,                     // LDA count
+        0xc9, IrqsBeforeHandlerClearsIrr,   // CMP #10
+        0x90, 0x05,                         // BCC exit
+        0xa9, 0x00,                         // LDA #0
+        0x8d, 0x34, 0xfe,                   // STA ACCCON
+        0xa5, 0xfc,                         // exit: LDA $FC
+        0x40,                               // RTI
+    ];
+
+    async function masterReadyToCount(acccon) {
+        const cpu = fake6502(findModel("Master"));
+        await cpu.initialise();
+        cpu.ramRomOs.set(CountingProgram, ProgramStart);
+        cpu.ramRomOs.set(LeavesIrrSetHandler, HandlerStart);
+        cpu.writemem(Acccon, acccon);
+        cpu.pc = ProgramStart;
+        return cpu;
+    }
+
+    function irqsCounted(cpu) {
+        cpu.execute(ProgramRunCycles);
+        return cpu.readmem(IrqCount);
+    }
+
+    it.each([
+        [0, 0],
+        [AccconIrr, IrqsBeforeHandlerClearsIrr],
+    ])("with ACCCON at %i, counts %i IRQs from a handler that clears IRR on its tenth", async (acccon, irqs) => {
+        expect(irqsCounted(await masterReadyToCount(acccon))).toBe(irqs);
+    });
+
+    it("holds the IRQ on a machine restored with IRR set", async () => {
+        const snapshot = (await masterReadyToCount(AccconIrr)).snapshotState();
+        const restored = fake6502(findModel("Master"));
+        await restored.initialise();
+
+        restored.restoreState(snapshot);
+
+        expect(irqsCounted(restored)).toBe(IrqsBeforeHandlerClearsIrr);
+    });
+
+    it("drops the IRQ on a hard reset", async () => {
+        const cpu = await masterReadyToCount(AccconIrr);
+        expect(cpu.interrupt & IrrIrqSource).toBe(IrrIrqSource);
+
+        cpu.reset(true);
+
+        expect(cpu.interrupt & IrrIrqSource).toBe(0);
     });
 });

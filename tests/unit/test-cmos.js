@@ -112,6 +112,29 @@ describe("CMOS", () => {
         });
     });
 
+    describe("inspect", () => {
+        it("gives the lines, the address latched, and every register as a read would, the clock unrecorded", () => {
+            const sample = vi.fn();
+            writeRegister(CMOS_ADDR.CONFIG_2, 0x42);
+            cmos.writeControl(PORT_B_ENABLE | PORT_B_ADDR_SEL, CMOS_ADDR.HOURS, IC32_READ);
+            cmos.inputLog = { sample };
+
+            const { registers, ...lines } = cmos.inspect();
+            cmos.inputLog = null;
+            expect(sample).not.toHaveBeenCalled();
+            expect(lines).toEqual({
+                chipEnable: true,
+                addressStrobe: true,
+                dataStrobe: false,
+                read: true,
+                address: CMOS_ADDR.CONFIG_2,
+            });
+            expect(registers.slice(0, 10)).toEqual([0x56, 0xff, 0x34, 0xff, 0x12, 0xff, 0x07, 0x15, 0x04, 0x23]);
+            expect(registers).toEqual(registers.map((_, address) => readRegister(address)));
+            expect(registers[CMOS_ADDR.CONFIG_2]).toBe(0x42);
+        });
+    });
+
     const readClock = (target = cmos) =>
         Object.fromEntries(
             ["SECONDS", "MINUTES", "HOURS", "DAY_OF_WEEK", "DAY_OF_MONTH", "MONTH", "YEAR"].map((name) => [

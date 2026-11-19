@@ -33,6 +33,17 @@ describe("Adc", () => {
         adc = new Adc(sysvia, scheduler);
     });
 
+    it("gives the status and data bytes as a program reads them, and whether a conversion is under way", () => {
+        adc.setChannelSource(1, source(0x1234));
+        adc.write(Status, 1);
+        const during = adc.inspect();
+        convert(1);
+        const [status, dataHigh, dataLow] = registers();
+
+        expect(during).toEqual({ status: Busy | 1, dataHigh: 0, dataLow: 0, converting: true });
+        expect(adc.inspect()).toEqual({ status, dataHigh, dataLow, converting: false });
+    });
+
     it("powers on, and resets, with a conversion complete and a zero result", () => {
         expect([...registers(), adc.read(3)]).toEqual([EndOfConversion, 0, 0, 0x40]);
         adc.setChannelSource(1, source(0x1234));

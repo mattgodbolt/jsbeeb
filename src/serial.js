@@ -24,6 +24,15 @@ export class Serial {
         this.acia.selectRs423(!!(val & 0x40));
     }
 
+    /** The control register as last written, and the rates in baud its fields select. */
+    inspect() {
+        return {
+            control: this.reg,
+            transmitBaud: BaudRates[this.transmitRate],
+            receiveBaud: BaudRates[this.receiveRate],
+        };
+    }
+
     read() {
         this.write(0, 0xfe);
         return 0;

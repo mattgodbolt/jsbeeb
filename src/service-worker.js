@@ -45,4 +45,5 @@ registerRoute(
 
 self.addEventListener("message", (event) => {
     if (event.data?.type === "SKIP_WAITING") self.skipWaiting();
+    if (event.data?.type === "WHICH_BUILD") event.ports[0].postMessage(import.meta.env.JSBEEB_COMMIT);
 });

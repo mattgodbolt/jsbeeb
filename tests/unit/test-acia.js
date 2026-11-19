@@ -318,3 +318,18 @@ describe("Acia", () => {
         });
     });
 });
+
+describe("Acia inspect", () => {
+    it("gives the control register as written, the status as a program reads it, and the byte received", () => {
+        const { acia } = createAcia();
+        acia.write(0, ReceiveInterruptEnable | EightBitsOneStopNoParity);
+        acia.receive(0x41);
+
+        expect(acia.inspect()).toEqual({
+            control: ReceiveInterruptEnable | EightBitsOneStopNoParity,
+            status: acia.peek(0),
+            receiveData: 0x41,
+        });
+        expect(acia.peek(0) & Rdrf).toBe(Rdrf);
+    });
+});
