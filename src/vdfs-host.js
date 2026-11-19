@@ -120,8 +120,8 @@ export class VdfsHost {
         this.reset();
     }
 
-    get openStreams() {
-        return this.ports.openStreams;
+    get openResponses() {
+        return this.ports.openResponses;
     }
 
     read(offset) {

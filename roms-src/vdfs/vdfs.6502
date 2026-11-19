@@ -1,6 +1,6 @@
 \ VDFS: a filing system whose files are the host's. Every call is forwarded to the host through
 \ the ports in contract.6502: the caller's A, X and Y go in, then the call's number to start it, and when the host is
-\ done A, X, Y and the carry come back. What the host wants the 6502 to do on the way, it says as a stream of ops.
+\ done A, X, Y and the carry come back. What the host wants the 6502 to do on the way, it says as a list of ops.
 
 INCLUDE "contract.6502"
 
@@ -46,37 +46,27 @@ SECTION Rom, org = &8000, filename = "vdfs.rom", guard = &C000
 .forward
 \ Very defensive, see docs/vdfs.md.
     PHA
-    LDA PortId : EOR #HostId : BNE absent
-    PLA : STA PortAIn : STX PortXIn : STY PortYIn : LDA #CallService : JMP enter
+    LDA PortGo : AND #IdMask : EOR #HostId : BNE absent
+    PLA : STA PortA : STX PortX : STY PortY : LDA #CallService : JMP enter
 .absent
     PLA
     RTS
 
-.vec_file   STA PortAIn : STX PortXIn : STY PortYIn : LDA #CallFile : JMP enter
-.vec_args   STA PortAIn : STX PortXIn : STY PortYIn : LDA #CallArgs : JMP enter
-.vec_bget   STA PortAIn : STX PortXIn : STY PortYIn : LDA #CallBget : JMP enter
-.vec_bput   STA PortAIn : STX PortXIn : STY PortYIn : LDA #CallBput : JMP enter
-.vec_gbpb   STA PortAIn : STX PortXIn : STY PortYIn : LDA #CallGbpb : JMP enter
-.vec_find   STA PortAIn : STX PortXIn : STY PortYIn : LDA #CallFind : JMP enter
-.vec_fsc    STA PortAIn : STX PortXIn : STY PortYIn : LDA #CallFsc : JMP enter
+.vec_file   STA PortA : STX PortX : STY PortY : LDA #CallFile : JMP enter
+.vec_args   STA PortA : STX PortX : STY PortY : LDA #CallArgs : JMP enter
+.vec_bget   STA PortA : STX PortX : STY PortY : LDA #CallBget : JMP enter
+.vec_bput   STA PortA : STX PortX : STY PortY : LDA #CallBput : JMP enter
+.vec_gbpb   STA PortA : STX PortX : STY PortY : LDA #CallGbpb : JMP enter
+.vec_find   STA PortA : STX PortX : STY PortY : LDA #CallFind : JMP enter
+.vec_fsc    STA PortA : STX PortX : STY PortY : LDA #CallFsc : JMP enter
 
-\ A is the call's number. Bit 7 of the status is busy, bit 6 says the host has ops for this ROM, and bit 0 is the carry out.
+\ A is the call's number. The ops, then the registers, are what the host answers with.
 .enter
     STA PortGo
     .wait
     BIT PortGo : BMI wait
-    BVS ops
-.results
-    LDX PortXRes : LDY PortYRes
-    LDA PortGo : LSR A
-    LDA PortARes
-    RTS
-
-.ops
-    LDX PortStream
 .next
-    STX PortStream
-    LDA PortData
+    LDA PortA
     BEQ results
     CMP #OpPrint : BEQ print
     CMP #OpError : BEQ error
@@ -87,11 +77,16 @@ SECTION Rom, org = &8000, filename = "vdfs.rom", guard = &C000
     EQUS "VDFS protocol error", 0
 .far_claim JMP claim
 
+.results
+    LDX PortX : LDY PortY
+    LDA PortGo : CMP #CarryBit
+    LDA PortA
+    RTS
+
 .print
 {
     .loop
-    STX PortStream
-    LDA PortData
+    LDA PortA
     BEQ done
     JSR OsAsci
     JMP loop
@@ -102,10 +97,10 @@ SECTION Rom, org = &8000, filename = "vdfs.rom", guard = &C000
 .error
 {
     LDA #0 : STA ErrorBlock
-    LDA PortData : STA ErrorBlock + 1
+    LDA PortA : STA ErrorBlock + 1
     LDY #2
     .loop
-    LDA PortData : STA ErrorBlock,Y
+    LDA PortA : STA ErrorBlock,Y
     BEQ go
     INY : BNE loop
     .go
@@ -116,8 +111,8 @@ SECTION Rom, org = &8000, filename = "vdfs.rom", guard = &C000
 \ ROM's place needs the language ROM paged in, which is done from RAM since this ROM is paged out by it.
 .exec
 {
-    LDA PortData : PHA
-    LDA PortData : PHA
+    LDA PortA : PHA
+    LDA PortA : PHA
     LDA #OsbyteLanguageRom : LDX #0 : LDY #&FF : JSR OsByte
     LDY #stub_end - stub - 1
     .copy

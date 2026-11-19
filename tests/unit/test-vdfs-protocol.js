@@ -8,8 +8,8 @@ import {
     Call,
     CarryOut,
     HostId,
+    IdMask,
     Op,
-    OpsWaiting,
     Port,
     PortBase,
     PortBytes,
@@ -25,8 +25,7 @@ const upperFirst = (name) => name[0].toUpperCase() + name.slice(1);
 const portsSaying = (says) => new VdfsPorts((call, registers, response) => response.print(says(call)));
 
 function makeCall(ports, call, registers = {}) {
-    for (const [port, value] of Object.entries({ aIn: 0, xIn: 0, yIn: 0, ...registers }))
-        ports.write(Port[port], value);
+    for (const [port, value] of Object.entries({ a: 0, x: 0, y: 0, ...registers })) ports.write(Port[port], value);
     ports.write(Port.go, call);
 }
 
@@ -63,24 +62,35 @@ describe("VDFS protocol", () => {
                     Object.entries(Port).map(([name, offset]) => [`Port${upperFirst(name)}`, PortBase + offset]),
                 ),
                 HostId,
+                IdMask,
+                CarryBit: CarryOut,
                 ...prefixed("Call", Call),
                 ...prefixed("Op", Op),
             });
         });
 
-        it("puts the status where the ROM tests it: busy in the top bit and ops in the next, which BIT copies, and the carry in the bottom", () => {
-            expect([Busy, OpsWaiting, CarryOut]).toEqual([0x80, 0x40, 0x01]);
+        it("puts the status where the ROM tests it: busy in the top bit, which BIT copies, then the carry, then the ID", () => {
+            expect([Busy, CarryOut, IdMask]).toEqual([0x80, 0x40, 0x3f]);
+            expect(HostId & ~IdMask).toBe(0);
         });
 
-        it("takes the ports from the start of FRED's window for them, a whole number of bytes", () => {
+        it("takes the four bytes of FRED from the start of the window for them", () => {
             expect(PortBase).toBe(0xfc60);
-            expect(Math.max(...Object.values(Port)) < PortBytes).toBe(true);
+            expect(Object.values(Port).sort()).toEqual([...Array(PortBytes).keys()]);
         });
     });
 
     describe("responses", () => {
-        it("tells a ROM that has a host to talk to by the byte at the ID port", () => {
-            expect(portsSaying(() => "").read(Port.id)).toBe(HostId);
+        it("tells a ROM that has a host to talk to by the bottom bits of the status, whatever else it says", () => {
+            const ports = new VdfsPorts((call, registers) => {
+                registers.p = 1;
+            });
+            expect(ports.read(Port.go) & IdMask).toBe(HostId);
+            makeCall(ports, Call.file);
+            expect(ports.read(Port.go) & IdMask).toBe(HostId);
+            const slow = new VdfsPorts(() => new Promise(() => {}));
+            makeCall(slow, Call.file);
+            expect(slow.read(Port.go) & IdMask).toBe(HostId);
         });
 
         it("gives the registers a call was made with, and returns the ones it ended with and the carry", () => {
@@ -88,44 +98,28 @@ describe("VDFS protocol", () => {
                 registers.a = registers.x + registers.y;
                 registers.p |= 1;
             });
-            makeCall(ports, Call.file, { xIn: 2, yIn: 3 });
+            makeCall(ports, Call.file, { x: 2, y: 3 });
             expect(readResponse(ports, {})).toEqual({ ops: [], a: 5, x: 2, y: 3, p: 1 });
-        });
-
-        it("has no ops waiting for a call that does not ask for any, and ops waiting until they are read for one that does", () => {
-            const quiet = new VdfsPorts(() => {});
-            makeCall(quiet, Call.bget);
-            expect(quiet.read(Port.go) & OpsWaiting).toBe(0);
-            const talking = portsSaying(() => "A");
-            makeCall(talking, Call.file);
-            expect(talking.read(Port.go) & OpsWaiting).toBe(OpsWaiting);
-            readResponse(talking, {});
-            expect(talking.read(Port.go) & OpsWaiting).toBe(0);
         });
 
         it("keeps each response's own registers, so a call made while its ops are being read does not change them", () => {
             const ports = new VdfsPorts((call, registers, response) => {
                 registers.a = call === Call.file ? 0x11 : 0x22;
+                registers.x = call === Call.file ? 0x33 : 0x44;
                 registers.p = call === Call.file ? 1 : 0;
                 response.print(call === Call.file ? "AB" : "X");
             });
             makeCall(ports, Call.file);
-            const outer = ports.read(Port.stream);
-            for (let read = 0; read < 2; read++) {
-                ports.write(Port.stream, outer);
-                ports.read(Port.data);
-            }
+            for (let read = 0; read < 2; read++) ports.read(Port.a);
             makeCall(ports, Call.args);
-            expect(readResponse(ports, {})).toMatchObject({ a: 0x22, p: 0 });
-            ports.write(Port.stream, outer);
-            for (let read = 0; read < 3; read++) {
-                ports.write(Port.stream, outer);
-                ports.read(Port.data);
-            }
-            expect([ports.read(Port.xRes), ports.read(Port.go) & CarryOut, ports.read(Port.aRes)]).toEqual([
-                0, 1, 0x11,
+            expect(readResponse(ports, {})).toMatchObject({ a: 0x22, x: 0x44, p: 0 });
+            for (let read = 0; read < 3; read++) ports.read(Port.a);
+            expect([ports.read(Port.x), ports.read(Port.go) & CarryOut, ports.read(Port.a)]).toEqual([
+                0x33,
+                CarryOut,
+                0x11,
             ]);
-            expect(ports.openStreams).toBe(0);
+            expect(ports.openResponses).toBe(0);
         });
 
         it("shows a control code as a question mark, a NUL too since the ROM takes it for the end, but not a return", () => {
@@ -143,15 +137,11 @@ describe("VDFS protocol", () => {
         it("keeps each call's response apart, so a call made while one is being read leaves it whole", () => {
             const ports = portsSaying((call) => (call === Call.file ? "AB" : "XY"));
             makeCall(ports, Call.file);
-            const outer = ports.read(Port.stream);
-            ports.write(Port.stream, outer);
-            expect(ports.read(Port.data)).toBe(Op.print);
-            expect(ports.read(Port.data)).toBe("A".charCodeAt(0));
+            expect(ports.read(Port.a)).toBe(Op.print);
+            expect(ports.read(Port.a)).toBe("A".charCodeAt(0));
             makeCall(ports, Call.args);
-            const inner = ports.read(Port.stream);
-            expect(inner).not.toBe(outer);
-            ports.write(Port.stream, outer);
-            expect(ports.read(Port.data)).toBe("B".charCodeAt(0));
+            expect(readResponse(ports, {}).ops).toEqual([{ op: "print", text: "XY" }]);
+            expect(ports.read(Port.a)).toBe("B".charCodeAt(0));
         });
 
         describe("what a call that goes wrong says", () => {
@@ -205,6 +195,19 @@ describe("VDFS protocol", () => {
             expect(readResponse(ports, {}).a).toBe(7);
         });
 
+        it("ends a call with an error when a call made meanwhile, as from an interrupt, was answered and read first", async () => {
+            const waiting = deferred();
+            const ports = new VdfsPorts((call) => (call === Call.file ? waiting.promise : undefined));
+            makeCall(ports, Call.file);
+            makeCall(ports, Call.args);
+            readResponse(ports, {});
+            waiting.resolve();
+            await waiting.promise;
+            await Promise.resolve();
+            expect(ports.read(Port.go) & Busy).toBe(0);
+            expect(readResponse(ports, {}).ops).toEqual([{ op: "error", number: 0xc9, text: "Disc changed" }]);
+        });
+
         it("is not answered at all if a break comes first, and a call made after it is", async () => {
             const waiting = deferred();
             const ports = new VdfsPorts((call, registers, response, turn) =>
@@ -214,11 +217,9 @@ describe("VDFS protocol", () => {
             ports.reset();
             expect(ports.read(Port.go) & Busy).toBe(0);
             makeCall(ports, Call.args);
-            const answered = ports.read(Port.stream);
             waiting.resolve();
             await waiting.promise;
             await Promise.resolve();
-            expect(ports.read(Port.stream)).toBe(answered);
             expect(readResponse(ports, {}).ops).toEqual([{ op: "print", text: "NEW" }]);
         });
 
@@ -232,13 +233,13 @@ describe("VDFS protocol", () => {
             waiting.resolve();
             await waiting.promise;
             await Promise.resolve();
-            expect(ports.openStreams).toBe(0);
+            expect(ports.openResponses).toBe(0);
         });
 
         it("has nothing to end when no call is waiting", () => {
             const ports = portsSaying(() => "A");
             ports.abort(new VdfsError(0xc9, "Disc changed"));
-            expect(ports.openStreams).toBe(0);
+            expect(ports.openResponses).toBe(0);
         });
 
         it("tells the call that a break has overtaken it, so that it does not go on to change the machine", async () => {
@@ -257,11 +258,20 @@ describe("VDFS protocol", () => {
     });
 
     describe("what is left of a response", () => {
+        const discChanged = (ports) => {
+            const bytes = [];
+            for (let byte = ports.read(Port.a); bytes.length < 3 || byte !== 0; byte = ports.read(Port.a))
+                bytes.push(byte);
+            expect(bytes[0]).toBe(Op.error);
+            expect(bytes[1]).toBe(0xc9);
+            expect(String.fromCharCode(...bytes.slice(2))).toBe("Disc changed");
+        };
+
         it("keeps nothing of one that has been read to its end", () => {
             const ports = portsSaying(() => "A");
             makeCall(ports, Call.file);
             readResponse(ports, {});
-            expect(ports.openStreams).toBe(0);
+            expect(ports.openResponses).toBe(0);
         });
 
         it("hands the ROM an exec address of zero as zero, though its RTS takes one less", () => {
@@ -276,67 +286,47 @@ describe("VDFS protocol", () => {
         ])("has no return registers after %s, which the ROM does not come back to read", (_, end) => {
             const ports = new VdfsPorts((call, registers, response) => end(response));
             makeCall(ports, Call.file);
-            const stream = ports.read(Port.stream);
             readResponse(ports, {});
-            ports.write(Port.stream, stream);
-            expect(ports.openStreams).toBe(0);
+            expect(ports.openResponses).toBe(0);
+        });
+
+        it("drops what is below an error once it is read, since the BRK it raises never returns to it", () => {
+            const ports = new VdfsPorts((call, registers, response) =>
+                call === Call.file ? response.print("AB") : response.error(1, "x"),
+            );
+            makeCall(ports, Call.file);
+            ports.read(Port.a);
+            makeCall(ports, Call.args);
+            expect(readResponse(ports, {}).ops).toEqual([{ op: "error", number: 1, text: "x" }]);
+            expect(ports.openResponses).toBe(0);
         });
 
         it("keeps nothing across a break", () => {
             const ports = portsSaying(() => "A");
             makeCall(ports, Call.file);
-            expect(ports.openStreams).toBe(1);
+            expect(ports.openResponses).toBe(1);
             ports.reset();
-            expect(ports.openStreams).toBe(0);
+            expect(ports.openResponses).toBe(0);
         });
 
-        it("does not give a call's response the number of one that is being read, however many calls come between", () => {
-            const ports = portsSaying((call) => (call === Call.file ? "AB" : "X"));
-            makeCall(ports, Call.file);
-            const outer = ports.read(Port.stream);
-            const readOuter = () => {
-                ports.write(Port.stream, outer);
-                return ports.read(Port.data);
-            };
-            expect(readOuter()).toBe(Op.print);
-            expect(readOuter()).toBe("A".charCodeAt(0));
-            for (let nested = 0; nested < 600; nested++) {
-                makeCall(ports, Call.bput);
-                expect(readResponse(ports, {}).ops).toEqual([{ op: "print", text: "X" }]);
-            }
-            expect(readOuter()).toBe("B".charCodeAt(0));
-            expect(readOuter()).toBe(0);
-            expect(readOuter()).toBe(Op.done);
-        });
-
-        it("tells what reads a response that a break took that the disc changed", () => {
+        it("tells what reads a response that a break took, or that an interrupt's call finished, that the disc changed", () => {
             const ports = portsSaying(() => "AB");
             makeCall(ports, Call.file);
-            const stream = ports.read(Port.stream);
-            ports.write(Port.stream, stream);
-            ports.read(Port.data);
+            ports.read(Port.a);
             ports.reset();
-            ports.write(Port.stream, stream);
-            const bytes = [];
-            for (let byte = ports.read(Port.data); bytes.length < 3 || byte !== 0; byte = ports.read(Port.data))
-                bytes.push(byte);
-            expect(bytes[0]).toBe(Op.error);
-            expect(bytes[1]).toBe(0xc9);
-            expect(String.fromCharCode(...bytes.slice(2))).toBe("Disc changed");
+            discChanged(ports);
+            expect(ports.openResponses).toBe(0);
         });
 
-        it("can be put back from a snapshot partway through reading a response, and ends a call that was waiting", async () => {
+        it("can be put back from a snapshot partway through reading a response, and ends a call that was waiting", () => {
             const ports = portsSaying(() => "AB");
             makeCall(ports, Call.file);
-            const stream = ports.read(Port.stream);
-            ports.write(Port.stream, stream);
-            ports.read(Port.data);
-            ports.read(Port.data);
+            ports.read(Port.a);
+            ports.read(Port.a);
             const state = JSON.parse(JSON.stringify(ports.snapshotState()));
             const restored = portsSaying(() => "ZZ");
             restored.restoreState(state);
-            restored.write(Port.stream, stream);
-            expect([restored.read(Port.data), restored.read(Port.data), restored.read(Port.data)]).toEqual([
+            expect([restored.read(Port.a), restored.read(Port.a), restored.read(Port.a)]).toEqual([
                 "B".charCodeAt(0),
                 0,
                 Op.done,
@@ -348,50 +338,41 @@ describe("VDFS protocol", () => {
             const waiting = portsSaying(() => "ZZ");
             waiting.restoreState(JSON.parse(JSON.stringify(slow.snapshotState())));
             expect(waiting.read(Port.go) & Busy).toBe(0);
-            waiting.write(Port.stream, waiting.read(Port.stream));
-            expect(waiting.read(Port.data)).toBe(Op.error);
+            expect(waiting.read(Port.a)).toBe(Op.error);
         });
 
         it.each([
             ["nothing at all", undefined],
-            ["no streams", { streams: "none", request: null }],
-            ["numbers that are not bytes", { nextStream: 0, responseStream: 257, request: { a: 300, x: -1, y: "q" } }],
-            ["a stream with no bytes", { streams: [[1, "AB", 0], null, [2, [1, 2], 0.5]] }],
+            ["no responses", { responses: "none", inputs: null }],
+            ["numbers that are not bytes", { inputs: { a: 300, x: -1, y: "q" } }],
+            ["a response with no bytes", { responses: [["AB", 0], null, [[1, 2], 0.5]] }],
         ])("puts back what it can of a snapshot that is %s, and does not throw", (_, state) => {
             const ports = portsSaying(() => "A");
             expect(() => ports.restoreState(state)).not.toThrow();
-            expect(ports.openStreams).toBe(0);
+            expect(ports.openResponses).toBe(0);
             makeCall(ports, Call.file);
             expect(readResponse(ports, {}).ops).toEqual([{ op: "print", text: "A" }]);
         });
 
-        it("masks the numbers in a snapshot to bytes", () => {
+        it("keeps no more of a snapshot's responses than it would hold, with their positions inside them", () => {
             const ports = portsSaying(() => "A");
-            ports.restoreState({
-                nextStream: 0,
-                responseStream: 257,
-                request: { a: 300 },
-                streams: [[258, [256, 3], 0]],
-            });
-            expect(ports.read(Port.stream)).toBe(1);
-            ports.write(Port.stream, 2);
-            expect([ports.read(Port.data), ports.read(Port.data)]).toEqual([0, 3]);
-            const next = portsSaying(() => "A");
-            next.restoreState({ nextStream: 0 });
-            makeCall(next, Call.file);
-            expect(next.read(Port.stream)).toBe(1);
+            ports.restoreState({ responses: Array.from({ length: 100 }, () => [[1, 2], -5, null]) });
+            expect(ports.openResponses).toBeLessThan(100);
+            expect(ports.read(Port.a)).toBe(1);
         });
 
-        it("goes round the 255 numbers it has for responses, so one that is never read is replaced", () => {
+        it("masks the numbers in a snapshot to bytes", () => {
             const ports = portsSaying(() => "A");
-            const seen = new Set();
-            for (let call = 0; call < 600; call++) {
-                makeCall(ports, Call.file);
-                seen.add(ports.read(Port.stream));
-            }
-            expect(seen.size).toBe(255);
-            expect(seen.has(0)).toBe(false);
-            expect(ports.openStreams).toBe(255);
+            ports.restoreState({ responses: [[[256, 3], 0, { x: 258, y: 259, carry: 1 }]] });
+            expect([ports.read(Port.x), ports.read(Port.y), ports.read(Port.go) & CarryOut]).toEqual([2, 3, CarryOut]);
+            expect([ports.read(Port.a), ports.read(Port.a)]).toEqual([0, 3]);
+        });
+
+        it("drops the oldest of the responses a ROM never finished reading, rather than keep them for ever", () => {
+            const ports = portsSaying(() => "A");
+            for (let call = 0; call < 600; call++) makeCall(ports, Call.file);
+            expect(ports.openResponses).toBeLessThan(600);
+            expect(ports.openResponses).toBeGreaterThan(1);
         });
     });
 });

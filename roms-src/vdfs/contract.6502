@@ -1,19 +1,14 @@
-\ The ports and codes the VDFS ROM shares with the host (docs/vdfs.md). The host's copy is in
+\ The ports and codes the VDFS ROM shares with the host (docs/vdfs.md, which says what each port does). The host's copy is in
 \ src/vdfs-protocol.js, and tests/unit/test-vdfs-protocol.js fails if the two differ.
 
 PortBase    = &FC60
-\ Written with a call's number to start it; read for its status: busy, ops for the 6502 to do, the carry out.
 PortGo      = PortBase + 0
-PortAIn     = PortBase + 1
-PortXIn     = PortBase + 2
-PortYIn     = PortBase + 3
-PortARes    = PortBase + 4
-PortXRes    = PortBase + 5
-PortYRes    = PortBase + 6
-PortStream  = PortBase + 7
-PortData    = PortBase + 8
-PortId      = PortBase + 9
-HostId      = &56
+PortA       = PortBase + 1
+PortX       = PortBase + 2
+PortY       = PortBase + 3
+HostId      = &16
+IdMask      = &3F
+CarryBit    = &40
 
 CallService = 0
 CallFile    = 1
