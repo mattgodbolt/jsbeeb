@@ -18,6 +18,11 @@ export function hexbyte(value) {
     return ((value >>> 4) & 0xf).toString(16) + (value & 0xf).toString(16);
 }
 
+/** `value` in upper case hex, padded with zeros to at least `digits`. */
+export function hexUpper(value, digits) {
+    return value.toString(16).toUpperCase().padStart(digits, "0");
+}
+
 export function hexword(value) {
     return hexbyte(value >>> 8) + hexbyte(value & 0xff);
 }
