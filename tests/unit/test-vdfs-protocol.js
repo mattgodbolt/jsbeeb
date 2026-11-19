@@ -208,6 +208,22 @@ describe("VDFS protocol", () => {
             expect(readResponse(ports, {}).ops).toEqual([{ op: "error", number: 0xc9, text: "Disc changed" }]);
         });
 
+        it("ends a waiting call with an error when the call that interrupts it also takes its time", async () => {
+            const outer = deferred();
+            const inner = deferred();
+            const ports = new VdfsPorts((call) => (call === Call.file ? outer.promise : inner.promise));
+            makeCall(ports, Call.file);
+            makeCall(ports, Call.args);
+            inner.resolve();
+            await inner.promise;
+            await Promise.resolve();
+            expect(readResponse(ports, {}).ops).toEqual([]);
+            outer.resolve();
+            await outer.promise;
+            await Promise.resolve();
+            expect(readResponse(ports, {}).ops).toEqual([{ op: "error", number: 0xc9, text: "Disc changed" }]);
+        });
+
         it("is not answered at all if a break comes first, and a call made after it is", async () => {
             const waiting = deferred();
             const ports = new VdfsPorts((call, registers, response, turn) =>
