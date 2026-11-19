@@ -48,9 +48,9 @@ function noteName(hz) {
 
 const hzText = (hz) => `${hz.toFixed(1)} Hz`;
 
-function noiseShiftHz(control, periods) {
+function noiseShiftHz(control, tone) {
     const rate = control & NoiseRateMask;
-    return rate === NoiseFollowsTone2 ? toneHz(periods[Tone2]) : ChipClockHz / NoiseDividers[rate];
+    return rate === NoiseFollowsTone2 ? toneHz(tone[Tone2]) : ChipClockHz / NoiseDividers[rate];
 }
 
 function decodeVolume(attenuation) {
@@ -66,9 +66,9 @@ function decodeTone(period) {
     ];
 }
 
-function decodeNoise(control, { periods }) {
+function decodeNoise(control, { tone }) {
     const white = control & NoiseWhiteBit;
-    const shiftHz = noiseShiftHz(control, periods);
+    const shiftHz = noiseShiftHz(control, tone);
     const meanings = [
         spelt(
             NoiseModes[white ? 1 : 0],
@@ -98,13 +98,13 @@ function channelSection(channel) {
     const name = ChannelNames[channel];
     const pitch =
         channel === NoiseChannel
-            ? register(`R${2 * channel}`, "The noise control", 8, ({ periods }) => periods[channel], decodeNoise)
-            : register(`R${2 * channel}`, `The ${name} period`, 16, ({ periods }) => periods[channel], decodeTone);
+            ? register(`R${2 * channel}`, "The noise control", 8, ({ noise }) => noise, decodeNoise)
+            : register(`R${2 * channel}`, `The ${name} period`, 16, ({ tone }) => tone[channel], decodeTone);
     const volume = register(
         `R${2 * channel + 1}`,
         `The ${name} attenuation`,
         8,
-        ({ attenuations }) => attenuations[channel],
+        ({ attenuation }) => attenuation[channel],
         decodeVolume,
     );
     return { heading: name[0].toUpperCase() + name.slice(1), registers: [pitch, volume] };
@@ -117,15 +117,6 @@ const Sections = [
         registers: [register("Latched", "The latched register", 8, ({ latched }) => latched, decodeLatch)],
     },
 ];
-
-/** Plain reads of the chip's fields, which leave it as it was: no catching up, no rendering. */
-function soundState(chip) {
-    return {
-        periods: chip.registers,
-        attenuations: ChannelNames.map((_, channel) => chip.attenuation(channel)),
-        latched: chip.latchedRegister >>> 4,
-    };
-}
 
 /**
  * A floating panel showing the SN76489's registers decoded, with toggles that mute its channels in what is heard.
@@ -199,6 +190,6 @@ export class SoundChipPanel {
     }
 
     update() {
-        this._registers.update(soundState(this._chip));
+        this._registers.update(this._chip.inspect());
     }
 }

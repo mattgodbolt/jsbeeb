@@ -3,6 +3,8 @@
 // https://books.google.com/books?id=wUecAQAAQBAJ&pg=PA431&lpg=PA431&dq=acia+tdre&source=bl&ots=mp-yF-mK-P&sig=e6aXkFRfiIOb57WZmrvdIGsCooI&hl=en&sa=X&ei=0g2fVdDyFIXT-QG8-JD4BA&ved=0CCwQ6AEwAw#v=onepage&q=acia%20tdre&f=false
 // http://www.classiccmp.org/dunfield/r/6850.pdf
 
+const StatusAddress = 0;
+
 export class Acia extends EventTarget {
     constructor(cpu, toneGen, scheduler, relayNoise) {
         super();
@@ -144,6 +146,11 @@ export class Acia extends EventTarget {
         }
 
         return result;
+    }
+
+    /** The MC6850's registers by its datasheet's names, the status as a program reads it. */
+    inspect() {
+        return { control: this.cr, status: this.peek(StatusAddress), receiveData: this.dr };
     }
 
     write(addr, val) {

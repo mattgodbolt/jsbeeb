@@ -1,4 +1,4 @@
-import { NumRomBanks, RomBankBytes } from "./6502.js";
+import { NumRomBanks, RamStat, RomBankBytes, RomStat } from "./6502.js";
 import { byteChar } from "./hex.js";
 
 /**
@@ -21,10 +21,6 @@ const ShadowEnd = 0x8000;
 // Where romSelect and writeAcccon (6502.js) map ANDY and LYNNE, the shadow RAM, in ramRomOs.
 const AndyOffset = 0;
 const LynneOffset = 0x8000;
-
-// As the CPU's memStat marks a page: a write to ROM changes nothing, and one to neither reaches a device.
-export const RamStat = 1;
-export const RomStat = 2;
 
 const CopyrightPointerOffset = 7;
 const TitleOffset = 9;

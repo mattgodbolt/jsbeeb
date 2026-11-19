@@ -141,7 +141,7 @@ No `encoding` field means plain base64, which is how every array before v4 and e
 
 `swram` holds every bank the model has as sideways RAM (banks 0-7 on a B, mask `0x00FF`; 4-7 on a Master, mask `0x00F0`; none on a stock B or an Atom). The mask is saved rather than read from the model, so a later change to a model's banks cannot misplace an older file's. Both fields are left out when `roms` already carries every bank. On restore each bank in the mask overwrites only that bank, so the ROMs jsbeeb has loaded stay as they are. Snapshots from before sideways RAM was saved have neither field, and then sideways RAM keeps its current contents, so it needed no format version bump.
 
-**Note:** `interrupt` is not saved — it is reconstructed from the VIA and ACIA state, which reasserts their interrupt lines.
+**Note:** `interrupt` is not saved; it is reconstructed from the VIA and ACIA state, which reasserts their interrupt lines, and on a Master from `acccon`, whose bit 7 (IRR) holds an IRQ while set.
 
 Snapshots written before `ram` was 64KB, and earlier b-em and BeebEm imports, hold 128KB of `ram`. They still load: only the first 64KB is used, as the rest was never mapped, so it needed no format version bump.
 

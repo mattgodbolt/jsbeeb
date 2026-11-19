@@ -2274,6 +2274,69 @@ describe("Video", () => {
         });
     });
 
+    describe("inspect", () => {
+        const Black = 0xff000000;
+        const White = 0xffffffff;
+        const FullRed = 0xff0000ff;
+        const R12Mask = 0x3f;
+
+        it("gives the 6845's registers as stored, the one addressed, and what the board decides its addresses read", () => {
+            const r = makeVideo({ isMaster: true });
+            for (let reg = 0; reg < 18; ++reg) r.writeCrtc(reg, 0x40 + reg);
+            r.video.crtc.write(0, 3);
+            r.video.ula.write(0, Mode4);
+            r.video.setScreenHwScroll(2);
+
+            const crtc = r.video.crtc.inspect();
+            expect(crtc.regs).toHaveLength(18);
+            expect(crtc.regs.slice(0, 4)).toEqual([0x40, 0x41, 0x42, 0x43]);
+            expect(crtc.regs[12]).toBe((0x40 + 12) & R12Mask);
+            expect(crtc).toMatchObject({ addressRegister: 3, halfClock: true, screenSubtract: 10, isMaster: true });
+        });
+
+        it("gives the ULA's control register and palette as written, and the colour each entry draws", () => {
+            video.ula.write(0, Mode0);
+            video.ula.write(1, LogicalZeroAsPhysicalZero);
+            video.ula.write(1, 0x10);
+
+            expect(video.ula.inspect()).toEqual({
+                control: Mode0,
+                palette: [7, 0, ...Array(14).fill(0)],
+                paletteColours: [Black, ...Array(15).fill(White)],
+            });
+        });
+
+        it("gives what NuLA's registers have set, a palette write half done, and its colours", () => {
+            ({ video } = makeVideo({ hasVideoNula: true }));
+            for (const write of [
+                NulaPaletteModeOn,
+                NulaHorizontalOffsetOne,
+                NulaLeftBlankOne,
+                NulaAttributeModeOne,
+                NulaAttributeTextOn,
+                NulaFlashOffColours8To11,
+            ])
+                video.ula.write(2, write);
+            for (const byte of NulaColourZeroFullRed) video.ula.write(3, byte);
+            video.ula.write(3, 0x1f);
+
+            const { palette, ...registers } = video.ula.inspectNula();
+            expect(registers).toEqual({
+                disabled: false,
+                paletteMode: 1,
+                horizontalOffset: 1,
+                leftBlank: 1,
+                attributeMode: 1,
+                attributeText: 1,
+                flash: [0, 0, 0, 0, 1, 1, 1, 1],
+                paletteWriteFlag: true,
+                paletteFirstByte: 0x1f,
+            });
+            expect(palette).toHaveLength(16);
+            expect(palette[0]).toBe(FullRed);
+        });
+    });
+
     describe("snapshotState / restoreState", () => {
         const fresh = (options) => makeVideo(options).video;
 
