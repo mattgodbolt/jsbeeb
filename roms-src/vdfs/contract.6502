@@ -2,18 +2,17 @@
 \ src/vdfs-protocol.js, and tests/unit/test-vdfs-protocol.js fails if the two differ.
 
 PortBase    = &FC60
-\ Written with a call's number to start it; read for its status: busy, ops for the 6502 to do, the carry out.
+\ Written with a call's number to start it. Read for the status: bit 7 busy, bit 6 the carry out, bits 0 to 5 HostId.
 PortGo      = PortBase + 0
-PortAIn     = PortBase + 1
-PortXIn     = PortBase + 2
-PortYIn     = PortBase + 3
-PortARes    = PortBase + 4
-PortXRes    = PortBase + 5
-PortYRes    = PortBase + 6
-PortStream  = PortBase + 7
-PortData    = PortBase + 8
-PortId      = PortBase + 9
-HostId      = &56
+\ Written with the caller's register; read for the response, a byte at a time: its ops, OpDone, then the A it returns.
+PortA       = PortBase + 1
+\ Written with the caller's register; read for the X the call returns.
+PortX       = PortBase + 2
+\ Written with the caller's register; read for the Y the call returns.
+PortY       = PortBase + 3
+HostId      = &16
+IdMask      = &3F
+CarryBit    = &40
 
 CallService = 0
 CallFile    = 1

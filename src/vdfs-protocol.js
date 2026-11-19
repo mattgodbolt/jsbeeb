@@ -1,34 +1,22 @@
-// The device the VDFS ROM in roms-src/vdfs talks to: ports in FRED that the ROM pokes a call's A, X and Y into, then
-// its number to start it, waits on while the host does the call, and reads A, X, Y and the carry back from, with a
-// stream of ops for it to carry out where the host wants the 6502 to do something. See docs/vdfs.md.
+// The device the VDFS ROM in roms-src/vdfs talks to: four ports in FRED. The ROM pokes a call's A, X and Y in, then the
+// call's number to start it, waits on the go port while the host does the call, then reads the response back from A (the
+// ops it is to carry out, then the A the call returns) and X and Y. See docs/vdfs.md.
 
 import { Errors, VdfsError, printable } from "./vdfs-errors.js";
 
 export const PortBase = 0xfc60;
 /** How much of FRED the ports take. */
-export const PortBytes = 16;
-export const Port = Object.freeze({
-    go: 0,
-    aIn: 1,
-    xIn: 2,
-    yIn: 3,
-    aRes: 4,
-    xRes: 5,
-    yRes: 6,
-    stream: 7,
-    data: 8,
-    id: 9,
-});
-export const HostId = 0x56;
+export const PortBytes = 4;
+export const Port = Object.freeze({ go: 0, a: 1, x: 2, y: 3 });
+export const HostId = 0x16;
+export const IdMask = 0x3f;
 export const VdfsRom = "vdfs.rom";
 /** What a read of the go port says: the host is still doing the call. */
 export const Busy = 0x80;
-/** What a read of the go port says: the host has ops for the 6502 that it has not yet read. */
-export const OpsWaiting = 0x40;
-/** What a read of the go port says: the carry the call returns, for the response being read. */
-export const CarryOut = 0x01;
+/** What a read of the go port says: the carry the call returns, once the response's ops are read. */
+export const CarryOut = 0x40;
 /** What a read of a port gives while a replay runs the ROM, which must not reach the folder: a host that is idle. */
-export const inertRead = (offset) => (offset === Port.id ? HostId : 0);
+export const inertRead = (offset) => (offset === Port.go ? HostId : 0);
 
 export const Call = Object.freeze({ service: 0, file: 1, args: 2, bget: 3, bput: 4, gbpb: 5, find: 6, fsc: 7 });
 export const Op = Object.freeze({ done: 0, print: 1, error: 2, exec: 3, claim: 4 });
@@ -39,7 +27,7 @@ const LastAscii = 0x7e;
 const FirstPrintable = 0x20;
 const CarriageReturn = 0x0d;
 const Unprintable = "?".charCodeAt(0);
-const LastStreamId = 0xff;
+const MaxResponses = 16;
 
 /** Thrown inside a call that a break has overtaken, which has no one left to answer. */
 export class Superseded extends Error {}
@@ -118,17 +106,14 @@ export class VdfsPorts {
     constructor(dispatch) {
         this._dispatch = dispatch;
         this._inputs = { a: 0, x: 0, y: 0 };
-        this._streams = new Map();
-        this._nextStream = 1;
-        this._responseStream = 0;
-        this._selectedStream = 0;
+        this._responses = [];
         this._busy = false;
         this._epoch = 0;
     }
 
     /** How many responses the ROM has not finished reading. */
-    get openStreams() {
-        return this._streams.size;
+    get openResponses() {
+        return this._responses.length;
     }
 
     /** Ends a call that is waiting with an error, for when what it was waiting for is not there any more. */
@@ -142,12 +127,8 @@ export class VdfsPorts {
     snapshotState() {
         return {
             inputs: { ...this._inputs },
-            nextStream: this._nextStream,
-            responseStream: this._responseStream,
-            selectedStream: this._selectedStream,
             busy: this._busy,
-            streams: [...this._streams].map(([id, { bytes, position, results }]) => [
-                id,
+            responses: this._responses.map(({ bytes, position, results }) => [
                 [...bytes],
                 position,
                 results && { ...results },
@@ -160,19 +141,11 @@ export class VdfsPorts {
         this.reset();
         const inputs = state?.inputs ?? {};
         this._inputs = { a: byte(inputs.a), x: byte(inputs.x), y: byte(inputs.y) };
-        this._nextStream = byte(state?.nextStream) || 1;
-        this._responseStream = byte(state?.responseStream);
-        this._selectedStream = byte(state?.selectedStream);
-        for (const entry of Array.isArray(state?.streams) ? state.streams : []) {
-            const [id, bytes, position, results] = Array.isArray(entry) ? entry : [];
+        for (const entry of Array.isArray(state?.responses) ? state.responses : []) {
+            const [bytes, position, results] = Array.isArray(entry) ? entry : [];
             if (!Array.isArray(bytes) || !Number.isInteger(position)) continue;
-            const kept = results && {
-                a: byte(results.a),
-                x: byte(results.x),
-                y: byte(results.y),
-                carry: results.carry ? 1 : 0,
-            };
-            this._streams.set(byte(id), { bytes: bytes.map(byte), position, results: kept ?? null });
+            const kept = results && { x: byte(results.x), y: byte(results.y), carry: results.carry ? 1 : 0 };
+            this._responses.push({ bytes: bytes.map(byte), position, results: kept ?? null });
         }
         if (state?.busy) this._answerWith(errorBytes(Errors.discChanged()), null);
     }
@@ -182,25 +155,19 @@ export class VdfsPorts {
         this._epoch++;
         this._busy = false;
         this._inputs = { a: 0, x: 0, y: 0 };
-        this._streams.clear();
+        this._responses.length = 0;
     }
 
     read(offset) {
         switch (offset) {
             case Port.go:
                 return this._status();
-            case Port.aRes:
-                return this._takeResult("a");
-            case Port.xRes:
-                return this._streams.get(this._selectedStream)?.results?.x ?? 0;
-            case Port.yRes:
-                return this._streams.get(this._selectedStream)?.results?.y ?? 0;
-            case Port.stream:
-                return this._responseStream;
-            case Port.data:
+            case Port.a:
                 return this._nextByte();
-            case Port.id:
-                return HostId;
+            case Port.x:
+                return this._responses.at(-1)?.results?.x ?? 0;
+            case Port.y:
+                return this._responses.at(-1)?.results?.y ?? 0;
             default:
                 return 0;
         }
@@ -211,48 +178,34 @@ export class VdfsPorts {
             case Port.go:
                 this._call(value);
                 break;
-            case Port.aIn:
+            case Port.a:
                 this._inputs.a = value;
                 break;
-            case Port.xIn:
+            case Port.x:
                 this._inputs.x = value;
                 break;
-            case Port.yIn:
+            case Port.y:
                 this._inputs.y = value;
-                break;
-            case Port.stream:
-                this._selectedStream = value;
                 break;
         }
     }
 
     _status() {
-        if (this._busy) return Busy;
-        const answer = this._streams.get(this._responseStream);
-        const selected = this._streams.get(this._selectedStream);
-        const waiting = answer && answer.position < answer.bytes.length;
-        return (waiting ? OpsWaiting : 0) | (selected?.results?.carry ? CarryOut : 0);
+        if (this._busy) return Busy | HostId;
+        return HostId | (this._responses.at(-1)?.results?.carry ? CarryOut : 0);
     }
 
-    /** The A the call returns, which is the last thing the ROM reads of a response, and so frees it. */
-    _takeResult(register) {
-        const stream = this._streams.get(this._selectedStream);
-        if (!stream?.results) return 0;
-        const value = stream.results[register];
-        this._streams.delete(this._selectedStream);
-        return value;
-    }
-
-    /** A stream that is not there was cut off by a break or a restored snapshot, and what reads it is told the disc changed. */
+    /**
+     * The next byte of the response being read, which is the newest: calls the ROM makes while it carries out ops
+     * (`*SPOOL`) finish before it goes on. A response that is not there was cut off by a break, a restored snapshot or a
+     * call from an interrupt, and what reads it is told the disc changed. The last byte of a response frees it.
+     */
     _nextByte() {
-        let stream = this._streams.get(this._selectedStream);
-        if (!stream) {
-            stream = { bytes: errorBytes(Errors.discChanged()), position: 0, results: null };
-            this._streams.set(this._selectedStream, stream);
-        }
-        const byte = stream.bytes[stream.position++];
-        if (stream.position >= stream.bytes.length && !stream.results) this._streams.delete(this._selectedStream);
-        return byte ?? 0;
+        if (this._responses.length === 0) this._push(errorBytes(Errors.discChanged()), null);
+        const response = this._responses.at(-1);
+        const value = response.bytes[response.position++];
+        if (response.position >= response.bytes.length) this._responses.pop();
+        return value ?? 0;
     }
 
     /**
@@ -272,14 +225,8 @@ export class VdfsPorts {
                 response.error(HostFailureNumber, `VDFS host failure: ${printable(error.message)}`);
             }
             if (response.ended) return this._answerWith(response.bytes, null);
-            const results = {
-                a: byte(registers.a),
-                x: byte(registers.x),
-                y: byte(registers.y),
-                carry: registers.p & 1,
-            };
-            if (response.bytes.length > 0) response.bytes.push(Op.done);
-            this._answerWith(response.bytes, results);
+            const results = { x: byte(registers.x), y: byte(registers.y), carry: registers.p & 1 };
+            this._answerWith([...response.bytes, Op.done, byte(registers.a)], results);
         };
         let outcome;
         try {
@@ -298,18 +245,13 @@ export class VdfsPorts {
 
     /** Makes `bytes` and `results` the answer the ROM reads next. */
     _answerWith(bytes, results) {
-        this._responseStream = this._newStream(bytes, results);
-        this._selectedStream = this._responseStream;
+        this._push(bytes, results);
         this._busy = false;
     }
 
-    /** A number not in use by a response still being read; if all are, the one that would come next is replaced. */
-    _newStream(bytes, results) {
-        const after = (id) => (id === LastStreamId ? 1 : id + 1);
-        let id = this._nextStream;
-        for (let tried = 0; this._streams.has(id) && tried < LastStreamId; tried++) id = after(id);
-        this._nextStream = after(id);
-        this._streams.set(id, { bytes, position: 0, results });
-        return id;
+    /** The oldest response is dropped if the ROM has left this many unread. */
+    _push(bytes, results) {
+        if (this._responses.length >= MaxResponses) this._responses.shift();
+        this._responses.push({ bytes, position: 0, results });
     }
 }
