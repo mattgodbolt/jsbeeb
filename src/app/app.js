@@ -184,8 +184,8 @@ app.on("before-quit", (event) => {
 });
 
 app.on("window-all-closed", function () {
-    // What the BBC wrote to the VDFS folder is still on its way to it.
-    if (process.platform !== "darwin") Promise.allSettled([...pendingVdfsOperations]).then(() => app.quit());
+    // Quit after the final window closes, once any writes to the VDFS folder have settled.
+    Promise.allSettled([...pendingVdfsOperations]).then(() => app.quit());
 });
 
 app.whenReady()
