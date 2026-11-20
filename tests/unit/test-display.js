@@ -359,7 +359,7 @@ describe("Display", () => {
             expect(onNulaOverComposite).toHaveBeenCalledTimes(1);
         });
 
-        it("has the TV view take chroma from channels on or off for any field a colour needed it in, not before a restore", () => {
+        it("has the TV view take chroma from channels on or off for any field a colour needed it in", () => {
             const { display } = showing("pal");
             const paintField = (...reds) => {
                 for (const red of reds) writeNulaColour(display, 1, red, 0, 0);
@@ -378,10 +378,6 @@ describe("Display", () => {
             paintField(8);
             writeNulaColour(display, 1, 15, 0, 0);
             expect(presented()).toBe(true);
-            const restored = paintedFrom();
-            restored.paintsAfresh = true;
-            display.onPaint(restored, 0, 0, FbWidth, 8);
-            expect(presented()).toBe(false);
         });
 
         it.each([
