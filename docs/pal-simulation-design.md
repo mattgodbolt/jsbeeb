@@ -320,6 +320,10 @@ See shader source for actual matrix values.
 
 No gamma handling is needed, and an sRGB framebuffer would be the wrong direction. PAL encoders work on gamma-corrected R'G'B' and the decoder's R'G'B' output goes to the display as-is, so the whole chain runs on gamma-coded values. With one bit per gun the YUV matrix gives the same result either way, and NULA palette values are already gamma-coded.
 
+### VideoNuLA Colours
+
+A VideoNuLA drives the ULA's R, G and B pins with sixteen analogue levels each, but the machine's PAL encoder does not pass those straight through. Its luma is a resistor sum of the three (R137-R139 into Q8 on the B, R132-R134 into Q11 on the Master), so it follows the level; its chroma comes from logic (the 74LS86 and 74LS00 on the B, the CF30060 on the Master), which sees each channel only as on or off. So while any palette entry has a channel between off and full, the shader takes Y from the colour as drawn and U and V from each channel thresholded with `step(uChromaThreshold, rgb)`, at a level that sits between two of the sixteen (in the framebuffer's 0-1 scale, as stored): about level 10 on the B, mid-scale on the Master. Both thresholds are guesses; nobody has measured one (issue #1869). With only full and zero levels in the palette, `uQuantiseChroma` is off and the encode is exactly as above, so a stock palette renders unchanged. The display tells the user, once, that the picture is a guess and offers RGB.
+
 ## Integration with jsbeeb
 
 ### Line and Phase Propagation
