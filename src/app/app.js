@@ -7,6 +7,7 @@ import { ArgumentParser } from "argparse";
 import { getArguments } from "./args.js";
 import { FsStore } from "../vdfs-fs-store.js";
 import { isAppPage } from "./app-page.js";
+import { quitAfterLastWindowCloses } from "./lifecycle.js";
 import { drainVdfs, pageKeepsRunning, swapVdfsFolder } from "./vdfs-swap.js";
 
 const store = new Store();
@@ -185,7 +186,11 @@ app.on("before-quit", (event) => {
 
 app.on("window-all-closed", function () {
     // Quit after the final window closes, once any writes to the VDFS folder have settled.
-    Promise.allSettled([...pendingVdfsOperations]).then(() => app.quit());
+    quitAfterLastWindowCloses({
+        pendingOperations: pendingVdfsOperations,
+        getWindowCount: () => BrowserWindow.getAllWindows().length,
+        quit: () => app.quit(),
+    });
 });
 
 app.whenReady()
