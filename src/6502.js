@@ -18,6 +18,7 @@ import { hexbyte } from "./hex.js";
 import { loadData } from "./loader.js";
 import { MediaResolver } from "./media-resolver.js";
 import { BrkOpcode, Breakpoints } from "./breakpoints.js";
+import { DramRefresh } from "./dram-refresh.js";
 
 async function romImage(name) {
     return (await new MediaResolver().resolve("rom", name)).data;
@@ -44,6 +45,7 @@ const AndyEnd = 0x9000;
 const RomOffset = BaseRamBytes;
 const OsOffset = RomOffset + NumRomBanks * RomBankBytes;
 const BbcMemoryBytes = OsOffset + RomBankBytes;
+const ModelBRamBytes = 32 * 1024;
 // Further from every real offset than any address, and a small integer in every V8 build.
 const SlowPathOffset = -0x40000000;
 const NmiVector = 0xfffa;
@@ -817,6 +819,9 @@ export class Cpu6502 extends Base6502 {
         this.ramRomOs = new Uint8Array(this.memoryBytes);
         this.romOffset = RomOffset;
         this.osOffset = OsOffset;
+        /** @type {Uint8Array | null} */
+        this._dramRows = null;
+        this.dramRefresh = model.isAtom ? null : new DramRefresh(this, this.dramRegions());
         this.romsel = 0;
         this.acccon = 0;
         this.emptyBanks = 0;
@@ -953,14 +958,23 @@ export class Cpu6502 extends Base6502 {
     mapPages(start, end, stat, offset) {
         this.memStat.fill(stat, start, end);
         this.memLook.fill(offset, start, end);
-        // While a debug hook is set, every access of its kind takes the slow path, which calls it.
-        this.readLook.fill(stat !== DeviceStat && !this._debugRead ? offset : SlowPathOffset, start, end);
+        // While a debug hook is set, every access of its kind takes the slow path, which calls it; while DRAM rows
+        // are tracked, every access does.
+        this.readLook.fill(
+            stat !== DeviceStat && !this._debugRead && !this._dramRows ? offset : SlowPathOffset,
+            start,
+            end,
+        );
         if (this.pagedBankEmpty) {
             for (let page = start; page < end; ++page) {
                 if (this.readsEmptySocket(page)) this.readLook[page] = SlowPathOffset;
             }
         }
-        this.writeLook.fill(stat === RamStat && !this._debugWrite ? offset : SlowPathOffset, start, end);
+        this.writeLook.fill(
+            stat === RamStat && !this._debugWrite && !this._dramRows ? offset : SlowPathOffset,
+            start,
+            end,
+        );
     }
 
     mapBothHalves(fromPage, toPage, stat, offset) {
@@ -970,6 +984,29 @@ export class Cpu6502 extends Base6502 {
 
     refreshLook() {
         for (let i = 0; i < this.memStat.length; ++i) this.mapPages(i, i + 1, this.memStat[i], this.memLook[i]);
+    }
+
+    /** The [start, end) ranges of ramRomOs that are DRAM: on a Master, the sideways RAM banks too. */
+    dramRegions() {
+        if (!this.model.isMaster) return [[0, ModelBRamBytes]];
+        const regions = [[0, BaseRamBytes]];
+        this.model.swram.forEach((isRam, bank) => {
+            const start = this.romOffset + bank * RomBankBytes;
+            if (isRam) regions.push([start, start + RomBankBytes]);
+        });
+        return regions;
+    }
+
+    get tracksDramRows() {
+        return this._dramRows !== null;
+    }
+
+    /** Sends every memory access through the slow path, which notes the DRAM row it refreshes, while `on`. */
+    trackDramRows(on) {
+        const rows = on ? this.dramRefresh.cpuRows : null;
+        if (rows === this._dramRows) return;
+        this._dramRows = rows;
+        this.refreshLook();
     }
 
     writeAcccon(b) {
@@ -1197,6 +1234,7 @@ export class Cpu6502 extends Base6502 {
     }
 
     readmemSlow(addr) {
+        if (this._dramRows) this._dramRows[addr & this.dramRefresh.rowMask] = 1;
         const statOffset = this.memStatOffset + (addr >>> 8);
         let offset = 0;
         let res;
@@ -1363,6 +1401,7 @@ export class Cpu6502 extends Base6502 {
     }
 
     writememSlow(addr, b) {
+        if (this._dramRows) this._dramRows[addr & this.dramRefresh.rowMask] = 1;
         if (this._debugWrite) this._debugWrite(addr, b);
         const statOffset = this.memStatOffset + (addr >>> 8);
         const stat = this.memStat[statOffset];
@@ -1616,6 +1655,7 @@ export class Cpu6502 extends Base6502 {
             ...(this.vdfs && { vdfs: this.vdfs.snapshotState() }),
             tube: this.hasTube ? this.tube.snapshotState({ includeRoms, into: into?.tube }) : undefined,
             ...(this.amxMouse && { amxMouse: this.amxMouse.snapshotState() }),
+            ...(this.dramRefresh && { dram: this.dramRefresh.snapshotState() }),
         };
     }
 
@@ -1672,6 +1712,7 @@ export class Cpu6502 extends Base6502 {
         // 4. Rebuild memStat/memLook from romsel/acccon
         this.romSelect(state.romsel);
         if (this.model.isMaster) this.writeAcccon(state.acccon);
+        this.dramRefresh?.restoreState(state.dram);
 
         // 5. Cycle tracking
         this.currentCycles = state.currentCycles;
@@ -1755,6 +1796,7 @@ export class Cpu6502 extends Base6502 {
         }
         this.videoDisplayPage = 0;
         if (this.model.isMaster) this.writeAcccon(0);
+        this.dramRefresh?.powerOn();
     }
 
     // Override in subclasses for different peripheral sets.
