@@ -141,7 +141,7 @@ export class Display {
             lineBaseOdd: video.lineBaseOdd,
             phaseBaseEven: video.phaseBaseEven,
             phaseBaseOdd: video.phaseBaseOdd,
-            quantiseChroma: this.partialNulaLevelsThisField,
+            quantiseChroma: replacesPicture ? this.partialNulaLevels : this.partialNulaLevelsThisField,
         });
         this.partialNulaLevelsThisField = this.partialNulaLevels;
         // How many fields the phosphor has decayed over since the frame the
