@@ -91,6 +91,14 @@
       ],
       "icon": "public/jsbeeb-icon.png"
     },
+    "mac": {
+      "target": [
+        "dmg",
+        "dir"
+      ],
+      "category": "public.app-category.games",
+      "icon": "public/icons/icon-512.png"
+    },
     "files": [
       "!tests"
     ],
@@ -143,6 +151,7 @@
     "mirror-bbcdiscs:upload:index": "aws s3 cp .bbcdiscs-mirror/hfe/manifest.json s3://bbc.xania.org/archive/bbcdiscs/hfe/manifest.json --cache-control 'public, max-age=300' && aws s3 cp .bbcdiscs-mirror/manifest.json s3://bbc.xania.org/archive/bbcdiscs/manifest.json --cache-control 'public, max-age=300'",
     "electron": "npm run build && ELECTRON_DISABLE_SANDBOX=1 electron .",
     "electron:build": "electron-builder",
+    "electron:mac": "npm run build && electron-builder --mac",
     "test:e2e": "GA_MEASUREMENT_ID=G-E2ETEST npm run build && playwright test --project chrome",
     "test:dist-syntax": "npm run build && es-check checkBrowser './dist/**/*.js' --module && es-check checkBrowser './dist/**/*.js' --module --checkFeatures && es-check es5 src/web/browser-floor.js"
   },
