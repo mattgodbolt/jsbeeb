@@ -1013,19 +1013,6 @@ describe("Via peek", () => {
         expect(via.peek(IFR) & Timer1Int).toBe(0);
     });
 
-    it("gives the timers as the 16-bit values a program reads, caught up", () => {
-        via.write(T1CL, 0x1e);
-        via.write(T1CH, 0x4e);
-        via.write(T2CL, 0x34);
-        via.write(T2CH, 0x12);
-        runMicroseconds(100);
-        const timers = via.peekTimers();
-        expect(timers.t1l).toBe(0x4e1e);
-        expect(timers.t2l).toBe(0x1234);
-        expect(timers.t1c).toBe(via.read(T1CL) | (via.read(T1CH) << 8));
-        expect(timers.t2c).toBe(via.read(T2CL) | (via.read(T2CH) << 8));
-    });
-
     it("leaves the port interrupts raised when peeking the ports", () => {
         via.setca1(true);
         via.setcb1(true);
@@ -1035,5 +1022,82 @@ describe("Via peek", () => {
         via.read(ORA);
         via.read(ORB);
         expect(via.peek(IFR) & (Ca1Int | Cb1Int)).toBe(0);
+    });
+});
+
+describe("Via inspect", () => {
+    const AcrLatchBothPorts = 0x03;
+    const PcrCa1Cb1RisingEdge = 0x11;
+    const IerSetTimer1 = 0x80 | Timer1Int;
+    const IerReadsSet = 0x80;
+    const PeripheralPortB = 0xa5;
+
+    let scheduler, cpu;
+
+    beforeEach(() => {
+        scheduler = new Scheduler();
+        cpu = makeFakeCpu();
+    });
+
+    it("gives the registers as written, the pins, the latched inputs and the timers caught up as a program reads them", () => {
+        const via = new UserVia(cpu, scheduler, { read: () => PeripheralPortB, write: () => {} });
+        via.write(DDRA, 0xf0);
+        via.write(ORA, 0x42);
+        via.write(DDRB, 0x0f);
+        via.write(ORB, 0x03);
+        via.write(ACR, AcrLatchBothPorts);
+        via.write(PCR, PcrCa1Cb1RisingEdge);
+        via.write(IER, IerSetTimer1);
+        via.write(SR, 0x5a);
+        via.write(T1CL, 0x34);
+        via.write(T1CH, 0x12);
+        via.write(T2CL, 0x78);
+        via.write(T2CH, 0x56);
+        via.setca1(true);
+        via.setcb1(true);
+        scheduler.polltime(100 * TicksPerMicrosecond);
+
+        const portA = 0x4f;
+        const portB = 0xa1;
+        const state = via.inspect();
+        expect(state).toEqual({
+            t1c: via.read(T1CL) | (via.read(T1CH) << 8),
+            t1l: 0x1234,
+            t2c: via.read(T2CL) | (via.read(T2CH) << 8),
+            t2l: 0x5678,
+            orb: 0x03,
+            ora: 0x42,
+            ddrb: 0x0f,
+            ddra: 0xf0,
+            sr: 0x5a,
+            acr: AcrLatchBothPorts,
+            pcr: PcrCa1Cb1RisingEdge,
+            ifr: Ca1Int | Cb1Int,
+            ier: IerSetTimer1 | IerReadsSet,
+            irb: portB,
+            ira: portA,
+            portB,
+            portA,
+            ca1: true,
+            ca2: false,
+            cb1: true,
+            cb2: false,
+        });
+    });
+
+    it("gives the system VIA's addressable latch, the keys held by column and row, and the autoscan's column", () => {
+        const via = makeSysVia(cpu, scheduler);
+        const LatchAutoscan = 3;
+        const LatchSetAutoscan = 0x08 | LatchAutoscan;
+        via.write(DDRB, 0x0f);
+        via.write(ORB, LatchSetAutoscan);
+        via.keyDownRaw(BBC.A);
+
+        const { ic32, keys, scanColumn, isMaster } = via.inspect();
+        const [column, row] = BBC.A;
+        expect({ ic32, scanColumn, isMaster }).toEqual({ ic32: 1 << LatchAutoscan, scanColumn: 0, isMaster: false });
+        expect(keys).toHaveLength(13);
+        expect(keys.flat().filter(Boolean)).toHaveLength(1);
+        expect(keys[column][row]).toBe(1);
     });
 });

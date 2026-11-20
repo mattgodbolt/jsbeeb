@@ -2,6 +2,18 @@ import { toast } from "./toast.js";
 
 const WorkerUrl = "service-worker.js";
 const SkipWaiting = "SKIP_WAITING";
+const WhichBuild = "WHICH_BUILD";
+
+function buildOf(worker) {
+    return new Promise((resolve) => {
+        const channel = new MessageChannel();
+        channel.port1.onmessage = ({ data }) => {
+            channel.port1.close();
+            resolve(data);
+        };
+        worker.postMessage({ type: WhichBuild }, [channel.port2]);
+    });
+}
 
 /**
  * Register the service worker that makes the page installable and usable offline. A new version waits until the
@@ -35,13 +47,16 @@ export function registerServiceWorker(page, { benchmark }) {
     navigator.serviceWorker
         .register(WorkerUrl)
         .then((registration) => {
-            // The first install has no controller yet, and that is not an update.
-            const updateIsWaiting = () => !!navigator.serviceWorker.controller && !!registration.waiting;
-            if (updateIsWaiting()) offerUpdate(registration);
+            // The first install has no controller yet, and that is not an update. The page itself comes from the
+            // network, so a worker that installed as it loaded is usually the build already running.
+            const offerIfNewer = async () => {
+                const { waiting } = registration;
+                if (!navigator.serviceWorker.controller || !waiting) return;
+                if ((await buildOf(waiting)) !== import.meta.env.JSBEEB_COMMIT) offerUpdate(registration);
+            };
+            offerIfNewer();
             registration.addEventListener("updatefound", () =>
-                registration.installing.addEventListener("statechange", () => {
-                    if (updateIsWaiting()) offerUpdate(registration);
-                }),
+                registration.installing.addEventListener("statechange", offerIfNewer),
             );
             // An installed window never navigates, so it would not otherwise look for a new version.
             page.document.addEventListener("visibilitychange", () => {

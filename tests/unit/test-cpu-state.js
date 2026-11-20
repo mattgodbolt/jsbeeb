@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { fake6502 } from "../../src/fake6502.js";
-import { NmiSource } from "../../src/6502.js";
+import { NmiSource, NoReplayHooks } from "../../src/6502.js";
 import { Econet } from "../../src/econet.js";
 import { FakeVideo } from "../../src/video.js";
 import { Music5000 } from "../../src/music5000.js";
@@ -9,6 +9,9 @@ import { findModel, TEST_6502, TEST_65C02 } from "../../src/models.js";
 import { setNodeBasePath } from "../../src/loader.js";
 import { hexbyte, hexword } from "../../src/hex.js";
 import { expectSnapshotRoundTrips } from "../helpers/snapshot-round-trip.js";
+import { Channel } from "../../src/vdfs-channels.js";
+import { Call, HostId, IdMask, Port, PortBase } from "../../src/vdfs-protocol.js";
+import { MemoryStore, file } from "../helpers/vdfs.js";
 import { machineWithRealChips } from "./helpers.js";
 
 const SeekDrive1 = 0x69;
@@ -72,6 +75,8 @@ function expectAdlcStatusAtEveryMirror(cpu) {
 const ProgramStart = 0x2000;
 const ProgramCycles = 12345;
 const RomSelect = 0xfe30;
+const Acccon = 0xfe34;
+const AccconTst = 0x40;
 const SysViaOrb = 0xfe40;
 const SysViaOra = 0xfe41;
 const SysViaDdrb = 0xfe42;
@@ -505,6 +510,52 @@ describe("cycle counter rollover", () => {
     });
 });
 
+describe("1 MHz bus stretching", () => {
+    const LdaAbsolute = 0xad;
+    const LdaAbsoluteCycles = 4;
+
+    async function readCycles(name, addr, { tst = false } = {}) {
+        const cpu = fake6502(findModel(name));
+        await cpu.initialise();
+        if (tst) cpu.writemem(Acccon, AccconTst);
+        cpu.ramRomOs.set([LdaAbsolute, addr & 0xff, addr >>> 8], ProgramStart);
+        cpu.p.i = true;
+        cpu.pc = ProgramStart;
+        const before = cpu.currentCycles;
+        cpu.execute(1);
+        return cpu.currentCycles - before;
+    }
+
+    it.each(
+        [
+            ["Master", 0xfc00, false, true],
+            ["Master", 0xfe1f, false, true],
+            ["Master", 0xfe20, false, false],
+            ["Master", 0xfe24, false, false],
+            ["Master", 0xfe28, false, true],
+            ["Master", 0xfe2b, false, true],
+            ["Master", 0xfe2c, false, false],
+            ["Master", 0xfe34, false, false],
+            ["Master", 0xfe4f, false, true],
+            ["Master", 0xfe80, false, true],
+            ["Master", 0xfe9f, false, true],
+            ["Master", 0xfea0, false, false],
+            ["Master", 0xfec0, false, false],
+            ["Master", 0xfee0, false, false],
+            ["Master", 0xfe28, true, false],
+            ["Master", 0xfe4f, true, false],
+            ["Master", 0xfe80, true, false],
+            ["B-DFS1.2", 0xfe28, false, false],
+            ["B-DFS1.2", 0xfe4f, false, true],
+            ["B-DFS1.2", 0xfe80, false, false],
+            ["B-DFS1.2", 0xfec0, false, true],
+        ].map(([name, addr, tst, stretched]) => [name, hexword(addr), addr, tst, stretched]),
+    )("on %s, a read of &%s with TST %s is stretched: %s", async (name, _hex, addr, tst, stretched) => {
+        const cycles = await readCycles(name, addr, { tst });
+        expect(cycles > LdaAbsoluteCycles).toBe(stretched);
+    });
+});
+
 describe("the chips a machine names", () => {
     it("puts the keyboard and tape on the system VIA and ACIA of a BBC", () => {
         const cpu = fake6502(findModel("B-DFS1.2"));
@@ -550,8 +601,6 @@ describe("peeking at the hardware", () => {
     const UserViaOrb = 0xfe60;
     const ViaRegisterCount = 16;
     const FdcResult = 0xfe81;
-    const Acccon = 0xfe34;
-    const AccconTst = 0x40;
     const EconetStationId = 0xfe18;
     const Music5000PageSelect = 0xfcff;
     const Music5000WaveRamPage = 0x30;
@@ -907,5 +956,190 @@ describe("Cpu6502 paged memory", () => {
         expect(cpu.readmem(ShadowAddress)).toBe(0x55);
         expect(cpu.romBank(first)[0]).toBe(0x66);
         expect(cpu.romBank(second)[0]).not.toBe(0x66);
+    });
+});
+
+describe("Cpu6502 VDFS", () => {
+    const RomTitleOffset = 9;
+    const storeOf = (...items) => new MemoryStore(items);
+    const romTitles = (cpu) =>
+        Array.from({ length: 16 }, (_, bank) => {
+            const start = cpu.romOffset + bank * 16384 + RomTitleOffset;
+            return String.fromCharCode(...cpu.ramRomOs.subarray(start, start + 4));
+        });
+
+    it("fits its ROM when it is started, so that nothing else has to", async () => {
+        const cpu = fake6502(findModel("B-DFS1.2"), { vdfsStore: storeOf() });
+        expect(romTitles(cpu)).not.toContain("VDFS");
+        await cpu.initialise();
+        expect(romTitles(cpu)).toContain("VDFS");
+    });
+
+    it("fits its ROM into a higher bank than the ROMs the user adds, which take what is left", async () => {
+        const cpu = fake6502(findModel("B-DFS1.2"), { vdfsStore: storeOf(), extraRoms: ["ats-3.0.rom"] });
+        await cpu.initialise();
+        const titles = romTitles(cpu);
+        expect(titles.indexOf("VDFS")).toBeGreaterThan(titles.findIndex((title) => title.startsWith("ATS")));
+    });
+
+    it("fits no ROM, and has no host, without a store", async () => {
+        const cpu = fake6502(findModel("B-DFS1.2"));
+        await cpu.initialise();
+        expect(cpu.vdfs).toBeNull();
+        expect(romTitles(cpu)).not.toContain("VDFS");
+    });
+
+    it("does not ask the store anything until the BBC does", async () => {
+        const store = storeOf();
+        const asked = vi.spyOn(store, "list");
+        const cpu = fake6502(findModel("B-DFS1.2"), { vdfsStore: store });
+        await cpu.initialise();
+        expect(asked).not.toHaveBeenCalled();
+    });
+
+    it.each([["Atom"], ["BBC B (MOS 0.10)"]])("is refused by the %s, which it would break", (name) => {
+        expect(() => fake6502(findModel(name), { vdfsStore: storeOf() })).toThrow(/VDFS is not for/);
+    });
+
+    it("is peeked at as the rest of the hardware is: giving nothing, and changing nothing", () => {
+        const cpu = fake6502(findModel("B-DFS1.2"), { vdfsStore: storeOf() });
+        cpu.writemem(PortBase + Port.go, 0);
+        const before = cpu.vdfs.openResponses;
+        for (let offset = 0; offset < 4; offset++) expect(cpu.peekmem(PortBase + offset)).toBe(0xff);
+        expect(cpu.vdfs.openResponses).toBe(before);
+    });
+
+    it("keeps its files and where it was when a replay puts the machine back, and not when a snapshot is loaded", () => {
+        const cpu = machineWithRealChips(TEST_6502, { vdfsStore: storeOf(file("DATA", "x")) });
+        cpu.vdfs.selected = true;
+        cpu.vdfs.directory = ["SUB"];
+        const info = { load: 0, exec: 0, locked: false };
+        cpu.vdfs.channels.open(new Channel({ path: ["DATA"], data: Uint8Array.of(1), info, writable: false }));
+        cpu.restoreState(cpu.snapshotState(), { keepVdfs: true });
+        expect(cpu.vdfs).toMatchObject({ selected: true, directory: ["SUB"] });
+        expect(cpu.vdfs.channels.get(0x11)).toBeDefined();
+        cpu.restoreState(cpu.snapshotState());
+        expect(cpu.vdfs).toMatchObject({ selected: false, directory: [] });
+    });
+
+    it("gives a replay an idle host, and leaves the live one and its folder alone", () => {
+        const cpu = fake6502(findModel("B-DFS1.2"), { vdfsStore: storeOf() });
+        cpu.writemem(PortBase + Port.a, 1);
+        cpu.asReplay(NoReplayHooks, () => {
+            cpu.writemem(PortBase + Port.go, Call.args);
+            expect(cpu.readmem(PortBase + Port.go) & IdMask).toBe(HostId);
+            expect([Port.a, Port.x, Port.y].map((port) => cpu.readmem(PortBase + port))).toEqual([0, 0, 0]);
+        });
+        expect(cpu.vdfs.openResponses).toBe(0);
+        expect(cpu.readmem(PortBase + Port.go)).toBe(HostId);
+    });
+
+    it("keeps the device as the ROM was using it across a snapshot, partway through reading a response", () => {
+        const cpu = fake6502(findModel("B-DFS1.2"), { vdfsStore: storeOf() });
+        cpu.writemem(PortBase + Port.go, Call.service);
+        cpu.readmem(PortBase + Port.a);
+        const state = cpu.snapshotState();
+        const restored = fake6502(findModel("B-DFS1.2"), { vdfsStore: storeOf() });
+        restored.restoreState(state);
+        expect(restored.readmem(PortBase + Port.a)).toBe(cpu.readmem(PortBase + Port.a));
+        expect(restored.vdfs.openResponses).toBe(cpu.vdfs.openResponses);
+    });
+
+    it("has its ports where the ROM expects them, and nothing on a machine without it", () => {
+        const withHost = fake6502(findModel("B-DFS1.2"), { vdfsStore: storeOf() });
+        const without = fake6502(findModel("B-DFS1.2"));
+        expect(withHost.readmem(PortBase + Port.go) & IdMask).toBe(HostId);
+        expect(without.readmem(PortBase + Port.go)).toBe(0xff);
+    });
+
+    it("goes back to the OS's own filing system, with no file open, when a snapshot is restored", () => {
+        const cpu = machineWithRealChips(TEST_6502, { vdfsStore: storeOf(file("DATA", "x")) });
+        cpu.vdfs.selected = true;
+        const info = { load: 0, exec: 0, locked: false };
+        cpu.vdfs.channels.open(new Channel({ path: ["DATA"], data: Uint8Array.of(1), info, writable: false }));
+        cpu.restoreState(cpu.snapshotState());
+        expect(cpu.vdfs.selected).toBe(false);
+        expect(() => cpu.vdfs.channels.get(0x11)).toThrow("Channel");
+    });
+});
+
+describe("Master ACCCON IRR", () => {
+    const Acccon = 0xfe34;
+    const AccconIrr = 0x80;
+    const IrrIrqSource = 0x10;
+    const HandlerStart = 0x2100;
+    const IrqCount = 0x70;
+    const IrqsBeforeHandlerClearsIrr = 10;
+    const ProgramRunCycles = 50 * 1000;
+    // prettier-ignore
+    const CountingProgram = [
+        0x78,                               // SEI
+        0xa9, 0x7f,                         // LDA #$7F
+        0x8d, 0x4e, 0xfe,                   // STA $FE4E
+        0x8d, 0x6e, 0xfe,                   // STA $FE6E
+        0xa9, HandlerStart & 0xff,          // LDA #<handler
+        0x8d, 0x04, 0x02,                   // STA IRQ1V
+        0xa9, HandlerStart >> 8,            // LDA #>handler
+        0x8d, 0x05, 0x02,                   // STA IRQ1V+1
+        0xa9, 0x00,                         // LDA #0
+        0x85, IrqCount,                     // STA count
+        0x58,                               // CLI
+        0xa2, 0x00,                         // LDX #0
+        0xca,                               // wait: DEX
+        0xd0, 0xfd,                         // BNE wait
+        0x78,                               // SEI
+        0x4c, 0x1e, 0x20,                   // done: JMP done
+    ];
+    // prettier-ignore
+    const LeavesIrrSetHandler = [
+        0xe6, IrqCount,                     // INC count
+        0xa5, IrqCount,                     // LDA count
+        0xc9, IrqsBeforeHandlerClearsIrr,   // CMP #10
+        0x90, 0x05,                         // BCC exit
+        0xa9, 0x00,                         // LDA #0
+        0x8d, 0x34, 0xfe,                   // STA ACCCON
+        0xa5, 0xfc,                         // exit: LDA $FC
+        0x40,                               // RTI
+    ];
+
+    async function masterReadyToCount(acccon) {
+        const cpu = fake6502(findModel("Master"));
+        await cpu.initialise();
+        cpu.ramRomOs.set(CountingProgram, ProgramStart);
+        cpu.ramRomOs.set(LeavesIrrSetHandler, HandlerStart);
+        cpu.writemem(Acccon, acccon);
+        cpu.pc = ProgramStart;
+        return cpu;
+    }
+
+    function irqsCounted(cpu) {
+        cpu.execute(ProgramRunCycles);
+        return cpu.readmem(IrqCount);
+    }
+
+    it.each([
+        [0, 0],
+        [AccconIrr, IrqsBeforeHandlerClearsIrr],
+    ])("with ACCCON at %i, counts %i IRQs from a handler that clears IRR on its tenth", async (acccon, irqs) => {
+        expect(irqsCounted(await masterReadyToCount(acccon))).toBe(irqs);
+    });
+
+    it("holds the IRQ on a machine restored with IRR set", async () => {
+        const snapshot = (await masterReadyToCount(AccconIrr)).snapshotState();
+        const restored = fake6502(findModel("Master"));
+        await restored.initialise();
+
+        restored.restoreState(snapshot);
+
+        expect(irqsCounted(restored)).toBe(IrqsBeforeHandlerClearsIrr);
+    });
+
+    it("drops the IRQ on a hard reset", async () => {
+        const cpu = await masterReadyToCount(AccconIrr);
+        expect(cpu.interrupt & IrrIrqSource).toBe(IrrIrqSource);
+
+        cpu.reset(true);
+
+        expect(cpu.interrupt & IrrIrqSource).toBe(0);
     });
 });

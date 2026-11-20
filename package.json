@@ -10,7 +10,7 @@
     "type": "git",
     "url": "git+https://github.com/mattgodbolt/jsbeeb.git"
   },
-  "version": "2.22.1",
+  "version": "2.26.0",
   "//engines": "If you change the version of Node, it must also be updated at the top of the Dockerfile.",
   "engines": {
     "node": ">=24.15.0"
@@ -123,6 +123,8 @@
     "dom-unit-tests": "vitest run --silent=true --project unit $(grep -rlE 'domFromIndexHtml|stitchHtml|indexHtmlThroughPlugin' tests/unit)",
     "coverage:all-tests": "vitest run --coverage",
     "benchmark": "vitest bench --config vitest.bench.config.js --silent=true --reporter=verbose",
+    "build:vdfs-rom": "node tools/build-vdfs-rom.js",
+    "check:vdfs-rom": "node tools/build-vdfs-rom.js --check",
     "benchmark:workloads": "node tools/make-benchmark-workloads.js",
     "benchmark:ab": "exec node tools/node-ab.js",
     "benchmark:browser-ab": "exec node tools/browser-ab.js",

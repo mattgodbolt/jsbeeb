@@ -141,7 +141,7 @@ No `encoding` field means plain base64, which is how every array before v4 and e
 
 `swram` holds every bank the model has as sideways RAM (banks 0-7 on a B, mask `0x00FF`; 4-7 on a Master, mask `0x00F0`; none on a stock B or an Atom). The mask is saved rather than read from the model, so a later change to a model's banks cannot misplace an older file's. Both fields are left out when `roms` already carries every bank. On restore each bank in the mask overwrites only that bank, so the ROMs jsbeeb has loaded stay as they are. Snapshots from before sideways RAM was saved have neither field, and then sideways RAM keeps its current contents, so it needed no format version bump.
 
-**Note:** `interrupt` is not saved — it is reconstructed from the VIA and ACIA state, which reasserts their interrupt lines.
+**Note:** `interrupt` is not saved; it is reconstructed from the VIA and ACIA state, which reasserts their interrupt lines, and on a Master from `acccon`, whose bit 7 (IRR) holds an IRQ while set.
 
 Snapshots written before `ram` was 64KB, and earlier b-em and BeebEm imports, hold 128KB of `ram`. They still load: only the first 64KB is used, as the rest was never mapped, so it needed no format version bump.
 
@@ -446,6 +446,21 @@ Present only when the AMX mouse was fitted. Absent means a fitted mouse drops an
 | `stepTaskOffset` | number\|null                       | Step task offset (null when the mouse is still)                                                                                |
 
 The levels on CB1 and CB2 are the user VIA's. The buttons are not saved: like the keyboard, they are host input.
+
+### VDFS (`state.vdfs`)
+
+Present when a folder is served (see [vdfs.md](vdfs.md)). It holds the device the ROM talks to, so that a snapshot taken
+while the ROM is partway through a call can be restored to the same place: `inputs` (the `a`, `x` and `y` the ROM
+poked in), `busy` (whether a call was waiting for the store), and `responses`, oldest first, each `[bytes, position,
+results, raises]`: a response the ROM has not finished reading, with the `x`, `y` and `carry` it will return (null for a
+response that ends in an error or an exec), and whether it ends in an error. A call that was `busy` is answered with "Disc
+changed" on restore, since the store it was waiting on is not the machine's.
+
+The host's own state is not kept. Its open files are the host's, so a restored snapshot has none open (they are written
+back), and the current directory and library are the root's. The OS's filing system vectors are in RAM and so still point
+at VDFS, and file calls go on being served, but the host forgets that it was selected, so commands such as `*DIR` are
+not claimed until `*VDFS` selects it again. A snapshot without `vdfs`, or loaded into a machine with no folder served,
+carries on without it. It was added without a version bump.
 
 ### Teletext adaptor (`state.teletextAdaptor`)
 

@@ -64,6 +64,9 @@ writeFileSync("/tmp/screen.png", png);
 - For multi-line programs, type each line separately with `runFor(500000)` between them.
 - `session._machine.readbyte(addr)` / `writebyte(addr, val)` for direct memory access.
 - `session.registers()` returns `{ pc, a, x, y, s, p }`.
+- `session.inspectHardware()` reads every device's registers (the VIAs, CRTC, ULA, sound chip, FDC and the rest)
+  without changing them; `session.inspectHardware("sysvia")` reads one, and an unknown name throws listing those
+  the model has.
 
 ## Example: Atom program
 

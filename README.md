@@ -342,9 +342,12 @@ What the worker keeps, and when it changes:
 - A disc or tape served from this site is kept the first time it is used, so a game played once can be played
   offline. These are never evicted, and a changed one is served from the old copy once before the new one takes
   over. Discs from any other site (Bitshifters, GitHub, archive.org, Google Drive) always come from the network.
-- A new version installs in the background and then waits. The page shows an "A new version of jsbeeb is ready"
-  notice, and only its Reload button switches to the new version, because switching reloads the page and would lose a
-  running machine. A tab that stays open is checked for a new version whenever it comes back into view.
+- A new version installs in the background and then waits. If the waiting worker is a different build from the page
+  (each reports the commit it was built from), it shows an "A new version of jsbeeb is ready" notice, and only its
+  Reload button switches to the new version, because switching reloads the page and would lose a running machine. A
+  page loaded after a deploy is already the new build, so it shows nothing, and the waiting worker takes over once
+  every jsbeeb tab and window has closed. A tab that stays open is checked for a new version whenever it comes back
+  into view.
 - `npm run test:e2e` removes `navigator.serviceWorker` from its pages, so a worker never answers a request the tests
   route themselves; only `tests/playwright/pwa.spec.js` keeps it, in a fresh browser context of its own.
 
@@ -509,6 +512,7 @@ sudo rpm -i out/dist/jsbeeb-<version>.x86_64.rpm
   failure it stays stopped. `fakeVideo`, `frameSkip`, `cpuMultiplier`, `videoCyclesBatch` and `lowLatency` are
   refused alongside it, as they change what is measured, and so is a machine fitted otherwise than the workload's
   `fittings` there say (a co-processor, Music 5000, teletext adaptor, Econet or VideoNuLA).
+- `vdfs` - set by the desktop app's File, Serve VDFS Folder, or by More, Serve a folder as VDFS in a Chromium browser: it serves the folder that was chosen as the VDFS filing system (`*VDFS` selects it). It needs the folder, so it is no use in a link, and a browser without the File System Access API (Firefox, Safari) ignores it. See [docs/vdfs.md](docs/vdfs.md).
 - `noseek` - no disc drive noise: the motor, the head's clicks and runs all silent, and nothing scheduled for them.
 - `audioDebug` - show the audio lead chart, and log one console line per second in which the emulator tick ran late or the sound stalled or skipped.
 - `audioLatencyMs` - how far the sound runs behind the emulator, in milliseconds (default 20). Raising it lets the sound ride out longer stalls of the emulator, at the cost of lagging the picture by that much.
@@ -640,7 +644,8 @@ and posted the [video up on YouTube](https://www.youtube.com/watch?v=37jyHQT7fXQ
 ## License
 
 This project is licensed under the GNU General Public License v3.0 (or later); see the [LICENSE](LICENSE) file for
-details.
+details. The exception is the source of the VDFS ROM in [roms-src/vdfs](roms-src/vdfs), which is dedicated to the public
+domain under CC0 1.0; see its [LICENSE](roms-src/vdfs/LICENSE).
 
 ## Contact
 
