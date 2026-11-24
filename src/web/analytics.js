@@ -45,6 +45,9 @@ export const displayMode = () =>
     // Safari on iOS has no display-mode query for a page added to the home screen.
     (window.navigator.standalone ? "standalone" : "browser");
 
+// A cross-site frame may set only SameSite=None cookies; Partitioned keys them to the embedding site.
+const frameCookieFlags = () => (window.top === window ? {} : { cookie_flags: "SameSite=None;Secure;Partitioned" });
+
 const pageLocations = () => ({
     page_location: analyticsLocation(window.location.href),
     page_referrer: analyticsLocation(document.referrer),
@@ -55,7 +58,11 @@ const pageLocations = () => ({
  * notes the errors `page` reports and its being installed as an app.
  */
 export function configureAnalytics(page = window) {
-    injectedGtag()?.("config", measurementId(), { ...pageLocations(), display_mode: displayMode() });
+    injectedGtag()?.("config", measurementId(), {
+        ...pageLocations(),
+        ...frameCookieFlags(),
+        display_mode: displayMode(),
+    });
     page.addEventListener("appinstalled", () => note("app_installed", {}));
     page.addEventListener("error", (event) =>
         noteError("window", event.error ?? event.message, {
@@ -69,7 +76,7 @@ export function configureAnalytics(page = window) {
 
 /** Moves the location later events report to the URL the page has just pushed, without a page_view. */
 export function noteLocation() {
-    injectedGtag()?.("config", measurementId(), { ...pageLocations(), send_page_view: false });
+    injectedGtag()?.("config", measurementId(), { ...pageLocations(), ...frameCookieFlags(), send_page_view: false });
 }
 
 const logValue = (value) => (typeof value === "string" && /^$|[\s"=]/.test(value) ? JSON.stringify(value) : value);

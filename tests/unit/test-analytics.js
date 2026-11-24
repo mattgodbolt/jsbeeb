@@ -233,6 +233,21 @@ describe("analytics", () => {
                 );
             });
 
+            it("asks for a partitioned SameSite=None cookie in both configs when framed, and only then", async () => {
+                const { configureAnalytics, noteLocation } = await loadWithMeasurementId(measurementId);
+                configureAnalytics(new EventTarget());
+                noteLocation();
+                vi.stubGlobal("top", {});
+                configureAnalytics(new EventTarget());
+                noteLocation();
+                expect(gtag.mock.calls.map(([, , params]) => params.cookie_flags)).toEqual([
+                    undefined,
+                    undefined,
+                    "SameSite=None;Secure;Partitioned",
+                    "SameSite=None;Secure;Partitioned",
+                ]);
+            });
+
             it("sends events from any host, leaving out the parameters that are undefined", async () => {
                 const { note } = await loadWithMeasurementId(measurementId);
                 note("category", { type: "type", label: undefined, count: 0 });
