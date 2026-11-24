@@ -901,6 +901,29 @@ test("Alt+M opens the media window with the search box focused, and while the wi
     expect(await beeb.screenText()).not.toMatch(/WELCOME|>AB/);
 });
 
+test("a click on the screen of a jsbeeb framed by another site gives the frame the keyboard", async ({
+    beeb,
+    page,
+    baseURL,
+}) => {
+    // Another site on the same server, by its other loopback name; Chrome blocks a public page framing a local one.
+    const host = new URL("/robots.txt", baseURL);
+    host.hostname = host.hostname === "localhost" ? "127.0.0.1" : "localhost";
+    await beeb.routed;
+    await page.goto(host.href);
+    await page.setContent(`
+        <script>window.hostKeys = []; addEventListener("keydown", (e) => hostKeys.push(e.key));</script>
+        <iframe src="${new URL("?embed", baseURL)}" width="1000" height="800"></iframe>`);
+    const frame = await (await page.locator("iframe").elementHandle()).contentFrame();
+    await expect.poll(() => frame.evaluate(() => window.processor?.sysvia !== undefined)).toBe(true);
+
+    await frame.locator("#cub-monitor").click();
+    await page.keyboard.down("a");
+    await expect.poll(() => frame.evaluate(() => window.processor.sysvia.hasAnyKeyDown())).toBe(true);
+    await page.keyboard.up("a");
+    expect(await page.evaluate(() => window.hostKeys)).toEqual([]);
+});
+
 test("the media window fills a phone's screen without scrolling sideways, and its bays show one thing at a time", async ({
     beeb,
     page,
