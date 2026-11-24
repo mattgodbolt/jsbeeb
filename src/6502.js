@@ -1,5 +1,6 @@
 import * as via from "./via.js";
 import { Acia } from "./acia.js";
+import { Midi6850 } from "./midi-6850.js";
 import { Serial } from "./serial.js";
 import { Tube } from "./tube.js";
 import { Adc } from "./adc.js";
@@ -90,6 +91,7 @@ export const NmiSource = Object.freeze({
     fdc: 0x01,
     econet: 0x02,
     tube: 0x04,
+    midi: 0x08,
 });
 
 class Flags {
@@ -816,6 +818,7 @@ export class Cpu6502 extends Base6502 {
         this.hasTube = !!this.config.tube;
         this.hasMusic5000 = !!this.config.hasMusic5000;
         this.hasTeletextAdaptor = !!this.config.hasTeletextAdaptor;
+        this.hasMidiInterface = !!this.config.hasMidiInterface;
         this.teletextAdaptor = this.hasTeletextAdaptor ? new TeletextAdaptor(this) : null;
         this.tube = this.hasTube
             ? new Tube6502(this.config.tube, this, { cpuMultiplier: this.config.tubeCpuMultiplier })
@@ -850,6 +853,16 @@ export class Cpu6502 extends Base6502 {
         });
         this.uservia = new via.UserVia(this, this.scheduler, this.config.userPort);
         this.acia = new Acia(this, this.soundChip.toneGenerator, this.scheduler, this.relayNoise);
+        this.midiAcia = this.hasMidiInterface
+            ? new Midi6850(
+                  this,
+                  this.scheduler,
+                  model.cyclesPerSecond,
+                  this.config.midiOutput,
+                  this.config.midiInterrupt,
+                  NmiSource.midi,
+              )
+            : null;
         this.serial = new Serial(this.acia);
         this.keyboardInterface = this.sysvia;
         this.tapeInterface = this.acia;
@@ -1031,6 +1044,8 @@ export class Cpu6502 extends Base6502 {
         }
         addr &= 0xffff;
 
+        if (this.midiAcia && (addr & ~1) === this.config.midiAddress) return this.midiAcia.read(addr);
+
         switch (addr & ~0x0003) {
             case 0xfc10:
                 if (this.hasTeletextAdaptor) return this.teletextAdaptor.read(addr - 0xfc10);
@@ -1205,6 +1220,8 @@ export class Cpu6502 extends Base6502 {
         addr &= 0xffff;
         const isMaster = this.model.isMaster;
 
+        if (this.midiAcia && (addr & ~1) === this.config.midiAddress) return this.midiAcia.peek(addr);
+
         switch (addr & ~0x0003) {
             case 0xfc10:
                 if (this.hasTeletextAdaptor) return UnpeekableDevice;
@@ -1338,6 +1355,8 @@ export class Cpu6502 extends Base6502 {
             this.music5000.write(this.music5000PageSel, addr, b);
             return;
         }
+
+        if (this.midiAcia && (addr & ~1) === this.config.midiAddress) return this.midiAcia.write(addr, b);
 
         switch (addr & ~0x0003) {
             case 0xfc10:
@@ -1567,6 +1586,7 @@ export class Cpu6502 extends Base6502 {
             video: this.video.snapshotState(),
             soundChip: this.soundChip.snapshotState(),
             acia: this.acia.snapshotState(),
+            midiAcia: this.midiAcia ? this.midiAcia.snapshotState() : undefined,
             adc: this.adconverter.snapshotState(),
             touchScreen: this.touchScreen.snapshotState(),
             fdc: this.fdc.snapshotState(),
@@ -1640,6 +1660,7 @@ export class Cpu6502 extends Base6502 {
         this.video.restoreState(state.video);
         this.soundChip.restoreState(state.soundChip);
         this.acia.restoreState(state.acia);
+        if (this.midiAcia && state.midiAcia) this.midiAcia.restoreState(state.midiAcia);
         this.adconverter.restoreState(state.adc);
         if (this.teletextAdaptor && state.teletextAdaptor) this.teletextAdaptor.restoreState(state.teletextAdaptor);
 
@@ -1715,6 +1736,7 @@ export class Cpu6502 extends Base6502 {
         this.sysvia.reset();
         this.uservia.reset();
         this.acia.reset();
+        this.midiAcia?.reset();
         this.serial.reset();
         this.ddNoise.spinDown();
         this.fdc.powerOnReset();

@@ -20,6 +20,32 @@ describe("a CPU fitted from a spec", () => {
         expect(cpu.keyLayout).toBe("gaming");
         expect(viaLayout).toHaveBeenCalledWith("gaming");
     });
+
+    it.each([0xfc00, 0xfc08, 0xfc80, 0xfcf0])("maps a fitted MIDI interface at %s", (midiAddress) => {
+        const sendByte = vi.fn();
+        const cpu = build(machineSpec({ hasMidiInterface: true, midiAddress, midiOutput: { sendByte } }));
+
+        expect(cpu.peekDevice(midiAddress) & 0x02).toBe(0x02);
+        cpu.writeDevice(midiAddress + 1, 0x90);
+        expect(sendByte).toHaveBeenCalledWith(0x90, expect.any(Number));
+        expect(cpu.readDevice(midiAddress) & 0x02).toBe(0);
+
+        cpu.scheduler.polltime(640);
+        expect(cpu.peekDevice(midiAddress) & 0x02).toBe(0x02);
+        expect(cpu.readDevice(midiAddress) & 0x02).toBe(0x02);
+    });
+
+    it("drives the CPU NMI line when the MIDI interrupt pin is configured as NMI", () => {
+        const cpu = build(machineSpec({ hasMidiInterface: true, midiInterrupt: "nmi" }));
+
+        cpu.writeDevice(0xfc00, 0x20);
+        expect(cpu.nmi).toBe(true);
+
+        cpu.writeDevice(0xfc01, 0x90);
+        expect(cpu.nmi).toBe(false);
+        cpu.scheduler.polltime(640);
+        expect(cpu.nmi).toBe(true);
+    });
 });
 
 describe("machineSpec", () => {
@@ -28,6 +54,8 @@ describe("machineSpec", () => {
         expect(spec.keyLayout).toBe("physical");
         expect(spec.cpuMultiplier).toBe(1);
         expect(spec.tube).toBeNull();
+        expect(spec.midiAddress).toBe(0xfc00);
+        expect(spec.midiInterrupt).toBe("none");
         expect(spec.extraRoms).toEqual([]);
         expect(spec.userPort.read()).toBe(0xff);
     });

@@ -134,6 +134,7 @@ No `encoding` field means plain base64, which is how every array before v4 and e
 | `peripheralCycles`    | number     | Peripheral cycle accumulator                                                                                  |
 | `videoCycles`         | number     | Video cycle accumulator                                                                                       |
 | `music5000PageSel`    | number     | Music 5000 page select                                                                                        |
+| `midiAcia`            | object     | _(Optional)_ State of the fitted MC6850 MIDI interface at &FC00                                               |
 | `ram`                 | Uint8Array | RAM contents (64KB; on a Master, ANDY at 0x8000, HAZEL at 0x9000 and LYNNE at 0xB000)                         |
 | `roms`                | Uint8Array | _(Optional)_ ROM contents (256KB, 16 x 16KB banks). Present in b-em imports and shared session joins.         |
 | `swram`               | Uint8Array | _(Optional)_ Sideways RAM banks, 16KB each, back to back in ascending bank order (see below)                  |
@@ -141,7 +142,8 @@ No `encoding` field means plain base64, which is how every array before v4 and e
 
 `swram` holds every bank the model has as sideways RAM (banks 0-7 on a B, mask `0x00FF`; 4-7 on a Master, mask `0x00F0`; none on a stock B or an Atom). The mask is saved rather than read from the model, so a later change to a model's banks cannot misplace an older file's. Both fields are left out when `roms` already carries every bank. On restore each bank in the mask overwrites only that bank, so the ROMs jsbeeb has loaded stay as they are. Snapshots from before sideways RAM was saved have neither field, and then sideways RAM keeps its current contents, so it needed no format version bump.
 
-**Note:** `interrupt` is not saved — it is reconstructed from the VIA and ACIA state, which reasserts their interrupt lines.
+**Note:** `interrupt` is not saved; it is reconstructed from the VIA, ACIA and fitted MIDI ACIA state, which reassert
+their interrupt lines.
 
 Snapshots written before `ram` was 64KB, and earlier b-em and BeebEm imports, hold 128KB of `ram`. They still load: only the first 64KB is used, as the rest was never mapped, so it needed no format version bump.
 
@@ -390,6 +392,18 @@ A machine built with `FakeVideo` (TestMachine, or the page's `fakeVideo` option;
 | `txCompleteTaskOffset` | number\|null | TX complete task offset                                                            |
 | `runTapeTaskOffset`    | number\|null | Tape poll task offset                                                              |
 | `runRs423TaskOffset`   | number\|null | RS-423 poll task offset                                                            |
+
+### MIDI ACIA (`state.midiAcia`)
+
+This optional state is present only when the 6850 MIDI interface is fitted. Older snapshots and machines without the
+interface omit it.
+
+| Field                        | Type         | Description                                 |
+| ---------------------------- | ------------ | ------------------------------------------- |
+| `control`                    | number       | MC6850 control register                     |
+| `status`                     | number       | MC6850 status bits                          |
+| `data`                       | number       | Data register                               |
+| `transmitCompleteTaskOffset` | number\|null | Cycles until the transmit register is empty |
 
 ### ADC (`state.adc`)
 

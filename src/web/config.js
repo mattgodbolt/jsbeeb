@@ -1,5 +1,6 @@
 import { getFilterForMode, persistenceSettings } from "./canvas.js";
 import { MasterAnfsRom } from "../econet.js";
+import { findModel } from "../models.js";
 import {
     configForm,
     controlId,
@@ -43,9 +44,10 @@ export function restartPending(settings, running, parameters = Parameters) {
  * "restart-required" after saving a change the running machine cannot follow.
  */
 export class Config extends EventTarget {
-    constructor(settings) {
+    constructor(settings, midiOutput) {
         super();
         this.settings = settings;
+        this.midiOutput = midiOutput;
         this.changed = {};
         // The setting the display in use declares, which is the mode asked for
         // unless that fell back; the page says which once the display exists.
@@ -57,6 +59,9 @@ export class Config extends EventTarget {
         configuration
             .querySelector(".modal-body")
             .append(...renderConfigForm(form, (field, value) => this.pick(field, value)));
+        const midiOutputSettings = document.getElementById("midi-output-settings");
+        const midiInterface = document.getElementById("hasMidiInterface");
+        if (midiOutputSettings && midiInterface) midiInterface.closest(".form-check").after(midiOutputSettings);
 
         // Built before anything can change, so this is what the running machine was built with.
         this.runningSettings = this.proposedSettings();
@@ -127,6 +132,7 @@ export class Config extends EventTarget {
     /** The parts of the dialog that follow from the settings as they would be saved. */
     showDependents() {
         const proposed = this.proposedSettings();
+        this.midiOutput?.setSelectionEnabled(proposed.hasMidiInterface && !findModel(proposed.model).isAtom);
         for (const field of this.fields) {
             if (field.enabledWhen) document.getElementById(controlId(field)).disabled = !field.enabledWhen(proposed);
             if (field.readout)

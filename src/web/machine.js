@@ -21,6 +21,7 @@ export function buildEmulationConfig({
     bankRoms,
     userPort,
     printer,
+    midiOutput,
 }) {
     return machineSpec({
         keyLayout,
@@ -30,6 +31,10 @@ export function buildEmulationConfig({
         tube: settings.coProcessor ? tubeModelFor(settings.model) : null,
         hasMusic5000: settings.hasMusic5000,
         hasTeletextAdaptor: settings.hasTeletextAdaptor,
+        hasMidiInterface: settings.hasMidiInterface && !settings.model.isAtom,
+        midiAddress: settings.midiAddress,
+        midiInterrupt: settings.midiInterrupt,
+        midiOutput,
         fittedRoms: settings.fittedRoms,
         bankRoms,
         extraRoms,
@@ -56,6 +61,7 @@ export class Machine {
         userPort,
         printer,
         speechOutput,
+        midiOutput,
         video,
         audioHandler,
         dbgr,
@@ -95,6 +101,7 @@ export class Machine {
             bankRoms,
             userPort,
             printer,
+            midiOutput,
         });
 
         this.processor = build(model, {
