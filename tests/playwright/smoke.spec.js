@@ -902,7 +902,7 @@ test("Alt+M opens the media window with the search box focused, and while the wi
     expect(await beeb.screenText()).not.toMatch(/WELCOME|>AB/);
 });
 
-test("a click on the screen of a jsbeeb framed by another site gives the frame the keyboard", async ({
+test("a click on the screen of a jsbeeb framed by another site gives the frame the keyboard, and a click on the host page takes it back", async ({
     beeb,
     page,
     baseURL,
@@ -925,8 +925,11 @@ test("a click on the screen of a jsbeeb framed by another site gives the frame t
         await frame.locator("#cub-monitor").click();
         await page.keyboard.down("a");
         await expect.poll(() => frame.evaluate(() => window.processor.sysvia.hasAnyKeyDown())).toBe(true);
-        await page.keyboard.up("a");
         expect(await page.evaluate(() => window.hostKeys)).toEqual([]);
+
+        await page.mouse.click(1200, 100);
+        await expect.poll(() => frame.evaluate(() => window.processor.sysvia.hasAnyKeyDown())).toBe(false);
+        await page.keyboard.up("a");
     } finally {
         embedder.close();
     }
