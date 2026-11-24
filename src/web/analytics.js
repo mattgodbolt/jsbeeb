@@ -45,7 +45,7 @@ export const displayMode = () =>
     // Safari on iOS has no display-mode query for a page added to the home screen.
     (window.navigator.standalone ? "standalone" : "browser");
 
-// A cross-site frame may set only SameSite=None cookies; Partitioned keys them to the embedding site.
+// Another site's frame may set only SameSite=None cookies; Partitioned keys them to the site at the top.
 const frameCookieFlags = () => (window.top === window ? {} : { cookie_flags: "SameSite=None;Secure;Partitioned" });
 
 const pageLocations = () => ({
