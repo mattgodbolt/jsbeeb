@@ -11,6 +11,7 @@
 // BASE_URL=http://localhost:5173/ points a run at a server that is already up.
 
 import { readFileSync } from "node:fs";
+import { createServer } from "node:http";
 
 import { expect, test } from "./fixtures.js";
 
@@ -899,6 +900,39 @@ test("Alt+M opens the media window with the search box focused, and while the wi
     await beeb.pressKey("b");
     await beeb.expectScreenText(">B");
     expect(await beeb.screenText()).not.toMatch(/WELCOME|>AB/);
+});
+
+test("a click on the screen of a jsbeeb framed by another site gives the frame the keyboard, and a click on the host page takes it back", async ({
+    beeb,
+    page,
+    baseURL,
+}) => {
+    const embedder = createServer((request, response) => {
+        response.setHeader("Content-Type", "text/html");
+        response.end(`
+            <script>window.hostKeys = []; addEventListener("keydown", (e) => hostKeys.push(e.key));</script>
+            <iframe src="${new URL("?embed", baseURL)}" width="1000" height="800"></iframe>`);
+    });
+    await new Promise((resolve) => embedder.listen(0, "127.0.0.1", resolve));
+    // A loopback name other than the frame's, so a different site; Chrome blocks a public page framing a local one.
+    const hostName = new URL(baseURL).hostname === "127.0.0.1" ? "localhost" : "127.0.0.1";
+    await beeb.routed;
+    try {
+        await page.goto(`http://${hostName}:${embedder.address().port}/`);
+        const frame = await (await page.locator("iframe").elementHandle()).contentFrame();
+        await expect.poll(() => frame.evaluate(() => window.processor?.sysvia !== undefined)).toBe(true);
+
+        await frame.locator("#cub-monitor").click();
+        await page.keyboard.down("a");
+        await expect.poll(() => frame.evaluate(() => window.processor.sysvia.hasAnyKeyDown())).toBe(true);
+        expect(await page.evaluate(() => window.hostKeys)).toEqual([]);
+
+        await page.mouse.click(1200, 100);
+        await expect.poll(() => frame.evaluate(() => window.processor.sysvia.hasAnyKeyDown())).toBe(false);
+        await page.keyboard.up("a");
+    } finally {
+        embedder.close();
+    }
 });
 
 test("the media window fills a phone's screen without scrolling sideways, and its bays show one thing at a time", async ({

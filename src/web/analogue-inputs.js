@@ -47,6 +47,8 @@ export class AnalogueInputs {
             audioHandler.tryResume();
             if (document.activeElement !== document.body) document.activeElement.blur();
             const { x, y } = screenPoint(evt);
+            // Preventing a mousedown's default also stops the browser moving focus into a cross-site frame.
+            if (evt.type === "mousedown") window.focus();
             evt.preventDefault();
             if (evt.type === "mousedown" && evt.button === 0 && takeScreenClick(x, y)) return;
             amxMouseInput?.onMouseEvent(evt);
