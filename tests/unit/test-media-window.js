@@ -1114,10 +1114,17 @@ describe("MediaWindow", () => {
             await openWith([saves, tape]);
             rowFor("saves.ssd").querySelector(".media-row-main").click();
             await vi.waitFor(() => expect(sent("media_load")).toHaveLength(3));
-            const disc = { source: "browser", kind: "disc", slot: "drive0", ref: "browser", result: "loaded" };
+            const disc = { media_source: "browser", kind: "disc", slot: "drive0", ref: "browser", result: "loaded" };
             expect(sent("media_load")).toEqual([
                 { ...disc, entry: "list" },
-                { source: "session", kind: "tape", slot: "deck", entry: "list", ref: "session", result: "loaded" },
+                {
+                    media_source: "session",
+                    kind: "tape",
+                    slot: "deck",
+                    entry: "list",
+                    ref: "session",
+                    result: "loaded",
+                },
                 { ...disc, entry: "recent" },
             ]);
         });

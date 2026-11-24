@@ -7,7 +7,7 @@ import { LoadFailures } from "../loader.js";
 const DriveNames = ["drive 0", "drive 1"];
 
 const noteLoad = (slot, { source, entry, ref, result }) =>
-    note("media_load", { source, kind: slot.kind, slot: slot.id, entry, ref: mediaLabel(ref), result });
+    note("media_load", { media_source: source, kind: slot.kind, slot: slot.id, entry, ref: mediaLabel(ref), result });
 
 /** One place media goes: a drive or the deck. What it holds is read from the machine itself. */
 class Slot {
@@ -110,7 +110,11 @@ export class MediaSlots extends EventTarget {
         const source = ref ? sourceKey(ref) : descriptor.source;
         noteLoad(slot, { source, entry, ref, result });
         if (result === "failed")
-            note("load_failed", { source, kind: slot.kind, reason: error?.loadFailure ?? LoadFailures.other });
+            note("load_failed", {
+                media_source: source,
+                kind: slot.kind,
+                reason: error?.loadFailure ?? LoadFailures.other,
+            });
         return result;
     }
 
