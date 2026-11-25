@@ -42,15 +42,18 @@ function isPrivateIpv6(address) {
     return ["::", "::1"].includes(address) || /^(f[cd][0-9a-f]{2}|fe[89ab][0-9a-f]):/.test(address);
 }
 
-/** Whether `url` is on this machine or its network. */
-function isOwnHost(url) {
-    let hostname, protocol;
+/** `ref` parsed, when it is an `http:` or `https:` URL. */
+function webAddress(ref) {
     try {
-        ({ hostname, protocol } = new URL(url));
+        const url = new URL(ref);
+        return url.protocol === "http:" || url.protocol === "https:" ? url : null;
     } catch {
-        return false;
+        return null;
     }
-    if (protocol !== "http:" && protocol !== "https:") return false;
+}
+
+/** Whether `url` is on this machine or its network. */
+function isOwnHost({ hostname }) {
     const host = hostname.replace(/\.$/, "");
     if (host.startsWith("[")) return isPrivateIpv6(host.slice(1, -1));
     const quad = host.match(DottedQuad);
@@ -60,14 +63,17 @@ function isOwnHost(url) {
 }
 
 /**
- * A media reference whole when anyone could name it (a catalogue entry, a built-in disc, a public URL), and only by
- * its source when it is the user's own, including a URL on their own machine or network.
+ * A media reference as anyone could name it (a catalogue entry, a built-in disc, a public URL without the credentials,
+ * query or fragment that may carry a token), and only by its source when it is the user's own, including a URL on
+ * their own machine or network.
  */
 export function mediaLabel(ref) {
     if (!ref) return ref;
     const { known } = schemaOf(ref);
-    const personal = (known.source ? Sources[known.source]?.personal : known.personal) || isOwnHost(ref);
-    return personal ? sourceKey(ref) : ref;
+    const url = webAddress(ref);
+    const personal = (known.source ? Sources[known.source]?.personal : known.personal) || (url && isOwnHost(url));
+    if (personal) return sourceKey(ref);
+    return url ? `${url.protocol}//${url.host}${url.pathname}` : ref;
 }
 
 export const redacted = () => "redacted";
