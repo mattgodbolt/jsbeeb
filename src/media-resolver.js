@@ -5,7 +5,10 @@ import { failingFor, loadData, LoadFailures } from "./loader.js";
 /** Splits an image reference into its schema (empty for a bare name) and the image it names. */
 export function splitImage(image) {
     const match = image.match(/(([^:]+):\/?\/?|[!^|])?(.*)/);
-    return { schema: match[2] || match[1] || "", image: match[3] };
+    return {
+        schema: (match[2] || match[1] || "").toLowerCase(),
+        image: match[3],
+    };
 }
 
 /**
