@@ -1,5 +1,7 @@
-// The message a browser below package.json's browserslist sees, and what it tells Google Analytics, against the
-// e2e build's dummy measurement id.
+// What jsbeeb tells Google Analytics, at top level, in another site's frame and in a browser below package.json's
+// browserslist (which also sees a message), against the e2e build's dummy measurement id.
+
+import { createServer } from "node:http";
 
 import { Beeb, expect, test } from "./fixtures.js";
 import { floorText } from "../../tools/vite-plugin-browser-floor.js";
@@ -14,8 +16,8 @@ const pretendToBe = (page, userAgent) =>
         userAgent,
     );
 
-const analyticsCalls = (page, command) =>
-    page.evaluate(
+const analyticsCalls = (pageOrFrame, command) =>
+    pageOrFrame.evaluate(
         (wanted) => (window.dataLayer ?? []).map((call) => Array.from(call)).filter((call) => call[0] === wanted),
         command,
     );
@@ -34,7 +36,9 @@ test("a supported browser starts the machine with its console names, loads gtag.
         "object",
     ]);
     await expect(page.locator('script[src^="https://www.googletagmanager.com/gtag/js?id="]')).toHaveCount(1);
-    expect(await analyticsCalls(page, "config"), "main.js's config").toHaveLength(1);
+    const configs = await analyticsCalls(page, "config");
+    expect(configs, "main.js's config").toHaveLength(1);
+    expect(configs[0][2]).not.toHaveProperty("cookie_flags");
     await expect
         .poll(async () => (await analyticsCalls(page, "event")).filter((call) => call[1] === "machine_start"))
         .toEqual([
@@ -53,6 +57,32 @@ test("a supported browser starts the machine with its console names, loads gtag.
     });
     await expect(page.locator("#browser-floor")).toBeHidden();
     expect(await unsupportedBrowserEvents(page)).toEqual([]);
+});
+
+test("jsbeeb framed by another site asks Google Analytics for a cookie partitioned by that site", async ({
+    beeb,
+    page,
+    baseURL,
+}) => {
+    const embedder = createServer((request, response) => {
+        response.setHeader("Content-Type", "text/html");
+        response.end(`<iframe src="${new URL("?embed", baseURL)}" width="1000" height="800"></iframe>`);
+    });
+    await new Promise((resolve) => embedder.listen(0, "127.0.0.1", resolve));
+    // A loopback name other than the frame's, so a different site; Chrome blocks a public page framing a local one.
+    const hostName = new URL(baseURL).hostname === "127.0.0.1" ? "localhost" : "127.0.0.1";
+    await beeb.routed;
+    try {
+        await page.goto(`http://${hostName}:${embedder.address().port}/`);
+        const frame = await (await page.locator("iframe").elementHandle()).contentFrame();
+        await expect
+            .poll(() => analyticsCalls(frame, "config"))
+            .toEqual([
+                ["config", "G-E2ETEST", expect.objectContaining({ cookie_flags: "SameSite=None;Secure;Partitioned" })],
+            ]);
+    } finally {
+        embedder.close();
+    }
 });
 
 test("a browser below the floor is told so, and the emulator still starts", async ({ beeb, page }) => {
