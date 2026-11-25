@@ -21,26 +21,23 @@ export class SamplePlayer {
     }
 
     /**
-     * Load a map of {name: path} into decoded AudioBuffers stored in this.sounds.
+     * Load a map of {name: path} into decoded AudioBuffers stored in this.sounds. A sound that
+     * cannot be fetched or decoded is left out, and plays as silence.
      */
     async loadSounds(pathMap) {
-        const entries = Object.entries(pathMap);
-        const decoded = await Promise.all(
-            entries.map(async ([, path]) => {
-                const data = await loadData(path);
-                // Safari doesn't support the promise form of decodeAudioData.
-                return new Promise((resolve, reject) => {
-                    this.context.decodeAudioData(
-                        data.buffer,
-                        (buf) => resolve(buf),
-                        (err) => reject(err),
-                    );
-                });
+        const failures = [];
+        await Promise.all(
+            Object.entries(pathMap).map(async ([name, path]) => {
+                try {
+                    const data = await loadData(path);
+                    this.sounds[name] = await this.context.decodeAudioData(data.buffer);
+                } catch (error) {
+                    failures.push(`${path} (${error?.message ?? error})`);
+                }
             }),
         );
-        for (let i = 0; i < entries.length; i++) {
-            this.sounds[entries[i][0]] = decoded[i];
-        }
+        if (failures.length)
+            console.warn(`These sounds will be silent, as they could not be loaded: ${failures.join(", ")}`);
     }
 
     /**
@@ -48,17 +45,17 @@ export class SamplePlayer {
      */
     oneShot(sound) {
         this.startSound(sound);
-        return sound.duration;
+        return sound?.duration ?? 0;
     }
 
     /**
      * Start `sound` at `when` on the audio clock (now if 0), `offset` seconds in, for
      * `duration` seconds (the rest of it if undefined), with `fadeSeconds` of fade at each
      * end so a cut into the middle of it does not click. Returns the source, or null when
-     * the context is not running.
+     * the sound did not load or the context is not running.
      */
     startSound(sound, { when = 0, offset = 0, duration, fadeSeconds = 0 } = {}) {
-        if (this.context.state !== "running") return null;
+        if (!sound || this.context.state !== "running") return null;
         const source = this.context.createBufferSource();
         source.buffer = sound;
         let into = this.gain;
@@ -99,10 +96,12 @@ export class SamplePlayer {
 
     /**
      * Play a buffer, optionally looping.  Returns a Promise that resolves
-     * with the source node (if looping) or when playback ends (if not).
+     * with the source node (if looping) or when playback ends (if not), and rejects when the
+     * context is not running. A sound that did not load resolves at once, with no source.
      */
     play(sound, loop) {
         if (this.context.state !== "running") return Promise.reject();
+        if (!sound) return Promise.resolve(null);
         return new Promise((resolve) => {
             const source = this.context.createBufferSource();
             source.loop = !!loop;
