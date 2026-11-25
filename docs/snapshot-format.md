@@ -163,7 +163,7 @@ Absent on the Atom. Which DRAM rows the video and the CPU have refreshed, and wh
 
 | Field             | Type         | Description                                                                                                                 |
 | ----------------- | ------------ | --------------------------------------------------------------------------------------------------------------------------- |
-| `windowStart`     | number       | Epoch the current refresh window began, at a flyback                                                                        |
+| `windowStart`     | number       | Epoch the current refresh window began                                                                                      |
 | `windows`         | number       | Refresh windows ended so far; the window after the end of every seventh, if that one left rows unrefreshed, samples the CPU |
 | `lastCoveredAt`   | number       | Epoch the last window that the video alone refreshed every row in ended                                                     |
 | `lastRefreshedAt` | Float64Array | Per row, the epoch of the last uncovered window that refreshed or decayed it; a covered window moves only `lastCoveredAt`   |
