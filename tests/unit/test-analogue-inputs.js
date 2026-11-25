@@ -241,6 +241,14 @@ describe("AnalogueInputs", () => {
         });
     });
 
+    describe("a microphone waiting for access", () => {
+        it("reads as silence on the channel it was given", () => {
+            const inputs = make();
+            inputs.updateAdcSources(false, 2);
+            expect(channels[2].getValue(2)).toBe(0);
+        });
+    });
+
     describe("a microphone whose channel was turned off", () => {
         it("never asks for microphone access", async () => {
             const inputs = make();
