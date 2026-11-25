@@ -18,7 +18,11 @@ describe("AudioHandler", () => {
             ...stubAudioContext(),
             destination: {},
             audioWorklet: hasWorklet ? { addModule } : undefined,
-            decodeAudioData: async () => ({ duration: 1 }),
+            // Safari rejects a failed decode with null.
+            decodeAudioData: async (data) => {
+                if (!/^(RIFF|ID3)/.test(new TextDecoder().decode(data.slice(0, 4)))) throw null;
+                return { duration: 1 };
+            },
             resume: async () => {},
         };
     }
@@ -384,14 +388,20 @@ describe("AudioHandler", () => {
     });
 
     describe("when drive sounds fail to load", () => {
-        async function initialisedWithout(missing) {
+        const named = (names, url) => names.some((name) => url.includes(`/${name}.wav`));
+
+        /** A handler whose `unfetchable` sounds fail to fetch and whose `undecodable` ones come back as a web page. */
+        async function initialisedWithout(unfetchable, undecodable = []) {
             stubAudio();
             vi.stubGlobal(
                 "XMLHttpRequest",
                 class extends FileBackedXhr {
                     send() {
-                        if (missing.some((name) => this._url.includes(`/${name}.wav`))) this.onerror();
-                        else super.send();
+                        if (named(unfetchable, this._url)) return this.onerror();
+                        if (!named(undecodable, this._url)) return super.send();
+                        this.response = new TextEncoder().encode("<!doctype html>");
+                        this.status = 200;
+                        this.onload();
                     }
                 },
             );
@@ -403,11 +413,11 @@ describe("AudioHandler", () => {
         }
 
         it("still initialises, warning once, with those seeks silent and the rest playing", async () => {
-            const missing = ["seek06in", "stepin"];
-            const { ddNoise, warn, played } = await initialisedWithout(missing);
+            const { ddNoise, warn, played } = await initialisedWithout(["seek06in"], ["stepin"]);
 
             expect(warn).toHaveBeenCalledOnce();
-            for (const name of missing) expect(warn.mock.calls[0][0]).toContain(`${name}.wav`);
+            expect(warn.mock.calls[0][0]).toContain("seek06in.wav");
+            expect(warn.mock.calls[0][0]).toContain("stepin.wav (null)");
             ddNoise.seekStart(10, 6);
             ddNoise.seekStart(1, 6);
             expect(played()).toEqual([]);

@@ -96,8 +96,8 @@ export class SamplePlayer {
 
     /**
      * Play a buffer, optionally looping.  Returns a Promise that resolves
-     * with the source node (if looping) or when playback ends (if not); a sound that did not
-     * load resolves at once, with no source.
+     * with the source node (if looping) or when playback ends (if not), and rejects when the
+     * context is not running. A sound that did not load resolves at once, with no source.
      */
     play(sound, loop) {
         if (this.context.state !== "running") return Promise.reject();
