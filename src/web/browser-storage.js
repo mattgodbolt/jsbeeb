@@ -1,10 +1,12 @@
-// Reading window.localStorage itself throws when the browser refuses the page storage. The stand-in is made afresh
-// each time, so what is written to it is gone at once.
+// Reading window.localStorage itself throws (or, in some browsers, gives null) when the browser refuses the page
+// storage. The stand-in is made afresh each time, so what is written to it is gone at once.
+const nothingKept = () => ({ length: 0, key: () => null, getItem: () => null, setItem() {}, removeItem() {} });
+
 function reachable(name) {
     try {
-        return window[name];
+        return window[name] ?? nothingKept();
     } catch {
-        return { length: 0, key: () => null, getItem: () => null, setItem() {}, removeItem() {} };
+        return nothingKept();
     }
 }
 

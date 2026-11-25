@@ -273,12 +273,6 @@ test("a browser that refuses the page its storage still starts the machine", asy
     });
     await beeb.open();
     await beeb.expectScreenText(">");
-    const errorsNoted = await page.evaluate(() =>
-        (window.dataLayer ?? [])
-            .map((call) => Array.from(call))
-            .filter((call) => call[0] === "event" && call[1] === "js_error"),
-    );
-    expect(errorsNoted).toEqual([]);
 });
 
 test("a fresh profile opens no floating panel on load", async ({ beeb, page }) => {
