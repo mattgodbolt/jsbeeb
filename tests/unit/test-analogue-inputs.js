@@ -301,6 +301,41 @@ describe("AnalogueInputs", () => {
             inputs.updateAdcSources(false, undefined);
             expect(stopTrack).toHaveBeenCalledTimes(1);
         });
+
+        it("shares an in-flight permission request when the microphone moves channels", async () => {
+            const pending = [];
+            const stopped = [];
+
+            getUserMedia.mockImplementation(
+                () =>
+                    new Promise((resolve) => {
+                        const stop = vi.fn();
+                        stopped.push(stop);
+                        pending.push(() => resolve({ getTracks: () => [{ stop }] }));
+                    }),
+            );
+
+            deps.settings.microphoneChannel = 2;
+            const inputs = make();
+            inputs.updateAdcSources(false, 2);
+
+            const firstSetup = inputs.setupMicrophone();
+
+            deps.settings.microphoneChannel = 3;
+            inputs.updateAdcSources(false, 3);
+
+            const secondSetup = inputs.setupMicrophone();
+
+            pending.forEach((resolve) => resolve());
+
+            await Promise.all([firstSetup, secondSetup]);
+
+            inputs.updateAdcSources(false, undefined);
+
+            expect(getUserMedia).toHaveBeenCalledTimes(1);
+            expect(stopped).toHaveLength(1);
+            expect(stopped[0]).toHaveBeenCalledOnce();
+        });
     });
 
     describe("a microphone whose channel was turned off", () => {
