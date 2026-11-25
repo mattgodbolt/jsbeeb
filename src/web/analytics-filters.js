@@ -6,18 +6,6 @@ const QuotedText = /"[^"]*"|'[^']*'|`[^`]*`|“[^”]*”|‘[^’]*’/g;
 const Addresses = /\b[a-z][a-z0-9+.-]*:\/\/\S+|\b(?:data|blob|file):\S+/gi;
 const PeerBucketTops = [0, 1, 2, 4];
 const LocalNetworkDomains = ["local", "localhost", "lan", "internal", "home.arpa", "ts.net"];
-const ShareLinkDomains = [
-    "dropbox.com",
-    "dropboxusercontent.com",
-    "drive.google.com",
-    "drive.usercontent.google.com",
-    "docs.google.com",
-    "onedrive.live.com",
-    "1drv.ms",
-    "sharepoint.com",
-    "icloud.com",
-    "box.com",
-];
 const DottedQuad = /^(\d+)\.(\d+)\.(\d+)\.(\d+)$/;
 // The URL parser writes an IPv4-mapped IPv6 address as two hex groups.
 const MappedIpv4 = /^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/;
@@ -54,7 +42,7 @@ function isPrivateIpv6(address) {
     return ["::", "::1"].includes(address) || /^(f[cd][0-9a-f]{2}|fe[89ab][0-9a-f]):/.test(address);
 }
 
-/** Whether `url` is on this machine, its network, or a host that serves unlisted share links. */
+/** Whether `url` is on this machine or its network. */
 function isOwnHost(url) {
     let hostname, protocol;
     try {
@@ -68,12 +56,12 @@ function isOwnHost(url) {
     const quad = host.match(DottedQuad);
     if (quad) return isPrivateIpv4(quad.slice(1).map(Number));
     const inDomain = (domain) => host === domain || host.endsWith(`.${domain}`);
-    return !host.includes(".") || LocalNetworkDomains.some(inDomain) || ShareLinkDomains.some(inDomain);
+    return !host.includes(".") || LocalNetworkDomains.some(inDomain);
 }
 
 /**
  * A media reference whole when anyone could name it (a catalogue entry, a built-in disc, a public URL), and only by
- * its source when it is the user's own, including a URL on their own machine or network or an unlisted share link.
+ * its source when it is the user's own, including a URL on their own machine or network.
  */
 export function mediaLabel(ref) {
     if (!ref) return ref;

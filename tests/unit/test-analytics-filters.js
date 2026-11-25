@@ -20,7 +20,6 @@ describe("analytics filters", () => {
             "http://172.32.0.1/game.ssd",
             "http://[2001:db8::1]/game.ssd",
             "https://local.example.com/game.ssd",
-            "https://notdropbox.com/game.ssd",
             "http://[fc0::1]/game.ssd",
             "http://[fe8::1]/game.ssd",
             "http://100.128.0.1/game.ssd",
@@ -54,16 +53,10 @@ describe("analytics filters", () => {
             ["http://[::]/mine.ssd", "http"],
             ["http://100.101.102.103/mine.ssd", "http"],
             ["https://beeb.tail1234.ts.net/mine.ssd", "https"],
-            ["https://someone-my.sharepoint.com/:u:/g/mine.ssd", "https"],
             ["http://beeb.local/mine.ssd", "http"],
             ["http://beeb.local./mine.ssd", "http"],
             ["http://dev.localhost/mine.ssd", "http"],
             ["http://router.home.arpa/mine.ssd", "http"],
-            ["https://dl.dropboxusercontent.com/s/abc/mine.ssd", "https"],
-            ["https://www.dropbox.com/s/abc/mine.ssd?dl=1", "https"],
-            ["https://drive.google.com/uc?export=download&id=1AbC", "https"],
-            ["https://drive.usercontent.google.com/download?id=1AbC", "https"],
-            ["https://onedrive.live.com/download?cid=1", "https"],
         ])("names %s only by its source", (ref, label) => {
             expect(mediaLabel(ref)).toBe(label);
         });
