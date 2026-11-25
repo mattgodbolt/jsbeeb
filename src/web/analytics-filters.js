@@ -5,7 +5,7 @@ const MaxErrorLabelLength = 100;
 const QuotedText = /"[^"]*"|'[^']*'|`[^`]*`|“[^”]*”|‘[^’]*’/g;
 const Addresses = /\b[a-z][a-z0-9+.-]*:\/\/\S+|\b(?:data|blob|file):\S+/gi;
 const PeerBucketTops = [0, 1, 2, 4];
-const LocalNetworkDomains = ["local", "localhost", "lan", "internal", "home.arpa"];
+const LocalNetworkDomains = ["local", "localhost", "lan", "internal", "home.arpa", "ts.net"];
 const ShareLinkDomains = [
     "dropbox.com",
     "dropboxusercontent.com",
@@ -14,6 +14,9 @@ const ShareLinkDomains = [
     "docs.google.com",
     "onedrive.live.com",
     "1drv.ms",
+    "sharepoint.com",
+    "icloud.com",
+    "box.com",
 ];
 const DottedQuad = /^(\d+)\.(\d+)\.(\d+)\.(\d+)$/;
 // The URL parser writes an IPv4-mapped IPv6 address as two hex groups.
@@ -35,6 +38,7 @@ function isPrivateIpv4([a, b]) {
         a === 0 ||
         a === 10 ||
         a === 127 ||
+        (a === 100 && b >= 64 && b <= 127) ||
         (a === 169 && b === 254) ||
         (a === 172 && b >= 16 && b <= 31) ||
         (a === 192 && b === 168)
@@ -47,7 +51,7 @@ function isPrivateIpv6(address) {
         const high = parseInt(mapped[1], 16);
         return isPrivateIpv4([high >> 8, high & 0xff]);
     }
-    return address === "::1" || /^f[cd]/.test(address) || /^fe[89ab]/.test(address);
+    return ["::", "::1"].includes(address) || /^(f[cd][0-9a-f]{2}|fe[89ab][0-9a-f]):/.test(address);
 }
 
 /** Whether `url` is on this machine, its network, or a host that serves unlisted share links. */

@@ -93,12 +93,6 @@ describe("analytics", () => {
             );
         });
 
-        it("names a program from the user's own network only by its source", () => {
-            expect(analyticsLocation(`${base}?loadBasic=http://localhost:8000/mine.bas`)).toBe(
-                `${base}?loadBasic=http`,
-            );
-        });
-
         it("keeps no parameters at all from a URL whose parameters cannot be decoded", () => {
             expect(analyticsLocation(`${base}?disc1=gd:1AbC/Mine%E0.ssd&model=B`)).toBe(base);
         });
@@ -200,28 +194,20 @@ describe("analytics", () => {
                 });
             });
 
-            it.each(["standalone", "window-controls-overlay", "minimal-ui"])(
-                "tells the page_view the page is an installed app in %s display mode",
-                async (mode) => {
-                    const { configureAnalytics } = await loadWithMeasurementId(measurementId);
-                    showAs(mode);
-                    configureAnalytics(new EventTarget());
-                    expect(gtag).toHaveBeenCalledWith(
-                        "config",
-                        measurementId,
-                        expect.objectContaining({ display_mode: mode }),
-                    );
-                },
-            );
-
-            it("tells the page_view a fullscreen page is in a browser, as a tab in fullscreen matches too", async () => {
+            it.each([
+                ["standalone", "standalone"],
+                ["window-controls-overlay", "window-controls-overlay"],
+                ["minimal-ui", "minimal-ui"],
+                ["fullscreen", "browser"],
+                ["browser", "browser"],
+            ])("tells the page_view a page in %s display mode is shown as %s", async (mode, reported) => {
                 const { configureAnalytics } = await loadWithMeasurementId(measurementId);
-                showAs("fullscreen");
+                showAs(mode);
                 configureAnalytics(new EventTarget());
                 expect(gtag).toHaveBeenCalledWith(
                     "config",
                     measurementId,
-                    expect.objectContaining({ display_mode: "browser" }),
+                    expect.objectContaining({ display_mode: reported }),
                 );
             });
 

@@ -21,6 +21,9 @@ describe("analytics filters", () => {
             "http://[2001:db8::1]/game.ssd",
             "https://local.example.com/game.ssd",
             "https://notdropbox.com/game.ssd",
+            "http://[fc0::1]/game.ssd",
+            "http://[fe8::1]/game.ssd",
+            "http://100.128.0.1/game.ssd",
         ])("keeps %s whole", (ref) => {
             expect(mediaLabel(ref)).toBe(ref);
         });
@@ -47,6 +50,10 @@ describe("analytics filters", () => {
             ["http://[::ffff:192.168.1.2]/mine.ssd", "http"],
             ["http://[fd12:3456::1]/mine.ssd", "http"],
             ["http://[fe80::1]/mine.ssd", "http"],
+            ["http://[::]/mine.ssd", "http"],
+            ["http://100.101.102.103/mine.ssd", "http"],
+            ["https://beeb.tail1234.ts.net/mine.ssd", "https"],
+            ["https://someone-my.sharepoint.com/:u:/g/mine.ssd", "https"],
             ["http://beeb.local/mine.ssd", "http"],
             ["http://beeb.local./mine.ssd", "http"],
             ["http://dev.localhost/mine.ssd", "http"],
