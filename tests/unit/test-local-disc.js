@@ -60,6 +60,27 @@ describe("a disc held in browser local storage", () => {
         expect(refused).toEqual([refusal]);
     });
 
+    it.each([
+        [
+            "throws",
+            {
+                get localStorage() {
+                    throw new DOMException("The operation is insecure.", "SecurityError");
+                },
+            },
+        ],
+        ["gives null", { localStorage: null }],
+    ])("opens and reports at once when the browser's storage getter %s", (_, refusingWindow) => {
+        vi.stubGlobal("window", refusingWindow);
+        const refused = [];
+
+        const created = localDisc("blocked.ssd", DiscLayout.contiguous, (error) => refused.push(error));
+        writeTrack(created, 0);
+
+        expect(created.name).toBe("blocked.ssd");
+        expect(refused).toHaveLength(1);
+    });
+
     it("says nothing while the writes are being stored", () => {
         stubStorage({ setItem: () => {} });
         let refusals = 0;

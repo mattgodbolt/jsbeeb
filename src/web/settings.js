@@ -2,6 +2,7 @@ import { DefaultModel, findModel } from "../models.js";
 import { guessModelFromHostname, ParamTypes } from "../url-params.js";
 import { fittedRoms } from "./config.js";
 import { toast } from "./toast.js";
+import { localStore } from "./browser-storage.js";
 import { Parameters } from "./parameters.js";
 
 const fromStorage = {
@@ -24,7 +25,7 @@ function resolve(name, parameter, params) {
     const usable = (value) => suitsType[type](value) && (!valid || valid(value));
     const candidates = [];
     if (suitsType[type](params[name])) candidates.push(fromUrl(params[name]));
-    if (parameter.stored) candidates.push(fromStorage[type](window.localStorage[name]));
+    if (parameter.stored) candidates.push(fromStorage[type](localStore()[name]));
     const value = candidates.find(usable);
     return fit(value === undefined ? parameter.default : value);
 }
@@ -100,8 +101,8 @@ export class Settings extends EventTarget {
             if (name === "model") this[name] = findModel(value) ?? this.model;
             else this[name] = value === undefined ? parameter.default : value;
             if (!parameter.stored) continue;
-            if (value === undefined) window.localStorage.removeItem(name);
-            else window.localStorage[name] = value;
+            if (value === undefined) localStore().removeItem(name);
+            else localStore()[name] = value;
         }
         const slid = Object.keys(changes).some((name) => this.parameters[name].slid);
         this.urlState.set(changes, { settle: slid });
