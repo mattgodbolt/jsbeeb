@@ -56,12 +56,13 @@ function isPrivateIpv6(address) {
 
 /** Whether `url` is on this machine, its network, or a host that serves unlisted share links. */
 function isOwnHost(url) {
-    let hostname;
+    let hostname, protocol;
     try {
-        ({ hostname } = new URL(url));
+        ({ hostname, protocol } = new URL(url));
     } catch {
         return false;
     }
+    if (protocol !== "http:" && protocol !== "https:") return false;
     const host = hostname.replace(/\.$/, "");
     if (host.startsWith("[")) return isPrivateIpv6(host.slice(1, -1));
     const quad = host.match(DottedQuad);
@@ -77,8 +78,7 @@ function isOwnHost(url) {
 export function mediaLabel(ref) {
     if (!ref) return ref;
     const { known } = schemaOf(ref);
-    const personal =
-        (known.source ? Sources[known.source]?.personal : known.personal) || (known.route === "url" && isOwnHost(ref));
+    const personal = (known.source ? Sources[known.source]?.personal : known.personal) || isOwnHost(ref);
     return personal ? sourceKey(ref) : ref;
 }
 

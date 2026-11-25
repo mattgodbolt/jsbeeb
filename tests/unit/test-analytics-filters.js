@@ -50,6 +50,7 @@ describe("analytics filters", () => {
             ["http://[::ffff:192.168.1.2]/mine.ssd", "http"],
             ["http://[fd12:3456::1]/mine.ssd", "http"],
             ["http://[fe80::1]/mine.ssd", "http"],
+            ["HTTP://127.0.0.1/mine.ssd", "builtin"],
             ["http://[::]/mine.ssd", "http"],
             ["http://100.101.102.103/mine.ssd", "http"],
             ["https://beeb.tail1234.ts.net/mine.ssd", "https"],
