@@ -1,9 +1,10 @@
-// Placeholders until a bench probe measures them. The #1849 probe's Master failed after about half a minute.
+// Placeholders until a bench probe measures them.
 export const DramRetentionSeconds = 30;
 export const DecayedByte = 0xff;
 
-// Short enough that every PAL field ends one, long enough that the fields of an unprogrammed CRTC do not.
-const RefreshWindowSeconds = 0.01;
+// Under a 20 ms PAL field, so each field's flyback ends a refresh window; over the line-long fields of an
+// unprogrammed CRTC, so theirs do not.
+const MinRefreshWindowSeconds = 0.01;
 // Odd, so that sampling does not lock to a program that alternates its work between fields.
 const CpuSampleWindows = 7;
 const ModelBRows = 128;
@@ -52,7 +53,7 @@ export class DramRefresh {
         this.lineRows = new Int32Array(this.rowCount / BitsPerWord);
         this.cpuRows = new Uint8Array(this.rowCount);
         this.retentionCycles = DramRetentionSeconds * cpu.model.cyclesPerSecond;
-        this.windowCycles = RefreshWindowSeconds * cpu.model.cyclesPerSecond;
+        this.minWindowCycles = MinRefreshWindowSeconds * cpu.model.cyclesPerSecond;
         this.lastRefreshedAt = new Float64Array(this.rowCount);
         this.windowStart = 0;
         this.lastCoveredAt = 0;
@@ -120,7 +121,7 @@ export class DramRefresh {
     /** At each flyback: decays the rows that have gone unrefreshed for longer than DramRetentionSeconds. */
     endOfField() {
         const now = this.cpu.scheduler.epoch;
-        if (now - this.windowStart < this.windowCycles) return;
+        if (now - this.windowStart < this.minWindowCycles) return;
         this.windowStart = now;
         ++this.windows;
         if (this.covered) {
