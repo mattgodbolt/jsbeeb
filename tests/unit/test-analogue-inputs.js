@@ -265,6 +265,44 @@ describe("AnalogueInputs", () => {
         });
     });
 
+    describe("a microphone with access", () => {
+        const Silence = 128;
+        let getUserMedia;
+        let stopTrack;
+
+        beforeEach(() => {
+            stopTrack = vi.fn();
+            getUserMedia = vi.fn(async () => ({ getTracks: () => [{ stop: stopTrack }] }));
+            vi.stubGlobal("navigator", { mediaDevices: { getUserMedia } });
+            vi.stubGlobal(
+                "AudioContext",
+                class {
+                    state = "running";
+                    createAnalyser = () => ({
+                        frequencyBinCount: 4,
+                        getByteTimeDomainData: (data) => data.fill(Silence),
+                    });
+                    createMediaStreamSource = () => ({ connect() {}, disconnect() {} });
+                    close = async () => {};
+                },
+            );
+        });
+
+        it("keeps its stream when it moves to another channel, and stops it when turned off", async () => {
+            deps.settings.microphoneChannel = 2;
+            const inputs = make();
+            inputs.updateAdcSources(false, 2);
+            await inputs.setupMicrophone();
+            inputs.updateAdcSources(false, 3);
+            await inputs.setupMicrophone();
+            expect(getUserMedia).toHaveBeenCalledTimes(1);
+            expect(channels[3].getValue(3)).toBe(0);
+            expect(stopTrack).not.toHaveBeenCalled();
+            inputs.updateAdcSources(false, undefined);
+            expect(stopTrack).toHaveBeenCalledTimes(1);
+        });
+    });
+
     describe("a microphone whose channel was turned off", () => {
         it("never asks for microphone access", async () => {
             const inputs = make();

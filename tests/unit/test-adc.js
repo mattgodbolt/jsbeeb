@@ -130,20 +130,11 @@ describe("Adc", () => {
     });
 
     describe("sources", () => {
-        it("disposes of a source when it is replaced, and not when set again", () => {
-            const first = source(1);
-            const second = source(2);
-            adc.setChannelSource(0, first);
-            adc.setChannelSource(0, first);
-            expect(first.dispose).not.toHaveBeenCalled();
-            adc.setChannelSource(0, second);
-            expect([first.dispose.mock.calls.length, second.dispose.mock.calls.length]).toEqual([1, 0]);
-        });
-
         it("disposes of a source only once it is on no channel", () => {
             const moving = source(1);
             const staying = source(2);
             adc.setChannelSources([moving, staying, staying, null]);
+            adc.setChannelSource(0, moving);
             adc.setChannelSources([staying, moving, null, null]);
             adc.setChannelSource(2, moving);
             expect([moving.dispose.mock.calls.length, staying.dispose.mock.calls.length]).toEqual([0, 0]);
