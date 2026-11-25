@@ -383,36 +383,46 @@ describe("AudioHandler", () => {
         });
     });
 
-    describe("when a drive sound fails to load", () => {
-        const Missing = ["seek06in", "stepin", "motoron"];
-
-        class MissingSoundsXhr extends FileBackedXhr {
-            send() {
-                if (Missing.some((name) => this._url.includes(`/${name}.wav`))) this.onerror();
-                else super.send();
-            }
-        }
-
-        it("still initialises, with those sounds silent and the rest playing", async () => {
+    describe("when drive sounds fail to load", () => {
+        async function initialisedWithout(missing) {
             stubAudio();
-            vi.stubGlobal("XMLHttpRequest", MissingSoundsXhr);
+            vi.stubGlobal(
+                "XMLHttpRequest",
+                class extends FileBackedXhr {
+                    send() {
+                        if (missing.some((name) => this._url.includes(`/${name}.wav`))) this.onerror();
+                        else super.send();
+                    }
+                },
+            );
             const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
             const handler = makeHandler({ noSeek: false });
-            const { ddNoise } = handler;
-            const played = () => ddNoise.playing.map((source) => source.buffer);
-
             await handler.initialise();
+            const { ddNoise } = handler;
+            return { ddNoise, warn, played: () => ddNoise.playing.map((source) => source.buffer) };
+        }
+
+        it("still initialises, warning once, with those seeks silent and the rest playing", async () => {
+            const missing = ["seek06in", "stepin"];
+            const { ddNoise, warn, played } = await initialisedWithout(missing);
 
             expect(warn).toHaveBeenCalledOnce();
-            for (const name of Missing) expect(warn.mock.calls[0][0]).toContain(`${name}.wav`);
+            for (const name of missing) expect(warn.mock.calls[0][0]).toContain(`${name}.wav`);
             ddNoise.seekStart(10, 6);
             ddNoise.seekStart(1, 6);
             expect(played()).toEqual([]);
             ddNoise.seekStart(-10, 6);
             expect(played()).toEqual([ddNoise.sounds.seek06out]);
+        });
+
+        it.each(["motoron", "motor"])("without %s, still spins up and plays the stop sound", async (missing) => {
+            const { ddNoise, played } = await initialisedWithout([missing]);
+
             ddNoise.spinUp();
-            await vi.waitFor(() => expect(played()).toContain(ddNoise.sounds.motor));
+            for (const source of [...ddNoise.playing]) source.onended();
+            await new Promise((resolve) => setTimeout(resolve));
             ddNoise.spinDown();
+
             expect(played()).toContain(ddNoise.sounds.motorOff);
         });
     });
