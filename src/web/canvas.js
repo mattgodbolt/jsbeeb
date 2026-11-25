@@ -99,7 +99,7 @@ export class Canvas {
         this.imageData = this.backCtx.createImageData(this.backBuffer.width, this.backBuffer.height);
         this.phosphor = window.document.createElement("canvas");
         this.phosphorCtx = this.phosphor.getContext("2d", { alpha: false });
-        this.canvas = canvas;
+        this.element = canvas;
         this.persistence = 0;
 
         this.fb32 = new Uint32Array(this.imageData.data.buffer);
@@ -128,7 +128,7 @@ export class Canvas {
         const width = maxx - minx;
         const height = maxy - miny;
         this.backCtx.putImageData(this.imageData, 0, 0, minx, miny, width, height);
-        const { width: screenWidth, height: screenHeight } = this.canvas;
+        const { width: screenWidth, height: screenHeight } = this.element;
         if (this.persistence <= 0) {
             this.ctx.globalCompositeOperation = "source-over";
             this.ctx.globalAlpha = 1;
@@ -185,6 +185,7 @@ export class GlCanvas {
             desynchronized: lowLatency,
         };
         const gl = canvas.getContext("webgl", glAttrs) || canvas.getContext("experimental-webgl", glAttrs);
+        this.element = canvas;
         this.gl = gl;
         if (!gl) {
             throw new Error("Unable to create a GL context");
@@ -549,9 +550,8 @@ export function bestCanvas(canvas, filterClass, lowLatency = true) {
         console.log(`Unable to use ${filterClass.getDisplayConfig().name} with WebGL: ${e}`);
     }
 
-    // A canvas that has handed out a WebGL context can never hand out a 2D one,
-    // so if the failure came from the filter rather than from WebGL itself, the
-    // 2D fallback below would throw and take the emulator with it.
+    // If the failure came from the filter rather than from WebGL itself, WebGL
+    // without it still beats the 2D canvas.
     if (filterClass !== PassthroughFilter) {
         try {
             return fellBackBecause(new GlCanvas(canvas, PassthroughFilter, lowLatency), reason);
@@ -560,5 +560,9 @@ export function bestCanvas(canvas, filterClass, lowLatency = true) {
         }
     }
 
-    return fellBackBecause(new Canvas(canvas, lowLatency), reason);
+    // An element that has handed out a WebGL context never hands out a 2D one, so
+    // the 2D canvas draws on a copy put in its place; the owner takes `element`.
+    const fresh = canvas.cloneNode(false);
+    canvas.replaceWith(fresh);
+    return fellBackBecause(new Canvas(fresh, lowLatency), reason);
 }
