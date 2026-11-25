@@ -6,7 +6,7 @@ const QuotedText = /"[^"]*"|'[^']*'|`[^`]*`|“[^”]*”|‘[^’]*’/g;
 const Addresses = /\b[a-z][a-z0-9+.-]*:\/\/\S+|\b(?:data|blob|file):\S+/gi;
 const PeerBucketTops = [0, 1, 2, 4];
 const LocalNetworkDomains = ["local", "localhost", "lan", "internal", "home.arpa", "ts.net"];
-// The userinfo, query and fragment of a URL, cut from the text as written so the label reads as the user's ref did.
+// A URL's userinfo, query and fragment, cut from its text so the rest keeps the user's spelling.
 const UrlSecrets = /(?<=^[^:]+:\/*)[^/?#]*@|[?#].*$/gs;
 const DottedQuad = /^(\d+)\.(\d+)\.(\d+)\.(\d+)$/;
 // The URL parser writes an IPv4-mapped IPv6 address as two hex groups.

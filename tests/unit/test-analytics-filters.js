@@ -29,6 +29,7 @@ describe("analytics filters", () => {
 
         it.each([
             ["https://user:secret@example.com/game.ssd", "https://example.com/game.ssd"],
+            ["https://a@b:c@example.com/game.ssd", "https://example.com/game.ssd"],
             [
                 "https://bucket.s3.amazonaws.com/game.ssd?X-Amz-Signature=abc&X-Amz-Expires=60",
                 "https://bucket.s3.amazonaws.com/game.ssd",
