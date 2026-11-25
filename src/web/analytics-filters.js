@@ -6,6 +6,8 @@ const QuotedText = /"[^"]*"|'[^']*'|`[^`]*`|“[^”]*”|‘[^’]*’/g;
 const Addresses = /\b[a-z][a-z0-9+.-]*:\/\/\S+|\b(?:data|blob|file):\S+/gi;
 const PeerBucketTops = [0, 1, 2, 4];
 const LocalNetworkDomains = ["local", "localhost", "lan", "internal", "home.arpa", "ts.net"];
+// The userinfo, query and fragment of a URL, cut from the text as written so the label reads as the user's ref did.
+const UrlSecrets = /(?<=^[^:]+:\/*)[^/?#]*@|[?#].*$/gs;
 const DottedQuad = /^(\d+)\.(\d+)\.(\d+)\.(\d+)$/;
 // The URL parser writes an IPv4-mapped IPv6 address as two hex groups.
 const MappedIpv4 = /^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/;
@@ -73,7 +75,7 @@ export function mediaLabel(ref) {
     const url = webAddress(ref);
     const personal = (known.source ? Sources[known.source]?.personal : known.personal) || (url && isOwnHost(url));
     if (personal) return sourceKey(ref);
-    return url ? `${url.protocol}//${url.host}${url.pathname}` : ref;
+    return url ? ref.replace(UrlSecrets, "") : ref;
 }
 
 export const redacted = () => "redacted";

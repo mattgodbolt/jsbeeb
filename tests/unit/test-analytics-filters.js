@@ -34,7 +34,8 @@ describe("analytics filters", () => {
                 "https://bucket.s3.amazonaws.com/game.ssd",
             ],
             ["https://example.com/game.ssd?token=abc#frag", "https://example.com/game.ssd"],
-            ["HTTPS://Example.COM:8443/Game.ssd", "https://example.com:8443/Game.ssd"],
+            ["HTTPS://Example.COM:8443/My Disc.ssd?dl=1", "HTTPS://Example.COM:8443/My Disc.ssd"],
+            ["https://example.com/a@b/game.ssd?x=1", "https://example.com/a@b/game.ssd"],
         ])("names the public URL %s by its host and path", (ref, label) => {
             expect(mediaLabel(ref)).toBe(label);
         });

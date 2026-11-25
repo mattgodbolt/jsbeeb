@@ -51,9 +51,9 @@ describe("analytics", () => {
         it("names each ROM on its own, whichever bank it goes in", () => {
             expect(
                 analyticsLocation(
-                    `${base}?rom=https%3A%2F%2Fexample.com%2Fa.rom&rom=file:mine.rom&rom.7=github:o/r/x.rom&ROM.8=file:b.rom`,
+                    `${base}?rom=https%3A%2F%2Fu:p@example.com%2Fa%20b.rom%3Ftoken%3D1&rom=file:mine.rom&rom.7=github:o/r/x.rom&ROM.8=file:b.rom`,
                 ),
-            ).toBe(`${base}?rom=https://example.com/a.rom&rom=file&rom.7=github:o/r/x.rom&ROM.8=file`);
+            ).toBe(`${base}?rom=https://example.com/a%20b.rom&rom=file&rom.7=github:o/r/x.rom&ROM.8=file`);
         });
 
         it("redacts what the URL would have typed or run", () => {
