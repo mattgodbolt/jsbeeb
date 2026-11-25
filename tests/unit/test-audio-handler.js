@@ -415,16 +415,21 @@ describe("AudioHandler", () => {
             expect(played()).toEqual([ddNoise.sounds.seek06out]);
         });
 
-        it.each(["motoron", "motor"])("without %s, still spins up and plays the stop sound", async (missing) => {
-            const { ddNoise, played } = await initialisedWithout([missing]);
+        it.each(["motoron", "motor"])(
+            "without %s, still loops the motor if it has one and plays the stop sound",
+            async (missing) => {
+                const { ddNoise, played } = await initialisedWithout([missing]);
 
-            ddNoise.spinUp();
-            for (const source of [...ddNoise.playing]) source.onended();
-            await new Promise((resolve) => setTimeout(resolve));
-            ddNoise.spinDown();
+                ddNoise.spinUp();
+                expect(played()).not.toContain(undefined);
+                for (const source of [...ddNoise.playing]) source.onended();
+                await new Promise((resolve) => setTimeout(resolve));
+                expect(played()).toEqual([ddNoise.sounds.motor].filter(Boolean));
+                ddNoise.spinDown();
 
-            expect(played()).toContain(ddNoise.sounds.motorOff);
-        });
+                expect(played()).toContain(ddNoise.sounds.motorOff);
+            },
+        );
     });
 
     describe("without a warning node", () => {
