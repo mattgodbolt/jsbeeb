@@ -452,8 +452,8 @@ describe("phosphor persistence", () => {
 });
 
 describe("falling back to passthrough", () => {
-    // The 2D fallback is unreachable once a WebGL context exists, so a filter
-    // that fails to build has to be replaced on the context we have.
+    // A filter that fails to build is replaced on the WebGL context we have,
+    // which still beats the 2D canvas.
     it.each([
         [
             "bestCanvas",

@@ -1,5 +1,5 @@
-// What jsbeeb tells Google Analytics, at top level, in another site's frame and in a browser below package.json's
-// browserslist (which also sees a message), against the e2e build's dummy measurement id.
+// What jsbeeb tells Google Analytics, at top level, in another site's frame, in a browser whose WebGL fails and in a
+// browser below package.json's browserslist (which also sees a message), against the e2e build's dummy measurement id.
 
 import { createServer } from "node:http";
 
@@ -115,6 +115,12 @@ test("a browser whose WebGL fails to set up starts the machine on a 2D canvas in
             return data.some((value, i) => i % 4 !== 3 && value !== 0);
         });
     await expect.poll(screenHasPicture, { message: "the prompt drawn on the screen in the page" }).toBe(true);
+    const { laidOutWidth, shownWidth } = await page.evaluate(() => {
+        const screen = document.getElementById("screen");
+        return { laidOutWidth: parseFloat(screen.style.width), shownWidth: screen.getBoundingClientRect().width };
+    });
+    expect(shownWidth, "the screen in the page").toBeGreaterThan(0);
+    expect(laidOutWidth, "the layout's width for the screen in the page").toBeCloseTo(shownWidth, 1);
 });
 
 const breakBundle = async (page) => {
