@@ -87,8 +87,7 @@ export class AnalogueInputs {
             Number.isInteger(microphoneChannel) && microphoneChannel >= 0 && microphoneChannel < AdcChannelCount;
         if (microphoneChannelExists) sources[microphoneChannel] = this.microphoneInput;
 
-        // Each channel is set once, as the ADC disposes a source it takes off a channel.
-        sources.forEach((source, ch) => processor.adconverter.setChannelSource(ch, source));
+        processor.adconverter.setChannelSources(sources);
         this.mouseJoystickSource.setVia(mouseJoystickEnabled ? processor.sysvia : null);
 
         if (microphoneChannel !== undefined && !microphoneChannelExists) {

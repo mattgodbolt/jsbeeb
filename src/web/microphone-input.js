@@ -32,9 +32,10 @@ export class MicrophoneInput extends AnalogueSource {
 
     /**
      * Initialise microphone access
-     * @returns {Promise<boolean>} True if initialiation was successful
+     * @returns {Promise<boolean>} True if initialisation was successful, or it was already running
      */
     async initialise() {
+        if (this.microphoneAnalyser) return true;
         console.log("MicrophoneInput: Initialising microphone input");
 
         // Create audio context if needed

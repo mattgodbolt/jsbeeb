@@ -68,11 +68,12 @@ describe("AnalogueInputs", () => {
             expect(channels[3]).toBe(inputs.microphoneInput);
         });
 
-        it("disposes a source only as it leaves a channel", () => {
+        it("keeps the microphone running through every reroute until it is turned off", () => {
             const inputs = make();
             inputs.updateAdcSources(true, 0);
             const disposeMicrophone = vi.spyOn(inputs.microphoneInput, "dispose");
             inputs.updateAdcSources(false, 0);
+            inputs.updateAdcSources(false, 3);
             inputs.updateAdcSources(true, 0);
             expect(disposeMicrophone).not.toHaveBeenCalled();
             expect(channels[0]).toBe(inputs.microphoneInput);
