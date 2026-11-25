@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Scheduler } from "../../src/scheduler.js";
 import { AudioHandler } from "../../src/web/audio-handler.js";
+import { FileBackedXhr } from "../helpers/file-backed-xhr.js";
+import { stubAudioContext } from "../helpers/stub-audio-context.js";
 import { domFromIndexHtml, teardownDom, toasts } from "./helpers.js";
 
 const SuspendedText = "Your browser has suspended audio";
@@ -11,16 +13,12 @@ describe("AudioHandler", () => {
     let contexts;
     let worklets;
 
-    function fakeNode() {
-        return { connect: () => {}, gain: { value: 0 } };
-    }
-
     function fakeContext(hasWorklet, addModule) {
         return {
-            state: "running",
+            ...stubAudioContext(),
             destination: {},
             audioWorklet: hasWorklet ? { addModule } : undefined,
-            createGain: fakeNode,
+            decodeAudioData: async () => ({ duration: 1 }),
             resume: async () => {},
         };
     }
@@ -382,6 +380,30 @@ describe("AudioHandler", () => {
 
             await vi.waitFor(() => expect(toasts()).toEqual([expect.stringContaining("Music 5000 will be silent")]));
             expect(warningShown()).toBe(false);
+        });
+    });
+
+    describe("when a drive sound fails to load", () => {
+        class MissingSeekXhr extends FileBackedXhr {
+            send() {
+                if (this._url.includes("seek06in")) this.onerror();
+                else super.send();
+            }
+        }
+
+        it("still initialises, with that sound silent and the rest playing", async () => {
+            stubAudio();
+            vi.stubGlobal("XMLHttpRequest", MissingSeekXhr);
+            const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+            const handler = makeHandler({ noSeek: false });
+
+            await handler.initialise();
+
+            expect(warn).toHaveBeenCalledExactlyOnceWith(expect.stringContaining("seek06in.wav"));
+            handler.ddNoise.seekStart(10, 6);
+            expect(handler.ddNoise.playing).toEqual([]);
+            handler.ddNoise.seekStart(-10, 6);
+            expect(handler.ddNoise.playing).toHaveLength(1);
         });
     });
 

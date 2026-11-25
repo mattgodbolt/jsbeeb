@@ -64,10 +64,13 @@ export class DdNoise extends SamplePlayer {
                 // Handle race: we may have had spinDown() called on us before the
                 // spinUp() initial sound finished playing.
                 if (this.state === Idle) return;
-                this.play(this.sounds.motor, true).then((source) => {
-                    this.motor = source;
-                    this.state = Spinning;
-                });
+                this.play(this.sounds.motor, true).then(
+                    (source) => {
+                        this.motor = source;
+                        this.state = Spinning;
+                    },
+                    () => {},
+                );
             },
             () => {},
         );
@@ -103,6 +106,7 @@ export class DdNoise extends SamplePlayer {
         const rateMs = nearestRunRate(stepMs);
         const stepSeconds = rateMs / 1000;
         const sound = this.sounds[runName(rateMs, steps > 0)];
+        if (!sound) return;
         const start = now + JoinFadeSeconds;
         const parts = [];
         if (count <= RunSteps) {
