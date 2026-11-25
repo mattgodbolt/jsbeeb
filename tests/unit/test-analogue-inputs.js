@@ -2,7 +2,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AnalogueInputs } from "../../src/web/analogue-inputs.js";
+import { Adc } from "../../src/adc.js";
 import { AmxButtons } from "../../src/amx-mouse.js";
+import { Scheduler } from "../../src/scheduler.js";
 import { Settings } from "../../src/web/settings.js";
 import { domFromIndexHtml, fakeUrlState, teardownDom, toasts } from "./helpers.js";
 
@@ -14,10 +16,11 @@ describe("AnalogueInputs", () => {
         vi.useFakeTimers();
         domFromIndexHtml("cub-monitor");
         document.body.append(Object.assign(document.createElement("div"), { id: "micPermissionStatus" }));
-        channels = {};
+        const adconverter = new Adc({}, new Scheduler());
+        channels = adconverter.channelSources;
         deps = {
             processor: {
-                adconverter: { setChannelSource: vi.fn((ch, source) => (channels[ch] = source)) },
+                adconverter,
                 sysvia: {},
                 touchScreen: { onMouse: vi.fn() },
             },
@@ -39,7 +42,6 @@ describe("AnalogueInputs", () => {
         it("gives every channel to the gamepad by default", () => {
             const inputs = make();
             inputs.updateAdcSources(false, undefined);
-            expect(Object.keys(channels)).toHaveLength(4);
             for (let ch = 0; ch < 4; ch++) expect(channels[ch]).toBe(inputs.gamepadSource);
         });
 
@@ -64,6 +66,20 @@ describe("AnalogueInputs", () => {
             expect(channels[0]).toBe(inputs.microphoneInput);
             inputs.updateAdcSources(false, 3);
             expect(channels[3]).toBe(inputs.microphoneInput);
+        });
+
+        it("keeps the microphone running through every reroute until it is turned off", () => {
+            const inputs = make();
+            inputs.updateAdcSources(true, 0);
+            const disposeMicrophone = vi.spyOn(inputs.microphoneInput, "dispose");
+            inputs.updateAdcSources(false, 0);
+            inputs.updateAdcSources(false, 3);
+            inputs.updateAdcSources(true, 0);
+            expect(disposeMicrophone).not.toHaveBeenCalled();
+            expect(channels[0]).toBe(inputs.microphoneInput);
+            expect(inputs.mouseJoystickSource.isEnabled()).toBe(true);
+            inputs.updateAdcSources(true, undefined);
+            expect(disposeMicrophone).toHaveBeenCalledTimes(1);
         });
 
         it("refuses a channel that does not exist, says so, and clears the setting", () => {
@@ -238,6 +254,52 @@ describe("AnalogueInputs", () => {
             make();
             send("mousedown", { buttons: 1 });
             expect(monitor.requestPointerLock).not.toHaveBeenCalled();
+        });
+    });
+
+    describe("a microphone waiting for access", () => {
+        it("reads as silence on the channel it was given", () => {
+            const inputs = make();
+            inputs.updateAdcSources(false, 2);
+            expect(channels[2].getValue(2)).toBe(0);
+        });
+    });
+
+    describe("a microphone with access", () => {
+        const Silence = 128;
+        let getUserMedia;
+        let stopTrack;
+
+        beforeEach(() => {
+            stopTrack = vi.fn();
+            getUserMedia = vi.fn(async () => ({ getTracks: () => [{ stop: stopTrack }] }));
+            vi.stubGlobal("navigator", { mediaDevices: { getUserMedia } });
+            vi.stubGlobal(
+                "AudioContext",
+                class {
+                    state = "running";
+                    createAnalyser = () => ({
+                        frequencyBinCount: 4,
+                        getByteTimeDomainData: (data) => data.fill(Silence),
+                    });
+                    createMediaStreamSource = () => ({ connect() {}, disconnect() {} });
+                    close = async () => {};
+                },
+            );
+        });
+
+        it("keeps its stream when it moves to another channel, and stops it when turned off", async () => {
+            deps.settings.microphoneChannel = 2;
+            const inputs = make();
+            inputs.updateAdcSources(false, 2);
+            await inputs.setupMicrophone();
+            inputs.updateAdcSources(false, 3);
+            await inputs.setupMicrophone();
+            expect(getUserMedia).toHaveBeenCalledTimes(1);
+            expect(channels[3].getValue(3)).toBe(0);
+            expect(stopTrack).not.toHaveBeenCalled();
+            inputs.updateAdcSources(false, undefined);
+            expect(stopTrack).toHaveBeenCalledTimes(1);
         });
     });
 

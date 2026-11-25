@@ -1,6 +1,8 @@
 import { AnalogueSource } from "../analogue-source.js";
 import { createAudioContext } from "./audio-utils.js";
 
+const SilentLevel = 0;
+
 /**
  * Provides microphone input as an analogue source for the BBC Micro's ADC
  * Used for software like MicroMike that uses the analogue port for sound input
@@ -30,9 +32,10 @@ export class MicrophoneInput extends AnalogueSource {
 
     /**
      * Initialise microphone access
-     * @returns {Promise<boolean>} True if initialiation was successful
+     * @returns {Promise<boolean>} True if initialisation was successful, or it was already running
      */
     async initialise() {
+        if (this.microphoneAnalyser) return true;
         console.log("MicrophoneInput: Initialising microphone input");
 
         // Create audio context if needed
@@ -107,9 +110,8 @@ export class MicrophoneInput extends AnalogueSource {
      * @returns {number} A value between 0 and 0xffff
      */
     getValue(_channel) {
-        if (!this.microphoneAnalyser || !this.microphoneDataArray) {
-            throw new Error("MicrophoneInput: getValue called but analyser not initialised");
-        }
+        // The ADC is routed here as soon as the channel is chosen, before access is granted.
+        if (!this.microphoneAnalyser) return SilentLevel;
 
         // Get time domain data (waveform)
         this.microphoneAnalyser.getByteTimeDomainData(this.microphoneDataArray);
