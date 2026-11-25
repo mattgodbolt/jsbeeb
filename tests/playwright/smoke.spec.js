@@ -261,6 +261,26 @@ const DebugPanels = ["#toolbar-panel", "#disassembly-panel", "#registers-panel",
 const boxesOf = (page, selectors) => Promise.all(selectors.map((selector) => page.locator(selector).boundingBox()));
 const overlap = (a, b) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
 
+test("a browser that refuses the page its storage still starts the machine", async ({ beeb, page }) => {
+    await page.addInitScript(() => {
+        for (const name of ["localStorage", "sessionStorage"]) {
+            Object.defineProperty(window, name, {
+                get() {
+                    throw new DOMException("The operation is insecure.", "SecurityError");
+                },
+            });
+        }
+    });
+    await beeb.open();
+    await beeb.expectScreenText(">");
+    const errorsNoted = await page.evaluate(() =>
+        (window.dataLayer ?? [])
+            .map((call) => Array.from(call))
+            .filter((call) => call[0] === "event" && call[1] === "js_error"),
+    );
+    expect(errorsNoted).toEqual([]);
+});
+
 test("a fresh profile opens no floating panel on load", async ({ beeb, page }) => {
     await beeb.open();
     await beeb.expectScreenText(">");

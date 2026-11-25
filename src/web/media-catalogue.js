@@ -3,6 +3,7 @@ import { Schemas, splitImage } from "../media-resolver.js";
 import { findModel } from "../models.js";
 import { Parameters } from "./parameters.js";
 import { readStored, writeStored } from "./stored-json.js";
+import { localStore } from "./browser-storage.js";
 
 /**
  * One shape for everything the media window can list, whichever source it
@@ -257,7 +258,7 @@ export const describeSessionFile = (key, name, kind, sameName = { order: 1, coun
 });
 
 /** The discs held in the browser's storage, by name. */
-export function browserDiscNames(storage = window.localStorage) {
+export function browserDiscNames(storage = localStore()) {
     const names = [];
     for (let i = 0; i < storage.length; ++i) {
         const key = storage.key(i);

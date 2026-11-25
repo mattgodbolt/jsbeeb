@@ -1,6 +1,7 @@
 import { DiscLayout } from "../disc.js";
 import { blankImage, discFor, guessDiscTypeFromName } from "../fdc.js";
 import { stringToUint8Array, uint8ArrayToString } from "../binary.js";
+import { localStore } from "./browser-storage.js";
 
 /**
  * Create or open a disc held in the browser's local storage.
@@ -13,7 +14,7 @@ import { stringToUint8Array, uint8ArrayToString } from "../binary.js";
 export function localDisc(name, layout = DiscLayout.auto, onSaveError = () => {}) {
     const discName = "disc_" + name;
     let data;
-    const dataString = window.localStorage[discName];
+    const dataString = localStore()[discName];
     if (!dataString) {
         data = blankImage(guessDiscTypeFromName(name), name);
     } else {
