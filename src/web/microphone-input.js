@@ -110,7 +110,7 @@ export class MicrophoneInput extends AnalogueSource {
      */
     getValue(_channel) {
         // The ADC is routed here as soon as the channel is chosen, before access is granted.
-        if (!this.microphoneAnalyser || !this.microphoneDataArray) return SilentLevel;
+        if (!this.microphoneAnalyser) return SilentLevel;
 
         // Get time domain data (waveform)
         this.microphoneAnalyser.getByteTimeDomainData(this.microphoneDataArray);

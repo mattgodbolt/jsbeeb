@@ -81,25 +81,17 @@ export class AnalogueInputs {
     /** Helper to manage ADC source configuration */
     updateAdcSources(mouseJoystickEnabled, microphoneChannel) {
         const { processor } = this;
-        // Default all channels to the gamepad source.
-        for (let ch = 0; ch < AdcChannelCount; ch++) {
-            processor.adconverter.setChannelSource(ch, this.gamepadSource);
-        }
+        const sources = Array(AdcChannelCount).fill(this.gamepadSource);
+        if (mouseJoystickEnabled) sources[0] = sources[1] = this.mouseJoystickSource;
+        const microphoneChannelExists =
+            Number.isInteger(microphoneChannel) && microphoneChannel >= 0 && microphoneChannel < AdcChannelCount;
+        if (microphoneChannelExists) sources[microphoneChannel] = this.microphoneInput;
 
-        // Apply mouse joystick if enabled (takes priority on channels 0 & 1)
-        if (mouseJoystickEnabled) {
-            processor.adconverter.setChannelSource(0, this.mouseJoystickSource);
-            processor.adconverter.setChannelSource(1, this.mouseJoystickSource);
-            this.mouseJoystickSource.setVia(processor.sysvia);
-        } else {
-            this.mouseJoystickSource.setVia(null);
-        }
+        // Each channel is set once, as the ADC disposes a source it takes off a channel.
+        sources.forEach((source, ch) => processor.adconverter.setChannelSource(ch, source));
+        this.mouseJoystickSource.setVia(mouseJoystickEnabled ? processor.sysvia : null);
 
-        // Apply microphone if configured (can override any channel)
-        if (microphoneChannel === undefined) return;
-        if (Number.isInteger(microphoneChannel) && microphoneChannel >= 0 && microphoneChannel < AdcChannelCount) {
-            processor.adconverter.setChannelSource(microphoneChannel, this.microphoneInput);
-        } else {
+        if (microphoneChannel !== undefined && !microphoneChannelExists) {
             toast(
                 `There is no analogue channel ${microphoneChannel}; channels are 0 to 3. ` +
                     `The microphone channel has been turned off.`,

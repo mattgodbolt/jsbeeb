@@ -2,7 +2,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AnalogueInputs } from "../../src/web/analogue-inputs.js";
+import { Adc } from "../../src/adc.js";
 import { AmxButtons } from "../../src/amx-mouse.js";
+import { Scheduler } from "../../src/scheduler.js";
 import { Settings } from "../../src/web/settings.js";
 import { domFromIndexHtml, fakeUrlState, teardownDom, toasts } from "./helpers.js";
 
@@ -15,9 +17,15 @@ describe("AnalogueInputs", () => {
         domFromIndexHtml("cub-monitor");
         document.body.append(Object.assign(document.createElement("div"), { id: "micPermissionStatus" }));
         channels = {};
+        const adconverter = new Adc({}, new Scheduler());
+        const setChannelSource = adconverter.setChannelSource.bind(adconverter);
+        adconverter.setChannelSource = (ch, source) => {
+            channels[ch] = source;
+            setChannelSource(ch, source);
+        };
         deps = {
             processor: {
-                adconverter: { setChannelSource: vi.fn((ch, source) => (channels[ch] = source)) },
+                adconverter,
                 sysvia: {},
                 touchScreen: { onMouse: vi.fn() },
             },
@@ -64,6 +72,19 @@ describe("AnalogueInputs", () => {
             expect(channels[0]).toBe(inputs.microphoneInput);
             inputs.updateAdcSources(false, 3);
             expect(channels[3]).toBe(inputs.microphoneInput);
+        });
+
+        it("disposes only the sources a change takes off every channel", () => {
+            const inputs = make();
+            inputs.updateAdcSources(true, 0);
+            const disposeMicrophone = vi.spyOn(inputs.microphoneInput, "dispose");
+            inputs.updateAdcSources(false, 0);
+            inputs.updateAdcSources(true, 0);
+            expect(disposeMicrophone).not.toHaveBeenCalled();
+            expect(channels[0]).toBe(inputs.microphoneInput);
+            expect(inputs.mouseJoystickSource.via).toBe(deps.processor.sysvia);
+            inputs.updateAdcSources(true, undefined);
+            expect(disposeMicrophone).toHaveBeenCalledTimes(1);
         });
 
         it("refuses a channel that does not exist, says so, and clears the setting", () => {
