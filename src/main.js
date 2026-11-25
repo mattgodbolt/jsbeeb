@@ -184,9 +184,8 @@ if (cpuMultiplier !== 1) console.log(`CPU multiplier set to ${cpuMultiplier}`);
 const cpuSpeed = model.cyclesPerSecond;
 const clocksPerSecond = (cpuMultiplier * cpuSpeed) | 0;
 
-const screenCanvas = document.getElementById("screen");
 const display = new Display({
-    screenCanvas,
+    screenCanvas: document.getElementById("screen"),
     model,
     mode: displayMode,
     tryGl,
@@ -196,7 +195,7 @@ const display = new Display({
     onMissingVideoNula: answerMissingVideoNula({ inSession: () => !!loop.lockstep, settings }),
     frameSkip: parsedQuery.frameSkip ?? 0,
 });
-const video = display.video;
+const { screenCanvas, video } = display;
 
 const audioStatsEl = document.getElementById("audio-stats");
 if (audioStatsEl) audioStatsEl.hidden = !parsedQuery.audioDebug;

@@ -9,7 +9,8 @@ import { domFromIndexHtml, fakeAnimationFrames, teardownDom, toasts } from "./he
 
 const FbWidth = 1024;
 
-const fakeCanvasFor = (filterClass, overrides = {}) => ({
+const fakeCanvasFor = (element, filterClass, overrides = {}) => ({
+    element,
     fb32: new Uint32Array(FbWidth * 625),
     paint: vi.fn(),
     setPersistence: vi.fn(),
@@ -36,7 +37,7 @@ describe("Display", () => {
             model: { isMaster: false, isAtom: false },
             mode: "rgb",
             makeCanvas: (canvasEl, filterClass) =>
-                (fakeCanvas = fakeCanvasFor(filterClass, {
+                (fakeCanvas = fakeCanvasFor(canvasEl, filterClass, {
                     setFilter: vi.fn((newFilterClass) => (fakeCanvas.filterClass = newFilterClass)),
                 })),
             ...options,
@@ -115,7 +116,7 @@ describe("Display", () => {
         const display = make({
             mode: "pal",
             makeCanvas: (canvasEl, filterClass) =>
-                (fakeCanvas = fakeCanvasFor(PassthroughFilter, {
+                (fakeCanvas = fakeCanvasFor(canvasEl, PassthroughFilter, {
                     fallbackReason: `${filterClass.getDisplayConfig().name} declined`,
                 })),
         });
@@ -320,6 +321,7 @@ describe("Display", () => {
         make({
             makeCanvas: (canvasEl, filterClass) =>
                 (fakeCanvas = fakeCanvasFor(
+                    canvasEl,
                     class Other {
                         static getDisplayConfig() {
                             return filterClass.getDisplayConfig();

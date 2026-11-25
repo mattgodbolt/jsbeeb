@@ -49,6 +49,7 @@ export class Display {
         // creating the context, which fixes its initial viewport.
         this.sizeCanvasFor(this.filterClass);
         this.canvas = makeCanvas(screenCanvas, this.filterClass);
+        this.screenCanvas = this.canvas.element;
         this.reportAnyFallback(this.filterClass);
         this.filterClass = this.canvas.filterClass;
 

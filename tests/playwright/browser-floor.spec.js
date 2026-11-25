@@ -94,6 +94,29 @@ test("a browser below the floor is told so, and the emulator still starts", asyn
     await beeb.expectScreenText(">");
 });
 
+test("a browser whose WebGL fails to set up starts the machine on a 2D canvas in the screen's place, and reports that renderer", async ({
+    beeb,
+    page,
+}) => {
+    // As Safari has been seen to: a context, then no shader from it.
+    await page.addInitScript(() => (WebGLRenderingContext.prototype.createShader = () => null));
+    await beeb.open();
+    await beeb.expectScreenText(">");
+    await expect
+        .poll(
+            async () => (await analyticsCalls(page, "event")).find((call) => call[1] === "machine_start")?.[2].renderer,
+        )
+        .toBe("canvas2d");
+    expect(await unsupportedBrowserEvents(page)).toEqual([]);
+    const screenHasPicture = () =>
+        page.evaluate(() => {
+            const screen = document.getElementById("screen");
+            const { data } = screen.getContext("2d").getImageData(0, 0, screen.width, screen.height);
+            return data.some((value, i) => i % 4 !== 3 && value !== 0);
+        });
+    await expect.poll(screenHasPicture, { message: "the prompt drawn on the screen in the page" }).toBe(true);
+});
+
 const breakBundle = async (page) => {
     const html = await (await page.request.get("./")).text();
     const bundle = html.match(ModuleScriptSrc)[1].replace(/^\.\//, "/");
