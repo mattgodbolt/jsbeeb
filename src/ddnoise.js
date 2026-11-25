@@ -78,12 +78,11 @@ export class DdNoise extends SamplePlayer {
 
     spinDown() {
         if (this.state === Idle) return;
+        const wasSpinning = this.state === Spinning;
         this.state = Idle;
-        if (this.motor) {
-            this.motor.stop();
-            this.motor = null;
-            this.oneShot(this.sounds.motorOff);
-        }
+        this.motor?.stop();
+        this.motor = null;
+        if (wasSpinning) this.oneShot(this.sounds.motorOff);
     }
 
     /**

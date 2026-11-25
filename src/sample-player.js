@@ -96,10 +96,12 @@ export class SamplePlayer {
 
     /**
      * Play a buffer, optionally looping.  Returns a Promise that resolves
-     * with the source node (if looping) or when playback ends (if not).
+     * with the source node (if looping) or when playback ends (if not); a sound that did not
+     * load resolves at once, with no source.
      */
     play(sound, loop) {
-        if (!sound || this.context.state !== "running") return Promise.reject();
+        if (this.context.state !== "running") return Promise.reject();
+        if (!sound) return Promise.resolve(null);
         return new Promise((resolve) => {
             const source = this.context.createBufferSource();
             source.loop = !!loop;

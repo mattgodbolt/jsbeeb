@@ -384,26 +384,36 @@ describe("AudioHandler", () => {
     });
 
     describe("when a drive sound fails to load", () => {
-        class MissingSeekXhr extends FileBackedXhr {
+        const Missing = ["seek06in", "stepin", "motoron"];
+
+        class MissingSoundsXhr extends FileBackedXhr {
             send() {
-                if (this._url.includes("seek06in")) this.onerror();
+                if (Missing.some((name) => this._url.includes(`/${name}.wav`))) this.onerror();
                 else super.send();
             }
         }
 
-        it("still initialises, with that sound silent and the rest playing", async () => {
+        it("still initialises, with those sounds silent and the rest playing", async () => {
             stubAudio();
-            vi.stubGlobal("XMLHttpRequest", MissingSeekXhr);
+            vi.stubGlobal("XMLHttpRequest", MissingSoundsXhr);
             const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
             const handler = makeHandler({ noSeek: false });
+            const { ddNoise } = handler;
+            const played = () => ddNoise.playing.map((source) => source.buffer);
 
             await handler.initialise();
 
-            expect(warn).toHaveBeenCalledExactlyOnceWith(expect.stringContaining("seek06in.wav"));
-            handler.ddNoise.seekStart(10, 6);
-            expect(handler.ddNoise.playing).toEqual([]);
-            handler.ddNoise.seekStart(-10, 6);
-            expect(handler.ddNoise.playing).toHaveLength(1);
+            expect(warn).toHaveBeenCalledOnce();
+            for (const name of Missing) expect(warn.mock.calls[0][0]).toContain(`${name}.wav`);
+            ddNoise.seekStart(10, 6);
+            ddNoise.seekStart(1, 6);
+            expect(played()).toEqual([]);
+            ddNoise.seekStart(-10, 6);
+            expect(played()).toEqual([ddNoise.sounds.seek06out]);
+            ddNoise.spinUp();
+            await vi.waitFor(() => expect(played()).toContain(ddNoise.sounds.motor));
+            ddNoise.spinDown();
+            expect(played()).toContain(ddNoise.sounds.motorOff);
         });
     });
 
