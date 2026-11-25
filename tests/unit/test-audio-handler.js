@@ -18,9 +18,9 @@ describe("AudioHandler", () => {
             ...stubAudioContext(),
             destination: {},
             audioWorklet: hasWorklet ? { addModule } : undefined,
-            // Safari rejects a failed decode with null.
             decodeAudioData: async (data) => {
-                if (!/^(RIFF|ID3)/.test(new TextDecoder().decode(data.slice(0, 4)))) throw null;
+                if (!/^(RIFF|ID3)/.test(new TextDecoder().decode(data.slice(0, 4))))
+                    throw new DOMException("Decoding failed", "EncodingError");
                 return { duration: 1 };
             },
             resume: async () => {},
@@ -417,7 +417,7 @@ describe("AudioHandler", () => {
 
             expect(warn).toHaveBeenCalledOnce();
             expect(warn.mock.calls[0][0]).toContain("seek06in.wav");
-            expect(warn.mock.calls[0][0]).toContain("stepin.wav (null)");
+            expect(warn.mock.calls[0][0]).toContain("stepin.wav (Decoding failed)");
             ddNoise.seekStart(10, 6);
             ddNoise.seekStart(1, 6);
             expect(played()).toEqual([]);
