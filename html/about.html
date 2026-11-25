@@ -44,12 +44,16 @@
             bucket. What is sent:
             <ul>
               <li>
-                the page's address, with anything of your own taken out: a disc from your Google Drive, this browser or
-                your computer is named only by where it came from, and a shared session's room and names are removed;
+                the page's address, with anything of your own taken out: a disc from your Google Drive, this browser,
+                your computer or your own network, or behind a share link, is named only by where it came from; what the
+                address would type or run, and a shared session's room and names, are removed; and anything else in it
+                that jsbeeb doesn't use is dropped;
               </li>
+              <li>whether jsbeeb is in a browser tab or installed as an app, and its being installed;</li>
               <li>
                 each disc or tape loaded: where from, how it was picked, and whether it loaded or why not in general
-                terms. Public discs are named; your own are not;
+                terms, and when the machine is switched to suit a disc. Public discs are named; your own, including any
+                from your own machine or network, are not;
               </li>
               <li>
                 how the emulator started: the machine model, keyboard layout, whether it is embedded in another page,
@@ -60,12 +64,13 @@
                 errors in jsbeeb itself: the start of the message, with quoted text and addresses removed, and where in
                 jsbeeb's code it happened;
               </li>
-              <li>shared sessions being hosted, joined, failing and ending, and roughly how many took part;</li>
-              <li>pressing Break, and a few of jsbeeb's shortcut keys.</li>
+              <li>that your browser is too old for jsbeeb, or that jsbeeb failed to start in it;</li>
+              <li>shared sessions being hosted, joined, failing and ending, and roughly how many took part.</li>
             </ul>
             Not sent: what you type into the emulator, the contents of any disc or tape, or the names of your own files.
-            Google Analytics also records what it records on any site, such as your browser, device type and rough
-            location.
+            Nothing at all is sent from a browser driven by automation. When jsbeeb is embedded in another site, it is
+            counted with a cookie kept separate for each site that embeds it. Google Analytics also records what it
+            records on any site, such as your browser, device type and rough location.
           </li>
           <li>
             No personal information is kept. Logging in to Google Drive stores only what is needed to reach your own

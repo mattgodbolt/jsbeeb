@@ -73,14 +73,15 @@ describe("browserFloorPlugin", () => {
     });
 });
 
-/** The built page in a browser that sends `userAgent`, with gtag only with `ga`. */
-async function open({ userAgent = CurrentChrome, ga = true } = {}) {
+/** The built page in a browser that sends `userAgent`, with gtag only with `ga`, driven by automation with `webdriver`. */
+async function open({ userAgent = CurrentChrome, ga = true, webdriver = false } = {}) {
     const { window } = new JSDOM(pages[ga ? "withGa" : "withoutGa"], {
         url: PageUrl,
         referrer: "https://example.com/list?mine=1",
         runScripts: "dangerously",
         beforeParse(window) {
             Object.defineProperty(window.navigator, "userAgent", { value: userAgent });
+            Object.defineProperty(window.navigator, "webdriver", { value: webdriver });
             if (ga) {
                 window.dataLayer = [];
                 window.gtag = (...args) => window.dataLayer.push(args);
@@ -144,6 +145,12 @@ describe("the browser floor check", () => {
             const window = await open({ userAgent: OldChrome, ga: false });
             expect(messageOf(window).hidden).toBe(false);
             expect(window.dataLayer).toBeUndefined();
+        });
+
+        it("sends nothing from an automated browser", async () => {
+            const window = await open({ userAgent: OldChrome, webdriver: true });
+            expect(messageOf(window).hidden).toBe(false);
+            expect(window.dataLayer).toEqual([]);
         });
 
         it("is closed by its button", async () => {

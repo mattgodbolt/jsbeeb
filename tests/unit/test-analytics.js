@@ -82,9 +82,21 @@ describe("analytics", () => {
             expect(analyticsLocation(href)).toBe(href);
         });
 
-        it("leaves a parameter the page does not know as it is", () => {
-            const href = `${base}?utm_source=somewhere&constructor=gd:1AbC/Mine.ssd`;
-            expect(analyticsLocation(href)).toBe(href);
+        it.each([
+            ["an unknown key", "fbclid=IwAR0abc&v=3"],
+            ["a misspelling", "autoType=my%20secret"],
+            ["an HTML-escaped key", "amp;loadBasic=http://192.168.1.2/mine.bas"],
+            ["an inherited property's name", "constructor=gd:1AbC/Mine.ssd"],
+        ])("drops %s", (_, query) => {
+            expect(analyticsLocation(`${base}?model=B&${query}&utm_source=somewhere`)).toBe(
+                `${base}?model=B&utm_source=somewhere`,
+            );
+        });
+
+        it("names a program from the user's own network only by its source", () => {
+            expect(analyticsLocation(`${base}?loadBasic=http://localhost:8000/mine.bas`)).toBe(
+                `${base}?loadBasic=http`,
+            );
         });
 
         it("keeps no parameters at all from a URL whose parameters cannot be decoded", () => {
@@ -164,6 +176,19 @@ describe("analytics", () => {
                 expect(gtag).not.toHaveBeenCalled();
             });
 
+            it("sends nothing from an automated browser", async () => {
+                const { configureAnalytics, noteLocation, note } = await loadWithMeasurementId(measurementId);
+                Object.defineProperty(window.navigator, "webdriver", { value: true, configurable: true });
+                try {
+                    configureAnalytics(new EventTarget());
+                    noteLocation();
+                    note("event", { type: "type" });
+                } finally {
+                    delete window.navigator.webdriver;
+                }
+                expect(gtag).not.toHaveBeenCalled();
+            });
+
             it("configures the page_view with the location and referrer analyticsLocation gives", async () => {
                 const { configureAnalytics } = await loadWithMeasurementId(measurementId);
                 window.history.replaceState(null, "", "/?disc1=local:Mine&model=B");
@@ -175,7 +200,7 @@ describe("analytics", () => {
                 });
             });
 
-            it.each(["standalone", "window-controls-overlay", "minimal-ui", "fullscreen"])(
+            it.each(["standalone", "window-controls-overlay", "minimal-ui"])(
                 "tells the page_view the page is an installed app in %s display mode",
                 async (mode) => {
                     const { configureAnalytics } = await loadWithMeasurementId(measurementId);
@@ -188,6 +213,17 @@ describe("analytics", () => {
                     );
                 },
             );
+
+            it("tells the page_view a fullscreen page is in a browser, as a tab in fullscreen matches too", async () => {
+                const { configureAnalytics } = await loadWithMeasurementId(measurementId);
+                showAs("fullscreen");
+                configureAnalytics(new EventTarget());
+                expect(gtag).toHaveBeenCalledWith(
+                    "config",
+                    measurementId,
+                    expect.objectContaining({ display_mode: "browser" }),
+                );
+            });
 
             it("tells the page_view about a home screen app on iOS, which has no display-mode query", async () => {
                 const { configureAnalytics } = await loadWithMeasurementId(measurementId);
@@ -223,14 +259,16 @@ describe("analytics", () => {
                 });
             });
 
-            it("moves the location each time the page pushes its URL", async () => {
+            it("moves the location once, without a page_view, each time the page pushes its URL", async () => {
                 const { UrlState } = await loadWithMeasurementId(measurementId);
                 new UrlState(window.location, window.history).set({ disc1: "local:Mine" });
-                expect(gtag).toHaveBeenLastCalledWith(
-                    "config",
-                    measurementId,
-                    expect.objectContaining({ page_location: `${origin()}/?disc1=browser` }),
-                );
+                expect(gtag.mock.calls).toEqual([
+                    [
+                        "config",
+                        measurementId,
+                        expect.objectContaining({ page_location: `${origin()}/?disc1=browser`, send_page_view: false }),
+                    ],
+                ]);
             });
 
             it("asks for a partitioned SameSite=None cookie in both configs when framed, and only then", async () => {

@@ -16,6 +16,11 @@ describe("analytics filters", () => {
             "https://example.com/game.ssd",
             "http://example.com/game.ssd",
             "unknown:thing.ssd",
+            "http://8.8.8.8/game.ssd",
+            "http://172.32.0.1/game.ssd",
+            "http://[2001:db8::1]/game.ssd",
+            "https://local.example.com/game.ssd",
+            "https://notdropbox.com/game.ssd",
         ])("keeps %s whole", (ref) => {
             expect(mediaLabel(ref)).toBe(ref);
         });
@@ -28,6 +33,29 @@ describe("analytics filters", () => {
             ["data:application/binary;base64,AAAA", "data"],
             ["b64data:AAAA", "b64data"],
             ["file:///home/someone/mine.ssd", "file"],
+            ["http://localhost:8000/mine.ssd", "http"],
+            ["http://nas/mine.ssd", "http"],
+            ["http://127.0.0.1/mine.ssd", "http"],
+            ["http://0x7f.1/mine.ssd", "http"],
+            ["http://0.0.0.0/mine.ssd", "http"],
+            ["http://10.1.2.3/mine.ssd", "http"],
+            ["http://172.16.0.1/mine.ssd", "http"],
+            ["http://172.31.255.1/mine.ssd", "http"],
+            ["http://192.168.1.20/mine.ssd", "http"],
+            ["http://169.254.0.5/mine.ssd", "http"],
+            ["http://[::1]/mine.ssd", "http"],
+            ["http://[::ffff:192.168.1.2]/mine.ssd", "http"],
+            ["http://[fd12:3456::1]/mine.ssd", "http"],
+            ["http://[fe80::1]/mine.ssd", "http"],
+            ["http://beeb.local/mine.ssd", "http"],
+            ["http://beeb.local./mine.ssd", "http"],
+            ["http://dev.localhost/mine.ssd", "http"],
+            ["http://router.home.arpa/mine.ssd", "http"],
+            ["https://dl.dropboxusercontent.com/s/abc/mine.ssd", "https"],
+            ["https://www.dropbox.com/s/abc/mine.ssd?dl=1", "https"],
+            ["https://drive.google.com/uc?export=download&id=1AbC", "https"],
+            ["https://drive.usercontent.google.com/download?id=1AbC", "https"],
+            ["https://onedrive.live.com/download?cid=1", "https"],
         ])("names %s only by its source", (ref, label) => {
             expect(mediaLabel(ref)).toBe(label);
         });
