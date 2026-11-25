@@ -16,13 +16,8 @@ describe("AnalogueInputs", () => {
         vi.useFakeTimers();
         domFromIndexHtml("cub-monitor");
         document.body.append(Object.assign(document.createElement("div"), { id: "micPermissionStatus" }));
-        channels = {};
         const adconverter = new Adc({}, new Scheduler());
-        const setChannelSource = adconverter.setChannelSource.bind(adconverter);
-        adconverter.setChannelSource = (ch, source) => {
-            channels[ch] = source;
-            setChannelSource(ch, source);
-        };
+        channels = adconverter.channelSources;
         deps = {
             processor: {
                 adconverter,
@@ -47,7 +42,6 @@ describe("AnalogueInputs", () => {
         it("gives every channel to the gamepad by default", () => {
             const inputs = make();
             inputs.updateAdcSources(false, undefined);
-            expect(Object.keys(channels)).toHaveLength(4);
             for (let ch = 0; ch < 4; ch++) expect(channels[ch]).toBe(inputs.gamepadSource);
         });
 
@@ -74,7 +68,7 @@ describe("AnalogueInputs", () => {
             expect(channels[3]).toBe(inputs.microphoneInput);
         });
 
-        it("disposes only the sources a change takes off every channel", () => {
+        it("disposes a source only as it leaves a channel", () => {
             const inputs = make();
             inputs.updateAdcSources(true, 0);
             const disposeMicrophone = vi.spyOn(inputs.microphoneInput, "dispose");
@@ -82,7 +76,7 @@ describe("AnalogueInputs", () => {
             inputs.updateAdcSources(true, 0);
             expect(disposeMicrophone).not.toHaveBeenCalled();
             expect(channels[0]).toBe(inputs.microphoneInput);
-            expect(inputs.mouseJoystickSource.via).toBe(deps.processor.sysvia);
+            expect(inputs.mouseJoystickSource.isEnabled()).toBe(true);
             inputs.updateAdcSources(true, undefined);
             expect(disposeMicrophone).toHaveBeenCalledTimes(1);
         });
