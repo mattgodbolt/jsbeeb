@@ -67,7 +67,7 @@ Snapshots can be imported from other emulators. The `importedFrom` field in the 
 | `"b-em"`       | B-em snapshot (`.snp` file, v1 or v3)            |
 | `"beebem-uef"` | BeebEm UEF save state (`.uef` with 0x046C chunk) |
 
-Imported snapshots use the same `jsbeeb-snapshot` format (version 3) and do not include FDC, disc, touchscreen or AMX mouse state (`state.fdc`, `state.touchScreen` and `state.amxMouse` will be absent).
+Imported snapshots use the same `jsbeeb-snapshot` format (version 3) and do not include FDC, disc, touchscreen, AMX mouse or DRAM refresh state (`state.fdc`, `state.touchScreen`, `state.amxMouse` and `state.dram` will be absent).
 
 B-em snapshots include the full ROM contents in the `roms` field (256KB, all 16 banks). BeebEm UEF snapshots include only the sideways RAM banks they saved, in `swram` and `swramBankMask`.
 
@@ -156,6 +156,23 @@ A state restored with `stoppedAtBreakpoint` set is stopped where it was saved: t
 | `epoch` | number | Current scheduler epoch (cycle count) |
 
 Scheduled tasks are not saved directly. Each component saves its task timing as an offset relative to `epoch` and re-registers its tasks on restore.
+
+### DRAM refresh (`state.dram`)
+
+Absent on the Atom. Which DRAM rows the video and the CPU have refreshed, and when, so that rows nothing refreshes decay as they would have. Times are scheduler epochs. A row is a CPU address's low 7 bits on a B and low 8 bits on a Master.
+
+| Field             | Type         | Description                                                                                                                 |
+| ----------------- | ------------ | --------------------------------------------------------------------------------------------------------------------------- |
+| `windowStart`     | number       | Epoch the current refresh window began                                                                                      |
+| `windows`         | number       | Refresh windows ended so far; the window after the end of every seventh, if that one left rows unrefreshed, samples the CPU |
+| `lastCoveredAt`   | number       | Epoch the last window that the video alone refreshed every row in ended                                                     |
+| `lastRefreshedAt` | Float64Array | Per row, the epoch of the last uncovered window that refreshed or decayed it; a covered window moves only `lastCoveredAt`   |
+| `covered`         | boolean      | The video has refreshed every row in the current window                                                                     |
+| `videoRows`       | Int32Array   | Bitmap of the rows the video has refreshed in the current window                                                            |
+| `cpuRows`         | Uint8Array   | Per row, 1 if the CPU has touched it in the current window while sampled                                                    |
+| `cpuSampled`      | boolean      | The CPU's memory accesses are sampled in the current window                                                                 |
+
+Snapshots written before DRAM refresh was emulated lack it, and absent means every row was refreshed at the moment of restore, so it needed no format version bump.
 
 ### VIA (`state.sysvia`, `state.uservia`)
 

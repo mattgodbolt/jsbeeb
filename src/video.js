@@ -573,6 +573,8 @@ export class Video {
         this.rightBorder = 3 * 16;
 
         this.paint_ext = paint_ext_param;
+        /** @type {import("./dram-refresh.js").DramRefresh | null} */
+        this.dramRefresh = null;
 
         this.debugPrevScreen = null;
 
@@ -755,6 +757,7 @@ export class Video {
     reset(cpu, via, hard) {
         this.renderPending();
         this.cpu = cpu;
+        this.dramRefresh = cpu?.dramRefresh ?? null;
         this.sysvia = via;
         if (via) via.cb2changecallback = this.cb2changed.bind(this);
         if (hard) this.ula.powerOn();
@@ -785,6 +788,7 @@ export class Video {
 
     flyback() {
         this.fieldCount++;
+        this.dramRefresh?.endOfField();
         this.renderPending();
         const painting = this.bitmapY >= MinPaintedFrameRows && this.dispEnabled & FRAMESKIPENABLE;
         if (painting) this.paint();
@@ -1175,6 +1179,19 @@ export class Video {
         // - Vertical adjust.
         // - Last scanline of vertical adjust (dummy raster pending).
         // - Dummy raster. (This is for interlace timing.)
+        const dram = this.dramRefresh;
+        if (dram !== null && !dram.covered) {
+            const chars = this.regs[0] + 1;
+            const firstMa = (this.addr - chars) & 0x3fff;
+            dram.refreshLine(
+                firstMa,
+                chars,
+                this.externalRowAddress(),
+                !!(firstMa & Ma13),
+                this.halfClock,
+                this.oddClock,
+            );
+        }
         this.firstScanline = false;
 
         if (this.scanlineCounter === this.regs[11]) this.cursorOff = true;
