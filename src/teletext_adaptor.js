@@ -176,7 +176,7 @@ export class TeletextAdaptor extends EventTarget {
 
             case 0x03:
                 this.teletextStatus &= ~0xd0; // Clear INT, DOR, and FSYN latches
-                this.cpu.interrupt &= ~IrqSource.teletext; // Clear interrupt
+                this.cpu.interrupt &= ~IrqSource.teletext;
                 break;
         }
     }

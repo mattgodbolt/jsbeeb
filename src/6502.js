@@ -96,7 +96,7 @@ export function packSidewaysRam(banks, into) {
  */
 export const NoReplayHooks = Object.freeze({ instruction: null, read: null, write: null, interrupt: null });
 
-/** One bit per device that can drive the IRQ line; the CPU takes the OR of them all. */
+/** One bit per source that can drive the IRQ line; the CPU takes the OR of them all. */
 export const IrqSource = Object.freeze({
     sysVia: 0x01,
     userVia: 0x02,
