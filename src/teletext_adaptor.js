@@ -1,7 +1,7 @@
+import { IrqSource } from "./6502.js";
 import { loadData } from "./loader.js";
 
 // Code ported from Beebem (C to .js) by Jason Robson
-const TELETEXT_IRQ = 5;
 const TELETEXT_FRAME_SIZE = 860;
 const TELETEXT_UPDATE_FREQ = 50000;
 
@@ -58,7 +58,7 @@ export class TeletextAdaptor extends EventTarget {
         this.pollCount = 0;
         this.frameBuffer = new Array(16).fill(0).map(() => new Array(64).fill(0));
         // Only a register access clears our IRQ, so an interrupt latched before the reset would hang the machine.
-        this.cpu.interrupt &= ~(1 << TELETEXT_IRQ);
+        this.cpu.interrupt &= ~IrqSource.teletext;
     }
 
     reset(hard) {
@@ -94,9 +94,9 @@ export class TeletextAdaptor extends EventTarget {
 
     updateIrq() {
         if (this.teletextInts && this.teletextStatus & 0x80) {
-            this.cpu.interrupt |= 1 << TELETEXT_IRQ;
+            this.cpu.interrupt |= IrqSource.teletext;
         } else {
-            this.cpu.interrupt &= ~(1 << TELETEXT_IRQ);
+            this.cpu.interrupt &= ~IrqSource.teletext;
         }
     }
 
@@ -145,7 +145,7 @@ export class TeletextAdaptor extends EventTarget {
                 break;
             case 0x03:
                 this.teletextStatus &= ~0xd0; // Clear INT, DOR, and FSYN latches
-                this.cpu.interrupt &= ~(1 << TELETEXT_IRQ);
+                this.cpu.interrupt &= ~IrqSource.teletext;
                 break;
         }
 
@@ -176,7 +176,7 @@ export class TeletextAdaptor extends EventTarget {
 
             case 0x03:
                 this.teletextStatus &= ~0xd0; // Clear INT, DOR, and FSYN latches
-                this.cpu.interrupt &= ~(1 << TELETEXT_IRQ); // Clear interrupt
+                this.cpu.interrupt &= ~IrqSource.teletext;
                 break;
         }
     }
@@ -227,7 +227,7 @@ export class TeletextAdaptor extends EventTarget {
         this.colPtr = 0x00;
 
         if (this.teletextInts) {
-            this.cpu.interrupt |= 1 << TELETEXT_IRQ;
+            this.cpu.interrupt |= IrqSource.teletext;
         }
     }
 }

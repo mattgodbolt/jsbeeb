@@ -40,7 +40,6 @@ export const RamStat = 1;
 export const RomStat = 2;
 const RomselAndy = 0x80;
 const AccconIrr = 0x80;
-const IrrIrqSource = 0x10;
 const AndyStart = 0x8000;
 const AndyEnd = 0x9000;
 const RomOffset = BaseRamBytes;
@@ -97,6 +96,16 @@ export function packSidewaysRam(banks, into) {
  * `write(address, value)` and `interrupt(taken, returnsTo)`, each called as the CPU's own debug hooks are, or null.
  */
 export const NoReplayHooks = Object.freeze({ instruction: null, read: null, write: null, interrupt: null });
+
+/** One bit per source that can drive the IRQ line; the CPU takes the OR of them all. */
+export const IrqSource = Object.freeze({
+    sysVia: 0x01,
+    userVia: 0x02,
+    acia: 0x04,
+    tube: 0x08,
+    irr: 0x10,
+    teletext: 0x20,
+});
 
 /** One bit per device that can drive the NMI line; the CPU takes the OR of them all. */
 export const NmiSource = Object.freeze({
@@ -1024,8 +1033,8 @@ export class Cpu6502 extends Base6502 {
 
     writeAcccon(b) {
         this.acccon = b;
-        if (b & AccconIrr) this.interrupt |= IrrIrqSource;
-        else this.interrupt &= ~IrrIrqSource;
+        if (b & AccconIrr) this.interrupt |= IrqSource.irr;
+        else this.interrupt &= ~IrqSource.irr;
         // ACCCON is
         // IRR TST IJF ITU  Y  X  E  D
         //  7   6   5   4   3  2  1  0
