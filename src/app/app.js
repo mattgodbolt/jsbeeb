@@ -9,7 +9,6 @@ import { FsStore } from "../vdfs-fs-store.js";
 import { isAppPage } from "./app-page.js";
 import { quitAfterLastWindowCloses } from "./lifecycle.js";
 import { drainVdfs, pageKeepsRunning, swapVdfsFolder } from "./vdfs-swap.js";
-import { allowMidiPermissions } from "./midi-permissions.js";
 
 const store = new Store();
 
@@ -151,11 +150,6 @@ async function createWindow() {
             preload: path.join(import.meta.dirname, "preload.js"),
         },
     }));
-    allowMidiPermissions(
-        win.webContents.session,
-        win.webContents,
-        path.resolve(import.meta.dirname, "../../dist/index.html"),
-    );
 
     // Load saved settings, then override with command-line args
     const query = pageQuery();
