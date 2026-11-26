@@ -1,28 +1,28 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { IrqSource } from "../../src/6502.js";
+import { IrqSource, NmiSource } from "../../src/6502.js";
 import { Midi6850 } from "../../src/midi-6850.js";
 import { Scheduler } from "../../src/scheduler.js";
 
 describe("Midi6850", () => {
     it("transmits bytes at MIDI rate and raises the transmit-empty interrupt", () => {
         const scheduler = new Scheduler();
-        const cpu = { interrupt: 0x08, setNmi: vi.fn() };
+        const cpu = { interrupt: IrqSource.tube, setNmi: vi.fn() };
         const midiOutput = { sendByte: vi.fn() };
-        const midi = new Midi6850(cpu, scheduler, 2_000_000, midiOutput, "irq", 0x08);
+        const midi = new Midi6850(cpu, scheduler, 2_000_000, midiOutput, "irq", NmiSource.midi);
 
         midi.write(0xfc00, 0x20);
         expect(midi.peek()).toBe(0x82);
         expect(cpu.interrupt & IrqSource.midi).toBe(IrqSource.midi);
-        expect(cpu.interrupt & 0x08).toBe(0x08);
-        expect(cpu.setNmi).toHaveBeenLastCalledWith(0x08, false);
+        expect(cpu.interrupt & IrqSource.tube).toBe(IrqSource.tube);
+        expect(cpu.setNmi).toHaveBeenLastCalledWith(NmiSource.midi, false);
 
         scheduler.polltime(123);
         midi.write(0xfc01, 0x90);
         expect(midiOutput.sendByte).toHaveBeenCalledWith(0x90, 123);
         expect(midi.peek()).toBe(0);
         expect(cpu.interrupt & IrqSource.midi).toBe(0);
-        expect(cpu.interrupt & 0x08).toBe(0x08);
+        expect(cpu.interrupt & IrqSource.tube).toBe(IrqSource.tube);
 
         scheduler.polltime(639);
         expect(midi.peek()).toBe(0);
@@ -34,7 +34,7 @@ describe("Midi6850", () => {
     it("resets the control register, transmitter and interrupt", () => {
         const scheduler = new Scheduler();
         const cpu = { interrupt: 0, setNmi: vi.fn() };
-        const midi = new Midi6850(cpu, scheduler, 2_000_000, { sendByte: vi.fn() }, "irq", 0x08);
+        const midi = new Midi6850(cpu, scheduler, 2_000_000, { sendByte: vi.fn() }, "irq", NmiSource.midi);
         midi.write(0xfc00, 0x20);
         midi.write(0xfc01, 0x90);
 
@@ -49,7 +49,7 @@ describe("Midi6850", () => {
         const scheduler = new Scheduler();
         const cpu = { interrupt: 0, replaying: true, setNmi: vi.fn() };
         const midiOutput = { sendByte: vi.fn() };
-        const midi = new Midi6850(cpu, scheduler, 2_000_000, midiOutput, "none", 0x08);
+        const midi = new Midi6850(cpu, scheduler, 2_000_000, midiOutput, "none", NmiSource.midi);
 
         midi.write(0xfc01, 0x90);
 
@@ -66,30 +66,30 @@ describe("Midi6850", () => {
     it("routes the transmit-empty interrupt to NMI without asserting IRQ", () => {
         const scheduler = new Scheduler();
         const cpu = { interrupt: 0, setNmi: vi.fn() };
-        const midi = new Midi6850(cpu, scheduler, 2_000_000, { sendByte: vi.fn() }, "nmi", 0x08);
+        const midi = new Midi6850(cpu, scheduler, 2_000_000, { sendByte: vi.fn() }, "nmi", NmiSource.midi);
 
         midi.write(0xfc00, 0x20);
         expect(midi.peek()).toBe(0x82);
         expect(cpu.interrupt & IrqSource.midi).toBe(0);
-        expect(cpu.setNmi).toHaveBeenLastCalledWith(0x08, true);
+        expect(cpu.setNmi).toHaveBeenLastCalledWith(NmiSource.midi, true);
 
         midi.write(0xfc01, 0x90);
-        expect(cpu.setNmi).toHaveBeenLastCalledWith(0x08, false);
+        expect(cpu.setNmi).toHaveBeenLastCalledWith(NmiSource.midi, false);
         scheduler.polltime(640);
-        expect(cpu.setNmi).toHaveBeenLastCalledWith(0x08, true);
+        expect(cpu.setNmi).toHaveBeenLastCalledWith(NmiSource.midi, true);
         expect(cpu.interrupt & IrqSource.midi).toBe(0);
     });
 
     it("leaves the interrupt pin disconnected by default", () => {
         const scheduler = new Scheduler();
         const cpu = { interrupt: 0, setNmi: vi.fn() };
-        const midi = new Midi6850(cpu, scheduler, 2_000_000, { sendByte: vi.fn() }, "none", 0x08);
+        const midi = new Midi6850(cpu, scheduler, 2_000_000, { sendByte: vi.fn() }, "none", NmiSource.midi);
 
         midi.write(0xfc00, 0x20);
 
         expect(midi.peek()).toBe(0x82);
         expect(cpu.interrupt & IrqSource.midi).toBe(0);
-        expect(cpu.setNmi).toHaveBeenLastCalledWith(0x08, false);
+        expect(cpu.setNmi).toHaveBeenLastCalledWith(NmiSource.midi, false);
     });
 
     it("restores the transmit-complete deadline", () => {
@@ -100,7 +100,7 @@ describe("Midi6850", () => {
             2_000_000,
             { sendByte: vi.fn() },
             "none",
-            0x08,
+            NmiSource.midi,
         );
         midi.write(0xfc01, 0x90);
         scheduler.polltime(200);
@@ -114,7 +114,7 @@ describe("Midi6850", () => {
             2_000_000,
             { sendByte: vi.fn() },
             "none",
-            0x08,
+            NmiSource.midi,
         );
         restored.restoreState(state);
 
