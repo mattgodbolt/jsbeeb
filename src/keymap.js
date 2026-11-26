@@ -1,5 +1,4 @@
 import { runningInNode } from "./loader.js";
-import { localStore } from "./web/browser-storage.js";
 
 export const userKeymap = [];
 
@@ -412,10 +411,7 @@ export function detectKeyboardLayout() {
     if (runningInNode) {
         return "UK";
     }
-    const { keyboardLayout } = localStore();
-    if (keyboardLayout) {
-        return keyboardLayout === "US" ? "US" : "UK";
-    }
+
     if (navigator.language) {
         if (navigator.language.toLowerCase() === "en-gb") return "UK";
         if (navigator.language.toLowerCase() === "en-us") return "US";
