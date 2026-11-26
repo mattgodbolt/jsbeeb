@@ -79,13 +79,23 @@ const MostTracedClocks = TracedVSyncs * 384 * 256 * 2;
 // Reference: b-em src/video.c (stardot/b-em).
 // Addresses &FE22 (control) and &FE23 (palette) via 2-byte write protocol.
 
+const FullLevel = 0xff;
+
+const isPartialChannel = (level) => level !== 0 && level !== FullLevel;
+
+/** Whether any of an ABGR colour's channels is neither off nor at full level. */
+const hasPartialLevel = (abgr) =>
+    isPartialChannel(abgr & 0xff) || isPartialChannel((abgr >>> 8) & 0xff) || isPartialChannel((abgr >>> 16) & 0xff);
+
 ////////////////////
 // ULA interface (includes NULA programmable palette support)
 class Ula {
-    constructor(video, hasVideoNula, onMissingVideoNula) {
+    constructor(video, hasVideoNula, onMissingVideoNula, onPartialLevelsChanged) {
         this.video = video;
         this.hasVideoNula = hasVideoNula;
         this.onMissingVideoNula = hasVideoNula ? null : onMissingVideoNula;
+        this.onPartialLevelsChanged = onPartialLevelsChanged;
+        this.usesPartialLevels = false;
         // NULA state
         this.collook = new Uint32Array(16);
         this.flash = new Uint8Array(8);
@@ -121,6 +131,14 @@ class Ula {
         this._recomputeUlaPal(!!(this.video.ulactrl & 1));
         // Rebuild MODE 7 teletext colours from the restored default palette.
         this.video.teletext.rebuildColours(this.collook);
+        this._notePartialLevels();
+    }
+
+    _notePartialLevels() {
+        const usesPartialLevels = this.collook.some(hasPartialLevel);
+        if (usesPartialLevels === this.usesPartialLevels) return;
+        this.usesPartialLevels = usesPartialLevels;
+        this.onPartialLevelsChanged?.(usesPartialLevels);
     }
 
     write(addr, val) {
@@ -220,6 +238,7 @@ class Ula {
         this.attributeText = state.attributeText;
         this._recomputeUlaPal(!!(this.video.ulactrl & 1));
         this.video.teletext.rebuildColours(this.collook);
+        this._notePartialLevels();
     }
 
     // ULA control register (&FE20).
@@ -313,6 +332,7 @@ class Ula {
             this._recomputeUlaPal(!!(this.video.ulactrl & 1));
             // MODE 7 teletext uses its own colour lookup; rebuild when a base colour changes.
             if (c < 8) this.video.teletext.rebuildColours(this.collook);
+            this._notePartialLevels();
         } else {
             this.paletteFirstByte = val;
         }
@@ -471,7 +491,7 @@ export class Video {
         isMaster,
         framebufferPixels,
         paint_ext_param,
-        { isAtom = false, hasVideoNula = false, onMissingVideoNula = null, drainKind } = {},
+        { isAtom = false, hasVideoNula = false, onMissingVideoNula = null, onPartialNulaLevelsChanged, drainKind } = {},
     ) {
         this.isMaster = isMaster;
         this.drain = new VideoDrain(framebufferPixels, drainKind ?? PreferredDrain);
@@ -603,7 +623,7 @@ export class Video {
         })();
 
         this.crtc = new Crtc(this);
-        this.ula = new Ula(this, hasVideoNula, onMissingVideoNula);
+        this.ula = new Ula(this, hasVideoNula, onMissingVideoNula, onPartialNulaLevelsChanged);
 
         // Atom: attach the MC6847 VDG and use its polltime
         this.video6847 = null;

@@ -22,6 +22,11 @@ import { PalCyclesPerLine, PalPhasePerLine } from "../video.js";
  */
 const PalScreenCurvature = { x: 1 / 48, y: 1 / 48 };
 
+/** Where a channel turns on for the B's chroma encoder, on the framebuffer's 0 to 1 scale; see docs/pal-simulation-design.md. */
+export const ModelBChromaThreshold = 9.5 / 15;
+/** The same for the Master's CF30060. */
+export const MasterChromaThreshold = 7.5 / 15;
+
 export class PALCompositeFilter {
     static getDisplayConfig() {
         return {
@@ -54,6 +59,8 @@ export class PALCompositeFilter {
             uExtentCentre: gl.getUniformLocation(this.program, "uExtentCentre"),
             uExtentHalfSize: gl.getUniformLocation(this.program, "uExtentHalfSize"),
             uCurvature: gl.getUniformLocation(this.program, "uCurvature"),
+            uQuantiseChroma: gl.getUniformLocation(this.program, "uQuantiseChroma"),
+            uChromaThreshold: gl.getUniformLocation(this.program, "uChromaThreshold"),
         };
     }
 
@@ -80,5 +87,7 @@ export class PALCompositeFilter {
             (maxy - miny) / 2 / params.height,
         );
         gl.uniform2f(this.locations.uCurvature, PalScreenCurvature.x, PalScreenCurvature.y);
+        gl.uniform1i(this.locations.uQuantiseChroma, params.quantiseChroma ? 1 : 0);
+        gl.uniform1f(this.locations.uChromaThreshold, params.chromaThreshold);
     }
 }

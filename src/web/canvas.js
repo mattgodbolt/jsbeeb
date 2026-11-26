@@ -493,6 +493,8 @@ export class GlCanvas {
             phaseBaseEven: frame.phaseBaseEven,
             phaseBaseOdd: frame.phaseBaseOdd,
             lineGrid: frame.lineGrid,
+            quantiseChroma: frame.quantiseChroma,
+            chromaThreshold: frame.chromaThreshold,
             // In texels; the scaling into texture coordinates above applies only
             // to the local copies that go into the UV buffer.
             extent,

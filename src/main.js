@@ -72,7 +72,7 @@ import { SymbolSets } from "./symbol-sets.js";
 import { LabelFiles } from "./label-files.js";
 import { loadData } from "./loader.js";
 import { configureAnalytics, noteError, noteFeature, noteMachineStart, silenceAnalytics } from "./web/analytics.js";
-import { answerMissingVideoNula, VideoNulaFeature } from "./web/video-nula-notice.js";
+import { answerMissingVideoNula, answerNulaOverComposite, VideoNulaFeature } from "./web/video-nula-notice.js";
 import { BenchmarkPage } from "./web/benchmark-page.js";
 import { hostAndRun, startAsTheUrlAsks, startupPlan } from "./web/startup.js";
 
@@ -193,6 +193,7 @@ const display = new Display({
     fakeVideo: !!parsedQuery.fakeVideo,
     hasVideoNula,
     onMissingVideoNula: answerMissingVideoNula({ inSession: () => !!loop.lockstep, settings }),
+    onNulaOverComposite: answerNulaOverComposite({ switchToRgb: () => settings.set({ displayMode: "rgb" }) }),
     frameSkip: parsedQuery.frameSkip ?? 0,
 });
 const { screenCanvas, video } = display;

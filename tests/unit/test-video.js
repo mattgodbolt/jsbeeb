@@ -1500,6 +1500,25 @@ describe("Video", () => {
             expect(read(video)).toEqual(expected);
         });
 
+        it("tells whoever asked when its colours start or stop having a channel between off and full", () => {
+            const onPartialNulaLevelsChanged = vi.fn();
+            const r = makeVideo({ hasVideoNula: true, onPartialNulaLevelsChanged });
+            const changes = () => onPartialNulaLevelsChanged.mock.calls.map(([partial]) => partial);
+            programNulaColour(r, 0, 15, 0, 0);
+            programNulaColour(r, 1, 0, 15, 15);
+            expect(changes()).toEqual([]);
+            programNulaColour(r, 1, 8, 0, 0);
+            programNulaColour(r, 2, 0, 0, 1);
+            expect(changes()).toEqual([true]);
+            programNulaColour(r, 1, 15, 0, 0);
+            expect(changes()).toEqual([true]);
+            programNulaColour(r, 2, 0, 0, 0);
+            expect(changes()).toEqual([true, false]);
+            programNulaColour(r, 3, 15, 14, 15);
+            r.video.reset(r.cpu, r.video.sysvia, true);
+            expect(changes()).toEqual([true, false, true, false]);
+        });
+
         it("tells whoever asked, once, when software first writes to the missing NuLA", () => {
             const onMissingVideoNula = vi.fn();
             ({ video } = makeVideo({ onMissingVideoNula }));
