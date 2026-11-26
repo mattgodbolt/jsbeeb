@@ -71,9 +71,9 @@ export class MicrophoneInput extends AnalogueSource {
             }
         }
 
+        const disposeCountBeforePrompt = this.disposeCount;
         try {
             console.log("MicrophoneInput: Requesting microphone access");
-            const disposeCountBeforePrompt = this.disposeCount;
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             if (this.disposeCount !== disposeCountBeforePrompt) {
                 stream.getTracks().forEach((track) => track.stop());
@@ -101,6 +101,7 @@ export class MicrophoneInput extends AnalogueSource {
             console.log("MicrophoneInput: Initialisation complete");
             return true;
         } catch (error) {
+            if (this.disposeCount !== disposeCountBeforePrompt) return false;
             console.error("MicrophoneInput: Error accessing microphone:", error);
             this.errorMessage = `Error accessing microphone: ${error.message}`;
             if (this.errorCallback) this.errorCallback(this.errorMessage);

@@ -339,17 +339,19 @@ describe("AnalogueInputs", () => {
 
         describe("turned off during the permission prompt", () => {
             const grants = [];
+            const denials = [];
             const stops = [];
             const status = () => document.getElementById("micPermissionStatus").textContent;
 
             beforeEach(() => {
-                grants.length = stops.length = 0;
+                grants.length = denials.length = stops.length = 0;
                 getUserMedia.mockImplementation(
                     () =>
-                        new Promise((resolve) => {
+                        new Promise((resolve, reject) => {
                             const stop = vi.fn();
                             stops.push(stop);
                             grants.push(() => resolve({ getTracks: () => [{ stop }] }));
+                            denials.push(() => reject(new Error("Permission denied")));
                         }),
                 );
             });
@@ -360,14 +362,17 @@ describe("AnalogueInputs", () => {
                 return channel === undefined ? Promise.resolve() : inputs.setupMicrophone();
             };
 
-            it("stops the stream it is then granted, without reporting an error", async () => {
+            it.each([
+                ["granted", grants, 1],
+                ["denied", denials, 0],
+            ])("reports no error when the prompt is then %s, and stops any stream", async (_, answers, stopCount) => {
                 const inputs = make();
                 const setup = turnOn(inputs, 2);
                 turnOn(inputs, undefined);
-                grants.forEach((grant) => grant());
+                answers.forEach((answer) => answer());
                 await setup;
 
-                expect(stops[0]).toHaveBeenCalledOnce();
+                expect(stops[0]).toHaveBeenCalledTimes(stopCount);
                 expect(toasts()).toEqual([]);
                 expect(status()).not.toMatch(/Error/);
             });
