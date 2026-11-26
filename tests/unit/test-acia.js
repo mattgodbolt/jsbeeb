@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
+import { IrqSource } from "../../src/6502.js";
 import { Acia } from "../../src/acia.js";
 import { Scheduler } from "../../src/scheduler.js";
 import { findModel } from "../../src/models.js";
@@ -15,7 +16,6 @@ const Tdre = 0x02;
 const Rdrf = 0x01;
 const ReceiveInterruptEnable = 0x80;
 const CarrierPollsToRaiseDcd = 209;
-const AciaIrq = 0x04;
 // A 10 bit byte at 75 baud takes 0.1333s: 266666 cycles of the 2MHz clock.
 const ByteCyclesAt75Baud = 266666;
 
@@ -219,7 +219,7 @@ describe("Acia", () => {
             acia.write(1, 0x55);
             expect(cpu.interrupt).toBe(0);
             scheduler.polltime(ByteCyclesAt75Baud);
-            expect(cpu.interrupt).toBe(0x04);
+            expect(cpu.interrupt).toBe(IrqSource.acia);
             expect(acia.read(0) & 0x80).toBe(0x80);
 
             acia.write(1, 0x55);
@@ -311,10 +311,10 @@ describe("Acia", () => {
             const scheduler = new Scheduler();
             const { cpu, acia } = createScheduledAcia(scheduler, ReceiveInterruptEnable | EightBitsOneStopNoParity, 75);
             acia.receive(0x41);
-            expect(cpu.interrupt).toBe(AciaIrq);
+            expect(cpu.interrupt).toBe(IrqSource.acia);
             const restoredCpu = { interrupt: 0, model: BbcModel };
             new Acia(restoredCpu, quiet, scheduler).restoreState(acia.snapshotState());
-            expect(restoredCpu.interrupt).toBe(AciaIrq);
+            expect(restoredCpu.interrupt).toBe(IrqSource.acia);
         });
     });
 });

@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
+import { IrqSource } from "../../src/6502.js";
 import { TeletextAdaptor } from "../../src/teletext_adaptor.js";
 import * as loader from "../../src/loader.js";
 import { expectSnapshotRoundTrips } from "../helpers/snapshot-round-trip.js";
 
-const TeletextIrq = 1 << 5;
 const Status = 0;
 const Row = 1;
 const Data = 2;
@@ -37,7 +37,7 @@ describe("TeletextAdaptor", () => {
     let pending;
     let loadData;
 
-    const irq = () => (cpu.interrupt & TeletextIrq) !== 0;
+    const irq = () => (cpu.interrupt & IrqSource.teletext) !== 0;
     const dataReady = (target = adaptor) => target.read(Status) & DataReady;
     const nextField = (target = adaptor) => target.polltime(CyclesPerField);
     const readRow = (row, length, target = adaptor) => {
@@ -286,14 +286,14 @@ describe("TeletextAdaptor", () => {
             adaptor.write(Status, Interrupts);
             nextField();
             restored.restoreState(adaptor.snapshotState());
-            expect(restoredCpu.interrupt & TeletextIrq).toBe(TeletextIrq);
+            expect(restoredCpu.interrupt & IrqSource.teletext).toBe(IrqSource.teletext);
         });
 
         it("clears an IRQ the adaptor was not holding", () => {
             nextField();
-            restoredCpu.interrupt = TeletextIrq;
+            restoredCpu.interrupt = IrqSource.teletext;
             restored.restoreState(adaptor.snapshotState());
-            expect(restoredCpu.interrupt & TeletextIrq).toBe(0);
+            expect(restoredCpu.interrupt & IrqSource.teletext).toBe(0);
         });
 
         it("does not share the frame buffer with the snapshot it came from", () => {

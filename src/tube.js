@@ -1,7 +1,4 @@
-import { NmiSource } from "./6502.js";
-
-//  this one should be declared more globally
-const HOST_CPU_FLAG_IRQ_TUBE_ULA = 8;
+import { IrqSource, NmiSource } from "./6502.js";
 
 const TUBE_ULA_R1 = 0;
 const TUBE_ULA_R2 = 1;
@@ -118,9 +115,9 @@ export class Tube {
             this.hostStatus[TUBE_ULA_R4] & TUBE_ULA_FLAG_DATA_AVAILABLE &&
             this.internalStatusRegister & TUBE_ULA_FLAG_STATUS_ENABLE_HOST_IRQ_FROM_R4_DATA
         ) {
-            this.hostCpu.interrupt |= HOST_CPU_FLAG_IRQ_TUBE_ULA;
+            this.hostCpu.interrupt |= IrqSource.tube;
         } else {
-            this.hostCpu.interrupt &= ~HOST_CPU_FLAG_IRQ_TUBE_ULA;
+            this.hostCpu.interrupt &= ~IrqSource.tube;
         }
         //  parasite IRQ
         if (

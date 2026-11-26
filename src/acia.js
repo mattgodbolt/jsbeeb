@@ -3,6 +3,8 @@
 // https://books.google.com/books?id=wUecAQAAQBAJ&pg=PA431&lpg=PA431&dq=acia+tdre&source=bl&ots=mp-yF-mK-P&sig=e6aXkFRfiIOb57WZmrvdIGsCooI&hl=en&sa=X&ei=0g2fVdDyFIXT-QG8-JD4BA&ved=0CCwQ6AEwAw#v=onepage&q=acia%20tdre&f=false
 // http://www.classiccmp.org/dunfield/r/6850.pdf
 
+import { IrqSource } from "./6502.js";
+
 const StatusAddress = 0;
 
 export class Acia extends EventTarget {
@@ -49,9 +51,9 @@ export class Acia extends EventTarget {
 
     updateIrq() {
         if (this.sr & this.cr & 0x80 || this.txIrq()) {
-            this.cpu.interrupt |= 0x04;
+            this.cpu.interrupt |= IrqSource.acia;
         } else {
-            this.cpu.interrupt &= ~0x04;
+            this.cpu.interrupt &= ~IrqSource.acia;
         }
     }
 

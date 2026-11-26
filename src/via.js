@@ -1,3 +1,4 @@
+import { IrqSource } from "./6502.js";
 import { BBC, getKeyMap, WithKeyMatrix } from "./keymap.js";
 
 const ORB = 0x0,
@@ -833,7 +834,7 @@ class Via {
 
 export class SysVia extends WithKeyMatrix(Via) {
     constructor(cpu, scheduler, { video, soundChip, cmos, isMaster, initialLayout } = {}) {
-        super(cpu, scheduler, 0x01);
+        super(cpu, scheduler, IrqSource.sysVia);
 
         this.IC32 = 0;
         this._initKeyMatrix(BBC.SHIFT, KeyboardColumns);
@@ -1095,7 +1096,7 @@ export class SysVia extends WithKeyMatrix(Via) {
 
 export class UserVia extends Via {
     constructor(cpu, scheduler, userPortPeripheral) {
-        super(cpu, scheduler, 0x02);
+        super(cpu, scheduler, IrqSource.userVia);
         this.userPortPeripheral = userPortPeripheral;
         this.reset();
     }
