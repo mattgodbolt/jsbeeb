@@ -27,10 +27,12 @@ const KeyLayoutOptions = [
     { value: "natural", text: "Natural: you get the character you type" },
     { value: "gaming", text: "Gaming: handy for games like Zalaga" },
 ];
-const MidiAddressOptions = [0xfc00, 0xfc08, 0xfc80, 0xfcf0].map((value) => ({
-    value,
-    text: `&${value.toString(16).toUpperCase()}`,
-}));
+const MidiAddressOptions = [
+    [0xfc00, "UMI 4M"],
+    [0xfc08, "Music 2000 port 1"],
+    [0xfc80, "UMI 4M"],
+    [0xfcf0, "EMR, ETI"],
+].map(([value, interfaces]) => ({ value, text: `&${value.toString(16).toUpperCase()} (${interfaces})` }));
 const MidiInterruptOptions = [
     { value: "none", text: "None" },
     { value: "irq", text: "IRQ" },

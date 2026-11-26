@@ -458,7 +458,7 @@ describe("the Settings form", () => {
                 id: "midiAddressDropdown",
                 label: "MIDI interface address:",
                 type: "button",
-                value: "&FC00",
+                value: "&FC00 (UMI 4M)",
                 disabled: true,
             },
             { id: "midiInterruptDropdown", label: "Interrupt:", type: "button", value: "None", disabled: true },
@@ -516,10 +516,10 @@ describe("the Settings form", () => {
         expect(menu("keyLayoutDropdown").map(({ data }) => data.value)).toEqual(["physical", "natural", "gaming"]);
         expect(menu("displayModeDropdown").map(({ data }) => data.value)).toEqual(["rgb", "pal", "xbr"]);
         expect(menu("midiAddressDropdown")).toEqual([
-            { text: "&FC00", data: { value: "64512" } },
-            { text: "&FC08", data: { value: "64520" } },
-            { text: "&FC80", data: { value: "64640" } },
-            { text: "&FCF0", data: { value: "64752" } },
+            { text: "&FC00 (UMI 4M)", data: { value: "64512" } },
+            { text: "&FC08 (Music 2000 port 1)", data: { value: "64520" } },
+            { text: "&FC80 (UMI 4M)", data: { value: "64640" } },
+            { text: "&FCF0 (EMR, ETI)", data: { value: "64752" } },
         ]);
         expect(menu("audioOutputDropdown")).toEqual([
             { text: "Internal speaker", data: { output: "speaker" } },

@@ -134,7 +134,7 @@ No `encoding` field means plain base64, which is how every array before v4 and e
 | `peripheralCycles`    | number     | Peripheral cycle accumulator                                                                                  |
 | `videoCycles`         | number     | Video cycle accumulator                                                                                       |
 | `music5000PageSel`    | number     | Music 5000 page select                                                                                        |
-| `midiAcia`            | object     | _(Optional)_ State of the fitted MC6850 MIDI interface at &FC00                                               |
+| `midiAcia`            | object     | _(Optional)_ State of the fitted MC6850 MIDI interface                                                        |
 | `ram`                 | Uint8Array | RAM contents (64KB; on a Master, ANDY at 0x8000, HAZEL at 0x9000 and LYNNE at 0xB000)                         |
 | `roms`                | Uint8Array | _(Optional)_ ROM contents (256KB, 16 x 16KB banks). Present in b-em imports and shared session joins.         |
 | `swram`               | Uint8Array | _(Optional)_ Sideways RAM banks, 16KB each, back to back in ascending bank order (see below)                  |
