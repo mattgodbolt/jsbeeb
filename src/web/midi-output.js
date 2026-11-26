@@ -1,3 +1,5 @@
+import { localStore } from "./browser-storage.js";
+
 const StoredOutputId = "midiOutputId";
 const NoOutputLabel = "No MIDI Interface";
 const MaxSysexBytes = 1024 * 1024;
@@ -35,7 +37,7 @@ export class MidiOutput {
         this.interfaceEnabled = false;
         this.selectionEnabled = false;
         this.ensureNoOutputOption();
-        this.select.value = window.localStorage.getItem(StoredOutputId) ?? "";
+        this.select.value = localStore().getItem(StoredOutputId) ?? "";
 
         this.select.addEventListener("focus", () => this.connectWithStatus());
         this.select.addEventListener("change", () => this.selectOutput());
@@ -68,7 +70,7 @@ export class MidiOutput {
             this.updateStatus();
         } else if (this.access) {
             this.updateOutputs();
-        } else if (window.localStorage.getItem(StoredOutputId)) {
+        } else if (localStore().getItem(StoredOutputId)) {
             this.connectWithStatus();
         } else {
             this.status.textContent = "Focus the dropdown to connect to MIDI devices.";
@@ -108,7 +110,7 @@ export class MidiOutput {
     }
 
     updateOutputs() {
-        const selectedId = this.select.value || window.localStorage.getItem(StoredOutputId) || "";
+        const selectedId = this.select.value || localStore().getItem(StoredOutputId) || "";
         const outputs = [...this.access.outputs.values()].filter((output) => output.state === "connected");
         this.select.replaceChildren(new Option(NoOutputLabel, ""));
         for (const [index, output] of outputs.entries()) {
@@ -118,7 +120,7 @@ export class MidiOutput {
         this.updateSelectEnabled();
         const selectedOutput = outputs.find((output) => output.id === selectedId);
         this.select.value = selectedOutput?.id ?? "";
-        if (selectedId && !selectedOutput) window.localStorage.removeItem(StoredOutputId);
+        if (selectedId && !selectedOutput) localStore().removeItem(StoredOutputId);
         this.output = this.access.outputs.get(this.select.value) ?? null;
         if (!this.selectionEnabled) {
             this.status.textContent = "Enable the 6850 MIDI interface in Peripherals and restart the emulator.";
@@ -133,11 +135,11 @@ export class MidiOutput {
         if (!this.selectionEnabled) return;
         this.output = this.access?.outputs.get(this.select.value) ?? null;
         if (this.output) {
-            window.localStorage.setItem(StoredOutputId, this.output.id);
+            localStore().setItem(StoredOutputId, this.output.id);
             this.warnedNoOutput = false;
             this.updateStatus();
         } else {
-            window.localStorage.removeItem(StoredOutputId);
+            localStore().removeItem(StoredOutputId);
             this.status.textContent = "No MIDI output selected.";
         }
     }

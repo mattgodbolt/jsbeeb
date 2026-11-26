@@ -29,8 +29,24 @@ describe("MidiOutput", () => {
     });
 
     afterEach(() => {
+        vi.restoreAllMocks();
         window.localStorage.removeItem("midiOutputId");
         delete navigator.requestMIDIAccess;
+    });
+
+    it("starts, and connects to an output it cannot remember, when the browser refuses storage", async () => {
+        vi.spyOn(window, "localStorage", "get").mockImplementation(() => {
+            throw new DOMException("The operation is insecure.", "SecurityError");
+        });
+        const select = document.getElementById("output");
+        const refused = new MidiOutput({ select, status: document.getElementById("status") });
+        refused.setInterfaceEnabled(true);
+        refused.setSelectionEnabled(true);
+        await refused.connect();
+
+        select.value = output.id;
+        select.dispatchEvent(new Event("change"));
+        expect(refused.output).toBe(output);
     });
 
     it("always keeps a nonempty no-output label in the dropdown", () => {

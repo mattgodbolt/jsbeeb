@@ -280,7 +280,7 @@ const loop = new EmulationLoop({
     audioStatsNode,
 });
 loop.addEventListener("tick", () =>
-    midiOutput.beginBatch(processor.scheduler.epoch, performance.now(), clocksPerSecond, loop.isSpeedy()),
+    midiOutput.beginBatch(processor.scheduler.epoch, performance.now(), cpuSpeed, loop.isSpeedy()),
 );
 dbgr.attachLoop(loop);
 
