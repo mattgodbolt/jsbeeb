@@ -1667,7 +1667,7 @@ export class Cpu6502 extends Base6502 {
             video: this.video.snapshotState(),
             soundChip: this.soundChip.snapshotState(),
             acia: this.acia.snapshotState(),
-            midiAcia: this.midiAcia ? this.midiAcia.snapshotState() : undefined,
+            ...(this.midiAcia && { midiAcia: this.midiAcia.snapshotState() }),
             adc: this.adconverter.snapshotState(),
             touchScreen: this.touchScreen.snapshotState(),
             fdc: this.fdc.snapshotState(),
