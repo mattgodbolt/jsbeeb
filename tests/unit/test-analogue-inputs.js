@@ -336,6 +336,26 @@ describe("AnalogueInputs", () => {
             expect(stopped).toHaveLength(1);
             expect(stopped[0]).toHaveBeenCalledOnce();
         });
+
+        it("stops the stream it is granted after being turned off during the permission prompt", async () => {
+            let grant;
+            getUserMedia.mockImplementation(
+                () => new Promise((resolve) => (grant = () => resolve({ getTracks: () => [{ stop: stopTrack }] }))),
+            );
+
+            deps.settings.microphoneChannel = 2;
+            const inputs = make();
+            inputs.updateAdcSources(false, 2);
+            const setup = inputs.setupMicrophone();
+
+            deps.settings.microphoneChannel = undefined;
+            inputs.updateAdcSources(false, undefined);
+            grant();
+            await setup;
+
+            expect(stopTrack).toHaveBeenCalledOnce();
+            expect(toasts()).toEqual([]);
+        });
     });
 
     describe("a microphone whose channel was turned off", () => {

@@ -21,6 +21,7 @@ export class MicrophoneInput extends AnalogueSource {
         this.errorCallback = null;
         this.errorMessage = null;
         this.initialisePromise = null;
+        this.disposeCount = 0;
     }
 
     /**
@@ -71,7 +72,12 @@ export class MicrophoneInput extends AnalogueSource {
 
         try {
             console.log("MicrophoneInput: Requesting microphone access");
+            const disposeCountBeforePrompt = this.disposeCount;
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            if (this.disposeCount !== disposeCountBeforePrompt) {
+                stream.getTracks().forEach((track) => track.stop());
+                return false;
+            }
             console.log("MicrophoneInput: Microphone access granted");
 
             this.microphoneStream = stream;
@@ -142,6 +148,7 @@ export class MicrophoneInput extends AnalogueSource {
      * Clean up resources when no longer needed
      */
     dispose() {
+        this.disposeCount++;
         if (this.microphoneStream) {
             this.microphoneStream.getTracks().forEach((track) => track.stop());
             this.microphoneStream = null;
