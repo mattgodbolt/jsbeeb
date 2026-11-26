@@ -314,6 +314,7 @@ export const Parameters = {
     lowLatency: { type: ParamTypes.BOOL_DEFAULT_TRUE, localToPage: true },
     fakeVideo: { type: ParamTypes.BOOL, takenFromHost: true },
     audioDebug: { type: ParamTypes.BOOL, localToPage: true },
+    mute: { type: ParamTypes.BOOL, localToPage: true },
 
     // Numeric parameters
     stationId: { type: ParamTypes.INT, takenFromHost: true },
