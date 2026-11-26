@@ -26,7 +26,7 @@ export async function newBenchmarkMachine(
     fittings,
     { fakeVideo = false, onSoundEvent = () => {}, drainKind } = {},
 ) {
-    const { coProcessor, hasMusic5000, hasTeletextAdaptor, hasEconet, hasVideoNula } = fittings;
+    const { coProcessor, hasMusic5000, hasTeletextAdaptor, hasMidiInterface, hasEconet, hasVideoNula } = fittings;
     const { isMaster } = findModel(model);
     const video = fakeVideo
         ? new FakeVideo()
@@ -38,6 +38,7 @@ export async function newBenchmarkMachine(
         tube: coProcessor,
         hasMusic5000,
         hasTeletextAdaptor,
+        hasMidiInterface,
         econet: hasEconet,
     });
     await machine.initialise();
