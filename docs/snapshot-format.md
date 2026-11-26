@@ -416,7 +416,7 @@ A machine built with `FakeVideo` (TestMachine, or the page's `fakeVideo` option;
 ### MIDI ACIA (`state.midiAcia`)
 
 This optional state is present only when the 6850 MIDI interface is fitted. Older snapshots and machines without the
-interface omit it.
+interface omit it, and a machine with the interface fitted resets its ACIA when restoring one.
 
 | Field                        | Type         | Description                                 |
 | ---------------------------- | ------------ | ------------------------------------------- |

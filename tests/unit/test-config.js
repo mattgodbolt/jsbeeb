@@ -519,7 +519,7 @@ describe("the Settings form", () => {
             { text: "&FC00 (UMI 4M)", data: { value: "64512" } },
             { text: "&FC08 (Music 2000 port 1)", data: { value: "64520" } },
             { text: "&FC80 (UMI 4M)", data: { value: "64640" } },
-            { text: "&FCF0 (EMR, ETI)", data: { value: "64752" } },
+            { text: "&FCF0 (EMR, ETI, J.G. Harston)", data: { value: "64752" } },
         ]);
         expect(menu("audioOutputDropdown")).toEqual([
             { text: "Internal speaker", data: { output: "speaker" } },

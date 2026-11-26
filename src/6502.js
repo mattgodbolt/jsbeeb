@@ -1747,7 +1747,10 @@ export class Cpu6502 extends Base6502 {
         this.video.restoreState(state.video);
         this.soundChip.restoreState(state.soundChip);
         this.acia.restoreState(state.acia);
-        if (this.midiAcia && state.midiAcia) this.midiAcia.restoreState(state.midiAcia);
+        if (this.midiAcia) {
+            if (state.midiAcia) this.midiAcia.restoreState(state.midiAcia);
+            else this.midiAcia.reset();
+        }
         this.adconverter.restoreState(state.adc);
         if (this.teletextAdaptor && state.teletextAdaptor) this.teletextAdaptor.restoreState(state.teletextAdaptor);
         if (!keepVdfs) this.vdfs?.restoreState(state.vdfs);

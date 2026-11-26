@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { machineSpec, nullIo } from "../../src/machine-spec.js";
-import { TEST_6502 } from "../../src/models.js";
+import { findModel, TEST_6502 } from "../../src/models.js";
 
 describe("a CPU fitted from a spec", () => {
     const build = (spec = machineSpec()) => new TEST_6502.Cpu(TEST_6502, { ...nullIo(), config: spec });
@@ -33,6 +33,42 @@ describe("a CPU fitted from a spec", () => {
         cpu.scheduler.polltime(640);
         expect(cpu.peekDevice(midiAddress) & 0x02).toBe(0x02);
         expect(cpu.readDevice(midiAddress) & 0x02).toBe(0x02);
+    });
+
+    it("keeps the MIDI IRQ apart from a Master's ACCCON IRR", () => {
+        const master = findModel("Master");
+        const cpu = new master.Cpu(master, {
+            ...nullIo({ model: master }),
+            config: machineSpec({ hasMidiInterface: true, midiInterrupt: "irq" }),
+        });
+
+        cpu.writeAcccon(0x80);
+        cpu.writeDevice(0xfc00, 0x03);
+        expect(cpu.interrupt).not.toBe(0);
+
+        cpu.writeAcccon(0x00);
+        cpu.writeDevice(0xfc00, 0x20);
+        cpu.writeAcccon(0x80);
+        cpu.writeAcccon(0x00);
+        expect(cpu.interrupt).not.toBe(0);
+    });
+
+    it("carries a byte in flight across a snapshot, and resets the MIDI ACIA for one without it", () => {
+        const fitted = machineSpec({ hasMidiInterface: true });
+        const source = build(fitted);
+        source.writeDevice(0xfc01, 0x90);
+        source.scheduler.polltime(100);
+        const inFlight = source.snapshotState();
+
+        const restored = build(fitted);
+        restored.restoreState(inFlight);
+        expect(restored.peekDevice(0xfc00) & 0x02).toBe(0);
+        restored.scheduler.polltime(540);
+        expect(restored.peekDevice(0xfc00) & 0x02).toBe(0x02);
+
+        restored.writeDevice(0xfc01, 0x90);
+        restored.restoreState(build().snapshotState());
+        expect(restored.peekDevice(0xfc00) & 0x02).toBe(0x02);
     });
 
     it("drives the CPU NMI line when the MIDI interrupt pin is configured as NMI", () => {

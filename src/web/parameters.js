@@ -31,7 +31,7 @@ const MidiAddressOptions = [
     [0xfc00, "UMI 4M"],
     [0xfc08, "Music 2000 port 1"],
     [0xfc80, "UMI 4M"],
-    [0xfcf0, "EMR, ETI"],
+    [0xfcf0, "EMR, ETI, J.G. Harston"],
 ].map(([value, interfaces]) => ({ value, text: `&${value.toString(16).toUpperCase()} (${interfaces})` }));
 const MidiInterruptOptions = [
     { value: "none", text: "None" },

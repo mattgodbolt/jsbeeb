@@ -1,5 +1,5 @@
 const TransmitDataRegisterEmpty = 0x02;
-const Irq = 0x10;
+const Irq = 0x40;
 const MidiFrameBits = 10;
 const MidiBaudRate = 31250;
 

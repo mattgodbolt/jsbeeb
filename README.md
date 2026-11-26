@@ -381,8 +381,8 @@ browser asks for a new worker within half a minute of a deploy.
 
 jsbeeb can send MIDI to a host output in browsers that support Web MIDI and in the Electron app. In **Settings**, enable
 **6850 MIDI interface** under Additional peripherals, choose the address of the interface your software expects
-(`&FC08` for port 1 of Hybrid's Music 2000, `&FC80` or `&FC00` for the UMI 4M, `&FCF0` for the EMR and ETI
-interfaces; the default is `&FC00`) and which line its interrupt drives (**None**, the default, **IRQ** or
+(`&FC08` for port 1 of Hybrid's Music 2000, `&FC80` or `&FC00` for the UMI 4M, `&FCF0` for the EMR, ETI and
+J.G. Harston interfaces; the default is `&FC00`) and which line its interrupt drives (**None**, the default, **IRQ** or
 **NMI**), then restart the emulator. In Settings, focus the **Host MIDI output**
 dropdown below the peripheral options to connect to MIDI devices and choose an output. The browser may ask for MIDI
 access when you focus the dropdown.
