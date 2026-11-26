@@ -5,11 +5,13 @@ import { Display } from "../../src/web/display.js";
 import { FakeAtomVideo, FakeVideo } from "../../src/video.js";
 import { PassthroughFilter } from "../../src/video-filters/passthrough-filter.js";
 import { LineGridRows } from "../../src/video-filters/pixel-grid.js";
+import { MasterChromaThreshold, ModelBChromaThreshold } from "../../src/video-filters/pal-composite.js";
 import { domFromIndexHtml, fakeAnimationFrames, teardownDom, toasts } from "./helpers.js";
 
 const FbWidth = 1024;
 
-const fakeCanvasFor = (filterClass, overrides = {}) => ({
+const fakeCanvasFor = (element, filterClass, overrides = {}) => ({
+    element,
     fb32: new Uint32Array(FbWidth * 625),
     paint: vi.fn(),
     setPersistence: vi.fn(),
@@ -36,7 +38,7 @@ describe("Display", () => {
             model: { isMaster: false, isAtom: false },
             mode: "rgb",
             makeCanvas: (canvasEl, filterClass) =>
-                (fakeCanvas = fakeCanvasFor(filterClass, {
+                (fakeCanvas = fakeCanvasFor(canvasEl, filterClass, {
                     setFilter: vi.fn((newFilterClass) => (fakeCanvas.filterClass = newFilterClass)),
                 })),
             ...options,
@@ -50,8 +52,8 @@ describe("Display", () => {
         return display;
     };
 
-    const paintedFrom = (frameSkipCount = 0, frameCount = 0) => ({
-        frameCount,
+    const paintedFrom = (frameSkipCount = 0, fieldCount = 0) => ({
+        fieldCount,
         fb32: new Uint32Array(FbWidth * 625),
         lineGrid: new Uint8Array(LineGridRows),
         lineBaseEven: 1,
@@ -115,7 +117,7 @@ describe("Display", () => {
         const display = make({
             mode: "pal",
             makeCanvas: (canvasEl, filterClass) =>
-                (fakeCanvas = fakeCanvasFor(PassthroughFilter, {
+                (fakeCanvas = fakeCanvasFor(canvasEl, PassthroughFilter, {
                     fallbackReason: `${filterClass.getDisplayConfig().name} declined`,
                 })),
         });
@@ -195,20 +197,20 @@ describe("Display", () => {
         const display = make();
         display.onPaint(paintedFrom(0, 100), 0, 0, FbWidth, 8);
         animationFrames.run();
-        const restored = paintedFrom(0, 3);
+        const restored = paintedFrom(0, 103);
         restored.paintsAfresh = true;
         display.onPaint(restored, 0, 0, FbWidth, 8);
         animationFrames.run();
         expect(lastPainted().fields).toBe(250);
         expect(restored.paintsAfresh).toBe(false);
-        display.onPaint(paintedFrom(0, 4), 0, 0, FbWidth, 8);
+        display.onPaint(paintedFrom(0, 104), 0, 0, FbWidth, 8);
         animationFrames.run();
         expect(lastPainted().fields).toBe(1);
     });
 
     it("replaces the picture on a mode change rather than glowing the old mode through it", () => {
         const display = make({ mode: "pal" });
-        display.onPaint(paintedFrom(0, 10), 0, 0, FbWidth, 8);
+        display.onPaint(paintedFrom(), 0, 0, FbWidth, 8);
         animationFrames.run();
         display.setMode("rgb");
         animationFrames.run();
@@ -222,18 +224,6 @@ describe("Display", () => {
         fakeCanvas.setPersistence.mockClear();
         display.setPersistence("palPersistenceMs", 40);
         expect(fakeCanvas.setPersistence).not.toHaveBeenCalled();
-    });
-
-    it("counts the Atom's fields from the 6847, which syncs its count only after painting", () => {
-        const display = make({ model: { isMaster: false, isAtom: true } });
-        const atom = paintedFrom(0, 0);
-        atom.video6847 = { frameCount: 7 };
-        display.onPaint(atom, 0, 0, FbWidth, 8);
-        animationFrames.run();
-        atom.video6847.frameCount = 10;
-        display.onPaint(atom, 0, 0, FbWidth, 8);
-        animationFrames.run();
-        expect(lastPainted().fields).toBe(3);
     });
 
     it("schedules another present once the first has run", () => {
@@ -332,6 +322,7 @@ describe("Display", () => {
         make({
             makeCanvas: (canvasEl, filterClass) =>
                 (fakeCanvas = fakeCanvasFor(
+                    canvasEl,
                     class Other {
                         static getDisplayConfig() {
                             return filterClass.getDisplayConfig();
@@ -341,6 +332,65 @@ describe("Display", () => {
                 )),
         });
         expect(toasts()).toEqual([expect.stringContaining("no WebGL")]);
+    });
+
+    describe("VideoNuLA colours in the TV view", () => {
+        const writeNulaColour = (display, index, red, green, blue) => {
+            display.video.ula.write(3, (index << 4) | red);
+            display.video.ula.write(3, (green << 4) | blue);
+        };
+        const showing = (mode) => {
+            const onNulaOverComposite = vi.fn();
+            const display = make({ mode, hasVideoNula: true, onNulaOverComposite });
+            return { display, onNulaOverComposite };
+        };
+
+        it("tells whoever asked when the TV view shows levels between off and full", () => {
+            const { display, onNulaOverComposite } = showing("pal");
+            writeNulaColour(display, 1, 15, 15, 15);
+            expect(onNulaOverComposite).not.toHaveBeenCalled();
+            writeNulaColour(display, 1, 8, 0, 0);
+            expect(onNulaOverComposite).toHaveBeenCalledTimes(1);
+        });
+
+        it("tells nobody in the RGB view, until the TV view is chosen", () => {
+            const { display, onNulaOverComposite } = showing("rgb");
+            writeNulaColour(display, 1, 8, 0, 0);
+            expect(onNulaOverComposite).not.toHaveBeenCalled();
+            display.setMode("pal");
+            expect(onNulaOverComposite).toHaveBeenCalledTimes(1);
+        });
+
+        it("has the TV view take chroma from channels on or off for any field a colour needed it in", () => {
+            const { display } = showing("pal");
+            const paintField = (...reds) => {
+                for (const red of reds) writeNulaColour(display, 1, red, 0, 0);
+                display.onPaint(paintedFrom(), 0, 0, FbWidth, 8);
+            };
+            const presented = () => {
+                animationFrames.run();
+                return lastPainted().quantiseChroma;
+            };
+            paintField(15);
+            expect(presented()).toBe(false);
+            paintField(8, 15);
+            expect(presented()).toBe(true);
+            paintField();
+            expect(presented()).toBe(false);
+            paintField(8);
+            writeNulaColour(display, 1, 15, 0, 0);
+            expect(presented()).toBe(true);
+        });
+
+        it.each([
+            ["a Model B", false, ModelBChromaThreshold],
+            ["a Master", true, MasterChromaThreshold],
+        ])("gives the TV view the chroma threshold of %s", (_, isMaster, threshold) => {
+            const display = make({ mode: "pal", model: { isMaster, isAtom: false } });
+            display.onPaint(paintedFrom(), 0, 0, FbWidth, 8);
+            animationFrames.run();
+            expect(lastPainted().chromaThreshold).toBe(threshold);
+        });
     });
 
     it.each([

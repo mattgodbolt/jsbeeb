@@ -5,6 +5,8 @@ import { registerServiceWorker } from "../../src/web/install.js";
 import { teardownDom, toasts } from "./helpers.js";
 
 const Reload = ".toast-action";
+const PageBuild = "page-build";
+const NewerBuild = "newer-build";
 
 function fakeWorkerContainer(controlled) {
     const container = new EventTarget();
@@ -18,6 +20,10 @@ function fakeWorkerContainer(controlled) {
     return container;
 }
 
+function fakeWorker(build) {
+    return { postMessage: vi.fn((_, [port] = []) => port?.postMessage(build)) };
+}
+
 function fakePage({ protocol, serviceWorker }) {
     const navigator = serviceWorker ? { serviceWorker } : {};
     return { navigator, location: { protocol, reload: vi.fn() }, document };
@@ -28,6 +34,7 @@ const settle = () => new Promise((resolve) => setTimeout(resolve));
 describe("the service worker", () => {
     beforeEach(() => {
         vi.stubEnv("PROD", true);
+        vi.stubEnv("JSBEEB_COMMIT", PageBuild);
     });
     afterEach(teardownDom);
 
@@ -70,11 +77,11 @@ describe("the service worker", () => {
     });
 
     describe("an update", () => {
-        const start = (controlled) => {
+        const start = (controlled, build = NewerBuild) => {
             const serviceWorker = fakeWorkerContainer(controlled);
             const page = fakePage({ protocol: "https:", serviceWorker });
             const { registration } = serviceWorker;
-            const waiting = { postMessage: vi.fn() };
+            const waiting = fakeWorker(build);
             return {
                 serviceWorker,
                 registration,
@@ -84,13 +91,36 @@ describe("the service worker", () => {
             };
         };
 
-        const installUpdate = (registration, waiting) => {
+        const installUpdate = async (registration, waiting) => {
             const installing = new EventTarget();
             registration.installing = installing;
             registration.dispatchEvent(new Event("updatefound"));
             registration.waiting = waiting;
             installing.dispatchEvent(new Event("statechange"));
+            await settle();
         };
+
+        describe.each([
+            ["a newer build than the page", NewerBuild, true],
+            ["the build the page already is", PageBuild, false],
+        ])("waiting with %s", (_, build, offered) => {
+            const verdict = offered ? "is offered" : "is not offered";
+            it(`${verdict} when it installs while the page is open`, async () => {
+                const { registration, waiting, begin } = start(true, build);
+                begin();
+                await settle();
+                await installUpdate(registration, waiting);
+                expect(toasts()).toHaveLength(offered ? 1 : 0);
+            });
+
+            it(`${verdict} when the page opens`, async () => {
+                const { registration, waiting, begin } = start(true, build);
+                registration.waiting = waiting;
+                begin();
+                await settle();
+                expect(toasts()).toHaveLength(offered ? 1 : 0);
+            });
+        });
 
         it("is offered once, and switches and reloads only when the user clicks", async () => {
             const { serviceWorker, registration, waiting, page, begin } = start(true);
@@ -98,10 +128,10 @@ describe("the service worker", () => {
             await settle();
             expect(toasts()).toEqual([]);
 
-            installUpdate(registration, waiting);
-            installUpdate(registration, waiting);
+            await installUpdate(registration, waiting);
+            await installUpdate(registration, waiting);
             expect(toasts()).toEqual(["Update A new version of jsbeeb is ready. Reload Stop telling me this"]);
-            expect(waiting.postMessage).not.toHaveBeenCalled();
+            expect(waiting.postMessage).not.toHaveBeenCalledWith({ type: "SKIP_WAITING" });
 
             document.querySelector(Reload).click();
             expect(waiting.postMessage).toHaveBeenCalledWith({ type: "SKIP_WAITING" });
@@ -110,30 +140,21 @@ describe("the service worker", () => {
             expect(page.location.reload).toHaveBeenCalledOnce();
         });
 
-        it("just reloads when another tab has already switched over", () => {
+        it("just reloads when another tab has already switched over", async () => {
             const { registration, waiting, page, begin } = start(true);
             registration.waiting = waiting;
             begin();
-            return settle().then(() => {
-                registration.waiting = null;
-                document.querySelector(Reload).click();
-                expect(page.location.reload).toHaveBeenCalledOnce();
-            });
-        });
-
-        it("is offered at once when the page opens with one already waiting", async () => {
-            const { registration, waiting, begin } = start(true);
-            registration.waiting = waiting;
-            begin();
             await settle();
-            expect(toasts()).toHaveLength(1);
+            registration.waiting = null;
+            document.querySelector(Reload).click();
+            expect(page.location.reload).toHaveBeenCalledOnce();
         });
 
         it("is not offered for the first install, which has nothing to replace", async () => {
             const { registration, waiting, begin } = start(false);
             begin();
             await settle();
-            installUpdate(registration, waiting);
+            await installUpdate(registration, waiting);
             expect(toasts()).toEqual([]);
         });
 

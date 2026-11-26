@@ -8,7 +8,10 @@ import { fillHelp, openHelpOnTheTabForNow } from "./web/help.js";
 import { DebugMenu } from "./web/debug-menu.js";
 import { PanelKeys } from "./web/panel-keys.js";
 import { GamePad } from "./web/gamepads.js";
-import { initialise as electron, isDesktopApp } from "./app/electron.js";
+import { canChooseFolder, browserVdfsStore } from "./web/vdfs-folder.js";
+import { attachBrowserVdfs, attachVdfsMenu } from "./web/vdfs-ui.js";
+import { ServedMessage } from "./web/vdfs-notice.js";
+import { attachDesktopVdfs, desktopVdfsStore, initialise as electron, isDesktopApp } from "./app/electron.js";
 import { AudioHandler } from "./web/audio-handler.js";
 import { installIcons } from "./web/icons.js";
 import { QuickSettings } from "./web/quick-settings.js";
@@ -70,7 +73,7 @@ import { SymbolSets } from "./symbol-sets.js";
 import { LabelFiles } from "./label-files.js";
 import { loadData } from "./loader.js";
 import { configureAnalytics, noteError, noteFeature, noteMachineStart, silenceAnalytics } from "./web/analytics.js";
-import { answerMissingVideoNula, VideoNulaFeature } from "./web/video-nula-notice.js";
+import { answerMissingVideoNula, answerNulaOverComposite, VideoNulaFeature } from "./web/video-nula-notice.js";
 import { BenchmarkPage } from "./web/benchmark-page.js";
 import { hostAndRun, startAsTheUrlAsks, startupPlan } from "./web/startup.js";
 
@@ -186,9 +189,8 @@ if (cpuMultiplier !== 1) console.log(`CPU multiplier set to ${cpuMultiplier}`);
 const cpuSpeed = model.cyclesPerSecond;
 const clocksPerSecond = (cpuMultiplier * cpuSpeed) | 0;
 
-const screenCanvas = document.getElementById("screen");
 const display = new Display({
-    screenCanvas,
+    screenCanvas: document.getElementById("screen"),
     model,
     mode: displayMode,
     tryGl,
@@ -196,9 +198,10 @@ const display = new Display({
     fakeVideo: !!parsedQuery.fakeVideo,
     hasVideoNula,
     onMissingVideoNula: answerMissingVideoNula({ inSession: () => !!loop.lockstep, settings }),
+    onNulaOverComposite: answerNulaOverComposite({ switchToRgb: () => settings.set({ displayMode: "rgb" }) }),
     frameSkip: parsedQuery.frameSkip ?? 0,
 });
-const video = display.video;
+const { screenCanvas, video } = display;
 
 const audioStatsEl = document.getElementById("audio-stats");
 if (audioStatsEl) audioStatsEl.hidden = !parsedQuery.audioDebug;
@@ -239,6 +242,7 @@ const machine = new Machine({
     stationId,
     userPort: accessibilitySwitches.userPort,
     printer,
+    vdfsStore: model.takesServiceRoms ? (desktopVdfsStore(parsedQuery) ?? browserVdfsStore(parsedQuery)) : null,
     speechOutput,
     midiOutput,
     video,
@@ -248,6 +252,20 @@ const machine = new Machine({
 });
 const processor = machine.processor;
 midiOutput.setInterfaceEnabled(processor.hasMidiInterface);
+const notifyVdfs = (message, options = {}) => toast(message, { title: "VDFS", ...options });
+if (processor.vdfs) {
+    if (isDesktopApp()) {
+        notifyVdfs(ServedMessage, { quietKey: "quietVdfs" });
+        attachDesktopVdfs(processor.vdfs, { notify: notifyVdfs });
+    } else {
+        attachBrowserVdfs(processor.vdfs, {
+            notify: notifyVdfs,
+            offer: (message, label, run) => notifyVdfs(message, { action: { label, run } }),
+        }).catch((error) => notifyVdfs(`The VDFS folder could not be set up (${error.message}).`));
+    }
+} else if (parsedQuery.vdfs && !model.takesServiceRoms) {
+    notifyVdfs(`VDFS is not for the ${model.name}, so the folder is not being served.`);
+}
 panelArrangement.followMachine(() => machineMoment(processor));
 
 const loop = new EmulationLoop({
@@ -275,7 +293,7 @@ const onAnyKeyDown = () => {
 const { keyboard } = new KeyboardSetup({
     actions: {
         toggleFast: () => loop.toggleFastAsPossible(),
-        toggleRewind: () => rewindUI.toggle(),
+        openRewind: () => rewindUI.open(),
         openPrinter: () => frontPanel.checkPrinterWindow(),
         openMedia: (target) => mediaWindow.openFor(target),
         paste: (text) => keyboard.sendRawKeyboard(autoBoot.stringToMachineKeys(text), true),
@@ -290,6 +308,15 @@ const { keyboard } = new KeyboardSetup({
 });
 
 const modals = new Modals({ loop });
+if (!isDesktopApp() && canChooseFolder() && model.takesServiceRoms)
+    attachVdfsMenu({
+        urlState,
+        modals,
+        serving: !!processor.vdfs,
+        notify: notifyVdfs,
+        hold: () => processor.vdfs?.hold(),
+        release: () => processor.vdfs?.release({ changed: false }),
+    });
 openHelpOnTheTabForNow(() => loop.isPaused() || loop.mode === RunMode.debugging);
 
 const drives = new Drives({
@@ -333,6 +360,7 @@ const inputs = new AnalogueInputs({
     settings,
     audioHandler,
     takeScreenClick: (x, y) => dbgr.showScreenByteAt(x, y),
+    takeScreenMenu: (e, x, y) => dbgr.offerScreenByteAt(e, x, y),
 });
 if (settings.microphoneChannel !== undefined) {
     // We need to use setTimeout to make sure this runs after the page has loaded
@@ -351,7 +379,7 @@ const frontPanel = new FrontPanel({ processor, model, printer, loop });
 // ------------------------------------------------------------------------
 
 const replayHistory = new ReplayHistory(processor);
-const rewindUI = new RewindUI({ processor, video, loop, history: replayHistory });
+const rewindUI = new RewindUI({ loop, history: replayHistory, arrangement: panelArrangement });
 rewindUI.updateButtonState();
 dbgr.attachStepBack(replayHistory);
 

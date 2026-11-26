@@ -1,15 +1,16 @@
 import { GamepadSource } from "../gamepad-source.js";
 import { MicrophoneInput } from "./microphone-input.js";
 import { MouseJoystickSource } from "../mouse-joystick-source.js";
+import { AmxMouseInput } from "./amx-mouse-input.js";
 import { calculateMouseCoordinates } from "../mouse-coordinates.js";
 import { toast } from "./toast.js";
 
 const AdcChannelCount = 4;
 
 /**
- * What feeds the analogue port and the touchscreen: the gamepad, the mouse
- * acting as a joystick, and the microphone, with the mouse on the monitor
- * routed to whichever of them wants it.
+ * What feeds the analogue port, the touchscreen and the AMX mouse: the gamepad,
+ * the mouse acting as a joystick, and the microphone, with the mouse on the
+ * monitor routed to whichever of them wants it.
  */
 export class AnalogueInputs {
     /**
@@ -21,8 +22,10 @@ export class AnalogueInputs {
      * @param {object} options.audioHandler - woken by any mouse event on the monitor
      * @param {(x: number, y: number) => boolean} options.takeScreenClick - offered each left click on the screen,
      *     at 0 to 1 across and down it, before the machine; true when it took the click
+     * @param {(event: MouseEvent, x: number, y: number) => boolean} options.takeScreenMenu - offered each right click
+     *     on the screen, as `takeScreenClick` is, before the browser's own menu; true when it took the click
      */
-    constructor({ processor, screenCanvas, getGamepads, settings, audioHandler, takeScreenClick }) {
+    constructor({ processor, screenCanvas, getGamepads, settings, audioHandler, takeScreenClick, takeScreenMenu }) {
         this.processor = processor;
         this.settings = settings;
 
@@ -37,13 +40,18 @@ export class AnalogueInputs {
         this.mouseJoystickSource = new MouseJoystickSource(screenCanvas);
 
         const cubMonitor = document.getElementById("cub-monitor");
+        const amxMouseInput =
+            processor.amxMouse && new AmxMouseInput({ mouse: processor.amxMouse, target: cubMonitor, screenCanvas });
+        const screenPoint = (evt) => calculateMouseCoordinates(evt, screenCanvas.getBoundingClientRect());
         const onCubMouseEvent = (evt) => {
             audioHandler.tryResume();
             if (document.activeElement !== document.body) document.activeElement.blur();
-            const screenRect = screenCanvas.getBoundingClientRect();
-            const { x, y } = calculateMouseCoordinates(evt, screenRect);
+            const { x, y } = screenPoint(evt);
+            // Preventing a mousedown's default also stops the browser moving focus into a cross-site frame.
+            if (evt.type === "mousedown") window.focus();
             evt.preventDefault();
             if (evt.type === "mousedown" && evt.button === 0 && takeScreenClick(x, y)) return;
+            amxMouseInput?.onMouseEvent(evt);
 
             // Handle touchscreen
             if (processor.touchScreen) processor.touchScreen.onMouse(x, y, evt.buttons);
@@ -64,30 +72,25 @@ export class AnalogueInputs {
         for (const eventType of ["mousemove", "mousedown", "mouseup"]) {
             cubMonitor.addEventListener(eventType, onCubMouseEvent);
         }
+        cubMonitor.addEventListener("contextmenu", (evt) => {
+            const { x, y } = screenPoint(evt);
+            if (takeScreenMenu(evt, x, y)) evt.preventDefault();
+        });
     }
 
     /** Helper to manage ADC source configuration */
     updateAdcSources(mouseJoystickEnabled, microphoneChannel) {
         const { processor } = this;
-        // Default all channels to the gamepad source.
-        for (let ch = 0; ch < AdcChannelCount; ch++) {
-            processor.adconverter.setChannelSource(ch, this.gamepadSource);
-        }
+        const sources = Array(AdcChannelCount).fill(this.gamepadSource);
+        if (mouseJoystickEnabled) sources[0] = sources[1] = this.mouseJoystickSource;
+        const microphoneChannelExists =
+            Number.isInteger(microphoneChannel) && microphoneChannel >= 0 && microphoneChannel < AdcChannelCount;
+        if (microphoneChannelExists) sources[microphoneChannel] = this.microphoneInput;
 
-        // Apply mouse joystick if enabled (takes priority on channels 0 & 1)
-        if (mouseJoystickEnabled) {
-            processor.adconverter.setChannelSource(0, this.mouseJoystickSource);
-            processor.adconverter.setChannelSource(1, this.mouseJoystickSource);
-            this.mouseJoystickSource.setVia(processor.sysvia);
-        } else {
-            this.mouseJoystickSource.setVia(null);
-        }
+        processor.adconverter.setChannelSources(sources);
+        this.mouseJoystickSource.setVia(mouseJoystickEnabled ? processor.sysvia : null);
 
-        // Apply microphone if configured (can override any channel)
-        if (microphoneChannel === undefined) return;
-        if (Number.isInteger(microphoneChannel) && microphoneChannel >= 0 && microphoneChannel < AdcChannelCount) {
-            processor.adconverter.setChannelSource(microphoneChannel, this.microphoneInput);
-        } else {
+        if (microphoneChannel !== undefined && !microphoneChannelExists) {
             toast(
                 `There is no analogue channel ${microphoneChannel}; channels are 0 to 3. ` +
                     `The microphone channel has been turned off.`,

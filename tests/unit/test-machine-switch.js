@@ -100,6 +100,18 @@ describe("MachineSwitch", () => {
         await make().switchFor(paradroid, drive0, { boot: true });
         expect(window.history.length).toBe(entries + 1);
     });
+
+    it("still switches when the browser refuses session storage, with no notice for the next page", async () => {
+        vi.spyOn(window, "sessionStorage", "get").mockImplementation(() => {
+            throw new DOMException("The operation is insecure.", "SecurityError");
+        });
+        await expect(make().switchFor(paradroid, drive0, { boot: true })).resolves.toBe(true);
+        expect(deps.urlState.navigatedTo).toBe(
+            "https://bbc.example/?disc1=bitshifters:bs-paradroid.ssd&autoboot&model=Master",
+        );
+        make().announce();
+        expect(toasts()).toEqual([]);
+    });
 });
 
 describe("reloading as another machine", () => {

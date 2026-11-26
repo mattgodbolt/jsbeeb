@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Scheduler } from "../../src/scheduler.js";
 import { AudioHandler } from "../../src/web/audio-handler.js";
+import { FileBackedXhr } from "../helpers/file-backed-xhr.js";
+import { stubAudioContext } from "../helpers/stub-audio-context.js";
 import { domFromIndexHtml, teardownDom, toasts } from "./helpers.js";
 
 const SuspendedText = "Your browser has suspended audio";
@@ -11,16 +13,16 @@ describe("AudioHandler", () => {
     let contexts;
     let worklets;
 
-    function fakeNode() {
-        return { connect: () => {}, gain: { value: 0 } };
-    }
-
     function fakeContext(hasWorklet, addModule) {
         return {
-            state: "running",
+            ...stubAudioContext(),
             destination: {},
             audioWorklet: hasWorklet ? { addModule } : undefined,
-            createGain: fakeNode,
+            decodeAudioData: async (data) => {
+                if (!/^(RIFF|ID3)/.test(new TextDecoder().decode(data.slice(0, 4))))
+                    throw new DOMException("Decoding failed", "EncodingError");
+                return { duration: 1 };
+            },
             resume: async () => {},
         };
     }
@@ -383,6 +385,61 @@ describe("AudioHandler", () => {
             await vi.waitFor(() => expect(toasts()).toEqual([expect.stringContaining("Music 5000 will be silent")]));
             expect(warningShown()).toBe(false);
         });
+    });
+
+    describe("when drive sounds fail to load", () => {
+        const named = (names, url) => names.some((name) => url.includes(`/${name}.wav`));
+
+        /** A handler whose `unfetchable` sounds fail to fetch and whose `undecodable` ones come back as a web page. */
+        async function initialisedWithout(unfetchable, undecodable = []) {
+            stubAudio();
+            vi.stubGlobal(
+                "XMLHttpRequest",
+                class extends FileBackedXhr {
+                    send() {
+                        if (named(unfetchable, this._url)) return this.onerror();
+                        if (!named(undecodable, this._url)) return super.send();
+                        this.response = new TextEncoder().encode("<!doctype html>");
+                        this.status = 200;
+                        this.onload();
+                    }
+                },
+            );
+            const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+            const handler = makeHandler({ noSeek: false });
+            await handler.initialise();
+            const { ddNoise } = handler;
+            return { ddNoise, warn, played: () => ddNoise.playing.map((source) => source.buffer) };
+        }
+
+        it("still initialises, warning once, with those seeks silent and the rest playing", async () => {
+            const { ddNoise, warn, played } = await initialisedWithout(["seek06in"], ["stepin"]);
+
+            expect(warn).toHaveBeenCalledOnce();
+            expect(warn.mock.calls[0][0]).toContain("seek06in.wav");
+            expect(warn.mock.calls[0][0]).toContain("stepin.wav (Decoding failed)");
+            ddNoise.seekStart(10, 6);
+            ddNoise.seekStart(1, 6);
+            expect(played()).toEqual([]);
+            ddNoise.seekStart(-10, 6);
+            expect(played()).toEqual([ddNoise.sounds.seek06out]);
+        });
+
+        it.each(["motoron", "motor"])(
+            "without %s, still loops the motor if it has one and plays the stop sound",
+            async (missing) => {
+                const { ddNoise, played } = await initialisedWithout([missing]);
+
+                ddNoise.spinUp();
+                expect(played()).not.toContain(undefined);
+                for (const source of [...ddNoise.playing]) source.onended();
+                await new Promise((resolve) => setTimeout(resolve));
+                expect(played()).toEqual([ddNoise.sounds.motor].filter(Boolean));
+                ddNoise.spinDown();
+
+                expect(played()).toContain(ddNoise.sounds.motorOff);
+            },
+        );
     });
 
     describe("without a warning node", () => {

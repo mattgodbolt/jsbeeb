@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { answerMissingVideoNula, offerVideoNula } from "../../src/web/video-nula-notice.js";
+import { answerMissingVideoNula, answerNulaOverComposite, offerVideoNula } from "../../src/web/video-nula-notice.js";
 import { sentEvents, teardownDom, toasts } from "./helpers.js";
 
 describe("offerVideoNula", () => {
@@ -83,5 +83,23 @@ describe("offerVideoNula", () => {
         offerVideoNula({ inSession: false, fit: vi.fn() });
         expect(toasts()).toEqual([]);
         expect(sent("feature_used")).toEqual([{ feature: "videonula", action: "missing" }]);
+    });
+});
+
+describe("answerNulaOverComposite", () => {
+    afterEach(teardownDom);
+
+    it("says once, after the emulator lets go, that the TV picture is a guess, offering RGB", () => {
+        const switchToRgb = vi.fn();
+        vi.useFakeTimers();
+        const answer = answerNulaOverComposite({ switchToRgb });
+        answer();
+        expect(toasts()).toEqual([]);
+        vi.runOnlyPendingTimers();
+        answer();
+        vi.runOnlyPendingTimers();
+        expect(toasts()).toEqual([expect.stringContaining("best guess")]);
+        document.querySelector(".toast .toast-action").click();
+        expect(switchToRgb).toHaveBeenCalledTimes(1);
     });
 });

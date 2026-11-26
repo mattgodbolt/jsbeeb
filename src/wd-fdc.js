@@ -69,6 +69,15 @@ const FmIndexMark = 0xfc;
 // The datasheet figures. In #1225, 30 ms reproduces the sectors a real Master 128 misses, and 15 ms doesn't.
 const Wd1770HeadSettleMs = 30;
 const Wd1772HeadSettleMs = 15;
+const CommandDoneDelayUs = 32;
+const FmByteUs = 64;
+const MfmByteUs = 32;
+// A Master 128's 1770 raises INTRQ a fixed number of byte-times after a sector or ID command's
+// last DRQ, the same in FM and MFM (#1852): 1/2 for READ ADDRESS, 2 5/8 for READ SECTOR and 5 5/8 for WRITE
+// SECTOR. Each constant is what is left of that after the bytes its command's state machine has already spent.
+const ReadAddressDoneBytes = 0.5;
+const ReadSectorDoneBytes = 0.625;
+const WriteSectorDoneBytes = 0.625;
 
 /**
  * The drive control register is documented here:
@@ -135,7 +144,8 @@ export const State = Object.freeze({
     writeTrackSetup: 16,
     inWriteTrack: 17,
     checkMulti: 18,
-    done: 19,
+    // Kept so the number is not reused; only older snapshots hold it.
+    retiredReadAddressDone: 19,
 });
 
 /**
@@ -807,7 +817,7 @@ export class WdFdc extends DiscController {
                     this._indexPulseCount = 0;
                     this._setState(State.searchId);
                 } else {
-                    this._commandDone(true);
+                    this._commandDoneAfterBytes(WriteSectorDoneBytes);
                 }
                 break;
             case State.writeTrackSetup:
@@ -815,9 +825,6 @@ export class WdFdc extends DiscController {
                 break;
             case State.inWriteTrack:
                 this._pulsesCallbackInWriteTrack(isMfm, isIndexPulsePositiveEdge);
-                break;
-            case State.done:
-                this._commandDone(true);
                 break;
             default:
                 throw new Error(`Unexpected state ${this._state}`);
@@ -1134,10 +1141,15 @@ export class WdFdc extends DiscController {
         this._timerTask.schedule(waitUs * this._cyclesPerUs);
     }
 
-    _commandDone(doRaiseIntRq) {
+    _commandDone(doRaiseIntRq, delayUs = CommandDoneDelayUs) {
         if (!(this._statusRegister & Status.busy)) throw new Error("Should be busy");
         this._doRaiseIntRq = doRaiseIntRq;
-        this._startTimer(TimerState.done, 32);
+        this._startTimer(TimerState.done, delayUs);
+    }
+
+    _commandDoneAfterBytes(bytes) {
+        const byteUs = this._isDoubleDensity(this._controlRegister) ? MfmByteUs : FmByteUs;
+        this._commandDone(true, bytes * byteUs);
     }
 
     _doneTimer() {
@@ -1263,11 +1275,7 @@ export class WdFdc extends DiscController {
             if (isCrcError) this._statusRegister |= Status.crcError;
             // Unlike the 8271, read address returns just a single record. It is also not synchronized
             // to the index pulse.
-            // EMU NOTE: the internal clock cycles the 1770 spends between delivering the last
-            // header byte, reporting the CRC error and dropping busy are not modelled.
-            // EMU NOTE: must not clear busy flag right away. The 1770 delivers the
-            // last header byte DRQ separately from lowering the busy flag.
-            this._setState(State.done);
+            this._commandDoneAfterBytes(ReadAddressDoneBytes);
             return;
         }
 
@@ -1331,17 +1339,21 @@ export class WdFdc extends DiscController {
             this._crc = IbmDiscFormat.crcAddByte(this._crc, data);
             this._sendDataToHost(data);
             return;
-        } else if (this._stateCount <= this._onDiscLength + 2) {
-            this._onDiscCrc = ((this._onDiscCrc << 8) & 0xffff) | data;
-            return;
         }
+        this._onDiscCrc = ((this._onDiscCrc << 8) & 0xffff) | data;
+        if (this._stateCount === this._onDiscLength + 2) this._endDataField();
+    }
+
+    _endDataField() {
         if (this._crc !== this._onDiscCrc) {
             this._statusRegister |= Status.crcError;
             // Sector data CRC error is terminal, even for a multi-sector read.
-            this._commandDone(true);
-            return;
+            this._commandDoneAfterBytes(ReadSectorDoneBytes);
+        } else if (this._isCommandMulti) {
+            this._setState(State.checkMulti);
+        } else {
+            this._commandDoneAfterBytes(ReadSectorDoneBytes);
         }
-        this._setState(State.checkMulti);
     }
 
     _sendDataToHost(data) {
@@ -1439,6 +1451,9 @@ export class WdFdc extends DiscController {
         if (this._statusRegister & Status.motorOn) for (const drive of this._drives) drive.startSpinning();
 
         this._timerTask.restoreOffset(state.timerTaskOffset);
+        if (state.state === State.retiredReadAddressDone) this._commandDone(true);
+        // Only older snapshots hold a data field read to its last CRC byte but not yet checked.
+        if (this._state === State.inData && this._stateCount === this._onDiscLength + 2) this._endDataField();
 
         this._updateNmi();
     }

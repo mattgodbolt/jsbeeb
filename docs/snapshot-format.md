@@ -67,7 +67,7 @@ Snapshots can be imported from other emulators. The `importedFrom` field in the 
 | `"b-em"`       | B-em snapshot (`.snp` file, v1 or v3)            |
 | `"beebem-uef"` | BeebEm UEF save state (`.uef` with 0x046C chunk) |
 
-Imported snapshots use the same `jsbeeb-snapshot` format (version 3) and do not include FDC, disc or touchscreen state (`state.fdc` and `state.touchScreen` will be absent).
+Imported snapshots use the same `jsbeeb-snapshot` format (version 3) and do not include FDC, disc, touchscreen, AMX mouse or DRAM refresh state (`state.fdc`, `state.touchScreen`, `state.amxMouse` and `state.dram` will be absent).
 
 B-em snapshots include the full ROM contents in the `roms` field (256KB, all 16 banks). BeebEm UEF snapshots include only the sideways RAM banks they saved, in `swram` and `swramBankMask`.
 
@@ -142,8 +142,7 @@ No `encoding` field means plain base64, which is how every array before v4 and e
 
 `swram` holds every bank the model has as sideways RAM (banks 0-7 on a B, mask `0x00FF`; 4-7 on a Master, mask `0x00F0`; none on a stock B or an Atom). The mask is saved rather than read from the model, so a later change to a model's banks cannot misplace an older file's. Both fields are left out when `roms` already carries every bank. On restore each bank in the mask overwrites only that bank, so the ROMs jsbeeb has loaded stay as they are. Snapshots from before sideways RAM was saved have neither field, and then sideways RAM keeps its current contents, so it needed no format version bump.
 
-**Note:** `interrupt` is not saved; it is reconstructed from the VIA, ACIA and fitted MIDI ACIA state, which reassert
-their interrupt lines.
+**Note:** `interrupt` is not saved; it is reconstructed from the VIA, ACIA and fitted MIDI ACIA state, which reassert their interrupt lines, and on a Master from `acccon`, whose bit 7 (IRR) holds an IRQ while set.
 
 Snapshots written before `ram` was 64KB, and earlier b-em and BeebEm imports, hold 128KB of `ram`. They still load: only the first 64KB is used, as the rest was never mapped, so it needed no format version bump.
 
@@ -159,6 +158,23 @@ A state restored with `stoppedAtBreakpoint` set is stopped where it was saved: t
 
 Scheduled tasks are not saved directly. Each component saves its task timing as an offset relative to `epoch` and re-registers its tasks on restore.
 
+### DRAM refresh (`state.dram`)
+
+Absent on the Atom. Which DRAM rows the video and the CPU have refreshed, and when, so that rows nothing refreshes decay as they would have. Times are scheduler epochs. A row is a CPU address's low 7 bits on a B and low 8 bits on a Master.
+
+| Field             | Type         | Description                                                                                                                 |
+| ----------------- | ------------ | --------------------------------------------------------------------------------------------------------------------------- |
+| `windowStart`     | number       | Epoch the current refresh window began                                                                                      |
+| `windows`         | number       | Refresh windows ended so far; the window after the end of every seventh, if that one left rows unrefreshed, samples the CPU |
+| `lastCoveredAt`   | number       | Epoch the last window that the video alone refreshed every row in ended                                                     |
+| `lastRefreshedAt` | Float64Array | Per row, the epoch of the last uncovered window that refreshed or decayed it; a covered window moves only `lastCoveredAt`   |
+| `covered`         | boolean      | The video has refreshed every row in the current window                                                                     |
+| `videoRows`       | Int32Array   | Bitmap of the rows the video has refreshed in the current window                                                            |
+| `cpuRows`         | Uint8Array   | Per row, 1 if the CPU has touched it in the current window while sampled                                                    |
+| `cpuSampled`      | boolean      | The CPU's memory accesses are sampled in the current window                                                                 |
+
+Snapshots written before DRAM refresh was emulated lack it, and absent means every row was refreshed at the moment of restore, so it needed no format version bump.
+
 ### VIA (`state.sysvia`, `state.uservia`)
 
 | Field                | Type         | Description                                                      |
@@ -173,14 +189,14 @@ Scheduled tasks are not saved directly. Each component saves its task timing as 
 | `t1l`                | number       | Timer 1 Latch (doubled 2MHz ticks)                               |
 | `t2l`                | number       | Timer 2 Latch                                                    |
 | `t1c`                | number       | Timer 1 Counter                                                  |
-| `t2c`                | number       | Timer 2 Counter (just the low byte's count in shift mode 100)    |
+| `t2c`                | number       | Timer 2 Counter (the low byte alone while T2 clocks the SR)      |
 | `acr`                | number       | Auxiliary Control Register                                       |
 | `pcr`                | number       | Peripheral Control Register                                      |
 | `ifr`                | number       | Interrupt Flag Register                                          |
 | `ier`                | number       | Interrupt Enable Register                                        |
 | `t1hit`              | boolean      | Timer 1 has expired                                              |
 | `t2hit`              | boolean      | Timer 2 has expired                                              |
-| `t2High`             | number       | T2 high byte in shift mode 100; split from `t2c` when absent     |
+| `t2High`             | number       | T2 high byte while T2 clocks the SR; split from `t2c` if absent  |
 | `portapins`          | number       | Port A pin levels                                                |
 | `portbpins`          | number       | Port B pin levels                                                |
 | `ca1`                | boolean      | CA1 line level                                                   |
@@ -189,12 +205,16 @@ Scheduled tasks are not saved directly. Each component saves its task timing as 
 | `cb2`                | boolean      | CB2 line level                                                   |
 | `justhit`            | number       | Timer just-hit flags                                             |
 | `t1_pb7`             | number       | Timer 1 PB7 output state                                         |
+| `shiftBits`          | number       | Bits left in the shift register's count of eight                 |
 | `lastPolltime`       | number       | Last polltime epoch                                              |
 | `taskOffset`         | number\|null | Scheduled task offset from epoch (null if no task)               |
 | `ca2PulseTaskOffset` | number\|null | Offset at which a pulse-mode CA2 returns high (null if no pulse) |
 | `cb2PulseTaskOffset` | number\|null | Offset at which a pulse-mode CB2 returns high (null if no pulse) |
+| `shiftTaskOffset`    | number\|null | Next edge of an internal shift clock or its flag (null if none)  |
 
 `ca2PulseTaskOffset` and `cb2PulseTaskOffset` are absent from snapshots written before CA2/CB2 pulses had a width, and from imported snapshots; absent means no pulse is in flight.
+
+While an internal clock shifts, `cb1` is the clock's output level, and while it shifts out `cb2` is the last bit put out. `shiftBits` and `shiftTaskOffset` are absent from snapshots written before the shift register shifted, and from imported snapshots; absent means no shift is under way and a full count of eight.
 
 System VIA additionally includes:
 
@@ -427,6 +447,34 @@ touchscreen keeps whatever state it currently holds, unpolled, exactly as before
 
 The pointer position and button state are not saved: like the keyboard, they are host input and are refreshed by the next mouse event.
 
+### AMX mouse (`state.amxMouse`)
+
+Present only when the AMX mouse was fitted. Absent means a fitted mouse drops any movement it had still to make.
+
+| Field            | Type                               | Description                                                                                                                    |
+| ---------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `x`, `y`         | `{pending: number, phase: number}` | Quadrature steps still to make (right and up positive), and phase 0 to 3                                                       |
+| `stepsWaited`    | number                             | Steps waited for the software to clear the CB1 and CB2 flags; still non-zero just after they clear, as the next step waits too |
+| `yStepsNext`     | boolean                            | Whether the Y axis takes the next step while both have steps to make                                                           |
+| `stepTaskOffset` | number\|null                       | Step task offset (null when the mouse is still)                                                                                |
+
+The levels on CB1 and CB2 are the user VIA's. The buttons are not saved: like the keyboard, they are host input.
+
+### VDFS (`state.vdfs`)
+
+Present when a folder is served (see [vdfs.md](vdfs.md)). It holds the device the ROM talks to, so that a snapshot taken
+while the ROM is partway through a call can be restored to the same place: `inputs` (the `a`, `x` and `y` the ROM
+poked in), `busy` (whether a call was waiting for the store), and `responses`, oldest first, each `[bytes, position,
+results, raises]`: a response the ROM has not finished reading, with the `x`, `y` and `carry` it will return (null for a
+response that ends in an error or an exec), and whether it ends in an error. A call that was `busy` is answered with "Disc
+changed" on restore, since the store it was waiting on is not the machine's.
+
+The host's own state is not kept. Its open files are the host's, so a restored snapshot has none open (they are written
+back), and the current directory and library are the root's. The OS's filing system vectors are in RAM and so still point
+at VDFS, and file calls go on being served, but the host forgets that it was selected, so commands such as `*DIR` are
+not claimed until `*VDFS` selects it again. A snapshot without `vdfs`, or loaded into a machine with no folder served,
+carries on without it. It was added without a version bump.
+
 ### Teletext adaptor (`state.teletextAdaptor`)
 
 Present only when the Acorn teletext adaptor was fitted. Absent means the adaptor, if one is fitted now, keeps its current state, the same fallback as a v1 snapshot's missing FDC. Because absence is already the well-defined case, adding this field did not need a format version bump: v3 readers that predate it ignore it, and readers that know it treat an older v3 snapshot as "adaptor state unchanged".
@@ -525,6 +573,10 @@ The FDC type depends on the model: Intel 8271 for BBC B models, WD1770 for Maste
 | `drives`                    | object[]     | Array of 2 drive states (see Disc drive below) |
 
 `_currentDrive` is derived from `controlRegister` drive select bits on restore.
+
+A `state` of 19 comes from a snapshot saved while a read address waited a byte after its last DRQ, a state the controller no longer has; on restore the command finishes, raising INTRQ after the usual 32 µs.
+
+A read sector now checks its data CRC as the second CRC byte arrives. An older snapshot saved in the byte it waited after that (`state` 8, `stateCount` two past the sector length) does the check on restore and ends the command as a newer one would; one saved in `checkMulti` (18) at the end of a single-sector read ends 5/8 of a byte after the next byte, so its INTRQ comes 4 5/8 byte-times after the last DRQ rather than 2 5/8.
 
 ### Disc drive (`state.fdc.drives[n]`)
 

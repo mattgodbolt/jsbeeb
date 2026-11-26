@@ -23,6 +23,7 @@ const USERDISPENABLE = 1 << 4;
 const FRAMESKIPENABLE = 1 << 5;
 export const EVERYTHINGENABLED =
     VDISPENABLE | HDISPENABLE | SKEWDISPENABLE | SCANLINEDISPENABLE | USERDISPENABLE | FRAMESKIPENABLE;
+const DisptmgEnables = HDISPENABLE | VDISPENABLE | USERDISPENABLE;
 
 export { OPAQUE_BLACK };
 const OPAQUE_WHITE = 0xffffffff;
@@ -45,6 +46,19 @@ export const HwScrollSubtract = [8, 4, 10, 5];
 export const LineCountPeriod = 2500;
 
 const BitmapXPerClock = 8;
+const Ma13 = 1 << 13;
+const CrtcRegisters = 18;
+const WideCharacterTexels = 2 * BitmapXPerClock;
+// A ULA write shows from 4 - p texels into the character fetched in its own cycle, for a pixel period of p texels
+// before the write, at either clock rate: measured on a Master in 20, 40 and 80 columns (#1866). Indexed by control
+// bits 3-2. Ten columns would put it 4 texels into the character before, which is unmeasured, so they show from the
+// character's start.
+const UlaWriteEdgeTexels = [0, 0, 2, 3];
+// The HD6845S switches R8's display enable for the character fetched in the write's last cycle (#1847, #1866).
+const R8EnableTakesFetchedCharacter = true;
+// Switching the CRTC from 2MHz to 1MHz while the 1MHz clock is high clocks it once more, with no fetch: measured on
+// one Master with an HD6845S (#1866); a Model B or another CRTC may differ.
+const ClockSwitchRuntTicksCrtc = true;
 
 /**
  * @typedef {object} BeamPosition
@@ -65,13 +79,23 @@ const MostTracedClocks = TracedVSyncs * 384 * 256 * 2;
 // Reference: b-em src/video.c (stardot/b-em).
 // Addresses &FE22 (control) and &FE23 (palette) via 2-byte write protocol.
 
+const FullLevel = 0xff;
+
+const isPartialChannel = (level) => level !== 0 && level !== FullLevel;
+
+/** Whether any of an ABGR colour's channels is neither off nor at full level. */
+const hasPartialLevel = (abgr) =>
+    isPartialChannel(abgr & 0xff) || isPartialChannel((abgr >>> 8) & 0xff) || isPartialChannel((abgr >>> 16) & 0xff);
+
 ////////////////////
 // ULA interface (includes NULA programmable palette support)
 class Ula {
-    constructor(video, hasVideoNula, onMissingVideoNula) {
+    constructor(video, hasVideoNula, onMissingVideoNula, onPartialLevelsChanged) {
         this.video = video;
         this.hasVideoNula = hasVideoNula;
         this.onMissingVideoNula = hasVideoNula ? null : onMissingVideoNula;
+        this.onPartialLevelsChanged = onPartialLevelsChanged;
+        this.usesPartialLevels = false;
         // NULA state
         this.collook = new Uint32Array(16);
         this.flash = new Uint8Array(8);
@@ -107,12 +131,22 @@ class Ula {
         this._recomputeUlaPal(!!(this.video.ulactrl & 1));
         // Rebuild MODE 7 teletext colours from the restored default palette.
         this.video.teletext.rebuildColours(this.collook);
+        this._notePartialLevels();
+    }
+
+    _notePartialLevels() {
+        const usesPartialLevels = this.collook.some(hasPartialLevel);
+        if (usesPartialLevels === this.usesPartialLevels) return;
+        this.usesPartialLevels = usesPartialLevels;
+        this.onPartialLevelsChanged?.(usesPartialLevels);
     }
 
     write(addr, val) {
         addr |= 0;
         val |= 0;
         this.video.renderPending();
+        const edgeTexels = UlaWriteEdgeTexels[this.video.ulaMode];
+        const { halfClock: wasHalfClock, teletextMode: wasTeletext } = this.video;
         let reg = addr & 3;
 
         // When NULA is disabled, mask off bit 1 so &FE22/&FE23 become &FE20/&FE21.
@@ -140,7 +174,10 @@ class Ula {
                 this._writeNulaPalette(val);
                 break;
         }
-        this.video.repaintSecondHalfOfCell();
+        this.video.repaintAfterUlaWrite(edgeTexels, wasHalfClock, wasTeletext);
+        if (ClockSwitchRuntTicksCrtc && !wasHalfClock && this.video.halfClock && this.video.oddClock) {
+            this.video.clockCrtcWithoutFetch();
+        }
     }
 
     snapshotState() {
@@ -155,6 +192,32 @@ class Ula {
             disabled: this.disabled,
             attributeMode: this.attributeMode,
             attributeText: this.attributeText,
+        };
+    }
+
+    /** The control register and palette as written, and the colour each palette entry draws now, as 0xAABBGGRR. */
+    inspect() {
+        const { ulactrl, actualPal, ulaPal } = this.video;
+        return {
+            control: ulactrl,
+            palette: Array.from(actualPal),
+            paletteColours: Array.from(ulaPal, (abgr) => abgr >>> 0),
+        };
+    }
+
+    /** What VideoNuLA's registers have set, its palette write half done, and its sixteen colours as 0xAABBGGRR. */
+    inspectNula() {
+        return {
+            disabled: this.disabled,
+            paletteMode: this.paletteMode,
+            horizontalOffset: this.horizontalOffset,
+            leftBlank: this.leftBlank,
+            attributeMode: this.attributeMode,
+            attributeText: this.attributeText,
+            flash: Array.from(this.flash),
+            palette: Array.from(this.collook, (abgr) => abgr >>> 0),
+            paletteWriteFlag: this.paletteWriteFlag,
+            paletteFirstByte: this.paletteFirstByte,
         };
     }
 
@@ -175,6 +238,7 @@ class Ula {
         this.attributeText = state.attributeText;
         this._recomputeUlaPal(!!(this.video.ulactrl & 1));
         this.video.teletext.rebuildColours(this.collook);
+        this._notePartialLevels();
     }
 
     // ULA control register (&FE20).
@@ -185,6 +249,7 @@ class Ula {
         }
         this.video.ulactrl = val;
         this.video.pixelsPerChar = val & 0x10 ? 8 : 16;
+        this.video.teletext.blackCellPixels = this.video.pixelsPerChar;
         this.video.halfClock = !(val & 0x10);
         const newMode = (val >>> 2) & 3;
         if (newMode !== this.video.ulaMode) {
@@ -267,6 +332,7 @@ class Ula {
             this._recomputeUlaPal(!!(this.video.ulactrl & 1));
             // MODE 7 teletext uses its own colour lookup; rebuild when a base colour changes.
             if (c < 8) this.video.teletext.rebuildColours(this.collook);
+            this._notePartialLevels();
         } else {
             this.paletteFirstByte = val;
         }
@@ -304,6 +370,34 @@ class Crtc {
         return { curReg: this.curReg };
     }
 
+    /**
+     * R0 to R17, the address register and the counters, with what the BBC wires around the 6845 that decides what its
+     * addresses read: the ULA's clock rate, IC32's screen size and whether this is a Master.
+     */
+    inspect() {
+        const video = this.video;
+        return {
+            regs: Array.from(video.regs.subarray(0, CrtcRegisters)),
+            addressRegister: this.curReg,
+            horizCounter: video.horizCounter,
+            scanlineCounter: video.scanlineCounter,
+            vertCounter: video.vertCounter,
+            addr: video.addr,
+            lineStartAddr: video.lineStartAddr,
+            rowAddress: video.externalRowAddress(),
+            dispEnabled: video.dispEnabled,
+            inHSync: video.inHSync,
+            inVSync: video.inVSync,
+            inVertAdjust: video.inVertAdjust,
+            inDummyRaster: video.inDummyRaster,
+            evenField: video.doEvenFrameLogic,
+            cursorOnThisFrame: video.cursorOnThisFrame,
+            halfClock: video.halfClock,
+            screenSubtract: video.screenSubtract,
+            isMaster: video.isMaster,
+        };
+    }
+
     restoreState(state) {
         this.curReg = state.curReg;
     }
@@ -332,8 +426,7 @@ class Crtc {
                     break;
                 case 8: {
                     this.video.renderPending();
-                    this.video.interlacedSyncAndVideo = (val & 3) === 3;
-                    this.video.updateVSync();
+                    const wasEnabled = !!(this.video.dispEnabled & USERDISPENABLE);
                     const skew = (val & 0x30) >>> 4;
                     if (skew < 3) {
                         this.video.displayEnableSkew = skew;
@@ -341,6 +434,10 @@ class Crtc {
                     } else {
                         this.video.dispEnableClear(USERDISPENABLE);
                     }
+                    // Before the interlace bits change, as the character was painted with the old ones.
+                    if (R8EnableTakesFetchedCharacter && skew < 3 !== wasEnabled) this.video.repaintAfterR8Write();
+                    this.video.interlacedSyncAndVideo = (val & 3) === 3;
+                    this.video.updateVSync();
                     break;
                 }
                 case 14:
@@ -394,7 +491,7 @@ export class Video {
         isMaster,
         framebufferPixels,
         paint_ext_param,
-        { isAtom = false, hasVideoNula = false, onMissingVideoNula = null, drainKind } = {},
+        { isAtom = false, hasVideoNula = false, onMissingVideoNula = null, onPartialNulaLevelsChanged, drainKind } = {},
     ) {
         this.isMaster = isMaster;
         this.drain = new VideoDrain(framebufferPixels, drainKind ?? PreferredDrain);
@@ -413,7 +510,9 @@ export class Video {
         // The bitmapX the beam would be at had no hsync since the last flyback sent it back.
         this.frameStartX = 0;
         this.oddClock = false;
+        // R6 hits, which a program need never reach; fieldCount counts the TV's fields.
         this.frameCount = 0;
+        this.fieldCount = 0;
         this.hsyncCount = 0;
         // Where the subcarrier is, in cycles, at the start of the current line.
         this.subcarrierPhase = 0;
@@ -494,6 +593,8 @@ export class Video {
         this.rightBorder = 3 * 16;
 
         this.paint_ext = paint_ext_param;
+        /** @type {import("./dram-refresh.js").DramRefresh | null} */
+        this.dramRefresh = null;
 
         this.debugPrevScreen = null;
 
@@ -522,7 +623,7 @@ export class Video {
         })();
 
         this.crtc = new Crtc(this);
-        this.ula = new Ula(this, hasVideoNula, onMissingVideoNula);
+        this.ula = new Ula(this, hasVideoNula, onMissingVideoNula, onPartialNulaLevelsChanged);
 
         // Atom: attach the MC6847 VDG and use its polltime
         this.video6847 = null;
@@ -647,6 +748,7 @@ export class Video {
         this.nextLineStartAddr = state.nextLineStartAddr;
         this.ulactrl = state.ulactrl;
         this.pixelsPerChar = state.pixelsPerChar;
+        this.teletext.blackCellPixels = this.pixelsPerChar;
         this.halfClock = state.halfClock;
         this.ulaMode = state.ulaMode;
         this.teletextMode = state.teletextMode;
@@ -675,6 +777,7 @@ export class Video {
     reset(cpu, via, hard) {
         this.renderPending();
         this.cpu = cpu;
+        this.dramRefresh = cpu?.dramRefresh ?? null;
         this.sysvia = via;
         if (via) via.cb2changecallback = this.cb2changed.bind(this);
         if (hard) this.ula.powerOn();
@@ -704,6 +807,8 @@ export class Video {
     }
 
     flyback() {
+        this.fieldCount++;
+        this.dramRefresh?.endOfField();
         this.renderPending();
         const painting = this.bitmapY >= MinPaintedFrameRows && this.dispEnabled & FRAMESKIPENABLE;
         if (painting) this.paint();
@@ -717,7 +822,7 @@ export class Video {
         this.dispEnabled &= ~FRAMESKIPENABLE;
         let enable = FRAMESKIPENABLE;
         if (this.frameSkipCount > 1) {
-            if (this.frameCount % this.frameSkipCount) enable = 0;
+            if (this.fieldCount % this.frameSkipCount) enable = 0;
         }
         this.dispEnabled |= enable;
         this.cursorInvertedOffset = -1;
@@ -873,11 +978,10 @@ export class Video {
         );
     }
 
-    // The second half of a 16 pixel cell, for the 1MHz repaint.
-    blitFbSecondHalf(dat, destOffset) {
+    blitFbFrom(dat, destOffset, fromPixel, toPixel) {
         const offset = table4bppOffset(this.ulaMode, dat);
         const colourLookup = this.pixelColours();
-        for (let i = 8; i < 16; ++i) {
+        for (let i = fromPixel; i < toPixel; ++i) {
             this.fb32[destOffset + i] = colourLookup[this.table4bpp[offset + i]];
         }
     }
@@ -906,12 +1010,12 @@ export class Video {
         if (++this.cursorDrawIndex === 7) this.cursorDrawIndex = 0;
     }
 
-    invertForCursor(offset, fromPixel) {
-        for (let i = fromPixel; i < this.pixelsPerChar; ++i) {
+    invertForCursor(offset, fromPixel, toPixel = this.pixelsPerChar) {
+        for (let i = fromPixel; i < toPixel; ++i) {
             this.fb32[offset + i] ^= CursorInvert;
         }
         if (this.doublesLines()) {
-            for (let i = fromPixel; i < this.pixelsPerChar; ++i) {
+            for (let i = fromPixel; i < toPixel; ++i) {
                 this.fb32[offset + 1024 + i] ^= CursorInvert;
             }
         }
@@ -926,27 +1030,52 @@ export class Video {
         return bitmapRow * 1024 + this.bitmapX;
     }
 
-    // The render loop paints a whole 1MHz cell on one 2MHz tick and skips the next, but the ULA
-    // output stage switches at 2MHz: a register write landing on the skipped tick changes the
-    // second half of the cell just painted. See https://github.com/mattgodbolt/jsbeeb/issues/766
-    repaintSecondHalfOfCell() {
-        if (!this.halfClock || !this.oddClock) return;
+    // The render loop paints a character whole on the tick that fetches it, so the part of it from a write's edge on
+    // is repainted with the new state. A 1MHz character spans two ticks and is painted on the first, so after the
+    // second the beam is half way through it. The repaint runs to where the next tick paints: a switch to 1MHz with
+    // oddClock set widens the character just painted, and one to 2MHz narrows it.
+    repaintAfterUlaWrite(edgeTexels, wasHalfClock, wasTeletext) {
+        const widens = !wasHalfClock && this.halfClock && this.oddClock;
+        const staysTeletext = wasTeletext && this.teletextMode;
+        if (staysTeletext && !widens) return;
         if ((this.dispEnabled & EVERYTHINGENABLED) !== EVERYTHINGENABLED) return;
-        if (this.bitmapX < 0 || this.bitmapX >= 1024 || this.bitmapY < 0 || this.bitmapY >= 625) return;
-        const offset = this.beamOffset();
-        const halfCell = this.pixelsPerChar >>> 1;
-        if (this.teletextMode) {
+        const beamIntoCharacter = wasHalfClock && !this.oddClock ? BitmapXPerClock : 0;
+        const toPixel = beamIntoCharacter + (this.halfClock && this.oddClock ? WideCharacterTexels : BitmapXPerClock);
+        const fromPixel = staysTeletext ? BitmapXPerClock : beamIntoCharacter + edgeTexels;
+        this.repaintCharacter(beamIntoCharacter, fromPixel, toPixel);
+    }
+
+    repaintAfterR8Write() {
+        if (this.teletextMode) return;
+        if (((this.dispEnabled | USERDISPENABLE) & EVERYTHINGENABLED) !== EVERYTHINGENABLED) return;
+        this.repaintCharacter(0, 0, this.pixelsPerChar);
+    }
+
+    // Repaints texels [fromPixel, toPixel) of the character starting beamIntoCharacter texels behind the beam: black
+    // with R8's display enable off, else as the ULA shows its fetched byte now.
+    repaintCharacter(beamIntoCharacter, fromPixel, toPixel) {
+        const characterX = this.bitmapX - beamIntoCharacter;
+        if (characterX < 0 || characterX >= 1024 || this.bitmapY < 0 || this.bitmapY >= 625) return;
+        const offset = this.beamOffset() - beamIntoCharacter;
+        if (!(this.dispEnabled & USERDISPENABLE)) {
+            this.fb32.fill(OPAQUE_BLACK, offset + fromPixel, offset + toPixel);
+        } else if (this.teletextMode) {
             this.teletext.catchUp();
-            this.teletext.emitSecondHalf(this.fb32, offset);
+            // The address counter has moved on past the character.
+            if (this.halfClock && (this.addr - 1) & Ma13) {
+                this.teletext.emitFrom(this.fb32, offset, fromPixel, toPixel);
+            } else {
+                this.fb32.fill(OPAQUE_BLACK, offset + fromPixel, offset + toPixel);
+            }
         } else {
-            this.blitFbSecondHalf(this.cellData, offset);
+            this.blitFbFrom(this.cellData, offset, fromPixel, toPixel);
         }
-        this.drain.markDrawn(offset, this.pixelsPerChar, this.doublesLines());
+        this.drain.markDrawn(offset, toPixel, this.doublesLines());
         if (this.doublesLines()) {
-            this.fb32.copyWithin(offset + 1024 + halfCell, offset + halfCell, offset + this.pixelsPerChar);
+            this.fb32.copyWithin(offset + 1024 + fromPixel, offset + fromPixel, offset + toPixel);
         }
         if (this.cursorInvertedOffset === offset) {
-            this.invertForCursor(offset, halfCell);
+            this.invertForCursor(offset, fromPixel, toPixel);
         }
     }
 
@@ -955,7 +1084,7 @@ export class Video {
     }
 
     readVideoMem() {
-        if (this.addr & 0x2000) {
+        if (this.addr & Ma13) {
             // Mode 7 chunky addressing mode if MA13 set.
             // Address offset by scanline is ignored.
             // On model B only, there's a quirk for reading 0x3c00.
@@ -965,6 +1094,13 @@ export class Video {
                 memAddr |= 0x7c00;
             } else {
                 memAddr |= 0x3c00;
+            }
+            // MA6 is XORed with the 1 MHz clock for DRAM refresh (https://beebwiki.mdfs.net/Address_translation);
+            // a 1 MHz ULA only reads on odd clocks, so only a 2 MHz bitmap ULA shows it. The Master also flips MA7
+            // on odd RA; a Model B's MA7 is unmeasured (https://github.com/mattgodbolt/jsbeeb/issues/1849).
+            if (!this.teletextMode && !this.oddClock) {
+                memAddr ^= 0x40;
+                if (this.isMaster && this.externalRowAddress() & 1) memAddr ^= 0x80;
             }
             return this.cpu.videoRead(memAddr);
         } else {
@@ -1063,6 +1199,19 @@ export class Video {
         // - Vertical adjust.
         // - Last scanline of vertical adjust (dummy raster pending).
         // - Dummy raster. (This is for interlace timing.)
+        const dram = this.dramRefresh;
+        if (dram !== null && !dram.covered) {
+            const chars = this.regs[0] + 1;
+            const firstMa = (this.addr - chars) & 0x3fff;
+            dram.refreshLine(
+                firstMa,
+                chars,
+                this.externalRowAddress(),
+                !!(firstMa & Ma13),
+                this.halfClock,
+                this.oddClock,
+            );
+        }
         this.firstScanline = false;
 
         if (this.scanlineCounter === this.regs[11]) this.cursorOff = true;
@@ -1197,9 +1346,8 @@ export class Video {
 
     dispEnableChanged() {
         // The DISPTMG output pin is wired to the SAA5050 teletext chip,
-        // for scanline tracking, so keep it apprised.
-        const mask = HDISPENABLE | VDISPENABLE | USERDISPENABLE;
-        const disptmg = (this.dispEnabled & mask) === mask;
+        // for scanline tracking, so keep it apprised. IC15 passes it on only with MA13 set.
+        const disptmg = (this.dispEnabled & DisptmgEnables) === DisptmgEnables && !!(this.addr & Ma13);
         this.teletext.setDISPTMG(disptmg);
     }
 
@@ -1209,8 +1357,26 @@ export class Video {
     }
 
     dispEnableClear(flag) {
+        // beebjit's reading: a low DISPTMG holds the chip in reset, so a line it never saw ends with no row counted.
+        const lineEndsHeldLow =
+            !this.teletext.levelDISPTMG &&
+            (this.dispEnabled & DisptmgEnables) === DisptmgEnables &&
+            flag & DisptmgEnables;
         this.dispEnabled &= ~flag;
         this.dispEnableChanged();
+        if (lineEndsHeldLow) this.teletext.endLine();
+    }
+
+    // Clocks the CRTC once with no fetch or paint: with FRAMESKIPENABLE clear polltime's tick fetches nothing (a
+    // flyback in it decides the bit anew), and its oddClock flip and beam step are undone first, so neither moves.
+    clockCrtcWithoutFetch() {
+        const fetching = this.dispEnabled & FRAMESKIPENABLE;
+        const field = this.fieldCount;
+        this.dispEnabled &= ~FRAMESKIPENABLE;
+        this.oddClock = !this.oddClock;
+        this.bitmapX -= BitmapXPerClock;
+        this.polltime(1);
+        if (this.fieldCount === field) this.dispEnabled |= fetching;
     }
 
     ////////////////////
@@ -1263,15 +1429,16 @@ export class Video {
             if ((insideBorder || this.cursorDrawIndex) && this.dispEnabled & FRAMESKIPENABLE) {
                 // Read data from address pointer if both horizontal and vertical display enabled.
                 const dat = this.readVideoMem();
+                const ma13 = this.addr & Ma13;
                 if (insideBorder) {
                     // Always clock the SAA5050, whatever the ULA mode: IC15 latches the video bus
-                    // into the chip and it is MA13, not the ULA's teletext bit, that gates it. We
-                    // do not model the MA13 gate yet, so this feeds unconditionally. The chip is
-                    // clocked here and painted later, so a control code seen while the ULA shows
-                    // bitmap still takes effect. The chip logs the bytes and runs them when read.
+                    // into the chip and it is MA13, not the ULA's teletext bit, that gates it, so
+                    // with MA13 clear the chip sees 0. The chip is clocked here and painted later,
+                    // so a control code seen while the ULA shows bitmap still takes effect. The chip
+                    // logs the bytes and runs them when read.
                     // See https://github.com/mattgodbolt/jsbeeb/issues/546
                     // and https://github.com/mattgodbolt/jsbeeb/issues/832
-                    this.teletext.logClocked(dat);
+                    this.teletext.logClocked(ma13 ? dat : 0);
 
                     // Check cursor start.
                     if (
@@ -1303,7 +1470,12 @@ export class Video {
                             // confirmed by Rich Talbot-Watkins (RTW) at ABUG 2026-03-13; the mechanism
                             // is not established, as the Model B ULA has no connection to the SAA5050 at all.
                             // See https://github.com/mattgodbolt/jsbeeb/issues/546
-                            this.teletext.showLatest(bitmapRow * 1024 + this.bitmapX, doubledLines, !this.halfClock);
+                            // With MA13 clear IC15 holds its DISPTMG low, which blanks it too.
+                            this.teletext.showLatest(
+                                bitmapRow * 1024 + this.bitmapX,
+                                doubledLines,
+                                !this.halfClock || !ma13,
+                            );
                         } else {
                             this.pendingCells[this.pendingCount++] = this.pendingBeamOffset() | dat;
                         }
@@ -1442,6 +1614,10 @@ export class FakeVideo {
     }
 
     setScreenHwScroll() {}
+
+    readVideoMem() {
+        return 0;
+    }
 
     /** @returns {BeamPosition} */
     beamPosition() {

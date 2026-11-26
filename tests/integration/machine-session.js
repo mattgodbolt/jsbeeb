@@ -979,6 +979,7 @@ describe("MachineSession history", () => {
     const LoopAt = 0x2000;
     const CallAt = 0x2003;
     const AfterCall = 0x2006;
+    const JumpAt = 0x2007;
     const SubroutineAt = 0x2010;
     const ReturnAt = 0x2013;
     const Counter = 0x1900;
@@ -1026,7 +1027,8 @@ describe("MachineSession history", () => {
             session.stepBackOut(),
             session.reverseContinue(),
             session.whoWrote(Counter).refusal,
-        ]).toEqual(Array(5).fill(expect.stringMatching(/keeps no history/)));
+            session.trace(1).refusal,
+        ]).toEqual(Array(6).fill(expect.stringMatching(/keeps no history/)));
         expect(session.historyState()).toEqual({ recent: 0, seconds: 0, snapshots: 0, oldestCycle: null });
     });
 
@@ -1079,6 +1081,20 @@ describe("MachineSession history", () => {
         expect([session.registers().pc, session.elapsedCycles]).toEqual([SubroutineAt, write.cycle]);
     });
 
+    it("traces the instructions it ran, the newest last, leaving the machine where it was", async () => {
+        await loopingWithHistory(PageHistory);
+        await session.runUntilAddress(AfterCall, 1);
+        const { x } = session.registers();
+
+        const { entries, stoppedBy } = session.trace(4);
+        expect([entries.map(({ address }) => address), entries[2].x, stoppedBy]).toEqual([
+            [JumpAt, CallAt, SubroutineAt, ReturnAt],
+            x,
+            null,
+        ]);
+        expect(session.registers().pc).toBe(AfterCall);
+    });
+
     it("refuses to replay while text from type() is still going in", async () => {
         session.writeMemory(LoopAt, Program);
         session.writeMemory(SubroutineAt, Subroutine);
@@ -1087,10 +1103,9 @@ describe("MachineSession history", () => {
         await session.type(CallLoop);
         expect(session.typingPending).toBe(true);
 
-        expect([session.stepBack(false), session.whoWrote(Counter).refusal]).toEqual([
-            expect.stringMatching(/still being typed/),
-            expect.stringMatching(/still being typed/),
-        ]);
+        expect([session.stepBack(false), session.whoWrote(Counter).refusal, session.trace(1).refusal]).toEqual(
+            Array(3).fill(expect.stringMatching(/still being typed/)),
+        );
     });
 
     // One-a-second snapshots only, so that the step back replays frames from the one before the reset.
@@ -1184,5 +1199,97 @@ describe("MachineSession history", () => {
         expect(snapshots).toBe(Recent + Seconds);
         expect(session.elapsedCycles - oldestCycle).toBeGreaterThan((Seconds - 1) * CyclesPerSecond);
         expect(session.elapsedCycles - oldestCycle).toBeLessThan((Seconds + 1) * CyclesPerSecond);
+    });
+});
+
+describe("MachineSession inspectHardware", () => {
+    const BbcDevices = ["sysvia", "uservia", "crtc", "ula", "sound", "fdc", "acia", "serial", "adc", "paging"];
+
+    it.each([
+        ["B-DFS1.2", {}, BbcDevices],
+        [
+            "Master",
+            { tube: true, hasVideoNula: true },
+            [
+                "sysvia",
+                "uservia",
+                "crtc",
+                "ula",
+                "nula",
+                "sound",
+                "fdc",
+                "acia",
+                "serial",
+                "adc",
+                "tube",
+                "cmos",
+                "paging",
+            ],
+        ],
+        ["Atom-Tape", {}, ["via", "ppia"]],
+        ["Atom-DOS", {}, ["via", "ppia", "fdc"]],
+    ])(
+        "reads %s's devices, each alone as among the rest, refusing one it lacks",
+        async (model, opts, devices) => {
+            const session = await bootedSession(model, opts);
+            const all = session.inspectHardware();
+            const crtcRefusal = devices.includes("crtc") ? [] : [session.inspectHardware.bind(session, "crtc")];
+            const each = Object.fromEntries(devices.map((device) => [device, session.inspectHardware(device)]));
+            const refusal = () => session.inspectHardware("hal9000");
+            session.destroy();
+
+            expect(Object.keys(all)).toEqual(devices);
+            expect(JSON.parse(JSON.stringify(all))).toEqual(all);
+            expect(each).toEqual(all);
+            expect(refusal).toThrow(`has no device "hal9000"; it has ${devices.join(", ")}`);
+            for (const absent of crtcRefusal) expect(absent).toThrow(/no device "crtc"/);
+        },
+        BootTimeout,
+    );
+
+    describe("changes nothing the machine does", () => {
+        const RunCycles = 3 * CyclesPerSecond;
+        const InspectEveryCycles = 9973;
+        const WallClockMs = Date.UTC(1986, 0, 1);
+
+        // Both runs read the Master's clock at the same time of day.
+        beforeEach(() => vi.spyOn(Date, "now").mockReturnValue(WallClockMs));
+        afterEach(() => vi.restoreAllMocks());
+
+        async function runWithKeyHeld(model, opts, inspect) {
+            const session = await bootedSession(model, opts);
+            const run = async (cycles) => {
+                for (let ran = 0; ran < cycles; ran += InspectEveryCycles) {
+                    await session.runFor(InspectEveryCycles);
+                    if (inspect) session.inspectHardware();
+                }
+            };
+            session.keyDown("KeyA");
+            await run(RunCycles);
+            session.keyUp("KeyA");
+            await run(RunCycles);
+            // Reading catches the VIAs' counters up to now, as the machine's next access to them would.
+            const last = session.inspectHardware();
+            const { machine } = session.snapshot({ includeRoms: false });
+            const screen = session.drainOutput().screenText;
+            session.destroy();
+            return { last, machine, screen };
+        }
+
+        it.each([
+            ["B-DFS1.2", {}],
+            ["Master", { tube: true, hasVideoNula: true }],
+        ])(
+            "on a %s, read throughout a key press",
+            async (model, opts) => {
+                const [read, unread] = [
+                    await runWithKeyHeld(model, opts, true),
+                    await runWithKeyHeld(model, opts, false),
+                ];
+                expect(read.screen).toContain("A");
+                expect(read).toEqual(unread);
+            },
+            4 * BootTimeout,
+        );
     });
 });

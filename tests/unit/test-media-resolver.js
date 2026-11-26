@@ -14,6 +14,9 @@ describe("splitImage", () => {
         ["local:mydisc", "local", "mydisc"],
         ["!mydisc", "!", "mydisc"],
         ["https://example.com/a.ssd", "https", "example.com/a.ssd"],
+        ["HTTPS://example.com/a.ssd", "https", "example.com/a.ssd"],
+        ["HTTP://example.com/a.ssd", "http", "example.com/a.ssd"],
+        ["HtTpS://example.com/a.ssd", "https", "example.com/a.ssd"],
         ["elite.ssd", "", "elite.ssd"],
     ])("splits %s into schema %j and image %j", (ref, schema, image) => {
         expect(splitImage(ref)).toEqual({ schema, image });

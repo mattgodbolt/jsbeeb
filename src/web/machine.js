@@ -21,6 +21,7 @@ export function buildEmulationConfig({
     bankRoms,
     userPort,
     printer,
+    vdfsStore,
     midiOutput,
 }) {
     return machineSpec({
@@ -31,6 +32,8 @@ export function buildEmulationConfig({
         tube: settings.coProcessor ? tubeModelFor(settings.model) : null,
         hasMusic5000: settings.hasMusic5000,
         hasTeletextAdaptor: settings.hasTeletextAdaptor,
+        hasAmxMouse: settings.hasAmxMouse,
+        vdfsStore,
         hasMidiInterface: settings.hasMidiInterface && !settings.model.isAtom,
         midiAddress: settings.midiAddress,
         midiInterrupt: settings.midiInterrupt,
@@ -60,6 +63,7 @@ export class Machine {
         stationId,
         userPort,
         printer,
+        vdfsStore = null,
         speechOutput,
         midiOutput,
         video,
@@ -101,6 +105,7 @@ export class Machine {
             bankRoms,
             userPort,
             printer,
+            vdfsStore,
             midiOutput,
         });
 

@@ -17,6 +17,7 @@ export const LayoutVersion = 1;
 /** Every panel there is or will be. Saved entries under any other id are dropped. */
 export const PanelIds = [
     "media",
+    "rewind",
     "session",
     "watches",
     "disc",
@@ -33,6 +34,8 @@ export const PanelIds = [
     "paging",
     "basic",
     "breakpoints",
+    "callstack",
+    "trace",
 ];
 export const AllEdges = { left: true, right: true, top: true, bottom: true };
 export const StartEdge = { anchor: "start", offset: 0, fraction: 0 };

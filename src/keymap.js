@@ -411,9 +411,7 @@ export function detectKeyboardLayout() {
     if (runningInNode) {
         return "UK";
     }
-    if (localStorage.keyboardLayout) {
-        return localStorage.keyboardLayout === "US" ? "US" : "UK";
-    }
+
     if (navigator.language) {
         if (navigator.language.toLowerCase() === "en-gb") return "UK";
         if (navigator.language.toLowerCase() === "en-us") return "US";

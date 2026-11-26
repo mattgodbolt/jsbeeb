@@ -11,6 +11,7 @@
 // BASE_URL=http://localhost:5173/ points a run at a server that is already up.
 
 import { readFileSync } from "node:fs";
+import { createServer } from "node:http";
 
 import { expect, test } from "./fixtures.js";
 
@@ -33,6 +34,8 @@ const OsScreenMode = 0x355;
 // only after the frame count has gone up three times.
 const FramesToClearModeSeven = 3;
 const RgbBits = 0xffffff;
+// Long enough for the rewind history to hold two seconds, so there is one to go back to.
+const RewindHistoryMs = 2500;
 // [register, value, what the panel then says] for the system VIA: PCR with independent edges then outputs, ACR
 // shifting out by T2 then counting pulses, and IC32's keyboard enable cleared, so port A selects a key.
 const SysViaModeWrites = [
@@ -75,7 +78,7 @@ const DesktopPreload = readFileSync(new URL("../../src/app/preload.js", import.m
 // The desktop app's own preload, given a stand-in for the electron module so the page sees what it would there.
 const DesktopPreloadScript = `((require) => { ${DesktopPreload} })(() => ({
     contextBridge: { exposeInMainWorld: (key, api) => (window[key] = api) },
-    ipcRenderer: { on: () => {}, send: () => {} },
+    ipcRenderer: { on: () => {}, send: () => {}, sendSync: () => 0 },
 }));`;
 
 test("the top bar is one row at laptop widths", async ({ beeb, page }) => {
@@ -257,6 +260,20 @@ test("the no-audio-worklet warning fits a phone and a desktop, closes without ta
 const DebugPanels = ["#toolbar-panel", "#disassembly-panel", "#registers-panel", "#memory-panel"];
 const boxesOf = (page, selectors) => Promise.all(selectors.map((selector) => page.locator(selector).boundingBox()));
 const overlap = (a, b) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+
+test("a browser that refuses the page its storage still starts the machine", async ({ beeb, page }) => {
+    await page.addInitScript(() => {
+        for (const name of ["localStorage", "sessionStorage"]) {
+            Object.defineProperty(window, name, {
+                get() {
+                    throw new DOMException("The operation is insecure.", "SecurityError");
+                },
+            });
+        }
+    });
+    await beeb.open();
+    await beeb.expectScreenText(">");
+});
 
 test("a fresh profile opens no floating panel on load", async ({ beeb, page }) => {
     await beeb.open();
@@ -899,6 +916,39 @@ test("Alt+M opens the media window with the search box focused, and while the wi
     expect(await beeb.screenText()).not.toMatch(/WELCOME|>AB/);
 });
 
+test("a click on the screen of a jsbeeb framed by another site gives the frame the keyboard, and a click on the host page takes it back", async ({
+    beeb,
+    page,
+    baseURL,
+}) => {
+    const embedder = createServer((request, response) => {
+        response.setHeader("Content-Type", "text/html");
+        response.end(`
+            <script>window.hostKeys = []; addEventListener("keydown", (e) => hostKeys.push(e.key));</script>
+            <iframe src="${new URL("?embed", baseURL)}" width="1000" height="800"></iframe>`);
+    });
+    await new Promise((resolve) => embedder.listen(0, "127.0.0.1", resolve));
+    // A loopback name other than the frame's, so a different site; Chrome blocks a public page framing a local one.
+    const hostName = new URL(baseURL).hostname === "127.0.0.1" ? "localhost" : "127.0.0.1";
+    await beeb.routed;
+    try {
+        await page.goto(`http://${hostName}:${embedder.address().port}/`);
+        const frame = await (await page.locator("iframe").elementHandle()).contentFrame();
+        await expect.poll(() => frame.evaluate(() => window.processor?.sysvia !== undefined)).toBe(true);
+
+        await frame.locator("#cub-monitor").click();
+        await page.keyboard.down("a");
+        await expect.poll(() => frame.evaluate(() => window.processor.sysvia.hasAnyKeyDown())).toBe(true);
+        expect(await page.evaluate(() => window.hostKeys)).toEqual([]);
+
+        await page.mouse.click(1200, 100);
+        await expect.poll(() => frame.evaluate(() => window.processor.sysvia.hasAnyKeyDown())).toBe(false);
+        await page.keyboard.up("a");
+    } finally {
+        embedder.close();
+    }
+});
+
 test("the media window fills a phone's screen without scrolling sideways, and its bays show one thing at a time", async ({
     beeb,
     page,
@@ -1184,12 +1234,44 @@ test.describe("on a phone", () => {
     });
 });
 
-test("a narrow window without a touch screen gets the on-screen keyboard but no hint to turn it for the game pad", async ({
+test.describe("with a touch screen beside a trackpad", () => {
+    // Launch options cannot vary within this file, and touch emulation makes the touch screen the main pointer too.
+    test.beforeEach(({ page }) =>
+        page.addInitScript(() => {
+            const matchMedia = window.matchMedia.bind(window);
+            window.matchMedia = (query) => (query === "(any-pointer: coarse)" ? { matches: true } : matchMedia(query));
+        }),
+    );
+
+    test("the on-screen keyboard starts closed behind its button, which opens it for good, and touchkeys opens it", async ({
+        beeb,
+        page,
+    }) => {
+        const keys = page.locator('#touch-keyboard .tk-layer[data-name="main"]');
+        const toggle = page.getByTitle("Show the on-screen keyboard");
+        await beeb.open();
+        await expect(toggle).toBeVisible();
+        await expect(keys).toBeHidden();
+        await beeb.open("?touchkeys");
+        await expect(keys).toBeVisible();
+        await beeb.open();
+        await expect(keys).toBeHidden();
+        await toggle.click();
+        await expect(keys).toBeVisible();
+        await page.reload();
+        await expect(keys).toBeVisible();
+    });
+});
+
+test("a window without a touch screen gets the on-screen keyboard only when narrow, with no hint to turn it for the game pad", async ({
     beeb,
     page,
 }) => {
-    await page.setViewportSize({ width: 600, height: 800 });
     await beeb.open();
+    await beeb.expectScreenText(">");
+    await expect(page.locator("#touch-keyboard, #touch-keyboard-toggle")).toHaveCount(0);
+    await page.setViewportSize({ width: 600, height: 800 });
+    await page.reload();
     await expect(page.locator('#touch-keyboard .tk-layer[data-name="main"]')).toBeVisible();
     await expect(page.locator("#touch-keyboard .tk-rotate-hint")).toBeHidden();
 });
@@ -1503,5 +1585,40 @@ for (const [wasm, drain] of [
         await beeb.expectScreenText("BASIC");
         expect(await page.evaluate(() => window.processor.video.drain.kind)).toBe(drain);
         await expect.poll(() => page.evaluate(drawnSoFar, RgbBits)).toBe(true);
+    });
+}
+
+for (const [where, viewport] of [
+    ["a desktop", { width: 1280, height: 800 }],
+    ["a phone", { width: 412, height: 915 }],
+]) {
+    test(`rewind opens in front of the media window and goes back to the moment chosen, on ${where}`, async ({
+        beeb,
+        page,
+    }) => {
+        await page.setViewportSize(viewport);
+        await beeb.open();
+        await beeb.expectScreenText(">");
+        await beeb.runFor(RewindHistoryMs);
+        await page.keyboard.press("Alt+M");
+        await expect(page.locator("#media-panel")).toBeVisible();
+        // Gives the keyboard back from the search box the media window focuses; Escape there would close the window.
+        await page.evaluate(() => document.activeElement.blur());
+        await page.keyboard.press("Alt+W");
+        await expect(page.locator("#media-panel")).toBeVisible();
+        const rewind = page.locator("#rewind-panel");
+        await expect(rewind).toBeVisible();
+        const onTop = await rewind.evaluate((panel) => {
+            const box = panel.getBoundingClientRect();
+            return panel.contains(document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2));
+        });
+        expect(onTop).toBe(true);
+        const before = await beeb.expectHeld();
+        await page.keyboard.press("ArrowLeft");
+        await page.keyboard.press("Enter");
+        await expect(rewind).toBeHidden();
+        const after = await beeb.cycles();
+        expect(after).toBeLessThan(before);
+        await beeb.expectRunningPast(after);
     });
 }

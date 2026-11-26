@@ -6,8 +6,8 @@
 
 import { applyInput, cycleCount, stateHash } from "./lockstep.js";
 import { tickCycles } from "./emulation-tick.js";
-import { NoReplayHooks } from "./6502.js";
-import { RamStat, RomStat, viewedByte } from "./paging.js";
+import { NoReplayHooks, RamStat, RomStat } from "./6502.js";
+import { SidewaysEnd, SidewaysStart, viewedByte } from "./paging.js";
 
 /** How much history the page keeps: snapshots at each of the last `recent` frames, and one a second for `seconds`. */
 export const PageHistory = Object.freeze({ recent: 3, seconds: 30 });
@@ -31,7 +31,10 @@ const IsRom = "That is ROM, which a write leaves as it is.";
 const NotRepeatedHere = "The search could not repeat the machine's run since its newest snapshot exactly.";
 const CannotSearchPast = "The search cannot go back past";
 const MovedOn = "The machine moved on before the search back finished.";
-const Unrepeated = "a stretch of the run it could not repeat exactly";
+const NothingToReplay = `There is no history to replay: ${KeepsHistory}.`;
+const MovedOnReplaying = "The machine moved on before the replay finished.";
+const CannotReplayPast = "The replay cannot go back past";
+export const Unrepeated = "a stretch of the run it could not repeat exactly";
 const MidInstruction = "an input that came part way through an instruction";
 
 // S counts down and wraps, so "not deeper" is a difference of under half the page, either way round $00.
@@ -80,7 +83,13 @@ const insideExecute = (cpu) => !cpu.halted && cpu.currentCycles < cpu.targetCycl
 
 function hostInputs(cpu) {
     const { gamepad, mouse } = cpu.sysvia.fireButtons();
-    return { keyboard: cpu.keyboardInterface.keyboardState(), gamepad, mouse, resetting: !cpu.resetLine };
+    return {
+        keyboard: cpu.keyboardInterface.keyboardState(),
+        gamepad,
+        mouse,
+        amxButtons: cpu.amxMouse?.buttons ?? 0,
+        resetting: !cpu.resetLine,
+    };
 }
 
 /** What the host holds once `input` has gone in, from `host`, what it held before. */
@@ -95,6 +104,8 @@ function withInput(host, input) {
                 ...host,
                 mouse: host.mouse.map((pressed, button) => (button === input.button ? input.pressed : pressed)),
             };
+        case "amxButtons":
+            return { ...host, amxButtons: input.buttons };
         case "break":
             return { ...host, resetting: input.down };
         default:
@@ -114,15 +125,17 @@ function hostChanges(from, to) {
     to.mouse.forEach((pressed, button) => {
         if (pressed !== from.mouse[button]) changes.push({ kind: "joystickButton", button, pressed });
     });
+    if (from.amxButtons !== to.amxButtons) changes.push({ kind: "amxButtons", buttons: to.amxButtons });
     if (from.resetting !== to.resetting) changes.push({ kind: "break", down: to.resetting });
     return changes;
 }
 
 // Before the machine's own restore, as restoreSessionSnapshot puts the keys back, so that its VIA scans these.
-function restoreHostInputs(cpu, { keyboard, gamepad, mouse, resetting }) {
+function restoreHostInputs(cpu, { keyboard, gamepad, mouse, amxButtons, resetting }) {
     cpu.keyboardInterface.restoreKeyboard(keyboard);
     cpu.sysvia.setGamepadFire(...gamepad);
     mouse.forEach((pressed, button) => cpu.sysvia.setJoystickButton(button, pressed));
+    cpu.amxMouse?.setButtons(amxButtons);
     cpu.setReset(resetting);
 }
 
@@ -178,8 +191,9 @@ export class InputLog {
 
     _devices() {
         const { cpu } = this;
-        const { keyboardInterface, sysvia, adconverter, touchScreen, acia, fdc } = cpu;
-        return [cpu, keyboardInterface, sysvia, adconverter, touchScreen, sysvia.cmos, acia, ...fdc.drives];
+        const { keyboardInterface, sysvia, adconverter, touchScreen, amxMouse, acia, fdc } = cpu;
+        const devices = [cpu, keyboardInterface, sysvia, adconverter, touchScreen, sysvia.cmos, acia, ...fdc.drives];
+        return amxMouse ? [...devices, amxMouse] : devices;
     }
 
     /** Stops every device the host reaches recording into this log, so that nothing keeps it growing. */
@@ -289,7 +303,7 @@ export class InputLog {
         this.sampleReplay = new SampleReplay(this.samples, from, this.samplesAt(from));
         try {
             restoreHostInputs(cpu, this.hostAt(from));
-            cpu.restoreState(snapshot);
+            cpu.restoreState(snapshot, { keepVdfs: true });
             cpu.debugInstruction.forgetStop();
             const startHash = stateHash(cpu);
             const reached = cpu.asReplay(hooks, () => {
@@ -426,7 +440,8 @@ class LastWrite {
 /**
  * Where a step back out lands: the latest instruction that entered a routine, a JSR or BRK or one an interrupt was
  * taken after, whose stack is shallower than here and than at every instruction after it. Each window keeps only
- * the instructions shallower than every one after them in it, the only ones it could be.
+ * the instructions shallower than every one after them in it, the only ones it could be, each with where it was
+ * and the routine it entered, if any, and, where a TXS moved the stack deeper, a mark of where it moved it to.
  */
 class OutLanding {
     constructor(cpu) {
@@ -435,10 +450,8 @@ class OutLanding {
         this.highestAfter = 0;
         this.hooks = {
             ...NoReplayHooks,
-            instruction: (_pc, opcode) => this.passing(opcode),
-            // Entered from the stack the instruction before left, which the interrupt pushed three bytes onto.
-            interrupt: () =>
-                this._keep(this.shallower.at(-1).cycle, this._height((this.cpu.s + InterruptPushes) & 0xff), true),
+            instruction: (pc, opcode) => this.passing(pc, opcode),
+            interrupt: (taken, returnsTo) => this.interrupted(taken, returnsTo),
         };
     }
 
@@ -454,22 +467,101 @@ class OutLanding {
 
     startWindow() {
         this.shallower = [];
+        this.entering = null;
+        this.txs = null;
     }
 
-    passing(opcode) {
-        const { flow } = this.cpu.disassembler.describeOpcode(opcode);
-        this._keep(cycleCount(this.cpu), this._height(this.cpu.s), flow === "call" || flow === "interrupt");
+    passing(pc, opcode) {
+        this._entered(pc);
+        const height = this._height(this.cpu.s);
+        const cycle = cycleCount(this.cpu);
+        this._movedBy(height);
+        const { flow, mnemonic } = this.cpu.disassembler.describeOpcode(opcode);
+        if (mnemonic === "TXS") this.txs = { at: pc, height };
+        const kind = flow === "call" ? "JSR" : flow === "interrupt" ? "BRK" : null;
+        this._keep({ cycle, height, kind, site: pc, siteBank: kind ? this._bankAt(pc) : undefined });
     }
 
-    _keep(cycle, height, enters) {
-        while (this.shallower.length && this.shallower.at(-1).height <= height) this.shallower.pop();
-        this.shallower.push({ cycle, height, enters });
+    // Entered from the stack the instruction before left, which the interrupt pushed three bytes onto.
+    interrupted(taken, returnsTo) {
+        this._entered(returnsTo);
+        const height = this._height((this.cpu.s + InterruptPushes) & 0xff);
+        const { cycle } = this.shallower.at(-1);
+        this._movedBy(height);
+        this._keep({ cycle, height, kind: taken.toUpperCase(), site: returnsTo, siteBank: this._bankAt(returnsTo) });
+    }
+
+    // Marks where the TXS just run, if any, moved the stack to, `height`, should that be deeper than it was: frames
+    // above a stack moved up stay as they were, and those its moving up drops are dropped as a return would drop them.
+    _movedBy(height) {
+        if (this.txs !== null && height < this.txs.height) this._keep({ height, kind: null, txsAt: this.txs.at });
+        this.txs = null;
+    }
+
+    // The routine the entry kept last went to starts at `pc`.
+    _entered(pc) {
+        if (this.entering === null) return;
+        Object.assign(this.entering, { routine: pc, routineBank: this._bankAt(pc) });
+        this.entering = null;
+    }
+
+    /** The sideways bank paged in at `address`, if that is where it is. */
+    _bankAt(address) {
+        const { cpu } = this;
+        if (cpu.model.isAtom || address < SidewaysStart || address >= SidewaysEnd) return undefined;
+        const bank = cpu.pagedBank;
+        return cpu.isBankPagedAt(bank, address) ? bank : undefined;
+    }
+
+    // A mark of the stack moving stays until the stack is higher than where it moved it to.
+    _keep(kept) {
+        const { height } = kept;
+        const covers = (earlier) =>
+            earlier.height < height || (earlier.height === height && earlier.txsAt === undefined);
+        while (this.shallower.length && covers(this.shallower.at(-1))) this.shallower.pop();
+        this.shallower.push(kept);
+        if (kept.kind) this.entering = kept;
     }
 
     inWindow() {
-        const entry = this.shallower.findLast(({ enters, height }) => enters && height > this.highestAfter);
+        const entry = this.shallower.findLast(({ kind, height }) => kind && height > this.highestAfter);
         if (entry) return entry.cycle;
         this.highestAfter = Math.max(this.highestAfter, this.shallower[0].height);
+        return null;
+    }
+}
+
+/**
+ * The calls and interrupts the machine is inside now, innermost first: each entry a step back out would land on,
+ * found in turn by raising the height the next must be above to the last one's, until the stack is accounted for,
+ * empty at some point after the outermost, or a TXS moved it. Its `frames` grow as each window is searched.
+ */
+class CallStack extends OutLanding {
+    constructor(cpu) {
+        super(cpu);
+        this.frames = [];
+        this.emptyHeight = this._height(EmptyStack);
+    }
+
+    /**
+     * How the stack was accounted for in the window just replayed, or null if it was not: `{ txsAt }`, the address
+     * of the TXS that moved it deeper, to where the outermost frame found entered from, or with `txsAt` null, empty
+     * there.
+     */
+    inWindow() {
+        // The machine stands where the window ends, before the instruction after its last.
+        this._entered(this.cpu.pc);
+        this._movedBy(this._height(this.cpu.s));
+        for (const kept of this.shallower.toReversed()) {
+            if (kept.height < this.highestAfter) continue;
+            if (kept.txsAt !== undefined) return { txsAt: kept.txsAt };
+            if (kept.kind && kept.height > this.highestAfter) {
+                const { kind, cycle, site, siteBank, routine, routineBank } = kept;
+                this.frames.push({ kind, cycle, site, siteBank, routine, routineBank });
+            }
+            this.highestAfter = kept.height;
+            if (kept.height === this.emptyHeight) return { txsAt: null };
+        }
         return null;
     }
 }
@@ -588,6 +680,7 @@ export class ReplayHistory extends EventTarget {
     _unavailable(what, nothing) {
         const { cpu } = this;
         if (cpu.econet) return `${what} is not available with Econet, whose network a replay cannot repeat.`;
+        if (cpu.vdfs) return `${what} is not available with VDFS, whose folder a replay cannot repeat.`;
         if (cpu.tapeInterface.motorOn) return `${what} is not available while the cassette motor runs.`;
         return this._earlier(cycleCount(cpu)).length ? null : nothing;
     }
@@ -603,6 +696,36 @@ export class ReplayHistory extends EventTarget {
     }
 
     /**
+     * The stretches between the snapshots before now, newest first, each `{ snapshot, from, to, next, crossing }`:
+     * replayed from `snapshot`, at cycle `from`, to `to`, which is now or, with `next` null, where the next snapshot
+     * was taken; and `crossing`, the first thing in it that no replay crosses, or null.
+     */
+    _stretchesBack() {
+        const { cpu, log } = this;
+        const stretches = [];
+        let [to, next] = [cycleCount(cpu), null];
+        for (const snapshot of this._earlier(to).reverse()) {
+            const from = snapshotCycle(cpu, snapshot);
+            // A rewind snapshot is a copy of a frame snapshot, at the same cycle, and has nothing to replay.
+            if (from === to) continue;
+            const crossing = log.refusalBetween(from, to);
+            stretches.push({ snapshot, from, to, next, crossing });
+            [to, next] = [from, snapshot];
+        }
+        return stretches;
+    }
+
+    /**
+     * Replays `stretch` watched by `hooks`, returning the hash of the machine as its snapshot put it, or null if it
+     * did not end on `hash`, that of the machine it is replayed towards. Inputs at its end go in only where that is
+     * now, as the next snapshot was taken before them.
+     */
+    _replayStretch({ snapshot, to, next }, hash, hooks) {
+        const fromHash = this.log.replay(snapshot, to, next === null, hooks);
+        return fromHash !== null && stateHash(this.cpu) === hash ? fromHash : null;
+    }
+
+    /**
      * Replays the stretches between the snapshots before now, newest first, each checked to end on the machine it
      * is replayed towards (the state now or the next snapshot's), until `seeker` finds in one what it looks for,
      * yielding after each stretch that does not have it. A seeker replays each stretch with its `hooks`, is told of
@@ -613,45 +736,80 @@ export class ReplayHistory extends EventTarget {
      * crosses, or Unrepeated. Leaves the machine at the end of whichever stretch it replayed last.
      */
     *_searchBack(seeker) {
-        const { cpu, log } = this;
-        let [to, hash, inputsAtTo] = [cycleCount(cpu), stateHash(cpu), true];
-        for (const snapshot of this._earlier(to).reverse()) {
-            const from = snapshotCycle(cpu, snapshot);
-            // A rewind snapshot is a copy of a frame snapshot, at the same cycle, and has nothing to replay.
-            if (from === to) continue;
+        let [reached, hash] = [cycleCount(this.cpu), stateHash(this.cpu)];
+        for (const stretch of this._stretchesBack()) {
+            const { snapshot, from, to, crossing } = stretch;
             if (!seeker.searches(from)) break;
-            const crossing = log.refusalBetween(from, to);
-            if (crossing) return { found: null, snapshot: null, reached: to, stoppedBy: crossing };
+            if (crossing) return { found: null, snapshot: null, reached, stoppedBy: crossing };
             seeker.startWindow(from);
-            const fromHash = log.replay(snapshot, to, inputsAtTo, seeker.hooks);
-            if (fromHash === null || stateHash(cpu) !== hash)
-                return { found: null, snapshot: null, reached: to, stoppedBy: Unrepeated };
+            const fromHash = this._replayStretch(stretch, hash, seeker.hooks);
+            if (fromHash === null) return { found: null, snapshot: null, reached, stoppedBy: Unrepeated };
             const found = seeker.inWindow(to);
             if (found !== null) return { found, snapshot, reached: from, stoppedBy: null };
-            [to, hash, inputsAtTo] = [from, fromHash, false];
+            [reached, hash] = [from, fromHash];
             yield;
         }
-        return { found: null, snapshot: null, reached: to, stoppedBy: null };
-    }
-
-    _original() {
-        const { cpu } = this;
-        const { memStatOffset } = cpu;
-        return { state: cpu.snapshotState(), host: hostInputs(cpu), picture: cpu.video.fb32.slice(), memStatOffset };
+        return { found: null, snapshot: null, reached, stoppedBy: null };
     }
 
     /**
-     * Puts the machine, the host's inputs and the picture back as `_original` kept them, with the half of the paging
-     * tables the last instruction's fetch chose, which a snapshot leaves out.
+     * Replays, oldest first, the stretches from the one holding `since` to the one holding `until`, each checked to
+     * end on the machine it is replayed towards, as `_searchBack` checks them, and yields between them. Returns
+     * `{ from, to, stoppedBy }` as `replayForward` does, or `{ refusal }` if there was no stretch to replay. Leaves
+     * the machine at the end of whichever stretch it replayed last.
      */
-    _putBack({ state, host, picture, memStatOffset }) {
+    *_forward(since, until, hooks) {
+        const nowHash = stateHash(this.cpu);
+        const stretches = [];
+        let stoppedBy = null;
+        for (const stretch of this._stretchesBack()) {
+            if (stretch.to <= since) break;
+            if (stretch.from >= until) continue;
+            if (stretch.crossing) {
+                stoppedBy = stretch.crossing;
+                break;
+            }
+            stretches.unshift(stretch);
+        }
+        if (!stretches.length) return { refusal: stoppedBy ? `${CannotReplayPast} ${stoppedBy}.` : TooFarBack };
+        const from = stretches[0].from;
+        for (const [i, stretch] of stretches.entries()) {
+            if (i > 0) yield;
+            const hash = stretch.next ? this._hashOf(stretch.next) : nowHash;
+            if (this._replayStretch(stretch, hash, hooks) === null)
+                return { from, to: stretch.from, stoppedBy: Unrepeated };
+        }
+        return { from, to: stretches.at(-1).to, stoppedBy };
+    }
+
+    // The machine as `snapshot` puts it, hashed as a replay from there hashes it.
+    _hashOf(snapshot) {
+        const at = snapshotCycle(this.cpu, snapshot);
+        return this.log.replay(snapshot, at, false, NoReplayHooks);
+    }
+
+    /** The machine as it stands, with what the host holds and its picture, for `putBack`. */
+    original() {
+        const { cpu } = this;
+        const { memStatOffset, resetsAndLoads } = cpu;
+        const state = cpu.snapshotState();
+        return { state, host: hostInputs(cpu), picture: cpu.video.fb32.slice(), memStatOffset, resetsAndLoads };
+    }
+
+    /**
+     * Puts the machine, the host's inputs and the picture back as `original` kept them, with the half of the paging
+     * tables the last instruction's fetch chose, which a snapshot leaves out, and its count of resets and loads, as
+     * the machine was never replaced.
+     */
+    putBack({ state, host, picture, memStatOffset, resetsAndLoads }) {
         const { cpu } = this;
         this.log.withoutRecording(() => {
             restoreHostInputs(cpu, host);
-            cpu.restoreState(state);
+            cpu.restoreState(state, { keepVdfs: true });
         });
         cpu.video.fb32.set(picture);
         cpu.memStatOffset = memStatOffset;
+        cpu.resetsAndLoads = resetsAndLoads;
     }
 
     // Steps back to the cycle `seeker` finds, or returns why it could not, `notFound` if no stretch held one.
@@ -665,26 +823,28 @@ export class ReplayHistory extends EventTarget {
     }
 
     /**
-     * Runs `_searchBack(seeker)` a stretch at a time, painting none of it, putting the machine back as `original`
-     * keeps it between stretches and yielding there. Returns what the search returns, with the machine where its
-     * last stretch left it, or `{ movedOn: true }` if the machine has moved on when the search resumes.
+     * Runs `replaying`, a replay of the history a stretch at a time, painting none of it, putting the machine back
+     * as `original` keeps it between stretches and yielding there. Returns what it returns, with the machine where
+     * its last stretch left it, or `{ movedOn: true }` if the machine has moved on when it resumes.
      */
-    *_searchingAway(seeker, original) {
+    *_away(replaying, original) {
         const { cpu } = this;
-        const [now, nowHash] = [cycleCount(cpu), stateHash(cpu)];
-        const search = this._searchBack(seeker);
+        // A write to a device register takes no cycles and is not in the hash, but the log records it.
+        const [now, nowHash, lastInput] = [cycleCount(cpu), stateHash(cpu), this.log.inputs.at(-1)];
         for (;;) {
             let step;
             try {
-                step = withoutPainting(cpu.video, () => search.next());
+                step = withoutPainting(cpu.video, () => replaying.next());
             } catch (e) {
-                this._putBack(original);
+                this.putBack(original);
                 throw e;
             }
             if (step.done) return step.value;
-            this._putBack(original);
+            this.putBack(original);
             yield;
-            if (cycleCount(cpu) !== now || stateHash(cpu) !== nowHash) return { movedOn: true };
+            if (cycleCount(cpu) !== now || stateHash(cpu) !== nowHash || this.log.inputs.at(-1) !== lastInput) {
+                return { movedOn: true };
+            }
         }
     }
 
@@ -700,8 +860,8 @@ export class ReplayHistory extends EventTarget {
         const refused = this.refusal();
         if (refused) return refused;
         const now = cycleCount(this.cpu);
-        const original = this._original();
-        const { movedOn, found, snapshot, reached, stoppedBy } = yield* this._searchingAway(seeker, original);
+        const original = this.original();
+        const { movedOn, found, snapshot, reached, stoppedBy } = yield* this._away(this._searchBack(seeker), original);
         if (movedOn) return MovedOn;
         let landed = false;
         try {
@@ -712,7 +872,7 @@ export class ReplayHistory extends EventTarget {
             this._landedAt(found, original.host);
             return null;
         } finally {
-            if (!landed) this._putBack(original);
+            if (!landed) this.putBack(original);
         }
     }
 
@@ -789,17 +949,82 @@ export class ReplayHistory extends EventTarget {
         const target = viewedByte(cpu, view, address);
         if (target.stat === RomStat) return { refusal: IsRom };
         const now = cycleCount(cpu);
-        const original = this._original();
-        const { movedOn, found, reached, stoppedBy } = yield* this._searchingAway(
-            new LastWrite(cpu, log, address, target),
+        const original = this.original();
+        const { movedOn, found, reached, stoppedBy } = yield* this._away(
+            this._searchBack(new LastWrite(cpu, log, address, target)),
             original,
         );
         if (movedOn) return { refusal: MovedOn };
-        this._putBack(original);
+        this.putBack(original);
         if (stoppedBy && reached === now) {
             return { refusal: stoppedBy === Unrepeated ? NotRepeatedHere : `${CannotSearchPast} ${stoppedBy}.` };
         }
         return { write: found, searched: now - reached, stoppedBy };
+    }
+
+    /**
+     * Finds the calls and interrupts the machine is inside, innermost first, by searching its history back from now
+     * a stretch at a time as lastWrite does, yielding the frames found so far between stretches. Each frame is
+     * `{ kind, cycle, site, siteBank, routine, routineBank }`: JSR, BRK, IRQ or NMI; the cycle its instruction, or
+     * the one the interrupt came after, started; the address it was made from (for an interrupt, the one it returns
+     * to) and the routine it entered, each with the sideways bank it was in, if any. Returns `{ refusal }` when it
+     * cannot search, with `movedOn` too if the machine moved on before it finished, or else
+     * `{ frames, accounted, txsAt, stoppedBy }`: `accounted` if the stack was empty or moved deeper
+     * by a TXS (at `txsAt`) before the outermost frame, so that there are no older ones; if not, `stoppedBy` is why
+     * the search went back no further, or null where the history ends. Leaves the machine as it was.
+     */
+    *callStack() {
+        const refusal = this._unavailable("The call stack", NothingToSearch);
+        if (refusal) return { refusal };
+        if (this.cpu.s === EmptyStack) return { frames: [], accounted: true, txsAt: null, stoppedBy: null };
+        const now = cycleCount(this.cpu);
+        const stack = new CallStack(this.cpu);
+        const original = this.original();
+        const search = this._away(this._searchBack(stack), original);
+        let step = search.next();
+        while (!step.done) {
+            yield stack.frames;
+            step = search.next();
+        }
+        const { movedOn, found, reached, stoppedBy } = step.value;
+        if (movedOn) return { refusal: MovedOn, movedOn };
+        this.putBack(original);
+        if (stoppedBy && reached === now) {
+            return { refusal: stoppedBy === Unrepeated ? NotRepeatedHere : `${CannotSearchPast} ${stoppedBy}.` };
+        }
+        const { frames } = stack;
+        return found
+            ? { frames, accounted: true, txsAt: found.txsAt, stoppedBy: null }
+            : { frames, accounted: false, txsAt: null, stoppedBy };
+    }
+
+    /**
+     * Replays the machine's history forward with `hooks` (as `asReplay` takes them), oldest first, from the stretch
+     * between snapshots that holds `since` to the one that holds `until`, checking and yielding between stretches as
+     * a search back does. Returns `{ refusal }`, or `{ from, to, stoppedBy }`: the hooks saw the run from cycle
+     * `from` to `to`; `stoppedBy` is why it covers less than asked, as `_searchBack` gives it, and with Unrepeated
+     * `to` is where the stretch that went its own way began. Leaves the machine as it was.
+     */
+    *replayForward(since, until, { hooks }) {
+        const refusal = this._unavailable("Replaying the history", NothingToReplay);
+        if (refusal) return { refusal };
+        const original = this.original();
+        const replayed = yield* this._away(this._forward(since, until, hooks), original);
+        if (replayed.movedOn) return { refusal: MovedOnReplaying };
+        this.putBack(original);
+        return replayed;
+    }
+
+    /**
+     * Puts the machine at `snapshot`, one of those kept, holding what the host held then, and lands there as a step
+     * back does, forgetting everything newer and changing what the machine holds to what the host holds now.
+     */
+    landAt(snapshot) {
+        const holding = hostInputs(this.cpu);
+        const cycle = snapshotCycle(this.cpu, snapshot);
+        this.log.replay(snapshot, cycle, true, NoReplayHooks);
+        this.cpu.vdfs?.restoreState(snapshot.vdfs);
+        this._landedAt(cycle, holding);
     }
 
     // What came after `cycle` was a future the machine has left, and runs from here make their own.

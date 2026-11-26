@@ -21,6 +21,7 @@ jsbeeb supports the browser versions listed under `browserslist` in [package.jso
 - [Printer Output](#printer-output)
 - [Save State and Rewind](#save-state-and-rewind)
 - [Joystick Support](#joystick-support)
+- [Touch Screen](#touch-screen)
 - [MIDI Output](#midi-output)
 - [Getting Set Up to Run Locally](#getting-set-up-to-run-locally)
 - [Installing as an App and Working Offline](#installing-as-an-app-and-working-offline)
@@ -221,13 +222,18 @@ A save state dropped on the page is restored too.
 
 The emulator continuously captures snapshots into a 30-slot rewind buffer (~1 per second). Open the rewind scrubber from **State > Rewind** or press **Alt-W** to browse recent states as a visual filmstrip:
 
-- **Left/Right arrows**: navigate between snapshots (the main screen updates live)
-- **Click** a thumbnail to jump to that point
-- **Enter**: commit selection and close the panel
-- **Escape** or **Alt-W**: cancel and restore the original state
+- **Left/Right arrows**, or a **click** on a thumbnail: choose a moment, which the main screen previews; the machine
+  stays where it is until you go back
+- **Enter** or **Go back here**: go back to the chosen moment and close the panel; the seconds after it are forgotten
+- **Alt-S**: go back to the chosen moment and stop in the debugger there
+- **Escape** or **Alt-W**: close the panel without going back, leaving the machine where it is
 
-While it is open, `Alt-T` and `Alt-B` still work; the other shortcuts, and every key for the emulated machine, are
-ignored.
+While it is open, `Alt-T` and `Alt-B` also still work; the other shortcuts, and every key for the emulated machine,
+are ignored.
+
+Rewind and the debugger's step back share one history, so opening rewind and cancelling leaves step back able to go
+as far back as before, and a preview replays the keys that were held at the time. Loading a saved state starts the
+history afresh.
 
 ### Joystick Support
 
@@ -235,6 +241,12 @@ jsbeeb supports both USB/Bluetooth gamepads and mouse-based analogue joystick em
 
 - X-axis: Left = 65535, Right = 0
 - Y-axis: Up = 65535, Down = 0
+
+An AMX mouse on the user port is fitted with `hasAmxMouse=true`, or from the Settings dialog, in place of the switch
+interface (`Alt-1` to `Alt-8`). A left click on the screen locks the pointer to it (the browser lets it go on `Esc`), as
+the mouse moves by how far the host's pointer moves rather than where it is; the left, middle and right buttons are
+the AMX mouse's. The AMX's own ROM is not included; [J.G. Harston's mouse
+driver](https://mdfs.net/Info/Comp/BBC/Mouse) works with it.
 
 A gamepad presses the emulated machine's keys, and which key each control presses can be changed from the URL in the
 same way as [remapping the keyboard](#remapping-keys):
@@ -267,6 +279,14 @@ press `1`. The on-screen game pad's classic layout follows `LEFT`, `RIGHT`, `UP`
 
 The older `LEFT=`, `RIGHT=`, `UP=`, `DOWN=` and `FIRE=` parameters (no `GP.` prefix, and in capitals) still work and
 mean the same thing.
+
+### Touch Screen
+
+jsbeeb emulates the Microvitec Touchtech 501, the infrared touch screen that fitted over a monitor and talked to the
+BBC Micro over RS-423. There is nothing to switch on: once a program asks it for positions, holding the mouse button
+down over the emulated screen touches the screen there. Point and multiple modes (1, 3, 129 and 131) are emulated,
+which covers Hybrid's Soundspace; size mode (2 and 130) reports the point without a size, and the data dump mode (0
+and 128) sends nothing.
 
 ## Getting Set Up to Run Locally
 
@@ -323,9 +343,12 @@ What the worker keeps, and when it changes:
 - A disc or tape served from this site is kept the first time it is used, so a game played once can be played
   offline. These are never evicted, and a changed one is served from the old copy once before the new one takes
   over. Discs from any other site (Bitshifters, GitHub, archive.org, Google Drive) always come from the network.
-- A new version installs in the background and then waits. The page shows an "A new version of jsbeeb is ready"
-  notice, and only its Reload button switches to the new version, because switching reloads the page and would lose a
-  running machine. A tab that stays open is checked for a new version whenever it comes back into view.
+- A new version installs in the background and then waits. If the waiting worker is a different build from the page
+  (each reports the commit it was built from), it shows an "A new version of jsbeeb is ready" notice, and only its
+  Reload button switches to the new version, because switching reloads the page and would lose a running machine. A
+  page loaded after a deploy is already the new build, so it shows nothing, and the waiting worker takes over once
+  every jsbeeb tab and window has closed. A tab that stays open is checked for a new version whenever it comes back
+  into view.
 - `npm run test:e2e` removes `navigator.serviceWorker` from its pages, so a worker never answers a request the tests
   route themselves; only `tests/playwright/pwa.spec.js` keeps it, in a fresh browser context of its own.
 
@@ -462,7 +485,8 @@ sudo rpm -i out/dist/jsbeeb-<version>.x86_64.rpm
 - `embed` - Remove the margins around the screen, hide most navigation entries and make the page background
   transparent (intended for use when running within an iframe in a third-party site).
 - `touchkeys` - offers the on-screen BBC keyboard, which otherwise appears only on a touch screen or in a window up to
-  700px wide (and never embedded or on the Atom; a landscape phone gets its game pad instead).
+  700px wide (and never embedded or on the Atom; a landscape phone gets its game pad instead). Where the touch screen
+  sits beside a trackpad or mouse, as on some laptops, it starts closed behind its ⌨ button.
 - `cpuMultiplier=X` speeds up the CPU by a factor of `X` relative to the peripherals: video, sound and the VIAs keep
   running at their real-world rates. May be fractional or below one to slow the CPU down. NB disc loads become
   unreliable with a too-slow CPU, and running too fast might cause the browser to hang.
@@ -502,6 +526,7 @@ sudo rpm -i out/dist/jsbeeb-<version>.x86_64.rpm
   failure it stays stopped. `fakeVideo`, `frameSkip`, `cpuMultiplier`, `videoCyclesBatch` and `lowLatency` are
   refused alongside it, as they change what is measured, and so is a machine fitted otherwise than the workload's
   `fittings` there say (a co-processor, Music 5000, teletext adaptor, Econet or VideoNuLA).
+- `vdfs` - set by the desktop app's File, Serve VDFS Folder, or by More, Serve a folder as VDFS in a Chromium browser: it serves the folder that was chosen as the VDFS filing system (`*VDFS` selects it). It needs the folder, so it is no use in a link, and a browser without the File System Access API (Firefox, Safari) ignores it. See [docs/vdfs.md](docs/vdfs.md).
 - `noseek` - no disc drive noise: the motor, the head's clicks and runs all silent, and nothing scheduled for them.
 - `audioDebug` - show the audio lead chart, and log one console line per second in which the emulator tick ran late or the sound stalled or skipped.
 - `audioLatencyMs` - how far the sound runs behind the emulator, in milliseconds (default 20). Raising it lets the sound ride out longer stalls of the emulator, at the cost of lagging the picture by that much.
@@ -579,6 +604,8 @@ For timing correctness, we have:
 - Some of Kevin Edwards' protection systems (stripped of the games themselves). These are extremely timing- and
   correctness-sensitive when it comes to the timers and interrupts of the BBC.
 - Some 65C12-specific read-modify-write tests written by Ed Spittles.
+- Kieran Connell's (Bitshifters) WD1770 READ ADDRESS race test, which chains commands from the INTRQ interrupt the way
+  phX's disc driver once did, and hangs on a real Master.
 
 Tests are run via npm scripts: `npm test` runs the whole suite. The vitest suites are `npm run test:unit`,
 `npm run test:integration` and `npm run test:shader`; CPU tests are `npm run test:cpu`, and the browser tests are
@@ -631,7 +658,8 @@ and posted the [video up on YouTube](https://www.youtube.com/watch?v=37jyHQT7fXQ
 ## License
 
 This project is licensed under the GNU General Public License v3.0 (or later); see the [LICENSE](LICENSE) file for
-details.
+details. The exception is the source of the VDFS ROM in [roms-src/vdfs](roms-src/vdfs), which is dedicated to the public
+domain under CC0 1.0; see its [LICENSE](roms-src/vdfs/LICENSE).
 
 ## Contact
 

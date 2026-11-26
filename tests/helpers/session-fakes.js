@@ -74,6 +74,7 @@ export function fakeProcessor({ cycles = 1000 } = {}) {
             holdFireButtons: vi.fn(),
             cmos: new Cmos(null),
         },
+        amxMouse: { hold: vi.fn() },
     };
     return processor;
 }

@@ -60,6 +60,7 @@ describe("what needs a restart", () => {
                 .sort(),
         ).toEqual([
             "coProcessor",
+            "hasAmxMouse",
             "hasEconet",
             "hasMidiInterface",
             "hasMusic5000",
@@ -395,7 +396,8 @@ describe("the Settings form", () => {
     const Changed =
         "?model=Master&keyLayout=natural&displayMode=pal&coProcessor=true&tubeCpuMultiplier=2&hasEconet=true" +
         "&hasVideoNula=true" +
-        "&audioOutput=board&speakerAmount=0.5&microphoneChannel=1&mouseJoystickEnabled=true&speechOutput=true";
+        "&audioOutput=board&speakerAmount=0.5&microphoneChannel=1&mouseJoystickEnabled=true&hasAmxMouse=true" +
+        "&speechOutput=true";
 
     const shown = (control) =>
         control.type === "checkbox"
@@ -472,6 +474,13 @@ describe("the Settings form", () => {
             {
                 id: "mouseJoystickEnabled",
                 label: "Enable mouse as analogue joystick",
+                type: "checkbox",
+                value: true,
+                disabled: false,
+            },
+            {
+                id: "hasAmxMouse",
+                label: "Fit an AMX mouse to the user port",
                 type: "checkbox",
                 value: true,
                 disabled: false,

@@ -55,6 +55,8 @@ export class Teletext {
         this.levelDEW = false;
         this.levelDISPTMG = false;
         this.levelRA0 = false;
+        // The ULA's character width, which a ULA write changes only once the log has run.
+        this.blackCellPixels = 8;
 
         // Bytes on the chip's input that it has not run yet, bit 7 set where it was clocked, and the cells to paint
         // where the clocked byte is shown.
@@ -443,8 +445,9 @@ export class Teletext {
 
             // Two bits a pixel, indexing the cell's palette; none set shows only the background.
             let pixels = 0;
-            if (!(
-                entry & TeletextBlack ||
+            if (entry & TeletextBlack) {
+                pixels = this.blackCellPixels;
+            } else if (!(
                 this.cellConceal ||
                 (this.cellFlash && hideFlashing) ||
                 (this.secondHalfOfDouble && !this.line.dbl)
@@ -546,6 +549,16 @@ export class Teletext {
         return this.flashTime < 16;
     }
 
+    /** Brings the log to the line's end and resets what a line carries, as a DISPTMG falling edge does. */
+    endLine() {
+        if (this.logShows) {
+            this.catchUp();
+        } else {
+            this.skipLine();
+        }
+        this.line.reset(this.normalGlyphs);
+    }
+
     setDISPTMG(level) {
         // The SAA5050 input pin "LOSE" is connected to the 6845 output pin
         // "DISPTMG" and it is used to track scanlines.
@@ -559,13 +572,7 @@ export class Teletext {
             return;
         }
 
-        if (this.logShows) {
-            this.catchUp();
-        } else {
-            this.skipLine();
-        }
-        this.line.reset(this.normalGlyphs);
-
+        this.endLine();
         this.scanlineCounter++;
         // Check for end of character row.
         if (this.scanlineCounter === 10) {
@@ -635,20 +642,17 @@ export class Teletext {
         return (this.glyphRow() >>> 1) + (this.secondHalfOfDouble ? 10 : 0);
     }
 
-    // The second half of the latched cell, for the ULA's 1MHz repaint.
-    emitSecondHalf(buf, offset) {
+    // Texels [fromPixel, toPixel) of the latched cell, for the ULA's repaint after a write part way through it.
+    emitFrom(buf, offset, fromPixel, toPixel) {
         const scanline = this.glyphScanline();
         if (this.cellConceal || (this.cellFlash && this.hideFlashing) || (this.secondHalfOfDouble && !this.line.dbl)) {
             const backgroundColour = this.colour[this.cellPalette & 0xe0];
-            for (let pixel = 8; pixel < 16; ++pixel) {
-                buf[offset + pixel] = backgroundColour;
-            }
+            buf.fill(backgroundColour, offset + fromPixel, offset + toPixel);
         } else {
-            let chardef = this.curGlyphs[this.cellGlyphIndex + scanline] >>> 16;
+            const chardef = this.curGlyphs[this.cellGlyphIndex + scanline];
             const paletteIndex = this.cellPalette;
-            for (let pixel = 8; pixel < 16; ++pixel) {
-                buf[offset + pixel] = this.colour[paletteIndex + (chardef & 3)];
-                chardef >>>= 2;
+            for (let pixel = fromPixel; pixel < toPixel; ++pixel) {
+                buf[offset + pixel] = this.colour[paletteIndex + ((chardef >>> (2 * pixel)) & 3)];
             }
         }
     }

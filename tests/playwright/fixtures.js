@@ -40,6 +40,8 @@ export class Beeb {
             page.addInitScript((kept) => {
                 // A worker would answer requests the tests route themselves, so only a test about one keeps it.
                 if (!kept) delete Navigator.prototype.serviceWorker;
+                // Analytics sends nothing from an automated browser, and the tests read what a person's would send.
+                Object.defineProperty(Navigator.prototype, "webdriver", { get: () => false });
                 const Native = window.RTCPeerConnection;
                 window.RTCPeerConnection = class extends Native {
                     constructor(config) {

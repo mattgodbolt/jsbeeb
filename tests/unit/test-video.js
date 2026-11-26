@@ -17,6 +17,7 @@ import { shortestRun } from "../helpers/pixel-runs.js";
 import { expectSnapshotRoundTrips } from "../helpers/snapshot-round-trip.js";
 import { checkDrainsAgainstJs } from "../helpers/compare-drains.js";
 import { seededRandom } from "../helpers/seeded-random.js";
+import { CpuCyclesPerField, makeAtomVideo } from "../helpers/atom-video.js";
 
 const NulaPaletteModeOn = 0x11;
 const NulaPaletteModeOff = 0x10;
@@ -37,6 +38,7 @@ const FbHeight = 768;
 const ClocksPerScanline = 128;
 const ScanlinesPerFrame = 312;
 const ClocksPerFrame = ClocksPerScanline * ScanlinesPerFrame;
+const ScanlinesBeforeTvGivesUp = 384;
 const ClocksPerSecond = 2 * 1000 * 1000;
 
 /**
@@ -114,8 +116,14 @@ function programExternallySyncedTiming(v) {
     v.writeCrtc(7, 0x7f); // Out of reach, so the CRTC never syncs itself
 }
 
+const Mode0 = 0x9c;
 const Mode4 = 0x88;
 const Mode4Teletext = 0x8a;
+const Mode5 = 0xc4;
+// MA13 set, without which IC15 feeds the SAA5050 nothing.
+const TeletextScreenStart = 0x2000;
+const WhiteGraphics = 0x17;
+const NewBackground = 0x1d;
 const inverted = (colour) => (colour ^ 0x00ffffff) >>> 0;
 
 function programNulaColour(v, index, red, green, blue) {
@@ -228,6 +236,43 @@ describe("Video", () => {
         it.each([
             ["Mode 7's chunky address on a Master", { isMaster: true, ctrl: Mode7, addr: 0x2000 }, 0x7c00],
             ["Mode 7's from &3C00 on a Model B, with MA11 clear", { ctrl: Mode7, addr: 0x2000 }, 0x3c00],
+            [
+                "MA13's with MA6 flipped on the 2 MHz tick a 1 MHz CRTC skips",
+                { isMaster: true, ctrl: TwoMhzClock, addr: 0x2000, oddClock: false },
+                0x7c40,
+            ],
+            [
+                "MA13's with MA6 and MA7 flipped on a Master's odd RA",
+                { isMaster: true, ctrl: TwoMhzClock, addr: 0x2000, scanline: 1, oddClock: false },
+                0x7cc0,
+            ],
+            [
+                "MA13's with MA7 flipped on the odd field's RA with interlace sync and video",
+                {
+                    isMaster: true,
+                    ctrl: TwoMhzClock,
+                    addr: 0x2000,
+                    r8: InterlaceSyncAndVideo,
+                    field: 1,
+                    oddClock: false,
+                },
+                0x7cc0,
+            ],
+            [
+                "MA13's own on the 2 MHz tick a 1 MHz CRTC takes",
+                { isMaster: true, ctrl: TwoMhzClock, addr: 0x2000, scanline: 1, oddClock: true },
+                0x7c00,
+            ],
+            [
+                "MA13's with only MA6 flipped on a Model B's odd RA",
+                { ctrl: TwoMhzClock, addr: 0x2800, scanline: 1, oddClock: false },
+                0x7c40,
+            ],
+            [
+                "MA13's own with a 2 MHz teletext ULA",
+                { isMaster: true, ctrl: Mode7 | TwoMhzClock, addr: 0x2000, scanline: 1, oddClock: false },
+                0x7c00,
+            ],
             ["a bitmap mode's row and scanline", { addr: 0x1234, scanline: 5 }, ((0x1234 << 3) | 5) & 0x7fff],
             [
                 "the even field's own scanline with interlace sync and video",
@@ -254,34 +299,45 @@ describe("Video", () => {
                 { addr: 0x1000, scanline: 5, scroll: ScrollMode3 },
                 0x4005,
             ],
-        ])("is %s", (_, { isMaster = false, ctrl = Bitmap, addr, scanline = 0, r8, field = 0, scroll }, expected) => {
-            ({ video, cpu } = makeVideo({ isMaster }));
-            video.ula.write(0, ctrl);
-            if (r8 !== undefined) {
-                video.crtc.write(0, 8);
-                video.crtc.write(1, r8);
-            }
-            if (scroll !== undefined) video.setScreenHwScroll(scroll);
-            video.addr = addr;
-            video.scanlineCounter = scanline;
-            video.frameCount = field;
-            cpu.data = 0x42;
+        ])(
+            "is %s",
+            (
+                _,
+                { isMaster = false, ctrl = Bitmap, addr, scanline = 0, r8, field = 0, scroll, oddClock = true },
+                expected,
+            ) => {
+                ({ video, cpu } = makeVideo({ isMaster }));
+                video.ula.write(0, ctrl);
+                if (r8 !== undefined) {
+                    video.crtc.write(0, 8);
+                    video.crtc.write(1, r8);
+                }
+                if (scroll !== undefined) video.setScreenHwScroll(scroll);
+                video.addr = addr;
+                video.scanlineCounter = scanline;
+                video.frameCount = field;
+                video.oddClock = oddClock;
+                cpu.data = 0x42;
 
-            expect(video.readVideoMem()).toBe(0x42);
-            expect(cpu.lastRead).toBe(expected);
-        });
+                expect(video.readVideoMem()).toBe(0x42);
+                expect(cpu.lastRead).toBe(expected);
+            },
+        );
     });
 
     describe("feeding the SAA5050", () => {
         const newestFed = () => video.teletext.snapshotState().dataQueue.at(-1);
 
-        beforeEach(() => {
+        const aimBeam = () => {
+            video.addr = TeletextScreenStart;
             video.dispEnabled = EVERYTHINGENABLED;
             video.bitmapX = 100;
             video.bitmapY = 100;
             video.horizCounter = 10;
             cpu.data = 0x42;
-        });
+        };
+
+        beforeEach(aimBeam);
 
         // See https://github.com/mattgodbolt/jsbeeb/issues/546 and https://github.com/mattgodbolt/jsbeeb/issues/832
         it("feeds the chip in a bitmap mode too", () => {
@@ -302,6 +358,77 @@ describe("Video", () => {
             expect(newestFed()).toBe(0x45);
         });
 
+        it.each([
+            ["set", TeletextScreenStart, 0x42],
+            ["clear", TeletextScreenStart - 1, 0],
+        ])("feeds the chip what was fetched only with MA13 %s", (_, addr, expected) => {
+            video.addr = addr;
+
+            video.polltime(1);
+
+            expect(newestFed()).toBe(expected);
+        });
+
+        it.each([
+            ["set", TeletextScreenStart, 5],
+            ["clear", TeletextScreenStart - 0x1000, 0],
+        ])("counts the chip's rows over lines shown with MA13 %s", (_, screenStart, rows) => {
+            const LinesShown = 5;
+            ({ video } = rig = makeVideo());
+            programStandardFrame(rig);
+            rig.writeCrtc(12, screenStart >> 8);
+            rig.run(ClocksPerFrame);
+            const at = () => video.beamPosition().crtc;
+            while (at().row !== 0 || at().scanline !== LinesShown || at().column !== 0) rig.run(1);
+
+            expect(video.teletext.snapshotState().scanlineCounter).toBe(rows);
+        });
+
+        // The restored rows start from a Video that last painted 2MHz cells, whose black cells are 8 texels.
+        describe.each(["wasm", "js"])("on the %s drain", (drainKind) => {
+            it.each`
+                ma13       | addr                            | restored | black
+                ${"set"}   | ${TeletextScreenStart}          | ${false} | ${false}
+                ${"clear"} | ${TeletextScreenStart - 0x1000} | ${false} | ${true}
+                ${"clear"} | ${TeletextScreenStart - 0x1000} | ${true}  | ${true}
+            `(
+                "draws a whole teletext cell black only with MA13 $ma13, restored: $restored",
+                ({ addr, restored, black }) => {
+                    const SolidBlock = 0x7f;
+                    const PipelineCells = 3;
+                    const CellPixels = 16;
+                    const Unpainted = 0xff00ff00;
+                    const TicksPerCell = 2;
+                    ({ video, fb, cpu } = rig = makeVideo({ drainKind }));
+                    aimBeam();
+                    video.regs[7] = 30; // keep vsync, and the flyback that clears the framebuffer, away from the cell
+                    video.ula.write(0, Mode4Teletext);
+                    if (restored) {
+                        const saved = video.snapshotState();
+                        ({ video, fb, cpu } = rig = makeVideo({ drainKind }));
+                        video.ula.write(0, Mode4Teletext | TwoMhzClock);
+                        video.restoreState(saved);
+                    }
+                    fb.fill(Unpainted);
+
+                    // A white background first, so a cell the chip shows as background is not black.
+                    for (const byte of [WhiteGraphics, NewBackground]) {
+                        cpu.data = byte;
+                        video.polltime(TicksPerCell);
+                    }
+                    video.addr = addr;
+                    cpu.data = SolidBlock;
+                    video.polltime(TicksPerCell * PipelineCells + 1);
+                    video.renderPending();
+
+                    const at = 100 * FbWidth + video.bitmapX;
+                    const cell = [...fb.subarray(at, at + CellPixels)];
+                    expect(cell.every((pixel) => pixel === OPAQUE_BLACK)).toBe(black);
+                    expect(cell).not.toContain(Unpainted);
+                },
+            );
+        });
+
         it("feeds it nothing outside the vertical display", () => {
             video.dispEnabled = 0;
             video.polltime(1);
@@ -310,7 +437,6 @@ describe("Video", () => {
 
         // The "TTX trick": with the teletext bit set in a 2MHz mode the SAA5050 outputs black.
         it("draws black instead of characters with the teletext bit set at 2MHz", () => {
-            const WhiteGraphics = 0x17;
             const SolidBlock = 0x7f;
             const PipelineCells = 3;
             const TwoMhzCellPixels = 8;
@@ -330,7 +456,6 @@ describe("Video", () => {
 
         describe("a cell above an odd field", () => {
             const White = 0xffffffff;
-            const WhiteGraphics = 0x17;
             const SolidBlock = 0x7f;
             const Teletext = 0x02;
             const TeletextAt2MHz = 0x12;
@@ -405,6 +530,7 @@ describe("Video", () => {
             r.writeCrtc(7, 27); // Vsync position
             r.writeCrtc(8, 0); // No interlace
             r.writeCrtc(9, 9); // Scanlines per character row
+            r.writeCrtc(12, TeletextScreenStart >> 8);
         }
 
         /**
@@ -553,7 +679,7 @@ describe("Video", () => {
             function programCursor(r, row, column) {
                 r.writeCrtc(10, 0); // a steady cursor from the top scanline
                 r.writeCrtc(11, ScanlinesPerRow - 1);
-                const address = row * DisplayedColumns + column;
+                const address = TeletextScreenStart + row * DisplayedColumns + column;
                 r.writeCrtc(14, address >> 8);
                 r.writeCrtc(15, address & 0xff);
             }
@@ -713,17 +839,27 @@ describe("Video", () => {
         });
     });
 
-    // See Video.repaintSecondHalfOfCell.
-    describe("ULA writes half way through a 1MHz cell", () => {
-        const Mode0 = 0x9c;
+    // See Video.repaintAfterUlaWrite.
+    describe("ULA writes part way through a cell", () => {
+        const Mode1 = 0xd8;
+        const Mode2 = 0xf4;
+        const Mode5Teletext = 0xc6;
+        const ControlReg = 0;
+        const PaletteReg = 1;
+        const NulaControlReg = 2;
         const Red = 0xff0000ff;
         const PhysicalRed = 1;
         const Green = 0xff00ff00;
+        const Blue = 0xffff0000;
         const AllPixelsSet = 0xff;
+        const LowNibbleSet = 0x0f;
         const CellWidth = 16;
         const HalfCell = 8;
+        const Mode0Edge = 3;
+        const Mode4Edge = 2;
         // A set pixel in a two colour mode is logical colour 15.
         const SetPixelsGreen = 0xf0 | (7 ^ 2);
+        const SetPixelsBlue = 0xf0 | (7 ^ 4);
         const offset = 100 * FbWidth + 100;
 
         // Leaves the beam at the start of a cell with the body about to run on the next tick.
@@ -731,6 +867,7 @@ describe("Video", () => {
             video.dispEnabled = EVERYTHINGENABLED;
             video.regs[7] = 30; // keep vsync, and the flyback it brings, away from the cell under test
             video.horizCounter = 10;
+            video.addr = TeletextScreenStart;
             video.bitmapX = 92;
             video.bitmapY = 100;
             video.oddClock = false;
@@ -739,55 +876,116 @@ describe("Video", () => {
         };
         beforeEach(aimAtCell);
 
-        const cell = (at = offset) => {
+        const cell = (at = offset, width = CellWidth) => {
             video.renderPending();
-            return Array.from(fb.subarray(at, at + CellWidth));
+            return Array.from(fb.subarray(at, at + width));
         };
-        const firstHalf = () => cell().slice(0, HalfCell);
-        const secondHalf = () => cell().slice(HalfCell);
+        const distinctPalette = () => {
+            for (let logical = 0; logical < 16; ++logical)
+                video.ula.write(PaletteReg, (logical << 4) | ((logical >>> 1) ^ 7));
+        };
 
-        it("repaints the second half as teletext when the teletext bit is set", () => {
-            video.ula.write(0, Mode4);
+        // A 1MHz character is painted on the first of its two ticks, so after the second the beam is half way
+        // through it.
+        it.each`
+            what              | screen               | mode             | ticks | data            | reg           | val               | width        | from
+            ${"palette"}      | ${"MODE 0"}          | ${Mode0}         | ${1}  | ${AllPixelsSet} | ${PaletteReg} | ${SetPixelsGreen} | ${HalfCell}  | ${3}
+            ${"palette"}      | ${"MODE 1"}          | ${Mode1}         | ${1}  | ${AllPixelsSet} | ${PaletteReg} | ${SetPixelsGreen} | ${HalfCell}  | ${2}
+            ${"palette"}      | ${"MODE 2"}          | ${Mode2}         | ${1}  | ${AllPixelsSet} | ${PaletteReg} | ${SetPixelsGreen} | ${HalfCell}  | ${0}
+            ${"palette"}      | ${"MODE 4"}          | ${Mode4}         | ${1}  | ${AllPixelsSet} | ${PaletteReg} | ${SetPixelsGreen} | ${CellWidth} | ${2}
+            ${"palette"}      | ${"MODE 4"}          | ${Mode4}         | ${2}  | ${AllPixelsSet} | ${PaletteReg} | ${SetPixelsGreen} | ${CellWidth} | ${10}
+            ${"palette"}      | ${"MODE 5"}          | ${Mode5}         | ${1}  | ${AllPixelsSet} | ${PaletteReg} | ${SetPixelsGreen} | ${CellWidth} | ${0}
+            ${"palette"}      | ${"MODE 5"}          | ${Mode5}         | ${2}  | ${AllPixelsSet} | ${PaletteReg} | ${SetPixelsGreen} | ${CellWidth} | ${8}
+            ${"mode"}         | ${"MODE 0"}          | ${Mode0}         | ${1}  | ${LowNibbleSet} | ${ControlReg} | ${Mode1}          | ${HalfCell}  | ${3}
+            ${"teletext on"}  | ${"MODE 5"}          | ${Mode5}         | ${1}  | ${AllPixelsSet} | ${ControlReg} | ${Mode5Teletext}  | ${CellWidth} | ${0}
+            ${"teletext on"}  | ${"MODE 4"}          | ${Mode4}         | ${1}  | ${AllPixelsSet} | ${ControlReg} | ${Mode4Teletext}  | ${CellWidth} | ${2}
+            ${"teletext off"} | ${"MODE 5 teletext"} | ${Mode5Teletext} | ${1}  | ${AllPixelsSet} | ${ControlReg} | ${Mode5}          | ${CellWidth} | ${0}
+            ${"teletext off"} | ${"MODE 4 teletext"} | ${Mode4Teletext} | ${1}  | ${AllPixelsSet} | ${ControlReg} | ${Mode4}          | ${CellWidth} | ${2}
+        `(
+            "shows a $what write in $screen from texel $from, after tick $ticks of the character",
+            ({ mode, ticks, data, reg, val, width, from }) => {
+                const paintCell = (writeFirst) => {
+                    aimAtCell();
+                    distinctPalette();
+                    cpu.data = data;
+                    video.ula.write(ControlReg, mode);
+                    if (writeFirst) video.ula.write(reg, val);
+                    video.polltime(ticks);
+                    return cell(offset, width);
+                };
+                const after = paintCell(true);
+                const before = paintCell(false);
+
+                video.ula.write(reg, val);
+
+                expect(after[from]).not.toBe(before[from]);
+                expect(cell(offset, width)).toEqual([...before.slice(0, from), ...after.slice(from)]);
+            },
+        );
+
+        it("repaints nothing for a palette write while teletext shows", () => {
+            const Black = 0;
+            ({ video, fb, cpu } = rig = makeVideo({ hasVideoNula: true }));
+            aimAtCell();
+            video.ula.write(ControlReg, Mode4Teletext);
             video.polltime(1);
-            expect(cell()).toEqual(Array(CellWidth).fill(Red));
-
-            video.ula.write(0, Mode4Teletext);
-
-            expect(firstHalf()).toEqual(Array(HalfCell).fill(Red));
-            expect(secondHalf()).not.toEqual(Array(HalfCell).fill(Red));
-        });
-
-        it("repaints the second half as bitmap when the teletext bit is cleared", () => {
-            video.ula.write(0, Mode4Teletext);
-            video.polltime(1);
-            const teletextHalf = firstHalf();
-            expect(teletextHalf).not.toContain(Red);
-
-            video.ula.write(0, Mode4);
-
-            expect(firstHalf()).toEqual(teletextHalf);
-            expect(secondHalf()).toEqual(Array(HalfCell).fill(Red));
-        });
-
-        it("applies a palette write to the second half only", () => {
-            video.ula.write(0, Mode4);
-            video.polltime(1);
-
-            video.ula.write(1, SetPixelsGreen);
-
-            expect(video.ulaPal[15] >>> 0).toBe(Green);
-            expect(firstHalf()).toEqual(Array(HalfCell).fill(Red));
-            expect(secondHalf()).toEqual(Array(HalfCell).fill(Green));
-        });
-
-        it("leaves the cell alone when the write lands at the start of the next cell", () => {
-            video.ula.write(0, Mode4);
-            video.polltime(2);
             const before = cell();
+            expect(before).toContain(OPAQUE_BLACK);
 
-            video.ula.write(0, Mode4Teletext);
+            programNulaColour(rig, Black, 0xf, 0x0, 0x0);
 
             expect(cell()).toEqual(before);
+        });
+
+        it.each`
+            what            | from     | to                      | ticks | kept
+            ${"speeds up"}  | ${Mode4} | ${Mode4 | TwoMhzClock}  | ${1}  | ${CellWidth}
+            ${"speeds up"}  | ${Mode4} | ${Mode4 | TwoMhzClock}  | ${2}  | ${CellWidth}
+            ${"slows down"} | ${Mode0} | ${Mode0 & ~TwoMhzClock} | ${1}  | ${HalfCell}
+            ${"slows down"} | ${Mode0} | ${Mode0 & ~TwoMhzClock} | ${2}  | ${HalfCell}
+        `(
+            "repaints nothing painted when a write only $what the clock, after $ticks ticks",
+            ({ from, to, ticks, kept }) => {
+                distinctPalette();
+                cpu.data = LowNibbleSet;
+                video.ula.write(ControlReg, from);
+                video.polltime(ticks);
+                const before = cell(offset, kept);
+
+                video.ula.write(ControlReg, to);
+
+                expect(cell(offset, kept)).toEqual(before);
+            },
+        );
+
+        it("paints the chip's second half when the TTX trick slows to 1MHz after the cell's tick", () => {
+            const WhiteForeground = 7;
+            video.ula.write(ControlReg, Mode4Teletext | TwoMhzClock);
+            for (const byte of [WhiteGraphics, NewBackground, AllPixelsSet, AllPixelsSet, AllPixelsSet]) {
+                cpu.data = byte;
+                video.polltime(1);
+            }
+            const at = 100 * FbWidth + video.bitmapX;
+
+            video.ula.write(ControlReg, Mode4Teletext);
+
+            expect(cell(at)).toEqual([
+                ...Array(HalfCell).fill(OPAQUE_BLACK),
+                ...Array(HalfCell).fill(video.teletext.colour[(WhiteForeground << 2) | 3] >>> 0),
+            ]);
+        });
+
+        it("repaints a wide character only up to where the next tick paints after a switch to 2MHz", () => {
+            distinctPalette();
+            cpu.data = LowNibbleSet;
+            video.ula.write(ControlReg, Mode4);
+            video.polltime(1);
+            const before = cell();
+
+            video.ula.write(ControlReg, Mode0);
+
+            expect(cell().slice(HalfCell)).toEqual(before.slice(HalfCell));
+            expect(cell().slice(Mode4Edge, HalfCell)).not.toEqual(before.slice(Mode4Edge, HalfCell));
         });
 
         it("leaves the frame alone while the beam is above it", () => {
@@ -812,48 +1010,85 @@ describe("Video", () => {
 
                 video.ula.write(0, Mode4);
 
-                expect(secondHalf()).toEqual(Array(HalfCell).fill(Red));
+                expect(cell().slice(HalfCell)).toEqual(Array(HalfCell).fill(Red));
                 clearBothFields(video);
                 expect(fb.every((pixel) => pixel === OPAQUE_BLACK)).toBe(true);
             },
         );
 
-        it("leaves a 2MHz mode alone, where every tick already paints", () => {
-            video.ula.write(0, Mode0);
+        it("keeps the spacing of back to back palette writes", () => {
+            const BackToBackTicks = 4;
+            video.ula.write(ControlReg, Mode0);
             video.polltime(1);
-            const before = cell();
+            video.ula.write(PaletteReg, SetPixelsGreen);
+            video.polltime(BackToBackTicks);
+            video.ula.write(PaletteReg, SetPixelsBlue);
+            video.polltime(1);
 
-            video.ula.write(1, SetPixelsGreen);
-
-            expect(cell()).toEqual(before);
+            const greenWidth = BackToBackTicks * HalfCell;
+            const blueWidth = HalfCell + HalfCell - Mode0Edge;
+            expect(cell(offset, Mode0Edge + greenWidth + blueWidth)).toEqual([
+                ...Array(Mode0Edge).fill(Red),
+                ...Array(greenWidth).fill(Green),
+                ...Array(blueWidth).fill(Blue),
+            ]);
         });
 
-        it("repaints the doubled scanline too", () => {
+        it("applies a VideoNuLA write from the same edge", () => {
+            ({ video, fb, cpu } = makeVideo({ hasVideoNula: true }));
+            aimAtCell();
+            video.ula.write(ControlReg, Mode0);
+            video.polltime(1);
+
+            video.ula.write(NulaControlReg, NulaPaletteModeOn);
+
+            const nulaColour15 = video.ula.collook[15] >>> 0;
+            expect(nulaColour15).not.toBe(Red);
+            expect(cell(offset, HalfCell)).toEqual([
+                ...Array(Mode0Edge).fill(Red),
+                ...Array(HalfCell - Mode0Edge).fill(nulaColour15),
+            ]);
+        });
+
+        it.each`
+            clock     | mode     | ticks | from                    | width
+            ${"1MHz"} | ${Mode4} | ${2}  | ${HalfCell + Mode4Edge} | ${CellWidth}
+            ${"2MHz"} | ${Mode0} | ${1}  | ${Mode0Edge}            | ${HalfCell}
+        `("repaints the doubled scanline too, in a $clock mode", ({ mode, ticks, from, width }) => {
             video.doubledScanlines = true;
             video.interlacedSyncAndVideo = false;
-            video.ula.write(0, Mode4);
-            video.polltime(1);
-            expect(cell(offset + FbWidth)).toEqual(Array(CellWidth).fill(Red));
+            video.ula.write(0, mode);
+            video.polltime(ticks);
+            expect(cell(offset + FbWidth, width)).toEqual(Array(width).fill(Red));
 
             video.ula.write(1, SetPixelsGreen);
 
-            expect(cell(offset + FbWidth).slice(HalfCell)).toEqual(Array(HalfCell).fill(Green));
+            expect(cell(offset + FbWidth, width)).toEqual([
+                ...Array(from).fill(Red),
+                ...Array(width - from).fill(Green),
+            ]);
         });
 
-        it("keeps the cursor inverted over the repainted half", () => {
-            video.ula.write(0, Mode4 | 0x60); // cursor on both halves of the master cursor table
+        it.each`
+            clock     | mode     | ticks | from                    | width
+            ${"1MHz"} | ${Mode4} | ${2}  | ${HalfCell + Mode4Edge} | ${CellWidth}
+            ${"2MHz"} | ${Mode0} | ${1}  | ${Mode0Edge}            | ${HalfCell}
+        `("keeps the cursor inverted over the repainted part, in a $clock mode", ({ mode, ticks, from, width }) => {
+            video.ula.write(0, mode | 0x60); // cursor on both halves of the master cursor table
             video.cursorOnThisFrame = true;
             video.cursorDrawIndex = 3;
-            video.polltime(1);
-            expect(cell()).toEqual(Array(CellWidth).fill(inverted(Red)));
+            video.polltime(ticks);
+            expect(cell(offset, width)).toEqual(Array(width).fill(inverted(Red)));
 
             video.ula.write(1, SetPixelsGreen);
 
-            expect(firstHalf()).toEqual(Array(HalfCell).fill(inverted(Red)));
-            expect(secondHalf()).toEqual(Array(HalfCell).fill(inverted(Green)));
+            expect(cell(offset, width)).toEqual([
+                ...Array(from).fill(inverted(Red)),
+                ...Array(width - from).fill(inverted(Green)),
+            ]);
         });
 
-        it("keeps the cursor inverted over the repainted half of a field stuck doubling its rows", () => {
+        it("keeps the cursor inverted over the repainted part of a field stuck doubling its rows", () => {
             video.interlacedSyncAndVideo = true;
             video.lastRenderWasEven = video.isEvenRender;
             video.ula.write(0, Mode4 | 0x60); // cursor on both halves of the master cursor table
@@ -863,10 +1098,43 @@ describe("Video", () => {
 
             video.ula.write(1, SetPixelsGreen);
 
-            const cursorCell = [...Array(HalfCell).fill(inverted(Red)), ...Array(HalfCell).fill(inverted(Green))];
+            const cursorCell = [
+                ...Array(Mode4Edge).fill(inverted(Red)),
+                ...Array(CellWidth - Mode4Edge).fill(inverted(Green)),
+            ];
             expect(cell()).toEqual(cursorCell);
             expect(cell(offset + FbWidth)).toEqual(cursorCell);
         });
+    });
+
+    describe("a ULA write that changes the clock rate", () => {
+        const Mode0At1MHz = Mode0 & ~TwoMhzClock;
+
+        // See ClockSwitchRuntTicksCrtc.
+        it.each`
+            what         | from           | to             | ticks | extraCharacters
+            ${"to 1MHz"} | ${Mode0}       | ${Mode0At1MHz} | ${1}  | ${1}
+            ${"to 1MHz"} | ${Mode0}       | ${Mode0At1MHz} | ${2}  | ${0}
+            ${"to 2MHz"} | ${Mode0At1MHz} | ${Mode0}       | ${1}  | ${0}
+            ${"to 2MHz"} | ${Mode0At1MHz} | ${Mode0}       | ${2}  | ${0}
+        `(
+            "clocks the CRTC $extraCharacters more times, fetching nothing and leaving the beam, switching $what after $ticks ticks",
+            ({ from, to, ticks, extraCharacters }) => {
+                programStandardFrame(rig);
+                video.ula.write(0, from);
+                rig.run(ClocksPerFrame + ticks);
+                const before = video.beamPosition();
+                let reads = 0;
+                cpu.videoRead = () => ++reads && 0;
+
+                video.ula.write(0, to);
+
+                const after = video.beamPosition();
+                expect(after.crtc.column).toBe(before.crtc.column + extraCharacters);
+                expect(after.frameCycle).toBe(before.frameCycle);
+                expect(reads).toBe(0);
+            },
+        );
     });
 
     describe("cells the beam has passed", () => {
@@ -874,7 +1142,7 @@ describe("Video", () => {
         const AllPixelsSet = 0xff;
         const offset = 100 * FbWidth + 100;
 
-        const passCell = (r) => {
+        const passCell = (r, setUp = () => {}) => {
             Object.assign(r.video, {
                 dispEnabled: EVERYTHINGENABLED,
                 horizCounter: 10,
@@ -884,8 +1152,61 @@ describe("Video", () => {
             });
             r.video.regs[7] = 30;
             r.cpu.data = AllPixelsSet;
+            setUp();
             r.run(1);
         };
+
+        // See Video.repaintAfterR8Write.
+        describe("by an R8 write that switches the display", () => {
+            const DisplayOn = 0x00;
+            const DisplayOff = 0x30;
+            const InterlaceSyncAndVideo = 0x03;
+            const TexelsPerTick = 8;
+            const whiteOnEveryIndex = () => {
+                for (let logical = 0; logical < 16; ++logical) video.ula.write(1, logical << 4);
+            };
+
+            it.each`
+                what              | where               | mode     | enabled                             | from          | to            | width | shown
+                ${"switches on"}  | ${"in a 2MHz mode"} | ${Mode0} | ${EVERYTHINGENABLED}                | ${DisplayOff} | ${DisplayOn}  | ${8}  | ${White}
+                ${"switches off"} | ${"in a 2MHz mode"} | ${Mode0} | ${EVERYTHINGENABLED}                | ${DisplayOn}  | ${DisplayOff} | ${8}  | ${OPAQUE_BLACK}
+                ${"switches on"}  | ${"in a 1MHz mode"} | ${Mode4} | ${EVERYTHINGENABLED}                | ${DisplayOff} | ${DisplayOn}  | ${16} | ${White}
+                ${"switches off"} | ${"in a 1MHz mode"} | ${Mode4} | ${EVERYTHINGENABLED}                | ${DisplayOn}  | ${DisplayOff} | ${16} | ${OPAQUE_BLACK}
+                ${"switches on"}  | ${"in the border"}  | ${Mode0} | ${EVERYTHINGENABLED & ~HDISPENABLE} | ${DisplayOff} | ${DisplayOn}  | ${8}  | ${OPAQUE_BLACK}
+            `(
+                "$what $where from the character fetched in the write's cycle",
+                ({ mode, enabled, from, to, width, shown }) => {
+                    video.ula.write(0, mode);
+                    whiteOnEveryIndex();
+                    passCell(rig, () => {
+                        video.dispEnabled = enabled;
+                        rig.writeCrtc(8, from);
+                    });
+
+                    rig.writeCrtc(8, to);
+                    rig.run(width / TexelsPerTick);
+                    video.renderPending();
+
+                    expect(Array.from(fb.subarray(offset, offset + 2 * width))).toEqual(Array(2 * width).fill(shown));
+                },
+            );
+
+            it("paints the character's own row when the write also ends interlace sync and video", () => {
+                const OddRow = 101;
+                video.ula.write(0, Mode0);
+                whiteOnEveryIndex();
+                passCell(rig, () => {
+                    video.bitmapY = OddRow;
+                    rig.writeCrtc(8, DisplayOff | InterlaceSyncAndVideo);
+                });
+
+                rig.writeCrtc(8, DisplayOn);
+                video.renderPending();
+
+                expect(fb[OddRow * FbWidth + 100]).toBe(White);
+                expect(fb[(OddRow - 1) * FbWidth + 100]).toBe(OPAQUE_BLACK);
+            });
+        });
 
         it.each([
             ["an R8 write", (r) => r.writeCrtc(8, 0)],
@@ -982,7 +1303,6 @@ describe("Video", () => {
         const AllPixelsSet = 0xff;
         const CursorOnFirstCell = 0x80;
         const InBorder = EVERYTHINGENABLED & ~HDISPENABLE;
-        const Mode0 = 0x9c;
         const WideR1 = 80;
         const NarrowR1 = 20;
 
@@ -1125,19 +1445,19 @@ describe("Video", () => {
                         v.writeCrtc(8, 1);
                     },
                     { seed: 1, hasVideoNula: false },
-                    [2206297541, 2206297541, 3715053517, 1469768717, 3659289193],
+                    [2206297541, 2206297541, 696831845, 652684235, 2971069823],
                 ],
                 [
                     "on doubled rows with a VideoNuLA",
                     programStandardFrame,
                     { seed: 2, hasVideoNula: true },
-                    [2206297541, 2206297541, 2165725467, 508035057, 977855931],
+                    [2206297541, 2206297541, 2513099733, 3370381045, 319121629],
                 ],
                 [
                     "with interlace sync and video",
                     programInterlaceSyncAndVideoFrame,
                     { seed: 3, hasVideoNula: true },
-                    [2206297541, 2206297541, 2897231635, 595029415, 4284534895],
+                    [2206297541, 2206297541, 3718618067, 2894276991, 4221043367],
                 ],
                 [
                     "with interlace sync and video stuck on one field",
@@ -1146,7 +1466,7 @@ describe("Video", () => {
                         v.writeCrtc(6, 40);
                     },
                     { seed: 4, hasVideoNula: true },
-                    [2206297541, 2206297541, 2410138283, 180526969, 4265788461],
+                    [2206297541, 2206297541, 4167504061, 2987492895, 454205651],
                 ],
             ])("paints ULA writes every few clocks %s as the beam saw them", (_, program, options, expected) => {
                 const { hashes, checked } = paintedHashes(program, options, drainKind);
@@ -1178,6 +1498,25 @@ describe("Video", () => {
         ])("takes %s on a stock ULA", (_, reg, value, read, expected) => {
             video.ula.write(reg, value);
             expect(read(video)).toEqual(expected);
+        });
+
+        it("tells whoever asked when its colours start or stop having a channel between off and full", () => {
+            const onPartialNulaLevelsChanged = vi.fn();
+            const r = makeVideo({ hasVideoNula: true, onPartialNulaLevelsChanged });
+            const changes = () => onPartialNulaLevelsChanged.mock.calls.map(([partial]) => partial);
+            programNulaColour(r, 0, 15, 0, 0);
+            programNulaColour(r, 1, 0, 15, 15);
+            expect(changes()).toEqual([]);
+            programNulaColour(r, 1, 8, 0, 0);
+            programNulaColour(r, 2, 0, 0, 1);
+            expect(changes()).toEqual([true]);
+            programNulaColour(r, 1, 15, 0, 0);
+            expect(changes()).toEqual([true]);
+            programNulaColour(r, 2, 0, 0, 0);
+            expect(changes()).toEqual([true, false]);
+            programNulaColour(r, 3, 15, 14, 15);
+            r.video.reset(r.cpu, r.video.sysvia, true);
+            expect(changes()).toEqual([true, false, true, false]);
         });
 
         it("tells whoever asked, once, when software first writes to the missing NuLA", () => {
@@ -1338,8 +1677,52 @@ describe("Video", () => {
 
             v.run(ClocksPerSecond);
 
-            // The beam gives up and flies back every 384 scanlines.
-            expect(v.paints()).toBe(Math.floor(ClocksPerSecond / (384 * ClocksPerScanline)));
+            expect(v.paints()).toBe(Math.floor(ClocksPerSecond / (ScanlinesBeforeTvGivesUp * ClocksPerScanline)));
+        });
+    });
+
+    describe("the TV's field count", () => {
+        const Fields = 10;
+        const bbcWith = (program, fieldClocks) => () => {
+            const v = makeVideo();
+            program(v);
+            v.writeCrtc(6, 0x7f);
+            return { video: v.video, run: v.run, fieldClocks };
+        };
+        const atom = () => {
+            const { video } = makeAtomVideo();
+            return { video, run: (cycles) => video.polltime(Math.round(cycles)), fieldClocks: CpuCyclesPerField };
+        };
+
+        it.each([
+            ["a CRTC that never reaches R6", bbcWith(programStandardFrame, ClocksPerFrame)],
+            [
+                "a TV that gives up waiting for vsync",
+                bbcWith(programExternallySyncedTiming, ScanlinesBeforeTvGivesUp * ClocksPerScanline),
+            ],
+            ["the Atom's 6847", atom],
+        ])("advances once a field for %s", (_, setup) => {
+            const { video, run, fieldClocks } = setup();
+            const startField = video.fieldCount;
+            for (let clock = 0; clock < 2 * fieldClocks && video.fieldCount === startField; clock++) run(1);
+            const fieldCount = video.fieldCount;
+
+            run((Fields + 0.5) * fieldClocks);
+
+            expect(video.fieldCount - fieldCount).toBe(Fields);
+        });
+
+        it("paints one field in frameSkipCount when the CRTC never reaches R6", () => {
+            const v = makeVideo();
+            programStandardFrame(v);
+            v.writeCrtc(6, 0x7f);
+            v.video.frameSkipCount = 9;
+            v.run(ClocksPerFrame);
+            v.resetPaints();
+
+            v.run(2 * 9 * ClocksPerFrame);
+
+            expect(v.paints()).toBe(2);
         });
     });
 
@@ -1907,6 +2290,69 @@ describe("Video", () => {
             video.bitmapY = 300;
             video.debugPaint();
             expect(video.fb32.every((pixel) => pixel === 0x12345678)).toBe(true);
+        });
+    });
+
+    describe("inspect", () => {
+        const Black = 0xff000000;
+        const White = 0xffffffff;
+        const FullRed = 0xff0000ff;
+        const R12Mask = 0x3f;
+
+        it("gives the 6845's registers as stored, the one addressed, and what the board decides its addresses read", () => {
+            const r = makeVideo({ isMaster: true });
+            for (let reg = 0; reg < 18; ++reg) r.writeCrtc(reg, 0x40 + reg);
+            r.video.crtc.write(0, 3);
+            r.video.ula.write(0, Mode4);
+            r.video.setScreenHwScroll(2);
+
+            const crtc = r.video.crtc.inspect();
+            expect(crtc.regs).toHaveLength(18);
+            expect(crtc.regs.slice(0, 4)).toEqual([0x40, 0x41, 0x42, 0x43]);
+            expect(crtc.regs[12]).toBe((0x40 + 12) & R12Mask);
+            expect(crtc).toMatchObject({ addressRegister: 3, halfClock: true, screenSubtract: 10, isMaster: true });
+        });
+
+        it("gives the ULA's control register and palette as written, and the colour each entry draws", () => {
+            video.ula.write(0, Mode0);
+            video.ula.write(1, LogicalZeroAsPhysicalZero);
+            video.ula.write(1, 0x10);
+
+            expect(video.ula.inspect()).toEqual({
+                control: Mode0,
+                palette: [7, 0, ...Array(14).fill(0)],
+                paletteColours: [Black, ...Array(15).fill(White)],
+            });
+        });
+
+        it("gives what NuLA's registers have set, a palette write half done, and its colours", () => {
+            ({ video } = makeVideo({ hasVideoNula: true }));
+            for (const write of [
+                NulaPaletteModeOn,
+                NulaHorizontalOffsetOne,
+                NulaLeftBlankOne,
+                NulaAttributeModeOne,
+                NulaAttributeTextOn,
+                NulaFlashOffColours8To11,
+            ])
+                video.ula.write(2, write);
+            for (const byte of NulaColourZeroFullRed) video.ula.write(3, byte);
+            video.ula.write(3, 0x1f);
+
+            const { palette, ...registers } = video.ula.inspectNula();
+            expect(registers).toEqual({
+                disabled: false,
+                paletteMode: 1,
+                horizontalOffset: 1,
+                leftBlank: 1,
+                attributeMode: 1,
+                attributeText: 1,
+                flash: [0, 0, 0, 0, 1, 1, 1, 1],
+                paletteWriteFlag: true,
+                paletteFirstByte: 0x1f,
+            });
+            expect(palette).toHaveLength(16);
+            expect(palette[0]).toBe(FullRed);
         });
     });
 

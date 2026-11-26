@@ -126,7 +126,7 @@ describe("Parameters", () => {
             "midiInterrupt",
             ["audioOutput", "speakerAmount"],
             ["microphoneChannel"],
-            ["mouseJoystickEnabled"],
+            ["mouseJoystickEnabled", "hasAmxMouse"],
             ["speechOutput"],
         ]);
     });
@@ -316,6 +316,7 @@ describe("the settings a session guest takes from its host", () => {
             "hasMidiInterface",
             "midiAddress",
             "midiInterrupt",
+            "hasAmxMouse",
             "fakeVideo",
             "stationId",
             "videoCyclesBatch",

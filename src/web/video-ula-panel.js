@@ -13,6 +13,7 @@ const PixelRatesMhz = [2, 4, 8, 16];
 const ClockRatesMhz = [1, 2];
 const FirstFlashColour = 8;
 const FlashFlagsPerRegister = 4;
+const TeletextBit = 2;
 
 /** The ULA's palette stores each physical colour's three bits inverted. */
 const physicalColour = (entry) => (entry & PhysicalColourMask) ^ PhysicalColourMask;
@@ -62,7 +63,7 @@ function flashFlagsRegister(number, firstFlag) {
 
 const ControlSection = {
     heading: "Control",
-    registers: [register("CTRL", "&FE20: the video ULA's control register", 8, (s) => s.ctrl, decodeControl)],
+    registers: [register("CTRL", "&FE20: the video ULA's control register", 8, (s) => s.control, decodeControl)],
 };
 
 const NulaSection = {
@@ -186,18 +187,18 @@ class Swatches {
 }
 
 /** Each palette entry: its colour now, a short label, and what it is in words. */
-function ulaPaletteEntries(video, hasNula) {
-    return [...video.actualPal].map((entry, index) => {
-        const described = describeEntry(video, hasNula, entry, index);
+function ulaPaletteEntries(ula, nula) {
+    return ula.palette.map((entry, index) => {
+        const described = describeEntry(ula, nula, entry, index);
         return { ...described, title: `Entry ${index.toString(16)}: ${described.what}` };
     });
 }
 
-function describeEntry(video, hasNula, entry, index) {
+function describeEntry(ula, nula, entry, index) {
     const colour = physicalColour(entry);
-    const flashes = entry & PaletteFlashBit && video.ula.flash[colour];
-    const swatch = cssColour(video.ulaPal[index]);
-    if (hasNula) {
+    const flashes = entry & PaletteFlashBit && (!nula || nula.flash[colour]);
+    const swatch = cssColour(ula.paletteColours[index]);
+    if (nula) {
         // NuLA's colours 8 to 15 need not duplicate 0 to 7, so an entry is named by the NuLA colour it draws.
         const steady = (entry ^ PhysicalColourMask).toString(16);
         const other = entry.toString(16);
@@ -221,7 +222,7 @@ function describeEntry(video, hasNula, entry, index) {
 }
 
 /** The palette by the mode's logical colours, each from the entries that draw it, marked mixed if they disagree. */
-function logicalColours(video, entries, colours) {
+function logicalColours(ula, entries, colours) {
     const slots = [];
     for (let logical = 0; logical < PaletteEntries; ++logical) {
         if (logical >= colours) {
@@ -230,7 +231,7 @@ function logicalColours(video, entries, colours) {
         }
         const drawnBy = entriesOf(logical, colours);
         const [first] = drawnBy;
-        const mixed = drawnBy.some((entry) => video.actualPal[entry] !== video.actualPal[first]);
+        const mixed = drawnBy.some((entry) => ula.palette[entry] !== ula.palette[first]);
         const list = colours === PaletteEntries ? "" : entryList(drawnBy);
         const title = mixed
             ? `Logical colour ${logical}: its entries disagree. ${drawnBy.map((entry) => entries[entry].title).join("; ")}`
@@ -246,9 +247,9 @@ function logicalColours(video, entries, colours) {
     return slots;
 }
 
-function nulaPaletteEntries(ula) {
-    return [...ula.collook].map((abgr, index) => {
-        const flashes = index >= FirstFlashColour && ula.flash[index - FirstFlashColour];
+function nulaPaletteEntries(nula) {
+    return nula.palette.map((abgr, index) => {
+        const flashes = index >= FirstFlashColour && nula.flash[index - FirstFlashColour];
         const rgb = nulaRgb(abgr);
         return {
             index,
@@ -282,8 +283,8 @@ export class VideoUlaPanel {
      * @param {import("./floating-panel.js").PanelArrangement} options.arrangement
      */
     constructor({ cpu, arrangement }) {
-        this._video = cpu.video;
-        this._hasNula = this._video.ula.hasVideoNula;
+        this._ula = cpu.video.ula;
+        this._hasNula = this._ula.hasVideoNula;
         this._showEntries = false;
         const { floating, body, part } = decodedPanel({
             id: "videoula",
@@ -322,19 +323,19 @@ export class VideoUlaPanel {
     }
 
     update() {
-        const video = this._video;
-        this._control.update({ ctrl: video.ulactrl });
-        this._updateUlaPalette();
-        if (!this._hasNula) return;
-        this._nulaRegisters.update(video.ula);
-        this._nulaPalette.update(nulaPaletteEntries(video.ula), false);
-        showHeading(this._nulaHeading, video.ula.disabled ? NulaOffHeading : NulaOnHeading);
+        const ula = this._ula.inspect();
+        const nula = this._hasNula ? this._ula.inspectNula() : null;
+        this._control.update(ula);
+        this._updateUlaPalette(ula, nula);
+        if (!nula) return;
+        this._nulaRegisters.update(nula);
+        this._nulaPalette.update(nulaPaletteEntries(nula), false);
+        showHeading(this._nulaHeading, nula.disabled ? NulaOffHeading : NulaOnHeading);
     }
 
-    _updateUlaPalette() {
-        const video = this._video;
-        const entries = ulaPaletteEntries(video, this._hasNula);
-        const unused = video.ula.paletteMode ? BypassedPaletteHeading : video.teletextMode && TeletextPaletteHeading;
+    _updateUlaPalette(ula, nula) {
+        const entries = ulaPaletteEntries(ula, nula);
+        const unused = nula?.paletteMode ? BypassedPaletteHeading : ula.control & TeletextBit && TeletextPaletteHeading;
         this._viewButton.classList.toggle("unused", !!unused);
         showHeading(this._viewButton, this._showEntries ? ShowColours : ShowEntries);
         if (unused) {
@@ -347,11 +348,11 @@ export class VideoUlaPanel {
             this._ulaPalette.update(entries, false);
             return;
         }
-        const colours = coloursOf(video.ulactrl);
+        const colours = coloursOf(ula.control);
         showHeading(this._ulaHeading, {
             text: `Palette: ${colours} colours`,
             title: "Each of this mode's colours, from the palette entries its pixels select",
         });
-        this._ulaPalette.update(logicalColours(video, entries, colours), false);
+        this._ulaPalette.update(logicalColours(ula, entries, colours), false);
     }
 }

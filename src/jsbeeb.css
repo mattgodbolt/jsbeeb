@@ -872,29 +872,13 @@ small {
   pointer-events: auto;
 }
 
-/* Rewind scrubber panel */
-#rewind-panel {
-  position: fixed;
-  bottom: 40px;
-  left: 0;
-  right: 0;
-  background: rgba(0, 0, 0, 0.85);
-  border-top: 1px solid #555;
-  z-index: 10;
-  padding: 8px 12px;
+#rewind-commit {
+  flex: none;
+  margin-left: auto;
 }
 
-.rewind-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 6px;
-}
-
-.rewind-title {
-  color: #ccc;
-  font-size: 12px;
-  font-weight: bold;
+#rewind-commit + .panel-close {
+  margin-left: 0;
 }
 
 .rewind-filmstrip {
@@ -1148,6 +1132,60 @@ small {
 #breakpoints-panel .bp-remove {
   font-size: 14px;
   line-height: 1;
+}
+
+#callstack-panel {
+  width: min(580px, 90vw);
+  font-family: monospace;
+  font-size: 9pt;
+}
+
+#callstack-panel .panel-body {
+  overflow-x: auto;
+}
+
+#callstack-panel td {
+  padding: 1px 4px;
+  white-space: nowrap;
+}
+
+#callstack-panel .cs-kind {
+  color: #aaaaaa;
+}
+
+#callstack-panel .cs-routine,
+#callstack-panel .cs-routine .txt-btn {
+  color: #f0d080;
+}
+
+#callstack-panel .cs-site,
+#callstack-panel .txt-btn {
+  color: #cccccc;
+  font-family: inherit;
+  text-decoration-color: rgba(255, 255, 255, 0.45);
+}
+
+#callstack-panel .cs-name {
+  display: inline-block;
+  max-width: 22ch;
+  margin-left: 1ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+}
+
+#callstack-panel .cs-name:empty {
+  display: none;
+}
+
+#callstack-panel .cs-bank {
+  margin-left: 1ch;
+  color: #888888;
+}
+
+#callstack-panel .cs-end {
+  color: #888888;
+  padding: 1px 4px;
 }
 
 .decoded-panel {
@@ -3336,6 +3374,23 @@ div.smoothie-chart-tooltip {
     border-radius: 0;
   }
 
+  /* A sheet across the bottom, over the touch keyboard, which the held machine has no use for. */
+  #rewind-panel {
+    inset: auto 0 0;
+    width: auto;
+    background: #000;
+    border-width: 1px 0 0;
+    border-radius: 0;
+  }
+
+  #rewind-panel .panel-header {
+    cursor: default;
+  }
+
+  #rewind-panel .panel-resize {
+    display: none;
+  }
+
   .media-header {
     cursor: default;
   }
@@ -3478,4 +3533,71 @@ div.smoothie-chart-tooltip {
 
 .config-section > .row + .row {
   margin-top: 10px;
+}
+
+#trace-panel {
+  width: min(600px, 90vw);
+  height: min(360px, 60vh);
+  font-family: monospace;
+  font-size: 9pt;
+}
+
+#trace-panel .panel-body {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+}
+
+#trace-panel .trace-status {
+  color: #aaaaaa;
+  padding: 2px 4px;
+}
+
+#trace-panel .trace-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+#trace-panel th {
+  position: sticky;
+  top: 0;
+  background: #222222;
+  color: #aaaaaa;
+  font-weight: normal;
+}
+
+#trace-panel th,
+#trace-panel td {
+  padding: 0 4px;
+  white-space: nowrap;
+}
+
+#trace-panel .trace-ago {
+  color: #888888;
+  text-align: right;
+}
+
+#trace-panel .trace-address {
+  color: #f0d080;
+  cursor: pointer;
+}
+
+#trace-panel .trace-address:hover {
+  text-decoration: underline;
+}
+
+#trace-panel .trace-name {
+  max-width: 16ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #80d0d0;
+}
+
+#trace-panel .trace-instruction {
+  min-width: 16ch;
+}
+
+#trace-panel .trace-interrupt .trace-instruction {
+  color: #f08080;
 }

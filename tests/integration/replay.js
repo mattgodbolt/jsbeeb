@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { finished, ReplayHistory, snapshotCycle } from "../../src/replay.js";
+import { finished, ReplayHistory, snapshotCycle, Unrepeated } from "../../src/replay.js";
+import { recentInstructions } from "../../src/instruction-trace.js";
+import { cycleCount } from "../../src/lockstep.js";
 import { PagedView } from "../../src/paging.js";
 import { createSnapshot, restoreSnapshot, snapshotFromJSON, snapshotToJSON } from "../../src/snapshot.js";
 import { Video } from "../../src/video.js";
@@ -8,9 +10,10 @@ import { AtomSoundChip, SoundChip } from "../../src/soundchip.js";
 import { keyCodes } from "../../src/keymap.js";
 import { bootedTestMachine, mode7Text } from "./helpers.js";
 import { singleStep } from "../helpers/single-step.js";
-import { executeUntilFrame } from "../../src/web/rewind-thumbnail.js";
+import { previewFrame } from "../../src/web/rewind-thumbnail.js";
 import { WFNFile } from "../../src/mmc.js";
 import { NoReplayHooks } from "../../src/6502.js";
+import { AmxButtons } from "../../src/amx-mouse.js";
 
 const FbWidth = 1024;
 const FbHeight = 768;
@@ -49,6 +52,8 @@ const PrintForever = [0x20, 0xee, 0xff, 0x4c, 0x00, 0x30];
 const Oswrch = 0xffee;
 const IrqVector = 0xfffe;
 const StepsInside = 3;
+const TimerNops = 8;
+const MovedStack = 0xe0;
 const Irq1v = 0x0204;
 const HandlerAddress = 0x3100;
 // LDA &FC; RTI: the OS's IRQ entry keeps A in &FC. Its source left alone, the interrupt is taken again at once.
@@ -57,6 +62,10 @@ const LoopJump = ScratchAddress + 3;
 const TextCursorX = 0x0318;
 const ForwardWindows = 3;
 const ForwardWindowSeconds = 0.007;
+// More than the newest stretch holds, so that a trace reaches into an older one.
+const TraceEntries = 6000;
+// Away from the program and anything else the tests run.
+const UnloggedAddress = 0x3200;
 // Channel 1 rising in pitch, a note every twentieth of a second, for ever.
 const RisingTone = ["10 FOR P%=1 TO 255 STEP 8:SOUND 1,-15,P%,1:NEXT:GOTO 10", "RUN"];
 const ChannelZeroLoudest = 0x90;
@@ -145,7 +154,7 @@ const atomPrinted = (machine, text) => {
 const catalogued = (machine) => mode7Text(machine).includes("Drive 0");
 
 // What each runs once a key is pressed: on the B a disc access, on the Master its clock read too, and on the Atom a
-// line printed. Only the BBCs read the FIRE buttons and the analogue port.
+// line printed. Only the BBCs read the FIRE buttons and the analogue port, and take the AMX mouse.
 describe.each([
     ["a B", "B-DFS1.2", WaitThenCatalogue, catalogued, true],
     ["a Master", "Master", WaitThenClockAndCatalogue, catalogued, true],
@@ -182,6 +191,12 @@ describe.each([
                       (cpu) => cpu.adconverter.setChannelSource(0, driftingSource()),
                       () => {},
                   ],
+                  ["the AMX mouse's movement", (cpu) => cpu.amxMouse.move(40, -24), () => {}],
+                  [
+                      "the AMX mouse's buttons",
+                      (cpu) => cpu.amxMouse.setButtons(AmxButtons.left | AmxButtons.right),
+                      (cpu) => cpu.amxMouse.setButtons(0),
+                  ],
               ]
             : []),
         [
@@ -193,7 +208,7 @@ describe.each([
             () => {},
         ],
     ])("replays %s exactly", async (_, press, release) => {
-        const machine = await booted(model);
+        const machine = await booted(model, { hasAmxMouse: readsBbcInputs });
         const cpu = machine.processor;
         const history = historyFromHere(machine);
         await seconds(machine, AroundAnInputSeconds);
@@ -430,6 +445,71 @@ describe.each([
     });
 });
 
+describe.each([
+    ["a B", "B-DFS1.2"],
+    ["a Master", "Master"],
+])("Finding the call stack on %s", (_, model) => {
+    it.each([
+        [
+            "from inside the OS's write character call, out to BASIC's CALL in its own bank",
+            async (machine) => {
+                await machine.runUntilAddress(Oswrch, 1);
+                for (let i = 1; i < StepsInside; i++) singleStep(machine.processor);
+            },
+            (frames, machine) => {
+                expect(frames).toContainEqual(
+                    expect.objectContaining({ kind: "JSR", site: ScratchAddress, routine: Oswrch }),
+                );
+                expect(frames.at(-1).routineBank).toBe(machine.processor.pagedBank);
+            },
+        ],
+        [
+            "from inside an interrupt handler",
+            async (machine) => {
+                await machine.runUntilAddress(machine.readword(IrqVector), 1);
+                singleStep(machine.processor);
+            },
+            ([innermost], machine) =>
+                expect(innermost).toMatchObject({ kind: "IRQ", routine: machine.readword(IrqVector) }),
+        ],
+    ])("%s, painting none of it, leaving the machine and its picture alone", async (_, stop, expectFrames) => {
+        const machine = await booted(model);
+        PrintForever.forEach((byte, i) => machine.writebyte(ScratchAddress + i, byte));
+        const history = historyFromHere(machine);
+        await machine.type("A%=88:CALL &3000");
+        history.taken(machine.processor.snapshotState(), null);
+        await seconds(machine, CursorBlinkSeconds);
+        await stop(machine);
+        const { video } = machine.processor;
+        const painted = vi.fn();
+        video.paint_ext = painted;
+        const before = machineNow(machine);
+        const { frames, accounted } = finished(history.callStack());
+        expect(accounted).toBe(true);
+        expectFrames(frames, machine);
+        expect(machineNow(machine)).toEqual(before);
+        expect(painted).not.toHaveBeenCalled();
+    });
+
+    it("goes back no further than a TXS an interrupt was taken straight after", async () => {
+        const machine = await booted(model);
+        // CLI's effect waits an instruction, so the User VIA timer's interrupt, set going under SEI, comes straight
+        // after the TXS.
+        const timerSoon = [0xa9, 0xc0, 0x8d, 0x6e, 0xfe, 0xa9, 0x02, 0x8d, 0x64, 0xfe, 0xa9, 0x00, 0x8d, 0x65, 0xfe];
+        const txsAt = ScratchAddress + 1 + timerSoon.length + TimerNops + 3;
+        const code = [0x78, ...timerSoon, ...Array(TimerNops).fill(0xea), 0xa2, MovedStack, 0x58, 0x9a];
+        [...code, 0x4c, (txsAt + 1) & 0xff, (txsAt + 1) >> 8].forEach((byte, i) =>
+            machine.writebyte(ScratchAddress + i, byte),
+        );
+        const history = historyFromHere(machine);
+        await machine.type("CALL &3000");
+        await machine.runUntilAddress(machine.readword(IrqVector), 1);
+        singleStep(machine.processor);
+        const { frames, txsAt: movedBy } = finished(history.callStack());
+        expect([frames.at(-1), movedBy]).toEqual([expect.objectContaining({ kind: "IRQ", site: txsAt + 1 }), txsAt]);
+    });
+});
+
 describe("Reverse continuing", () => {
     it.each([
         ["an instruction breakpoint", { kind: "execute", start: Oswrch }],
@@ -487,16 +567,112 @@ describe("Reverse continuing", () => {
     });
 });
 
+describe.each([
+    ["a B", "B-DFS1.2"],
+    ["a Master", "Master"],
+])("Tracing on %s", (_, model) => {
+    /** What the machine runs from here on, as a trace of it should give it. */
+    function recording(cpu) {
+        const ran = [];
+        const note = (kind, address, bytes) => {
+            const { a, x, y, s } = cpu;
+            ran.push({ kind, cycle: cycleCount(cpu), address, bytes, a, x, y, s, p: cpu.p.asByte() });
+        };
+        const instruction = cpu.debugInstruction.add((pc) => {
+            note(
+                "instruction",
+                pc,
+                [0, 1, 2].map((i) => cpu.peekmem(pc + i)),
+            );
+        });
+        const interrupt = cpu.debugInterrupt.add((taken, returnsTo) => note(taken, returnsTo, null));
+        return { ran, stop: () => [instruction, interrupt].forEach((hook) => hook.remove()) };
+    }
+
+    /** A history of `stretches` stretches, each `seconds` long, as the machine ran them. */
+    async function recorded(stretches, seconds) {
+        const machine = await printingForever(model);
+        const cpu = machine.processor;
+        const history = new ReplayHistory(cpu);
+        const { ran, stop } = recording(cpu);
+        for (let stretch = 0; stretch < stretches; stretch++) {
+            history.taken(cpu.snapshotState(), null);
+            await machine.runFor(seconds * machine.model.cyclesPerSecond);
+        }
+        stop();
+        return { machine, cpu, history, ran };
+    }
+
+    it("gives the instructions and interrupts the machine ran, the newest last, painting none of them and leaving the machine and its picture alone", async () => {
+        const { machine, cpu, history, ran } = await recorded(ForwardWindows, ForwardWindowSeconds);
+        const painted = vi.fn();
+        cpu.video.paint_ext = painted;
+        const before = machineNow(machine);
+        const { entries, stoppedBy } = finished(recentInstructions(history, TraceEntries));
+        expect(ran.length).toBeGreaterThan(TraceEntries);
+        expect(new Set(entries.map(({ kind }) => kind))).toEqual(new Set(["instruction", "irq"]));
+        expect([entries, stoppedBy]).toEqual([ran.slice(-TraceEntries), null]);
+        expect(entries[0].cycle).toBeLessThan(snapshotCycle(cpu, history.snapshots().at(-1)));
+        expect(machineNow(machine)).toEqual(before);
+        expect(painted).not.toHaveBeenCalled();
+    });
+
+    it.each([
+        ["the history ends", () => {}, null],
+        ["something no replay crosses", (cpu) => cpu.inputLog.refuse("a disc change"), "a disc change"],
+        ["an older stretch did not repeat", (cpu) => cpu.writemem(UnloggedAddress, 0x42), Unrepeated],
+    ])("gives fewer where %s", async (_, change, stoppedBy) => {
+        const machine = await printingForever(model);
+        const cpu = machine.processor;
+        const history = new ReplayHistory(cpu);
+        history.taken(cpu.snapshotState(), null);
+        const { ran, stop } = recording(cpu);
+        await seconds(machine, ForwardWindowSeconds);
+        change(cpu);
+        await seconds(machine, ForwardWindowSeconds);
+        history.taken(cpu.snapshotState(), null);
+        const newest = ran.length;
+        await seconds(machine, ForwardWindowSeconds);
+        stop();
+        const entries = stoppedBy ? ran.slice(newest) : ran;
+        expect(finished(recentInstructions(history, ran.length + 1))).toEqual({ entries, stoppedBy });
+    });
+
+    it("refuses where the run did not repeat", async () => {
+        const { machine, history } = await recorded(1, ForwardWindowSeconds);
+        machine.writebyte(ScratchAddress, 0x42);
+        await seconds(machine, ForwardWindowSeconds);
+        expect(finished(recentInstructions(history, TraceEntries))).toEqual({
+            refusal: "The trace could not repeat the machine's run exactly.",
+        });
+    });
+
+    it("replays forward only the stretches between the cycles asked for", async () => {
+        const { cpu, history, ran } = await recorded(ForwardWindows, ForwardWindowSeconds);
+        const [, middle, newest] = history.snapshots().map((snapshot) => snapshotCycle(cpu, snapshot));
+        const cycles = [];
+        const hooks = {
+            instruction: () => void cycles.push(cycleCount(cpu)),
+            read: null,
+            write: null,
+            interrupt: null,
+        };
+        const replayed = finished(history.replayForward(middle + 1, newest, { hooks }));
+        expect(replayed).toEqual({ from: middle, to: newest, stoppedBy: null });
+        const inStretch = ran.filter(({ kind, cycle }) => kind === "instruction" && cycle >= middle && cycle < newest);
+        expect(cycles).toEqual(inStretch.map(({ cycle }) => cycle));
+    });
+});
+
 describe("Replaying a Master's writes to its CMOS", () => {
     it.each([
         ["stepping back", ({ history }) => expect(history.stepBack(false)).toBeNull()],
         [
             "previewing a rewind",
-            ({ cpu, start }) => {
-                const live = cpu.snapshotState();
-                cpu.restoreState(start);
-                executeUntilFrame(cpu, cpu.video);
-                cpu.restoreState(live);
+            ({ history, start }) => {
+                const original = history.original();
+                previewFrame(history, start);
+                history.putBack(original);
             },
         ],
     ])("leaves the settings, the clock and the stored copy as the machine had them after %s", async (_, replay) => {
@@ -537,11 +713,10 @@ describe("Replaying an Atom's writes to its MMC card", () => {
         [
             "previewing a rewind",
             "after",
-            ({ cpu, start }) => {
-                const live = cpu.snapshotState();
-                cpu.restoreState(start);
-                executeUntilFrame(cpu, cpu.video);
-                cpu.restoreState(live);
+            ({ history, start }) => {
+                const original = history.original();
+                previewFrame(history, start);
+                history.putBack(original);
             },
         ],
         ["rewinding to before it", "before", ({ cpu, start }) => cpu.restoreState(start)],
@@ -622,7 +797,17 @@ describe("Replaying sends the host none of the machine's sound", () => {
 
     it.each([
         ["stepping back, which lands", (history) => expect(history.stepBack(false)).toBeNull()],
-        ["searching back, which puts the machine back", (history) => finished(history.lastWrite(ScratchAddress))],
+        [
+            "searching back, which puts the machine back",
+            (history) => finished(history.lastWrite(ScratchAddress, PagedView)),
+        ],
+        [
+            "replaying forward, which puts the machine back",
+            (history) =>
+                expect(finished(history.replayForward(0, cycleCount(history.cpu), { hooks: NoReplayHooks }))).toEqual(
+                    expect.objectContaining({ stoppedBy: null }),
+                ),
+        ],
     ])("after %s, sends the sound chip as it stands before the machine sounds on", async (_, replay) => {
         const onEvent = vi.fn();
         const machine = await booted("B-DFS1.2", { soundChip: new SoundChip(null, { onEvent }) });
@@ -638,6 +823,7 @@ describe("Replaying sends the host none of the machine's sound", () => {
         await seconds(machine, ForwardWindowSeconds);
 
         const events = onEvent.mock.calls.map(([event]) => event);
+        expect(events.slice(0, replayed).filter(({ kind }) => kind !== "state")).toEqual([]);
         const soundsOn = events.findIndex(({ kind }, i) => i >= replayed && kind !== "state");
         const resync = events.findLastIndex(({ kind }, i) => i < soundsOn && kind === "state");
         expect(soundsOn - resync).toBe(1);

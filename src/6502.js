@@ -6,16 +6,20 @@ import { Tube } from "./tube.js";
 import { Adc } from "./adc.js";
 import { Scheduler } from "./scheduler.js";
 import { TouchScreen } from "./touchscreen.js";
+import { AmxMouse } from "./amx-mouse.js";
 import { TeletextAdaptor } from "./teletext_adaptor.js";
 import { Filestore } from "./filestore.js";
+import { VdfsHost } from "./vdfs-host.js";
+import { PortBase as VdfsPortBase, VdfsRom, inertRead } from "./vdfs-protocol.js";
 import { FakeRelayNoise } from "./relaynoise.js";
 import { AtomPPIA } from "./ppia.js";
 import { AtomMMC2 } from "./mmc.js";
 import { signExtend } from "./binary.js";
-import { hexbyte, hexword } from "./hex.js";
+import { hexbyte } from "./hex.js";
 import { loadData } from "./loader.js";
 import { MediaResolver } from "./media-resolver.js";
 import { BrkOpcode, Breakpoints } from "./breakpoints.js";
+import { DramRefresh } from "./dram-refresh.js";
 
 async function romImage(name) {
     return (await new MediaResolver().resolve("rom", name)).data;
@@ -29,12 +33,20 @@ const UnpeekableDevice = 0xff;
 export const BaseRamBytes = 64 * 1024;
 export const RomBankBytes = 16 * 1024;
 export const NumRomBanks = 16;
+// What a page of memStat holds: reads and writes reach RAM, reads reach ROM and writes to it change nothing, or both
+// reach a device.
+export const DeviceStat = 0;
+export const RamStat = 1;
+export const RomStat = 2;
 const RomselAndy = 0x80;
+const AccconIrr = 0x80;
+const IrrIrqSource = 0x10;
 const AndyStart = 0x8000;
 const AndyEnd = 0x9000;
 const RomOffset = BaseRamBytes;
 const OsOffset = RomOffset + NumRomBanks * RomBankBytes;
 const BbcMemoryBytes = OsOffset + RomBankBytes;
+const ModelBRamBytes = 32 * 1024;
 // Further from every real offset than any address, and a small integer in every V8 build.
 const SlowPathOffset = -0x40000000;
 const NmiVector = 0xfffa;
@@ -186,7 +198,6 @@ class Base6502 {
         this.pc = 0;
         const { disassembler, runInstruction } = model.opcodesFactory(this, { cycleAccurate });
         this.disassembler = disassembler;
-        this.forceTracing = false;
         this.runner = runInstruction;
         this.interrupt = 0;
         this._nmiSources = 0;
@@ -758,9 +769,18 @@ class InstructionHook extends DebugHook {
     }
 }
 
-function is1MHzAccess(addr) {
+function isModelB1MHzAccess(addr) {
     const FEslowdown = [true, false, true, true, false, false, true, false];
     return addr >= 0xfc00 && addr < 0xff00 && (addr < 0xfe00 || FEslowdown[(addr >>> 5) & 7]);
+}
+
+// VIDPROC (&FE20-&FE27) is 2MHz as measured on a Master 128, though the Master Reference Manual (F.6-8) lists it as 1MHz.
+function isMaster1MHzAccess(addr) {
+    return (
+        addr >= 0xfc00 &&
+        addr < 0xff00 &&
+        (addr < 0xfe20 || (addr >= 0xfe28 && addr < 0xfe2c) || (addr >= 0xfe40 && addr < 0xfea0))
+    );
 }
 
 export class Cpu6502 extends Base6502 {
@@ -801,13 +821,15 @@ export class Cpu6502 extends Base6502 {
         this.ramRomOs = new Uint8Array(this.memoryBytes);
         this.romOffset = RomOffset;
         this.osOffset = OsOffset;
+        /** @type {Uint8Array | null} */
+        this._dramRows = null;
+        this.dramRefresh = model.isAtom ? null : new DramRefresh(this, this.dramRegions());
         this.romsel = 0;
         this.acccon = 0;
-        this.oldPcArray = new Uint16Array(256);
-        this.oldAArray = new Uint8Array(256);
-        this.oldXArray = new Uint8Array(256);
-        this.oldYArray = new Uint8Array(256);
-        this.oldPcIndex = 0;
+        this.emptyBanks = 0;
+        this.pagedBankEmpty = false;
+        // Where the instruction running started, kept only on the slow path, for the debug hooks.
+        this.instructionPc = 0;
         this.resetLine = true;
         this.resetsAndLoads = 0;
         /** @type {import("./replay.js").InputLog | null} */
@@ -820,6 +842,9 @@ export class Cpu6502 extends Base6502 {
         this.hasTeletextAdaptor = !!this.config.hasTeletextAdaptor;
         this.hasMidiInterface = !!this.config.hasMidiInterface;
         this.teletextAdaptor = this.hasTeletextAdaptor ? new TeletextAdaptor(this) : null;
+        if (this.config.vdfsStore && !model.takesServiceRoms)
+            throw new Error(`VDFS is not for the ${model.name}: it is for a BBC with a MOS that takes service ROMs`);
+        this.vdfs = this.config.vdfsStore ? new VdfsHost(this, this.config.vdfsStore) : null;
         this.tube = this.hasTube
             ? new Tube6502(this.config.tube, this, { cpuMultiplier: this.config.tubeCpuMultiplier })
             : new FakeTube();
@@ -851,7 +876,9 @@ export class Cpu6502 extends Base6502 {
             isMaster: this.model.isMaster,
             initialLayout: this.keyLayout,
         });
-        this.uservia = new via.UserVia(this, this.scheduler, this.config.userPort);
+        this.amxMouse = this.config.hasAmxMouse && !this.model.isAtom ? new AmxMouse(this.scheduler) : null;
+        this.uservia = new via.UserVia(this, this.scheduler, this.amxMouse ?? this.config.userPort);
+        this.amxMouse?.connect(this.uservia);
         this.acia = new Acia(this, this.soundChip.toneGenerator, this.scheduler, this.relayNoise);
         this.midiAcia = this.hasMidiInterface
             ? new Midi6850(
@@ -877,10 +904,6 @@ export class Cpu6502 extends Base6502 {
         return BbcMemoryBytes;
     }
 
-    getPrevPc(index) {
-        return this.oldPcArray[(this.oldPcIndex - index) & 0xff];
-    }
-
     // BBC Master memory map (within ramRomOs array):
     // 00000 - 08000 -> base 32KB RAM
     // 08000 - 09000 -> ANDY - 4KB
@@ -889,14 +912,20 @@ export class Cpu6502 extends Base6502 {
     romSelect(b) {
         this.romsel = b;
         const bank = this.pagedBank;
+        this.pagedBankEmpty = !!(this.emptyBanks & (1 << bank));
         const offset = bank * RomBankBytes + this.romOffset - 0x8000;
-        const swram = this.model.swram[bank] ? 1 : 2;
+        const swram = this.model.swram[bank] ? RamStat : RomStat;
         this.mapBothHalves(0x80, 0xc0, swram, offset);
         if (this.model.isMaster && b & 0x80) {
             // 4Kb RAM (private RAM - ANDY)
             // Zero offset as 0x8000 mapped to 0x8000
-            this.mapBothHalves(0x80, 0x90, 1, 0);
+            this.mapBothHalves(0x80, 0x90, RamStat, 0);
         }
+    }
+
+    /** ROMSEL as last written, the sideways bank it pages in, and on a Master ACCCON. */
+    inspectPaging() {
+        return { romsel: this.romsel, bank: this.pagedBank, ...(this.model.isMaster && { acccon: this.acccon }) };
     }
 
     /** The sideways bank ROMSEL pages in. */
@@ -920,12 +949,45 @@ export class Cpu6502 extends Base6502 {
         return this.pagedBank === bank;
     }
 
+    /**
+     * Marks the Master's sideways ROM banks that hold nothing, every byte zero, as empty sockets. Call after anything
+     * loads a ROM bank. A Model B's empty socket is unmeasured, so it reads as zeros.
+     */
+    findEmptyBanks() {
+        this.emptyBanks = 0;
+        if (!this.model.isMaster) return;
+        for (let bank = 0; bank < NumRomBanks; ++bank) {
+            if (!this.model.swram[bank] && this.romBank(bank).every((byte) => byte === 0)) this.emptyBanks |= 1 << bank;
+        }
+        this.romSelect(this.romsel);
+    }
+
+    /** Whether reading memStat's `page` reaches an empty socket. */
+    readsEmptySocket(page) {
+        const addressPage = page & 0xff;
+        return this.pagedBankEmpty && this.memStat[page] === RomStat && addressPage >= 0x80 && addressPage < 0xc0;
+    }
+
     mapPages(start, end, stat, offset) {
         this.memStat.fill(stat, start, end);
         this.memLook.fill(offset, start, end);
-        // While a debug hook is set, every access of its kind takes the slow path, which calls it.
-        this.readLook.fill(stat && !this._debugRead ? offset : SlowPathOffset, start, end);
-        this.writeLook.fill(stat === 1 && !this._debugWrite ? offset : SlowPathOffset, start, end);
+        // While a debug hook is set, every access of its kind takes the slow path, which calls it; while DRAM rows
+        // are tracked, every access does.
+        this.readLook.fill(
+            stat !== DeviceStat && !this._debugRead && !this._dramRows ? offset : SlowPathOffset,
+            start,
+            end,
+        );
+        if (this.pagedBankEmpty) {
+            for (let page = start; page < end; ++page) {
+                if (this.readsEmptySocket(page)) this.readLook[page] = SlowPathOffset;
+            }
+        }
+        this.writeLook.fill(
+            stat === RamStat && !this._debugWrite && !this._dramRows ? offset : SlowPathOffset,
+            start,
+            end,
+        );
     }
 
     mapBothHalves(fromPage, toPage, stat, offset) {
@@ -937,8 +999,33 @@ export class Cpu6502 extends Base6502 {
         for (let i = 0; i < this.memStat.length; ++i) this.mapPages(i, i + 1, this.memStat[i], this.memLook[i]);
     }
 
+    /** The [start, end) ranges of ramRomOs that are DRAM: on a Master, the sideways RAM banks too. */
+    dramRegions() {
+        if (!this.model.isMaster) return [[0, ModelBRamBytes]];
+        const regions = [[0, BaseRamBytes]];
+        this.model.swram.forEach((isRam, bank) => {
+            const start = this.romOffset + bank * RomBankBytes;
+            if (isRam) regions.push([start, start + RomBankBytes]);
+        });
+        return regions;
+    }
+
+    get tracksDramRows() {
+        return this._dramRows !== null;
+    }
+
+    /** Sends every memory access through the slow path, which notes the DRAM row it refreshes, while `on`. */
+    trackDramRows(on) {
+        const rows = on ? this.dramRefresh.cpuRows : null;
+        if (rows === this._dramRows) return;
+        this._dramRows = rows;
+        this.refreshLook();
+    }
+
     writeAcccon(b) {
         this.acccon = b;
+        if (b & AccconIrr) this.interrupt |= IrrIrqSource;
+        else this.interrupt &= ~IrrIrqSource;
         // ACCCON is
         // IRR TST IJF ITU  Y  X  E  D
         //  7   6   5   4   3  2  1  0
@@ -953,13 +1040,13 @@ export class Cpu6502 extends Base6502 {
         const bitY = !!(b & 8);
         // The "X" bit controls the "illegal" paging 20KB region overlay of LYNNE at 0x3000 - 0x7fff.
         const normal = bitX ? 0x8000 : 0;
-        this.mapPages(0x30, 0x80, 1, normal);
+        this.mapPages(0x30, 0x80, RamStat, normal);
         // Opcodes at 0xc000 - 0xdfff see shadow RAM by bit E, independent of bit X, unless HAZEL
         // is paged in there, when they see what normal access does.
-        this.mapPages(256 + 0x30, 256 + 0x80, 1, bitY ? normal : bitE ? 0x8000 : 0);
+        this.mapPages(256 + 0x30, 256 + 0x80, RamStat, bitY ? normal : bitE ? 0x8000 : 0);
         // The "Y" bit pages in HAZEL at c000->dfff. HAZEL is mapped in our RAM
         // at 0x9000, so (0x9000 - 0xc000) = -0x3000 is needed as an offset.
-        const hazelRAM = bitY ? 1 : 2;
+        const hazelRAM = bitY ? RamStat : RomStat;
         const hazelOff = bitY ? -0x3000 : this.osOffset - 0xc000;
         this.mapBothHalves(0xc0, 0xe0, hazelRAM, hazelOff);
     }
@@ -1050,8 +1137,9 @@ export class Cpu6502 extends Base6502 {
             case 0xfc10:
                 if (this.hasTeletextAdaptor) return this.teletextAdaptor.read(addr - 0xfc10);
                 break;
-            case 0xfcfc:
-                if (addr === 0xfcff && this.hasMusic5000) return this.music5000PageSel;
+            case VdfsPortBase:
+                if (this.vdfs)
+                    return this.replaying ? inertRead(addr - VdfsPortBase) : this.vdfs.read(addr - VdfsPortBase);
                 break;
             case 0xfe00:
             case 0xfe04:
@@ -1145,12 +1233,6 @@ export class Cpu6502 extends Base6502 {
                 return this.tube.read(addr);
         }
 
-        if (this.hasMusic5000) {
-            if ((this.music5000PageSel & 0xf0) === 0x30 && (addr & 0xff00) === 0xfd00) {
-                return this.music5000.read(this.music5000PageSel, addr);
-            }
-        }
-
         if (addr >= 0xfc00 && addr < 0xfe00) return 0xff;
         return addr >>> 8;
     }
@@ -1167,12 +1249,14 @@ export class Cpu6502 extends Base6502 {
     }
 
     readmemSlow(addr) {
+        if (this._dramRows) this._dramRows[addr & this.dramRefresh.rowMask] = 1;
         const statOffset = this.memStatOffset + (addr >>> 8);
         let offset = 0;
         let res;
-        if (this.memStat[statOffset]) {
+        if (this.memStat[statOffset] !== DeviceStat) {
             offset = this.memLook[statOffset];
-            res = this.ramRomOs[offset + addr];
+            // The empty socket drives nothing, so the bus keeps what the video read on its half of the cycle.
+            res = this.readsEmptySocket(statOffset) ? this.video.readVideoMem() : this.ramRomOs[offset + addr];
         } else {
             res = this.readDevice(addr);
         }
@@ -1196,7 +1280,7 @@ export class Cpu6502 extends Base6502 {
         // Callers read on past $ffff (an instruction's operand, a dump's end) where the 6502 wraps to $0000.
         addr &= 0xffff;
         const statOffset = memStatOffset + (addr >>> 8);
-        if (this.memStat[statOffset]) {
+        if (this.memStat[statOffset] !== DeviceStat) {
             const offset = this.memLook[statOffset];
             return this.ramRomOs[offset + addr];
         } else {
@@ -1206,7 +1290,7 @@ export class Cpu6502 extends Base6502 {
 
     /** Whether `addr` is a device's, rather than memory, as the machine is paged now. */
     isDevice(addr) {
-        return this.memStat[this.memStatOffset + ((addr & 0xffff) >>> 8)] === 0;
+        return this.memStat[this.memStatOffset + ((addr & 0xffff) >>> 8)] === DeviceStat;
     }
 
     /**
@@ -1226,8 +1310,8 @@ export class Cpu6502 extends Base6502 {
             case 0xfc10:
                 if (this.hasTeletextAdaptor) return UnpeekableDevice;
                 break;
-            case 0xfcfc:
-                if (addr === 0xfcff && this.hasMusic5000) return this.music5000PageSel;
+            case VdfsPortBase:
+                if (this.vdfs) return UnpeekableDevice;
                 break;
             case 0xfe00:
             case 0xfe04:
@@ -1321,12 +1405,6 @@ export class Cpu6502 extends Base6502 {
                 return this.hasTube ? UnpeekableDevice : this.tube.read(addr);
         }
 
-        if (this.hasMusic5000) {
-            if ((this.music5000PageSel & 0xf0) === 0x30 && (addr & 0xff00) === 0xfd00) {
-                return this.music5000.read(this.music5000PageSel, addr) | 0;
-            }
-        }
-
         if (addr >= 0xfc00 && addr < 0xfe00) return 0xff;
         return addr >>> 8;
     }
@@ -1340,11 +1418,12 @@ export class Cpu6502 extends Base6502 {
     }
 
     writememSlow(addr, b) {
+        if (this._dramRows) this._dramRows[addr & this.dramRefresh.rowMask] = 1;
         if (this._debugWrite) this._debugWrite(addr, b);
         const statOffset = this.memStatOffset + (addr >>> 8);
         const stat = this.memStat[statOffset];
-        if (stat === 1) this.ramRomOs[this.memLook[statOffset] + addr] = b;
-        else if (stat === 0) this.writeDevice(addr, b);
+        if (stat === RamStat) this.ramRomOs[this.memLook[statOffset] + addr] = b;
+        else if (stat === DeviceStat) this.writeDevice(addr, b);
     }
 
     writeDevice(addr, b) {
@@ -1361,6 +1440,9 @@ export class Cpu6502 extends Base6502 {
         switch (addr & ~0x0003) {
             case 0xfc10:
                 if (this.hasTeletextAdaptor) return this.teletextAdaptor.write(addr - 0xfc10, b);
+                break;
+            case VdfsPortBase:
+                if (this.vdfs && !this.replaying) return this.vdfs.write(addr - VdfsPortBase, b);
                 break;
             case 0xfcfc:
                 if (addr === 0xfcff && this.hasMusic5000) {
@@ -1522,7 +1604,7 @@ export class Cpu6502 extends Base6502 {
             filledBy.set(bank, rom);
             place(bank, rom);
         }
-        for (const rom of this.config.fittedRoms) {
+        for (const rom of [...this.config.fittedRoms, ...(this.vdfs ? [VdfsRom] : [])]) {
             const bank = emptySockets.length ? emptySockets.shift() : nextFreeBank(isRam);
             filledBy.set(bank, rom);
             place(bank, rom);
@@ -1543,9 +1625,8 @@ export class Cpu6502 extends Base6502 {
         const isRamOrNamed = (bank) => isRam(bank) || isNamed(bank);
         for (const rom of this.config.extraRoms)
             place(emptySockets.length ? emptySockets.shift() : nextFreeBank(isRamOrNamed), rom);
-        return await Promise.all(
-            placed.map(({ bank, rom }) => this.loadRom(rom, this.romOffset + bank * RomBankBytes)),
-        );
+        await Promise.all(placed.map(({ bank, rom }) => this.loadRom(rom, this.romOffset + bank * RomBankBytes)));
+        this.findEmptyBanks();
     }
 
     setReset(resetOn) {
@@ -1591,7 +1672,10 @@ export class Cpu6502 extends Base6502 {
             touchScreen: this.touchScreen.snapshotState(),
             fdc: this.fdc.snapshotState(),
             teletextAdaptor: this.teletextAdaptor ? this.teletextAdaptor.snapshotState() : undefined,
+            ...(this.vdfs && { vdfs: this.vdfs.snapshotState() }),
             tube: this.hasTube ? this.tube.snapshotState({ includeRoms, into: into?.tube }) : undefined,
+            ...(this.amxMouse && { amxMouse: this.amxMouse.snapshotState() }),
+            ...(this.dramRefresh && { dram: this.dramRefresh.snapshotState() }),
         };
     }
 
@@ -1617,14 +1701,15 @@ export class Cpu6502 extends Base6502 {
         }
     }
 
-    restoreState(state) {
+    /** A replay runs against an idle host and passes `keepVdfs`, so as not to close the files the machine has open. */
+    restoreState(state, { keepVdfs = false } = {}) {
         ++this.resetsAndLoads;
         // 1. Scheduler epoch first (so task offsets resolve correctly)
         this.scheduler.restoreState(state.scheduler);
 
         // 2. CPU registers
         this.restoreRegisters(state);
-        // interrupt is rebuilt by sub-component restores (VIA updateIFR, ACIA updateIrq)
+        // interrupt is rebuilt by writeAcccon (IRR) and sub-component restores (VIA updateIFR, ACIA updateIrq)
         this.interrupt = 0;
         this._nmiSources = 0;
         this.halted = state.halted;
@@ -1640,12 +1725,14 @@ export class Cpu6502 extends Base6502 {
             this.ramRomOs.set(state.roms.slice(0, NumRomBanks * RomBankBytes), this.romOffset);
         }
         if (state.swram) this.restoreSidewaysRam(state.swram, state.swramBankMask);
+        if (state.roms) this.findEmptyBanks();
         this.videoDisplayPage = state.videoDisplayPage;
         this.music5000PageSel = state.music5000PageSel;
 
         // 4. Rebuild memStat/memLook from romsel/acccon
         this.romSelect(state.romsel);
         if (this.model.isMaster) this.writeAcccon(state.acccon);
+        this.dramRefresh?.restoreState(state.dram);
 
         // 5. Cycle tracking
         this.currentCycles = state.currentCycles;
@@ -1663,10 +1750,15 @@ export class Cpu6502 extends Base6502 {
         if (this.midiAcia && state.midiAcia) this.midiAcia.restoreState(state.midiAcia);
         this.adconverter.restoreState(state.adc);
         if (this.teletextAdaptor && state.teletextAdaptor) this.teletextAdaptor.restoreState(state.teletextAdaptor);
+        if (!keepVdfs) this.vdfs?.restoreState(state.vdfs);
 
         // Touchscreen state, added without a version bump. Absent from an older snapshot, whose
         // touchscreen keeps its current state, unpolled.
         if (state.touchScreen) this.touchScreen.restoreState(state.touchScreen);
+        if (this.amxMouse) {
+            if (state.amxMouse) this.amxMouse.restoreState(state.amxMouse);
+            else this.amxMouse.reset();
+        }
 
         // FDC state (v2+). If absent (v1 snapshot), FDC keeps its current state, and the saved
         // level is the only record of its line.
@@ -1703,13 +1795,13 @@ export class Cpu6502 extends Base6502 {
         // redirected to shadow RAM.
         this.memStatOffsetByIFetchBank = this.model.isMaster ? (1 << 0xc) | (1 << 0xd) : 0x0000;
         if (!this.model.isTest) {
-            this.mapBothHalves(0, 0x80, 1, 0);
+            this.mapBothHalves(0, 0x80, RamStat, 0);
             this.romSelect(0);
-            this.mapBothHalves(0xc0, 0x100, 2, this.osOffset - 0xc000);
-            this.mapBothHalves(0xfc, 0xff, 0, 0);
+            this.mapBothHalves(0xc0, 0x100, RomStat, this.osOffset - 0xc000);
+            this.mapBothHalves(0xfc, 0xff, DeviceStat, 0);
         } else {
             // Test sets everything as RAM.
-            this.mapBothHalves(0, 0x100, 1, 0);
+            this.mapBothHalves(0, 0x100, RamStat, 0);
         }
         // DRAM content is not guaranteed to contain any particular
         // value on start up, so we choose values that help avoid
@@ -1725,6 +1817,7 @@ export class Cpu6502 extends Base6502 {
         }
         this.videoDisplayPage = 0;
         if (this.model.isMaster) this.writeAcccon(0);
+        this.dramRefresh?.powerOn();
     }
 
     // Override in subclasses for different peripheral sets.
@@ -1743,6 +1836,7 @@ export class Cpu6502 extends Base6502 {
         this.adconverter.reset();
 
         this.touchScreen.reset();
+        this.amxMouse?.reset();
     }
 
     // Universal CPU state reset. Shared by all machine types.
@@ -1761,6 +1855,7 @@ export class Cpu6502 extends Base6502 {
         this.video.reset(this, this.sysvia, hard);
         this.soundChip.reset(hard);
         if (this.teletextAdaptor) this.teletextAdaptor.reset(hard);
+        this.vdfs?.reset();
         if (this.music5000) this.music5000.reset(hard);
         if (hard && this.econet) {
             this.econet.reset();
@@ -1779,16 +1874,14 @@ export class Cpu6502 extends Base6502 {
     // Bake in the 1MHz bus check at construction time. On the Master, ACCCON
     // TST (bit 6) remaps FRED, JIM, and SHEILA reads (&FC00-&FEFF) to the
     // internal 2MHz bus, but writes still go through the external 1MHz bus.
-    // Non-Master machines just use the static address check with no ACCCON
-    // awareness.
     buildIs1MHzAccess() {
         if (this.model.isMaster) {
             return (addr, isWrite) => {
-                if (!isWrite && this.acccon & 0x40 && addr >= 0xfc00 && addr < 0xff00) return false;
-                return is1MHzAccess(addr);
+                if (!isWrite && this.acccon & 0x40) return false;
+                return isMaster1MHzAccess(addr);
             };
         }
-        return is1MHzAccess;
+        return isModelB1MHzAccess;
     }
 
     buildPolltime() {
@@ -1846,13 +1939,7 @@ export class Cpu6502 extends Base6502 {
      * executeInternal: the debug read or debug write might change tracing or other debugging while it runs.
      */
     get onFastPath() {
-        return !(
-            this.forceTracing ||
-            this._debugInstruction ||
-            this._debugRead ||
-            this._debugWrite ||
-            this._debugInterrupt
-        );
+        return !(this._debugInstruction || this._debugRead || this._debugWrite || this._debugInterrupt);
     }
 
     execute(numCyclesToRun) {
@@ -1882,8 +1969,7 @@ export class Cpu6502 extends Base6502 {
         // and none stops the machine at it again.
         let resuming = this.debugInstruction.stopped;
         while (!this.halted && this.currentCycles < this.targetCycles) {
-            this.oldPcIndex = (this.oldPcIndex + 1) & 0xff;
-            this.oldPcArray[this.oldPcIndex] = this.pc;
+            this.instructionPc = this.pc;
             this.memStatOffset = this.memStatOffsetByIFetchBank & (1 << (this.pc >>> 12)) ? 256 : 0;
             const opcode = this.readmem(this.pc);
             if (this._debugInstruction) {
@@ -1899,10 +1985,7 @@ export class Cpu6502 extends Base6502 {
             }
             this.incpc();
             this.runner.run(opcode);
-            this.oldAArray[this.oldPcIndex] = this.a;
-            this.oldXArray[this.oldPcIndex] = this.x;
-            this.oldYArray[this.oldPcIndex] = this.y;
-            if (opcode === BrkOpcode && this._debugInterrupt) this.checkBrkTakenByNmi(this.oldPcArray[this.oldPcIndex]);
+            if (opcode === BrkOpcode && this._debugInterrupt) this.checkBrkTakenByNmi(this.instructionPc);
             if (this.takeInt) {
                 const returnsTo = this.pc;
                 const taken = this.brk(true) === NmiVector ? "nmi" : "irq";
@@ -1969,29 +2052,6 @@ export class Cpu6502 extends Base6502 {
     setKeyLayout(layout) {
         this.keyLayout = layout;
         this.sysvia.setKeyLayout(layout);
-    }
-
-    dumpTrace(maxToShow, func) {
-        if (!maxToShow) maxToShow = 256;
-        if (maxToShow > 256) maxToShow = 256;
-        const disassembler = this.disassembler;
-        func =
-            func ||
-            function (pc, a, x, y) {
-                const dis = disassembler.disassemble(pc, true)[0];
-                console.log(
-                    hexword(pc),
-                    (dis + "                       ").substring(0, 15),
-                    hexbyte(a),
-                    hexbyte(x),
-                    hexbyte(y),
-                );
-            };
-        for (let i = maxToShow - 2; i >= 0; --i) {
-            const j = (this.oldPcIndex - i) & 255;
-            func(this.oldPcArray[j], this.oldAArray[j], this.oldXArray[j], this.oldYArray[j]);
-        }
-        func(this.pc, this.a, this.x, this.y);
     }
 
     async initialise() {
@@ -2062,7 +2122,7 @@ export class AtomCpu6502 extends Cpu6502 {
         bank &= 0x0f;
         const offset = BranquartOffset + bank * BranquartBankSize - 0xa000;
         // ROM banks are read-only, RAM banks are writable
-        const stat = this.branquartRam[bank] ? 1 : 2;
+        const stat = this.branquartRam[bank] ? RamStat : RomStat;
         this.mapBothHalves(0xa0, 0xb0, stat, offset);
     }
 
@@ -2070,23 +2130,23 @@ export class AtomCpu6502 extends Cpu6502 {
         this.memStatOffsetByIFetchBank = 0; // no shadow RAM on Atom
 
         // 0x0000-0x9FFF: RAM (including video RAM at 0x8000)
-        this.mapBothHalves(0, 0xa0, 1, 0);
+        this.mapBothHalves(0, 0xa0, RamStat, 0);
 
         // 0xA000-0xAFFF: Branquart banked region (set up via selectBranquartBank)
         this.branquartLatch = 0;
         this.selectBranquartBank(0);
 
         // 0xB000-0xBFFF: Device I/O (PPIA, MMC, VIA, bank latch)
-        this.mapBothHalves(0xb0, 0xc0, 0, 0);
+        this.mapBothHalves(0xb0, 0xc0, DeviceStat, 0);
 
         // 0xC000-0xEFFF: ROM (4KB blocks loaded into romOffset area)
-        this.mapBothHalves(0xc0, 0xf0, 2, this.romOffset - 0xa000);
+        this.mapBothHalves(0xc0, 0xf0, RomStat, this.romOffset - 0xa000);
 
         // 0xF000-0xFFFF: OS kernel ROM
-        this.mapBothHalves(0xf0, 0x100, 2, this.osOffset - 0xf000);
+        this.mapBothHalves(0xf0, 0x100, RomStat, this.osOffset - 0xf000);
 
         // FDC at 0x0A00 (device hole in RAM, if model uses FDC)
-        if (this.model.Fdc) this.mapBothHalves(0x0a, 0x0b, 0, 0);
+        if (this.model.Fdc) this.mapBothHalves(0x0a, 0x0b, DeviceStat, 0);
 
         // Randomise video RAM and seed bytes
         for (let i = 8; i < 13; ++i) this.ramRomOs[i] = (256 * Math.random()) | 0;
@@ -2189,7 +2249,7 @@ export class AtomCpu6502 extends Cpu6502 {
         if (this._debugWrite) this._debugWrite(addr, b);
         const statOffset = this.memStatOffset + (addr >>> 8);
         const stat = this.memStat[statOffset];
-        if (stat === 1) {
+        if (stat === RamStat) {
             // Notify VDG of CPU address bus activity for snow effect
             if (this.video.video6847) {
                 this.video.video6847.cpuAddrAccess(addr);
@@ -2198,7 +2258,7 @@ export class AtomCpu6502 extends Cpu6502 {
             this.ramRomOs[offset + addr] = b;
             return;
         }
-        if (stat === 2) return; // ROM: write ignored
+        if (stat === RomStat) return; // ROM: write ignored
         // Device page
         this.writeDevice(addr, b);
     }
@@ -2279,8 +2339,8 @@ export class AtomCpu6502 extends Cpu6502 {
     // This prevents super.restoreState() from corrupting the Atom memory map.
     romSelect() {}
 
-    restoreState(state) {
-        super.restoreState(state);
+    restoreState(state, options) {
+        super.restoreState(state, options);
 
         // Restore Atom-specific state after the parent has handled
         // CPU registers, memory, cycle tracking, and sub-components.

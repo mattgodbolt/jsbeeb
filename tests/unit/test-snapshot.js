@@ -79,6 +79,7 @@ describe("Snapshot coordinator", () => {
                 () => {},
                 { hasTeletextAdaptor: true },
             ],
+            ["a snapshot with no AMX mouse state into a machine with one", () => {}, { hasAmxMouse: true }],
             [
                 "a snapshot from before a disc's written tracks were saved",
                 (s) => delete s.state.fdc.drives[0].disc.dirtyTracks,
@@ -94,6 +95,14 @@ describe("Snapshot coordinator", () => {
             loadDisc(restored);
 
             expect(() => restoreSnapshot(restored, model, snapshot)).not.toThrow();
+        });
+
+        it("drops an AMX mouse's move under way on restoring a snapshot from a machine without one", async () => {
+            const fitted = machineWithRealChips(TEST_6502, { hasAmxMouse: true });
+            await fitted.initialise();
+            fitted.amxMouse.move(40, -40);
+            restoreSnapshot(fitted, model, createSnapshot(cpu, model));
+            expect(fitted.amxMouse.snapshotState()).toMatchObject({ x: { pending: 0 }, y: { pending: 0 } });
         });
     });
 

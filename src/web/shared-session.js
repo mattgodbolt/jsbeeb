@@ -168,11 +168,12 @@ export function sessionInput(sysvia, send, { allowBreak }) {
 
 // Each machine's ADC reads its own browser's gamepad, mouse and microphone, which
 // no other machine has, and the OS converts continuously into RAM; so in a session
-// every channel reads the centre. The fire buttons are local the same way.
+// every channel reads the centre. The fire buttons and the AMX mouse are local the same way.
 function holdLocalInputs(processor, held) {
     processor.inputLog?.refuse(held ? "the start of a shared session" : "the end of a shared session");
     processor.adconverter.setFixedValue(held ? AdcCentreValue : null);
     processor.sysvia.holdFireButtons(held);
+    processor.amxMouse?.hold(held);
 }
 
 /** A parsed message from a peer, or null for anything that is not a JSON object. */
@@ -1346,6 +1347,8 @@ export function roomFrom(text) {
 export function sessionRefusal({ model, processor }) {
     if (model.isAtom || processor.hasTube)
         return "Shared sessions need a BBC Model B or Master, without a second processor.";
+    if (processor.vdfs)
+        return "Shared sessions cannot run while a folder is served as VDFS: each machine would see its own.";
     return null;
 }
 

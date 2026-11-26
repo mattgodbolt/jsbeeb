@@ -1,12 +1,14 @@
 import "./touch-keyboard.css";
 import { navbarHeightOf } from "./floating-panel.js";
 import { toast } from "./toast.js";
+import { localStore } from "./browser-storage.js";
 
 const StorageKey = "touchKeyboardOpen";
 const LayerStorageKey = "touchKeyboardLayer";
 const PresetStorageKey = "touchPadPreset";
 const NarrowScreenQuery = "(max-width: 700px)";
 const TouchQuery = "(pointer: coarse)";
+const AnyTouchQuery = "(any-pointer: coarse)";
 const PhoneShortSidePx = 500;
 const LandscapePhoneQuery = `(orientation: landscape) and (max-height: ${PhoneShortSidePx}px)`;
 // In the machine's own time, which falls behind the wall clock when the page is busy. The OS scans the keyboard every
@@ -267,7 +269,11 @@ const padKey = (key, meaning, cls) => {
     return k(legend.label, key, legend, { meaning, cls: `${legend.cls ?? ""} ${cls}` });
 };
 
-export const wantsTouchKeyboard = (forced, matches) => forced || matches(TouchQuery) || matches(NarrowScreenQuery);
+/** How the keyboard starts, "open" or "closed", or null where it is not offered. */
+export const touchKeyboardStart = (forced, matches) => {
+    if (forced || matches(TouchQuery) || matches(NarrowScreenQuery)) return "open";
+    return matches(AnyTouchQuery) ? "closed" : null;
+};
 
 /**
  * The keys held on the glass and when the machine is told they are up, in the machine's milliseconds. `send(key,
@@ -337,7 +343,8 @@ export class KeyPresses {
  */
 export class TouchKeyboard {
     constructor({ processor, model, keyboard, layout, loop, forced, openMedia, onAnyKeyDown, gamepadRemaps }) {
-        if (!wantsTouchKeyboard(forced, (query) => window.matchMedia(query).matches)) return;
+        const start = touchKeyboardStart(forced, (query) => window.matchMedia(query).matches);
+        if (!start) return;
         this.processor = processor;
         this.model = model;
         this.layout = layout;
@@ -349,9 +356,9 @@ export class TouchKeyboard {
             else input.keyRaw(model.keys[key], down);
         });
         this.presets = { ...PadPresets, classic: followingGamepad(PadPresets.classic, gamepadRemaps) };
-        const storedPreset = window.localStorage[PresetStorageKey];
+        const storedPreset = localStore()[PresetStorageKey];
         this.presetName = Object.hasOwn(PadPresets, storedPreset) ? storedPreset : "classic";
-        const storedLayer = window.localStorage[LayerStorageKey];
+        const storedLayer = localStore()[LayerStorageKey];
         this.portraitLayer = LayerNames.includes(storedLayer) ? storedLayer : "main";
         /** @type {Set<number>} pointers that went down on the d-pad, whose keys follow them as they slide */
         this.dpadPointers = new Set();
@@ -375,7 +382,9 @@ export class TouchKeyboard {
             this.show();
         });
         new ResizeObserver(() => this.show()).observe(this.root);
-        this.setOpen(window.localStorage[StorageKey] !== "false");
+        const stored = localStore()[StorageKey];
+        this.open = stored ? stored === "true" : start === "open";
+        this.show();
     }
 
     build(openMedia) {
@@ -499,7 +508,7 @@ export class TouchKeyboard {
     nextPreset() {
         const names = Object.keys(this.presets);
         this.presetName = names[(names.indexOf(this.presetName) + 1) % names.length];
-        window.localStorage[PresetStorageKey] = this.presetName;
+        localStore()[PresetStorageKey] = this.presetName;
         this.releaseAll();
         this.buildPad();
     }
@@ -583,13 +592,14 @@ export class TouchKeyboard {
     buildToggle() {
         const toggle = this.buildButton("⌨", "", () => this.setOpen(true));
         toggle.id = "touch-keyboard-toggle";
-        toggle.setAttribute("aria-label", "Show the on-screen keyboard");
+        toggle.title = "Show the on-screen keyboard";
+        toggle.setAttribute("aria-label", toggle.title);
         return toggle;
     }
 
     setOpen(open) {
         this.open = open;
-        window.localStorage[StorageKey] = String(open);
+        localStore()[StorageKey] = String(open);
         this.show();
     }
 
@@ -621,7 +631,7 @@ export class TouchKeyboard {
     chooseLayer(name) {
         this.releaseAll();
         this.portraitLayer = name;
-        window.localStorage[LayerStorageKey] = name;
+        localStore()[LayerStorageKey] = name;
         this.show();
     }
 

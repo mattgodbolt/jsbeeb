@@ -8,8 +8,9 @@ const StackFrame = /(?:^\s*at |@).*?([^\s(@]+):(\d+):(\d+)\)?\s*$/;
 const measurementId = () => import.meta.env.GA_MEASUREMENT_ID;
 
 /**
- * `href` with each parameter put through its `analyticsFilter`, read and written as the page reads and writes its own
- * URL; with no parameters at all when they cannot be decoded.
+ * `href` with only the parameters the page declares, each put through its `analyticsFilter`, and campaign `utm_`
+ * tags, read and written as the page reads and writes its own URL; with no parameters at all when they cannot be
+ * decoded.
  */
 export function analyticsLocation(href) {
     if (!href) return href;
@@ -18,8 +19,10 @@ export function analyticsLocation(href) {
     try {
         const params = parseLocationParams(url, urlParamType);
         for (const [key, value] of Object.entries(params)) {
-            const filter = parameterFor(key)?.parameter.analyticsFilter;
-            if (filter && value !== null) params[key] = Array.isArray(value) ? value.map(filter) : filter(value);
+            const declared = parameterFor(key);
+            const filter = declared?.parameter.analyticsFilter;
+            if (!declared && !key.startsWith("utm_")) delete params[key];
+            else if (filter && value !== null) params[key] = Array.isArray(value) ? value.map(filter) : filter(value);
         }
         return buildUrlFromParams(page, params, urlParamType);
     } catch {
@@ -35,15 +38,20 @@ export function silenceAnalytics() {
 }
 
 /*global gtag*/
-const injectedGtag = () => (!silenced && measurementId() && typeof gtag === "function" ? gtag : undefined);
+const injectedGtag = () =>
+    !silenced && measurementId() && typeof gtag === "function" && !navigator.webdriver ? gtag : undefined;
 
-const InstalledDisplayModes = ["standalone", "window-controls-overlay", "minimal-ui", "fullscreen"];
+// Not "fullscreen", which a tab in fullscreen matches as well; the manifest asks for standalone.
+const InstalledDisplayModes = ["standalone", "window-controls-overlay", "minimal-ui"];
 
 /** How the page is shown: the installed app's display mode, or "browser" for a tab. */
 export const displayMode = () =>
     InstalledDisplayModes.find((mode) => window.matchMedia(`(display-mode: ${mode})`).matches) ??
     // Safari on iOS has no display-mode query for a page added to the home screen.
     (window.navigator.standalone ? "standalone" : "browser");
+
+// Another site's frame may set only SameSite=None cookies; Partitioned keys them to the site at the top.
+const frameCookieFlags = () => (window.top === window ? {} : { cookie_flags: "SameSite=None;Secure;Partitioned" });
 
 const pageLocations = () => ({
     page_location: analyticsLocation(window.location.href),
@@ -55,7 +63,11 @@ const pageLocations = () => ({
  * notes the errors `page` reports and its being installed as an app.
  */
 export function configureAnalytics(page = window) {
-    injectedGtag()?.("config", measurementId(), { ...pageLocations(), display_mode: displayMode() });
+    injectedGtag()?.("config", measurementId(), {
+        ...pageLocations(),
+        ...frameCookieFlags(),
+        display_mode: displayMode(),
+    });
     page.addEventListener("appinstalled", () => note("app_installed", {}));
     page.addEventListener("error", (event) =>
         noteError("window", event.error ?? event.message, {
@@ -69,7 +81,7 @@ export function configureAnalytics(page = window) {
 
 /** Moves the location later events report to the URL the page has just pushed, without a page_view. */
 export function noteLocation() {
-    injectedGtag()?.("config", measurementId(), { ...pageLocations(), send_page_view: false });
+    injectedGtag()?.("config", measurementId(), { ...pageLocations(), ...frameCookieFlags(), send_page_view: false });
 }
 
 const logValue = (value) => (typeof value === "string" && /^$|[\s"=]/.test(value) ? JSON.stringify(value) : value);

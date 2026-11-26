@@ -292,13 +292,15 @@ describe("SessionHost", () => {
         expect(signal.aborted).toBe(true);
     });
 
-    it("holds the analogue inputs at the centre and the fire buttons released for the session, and gives back an ordinary page when it closes", async () => {
+    it("holds the analogue inputs at the centre, and the fire buttons and AMX mouse released, for the session, and gives back an ordinary page when it closes", async () => {
         const { host, processor, context } = await hosting();
         expect(processor.adconverter.setFixedValue).toHaveBeenLastCalledWith(AdcCentreValue);
         expect(processor.sysvia.holdFireButtons).toHaveBeenLastCalledWith(true);
+        expect(processor.amxMouse.hold).toHaveBeenLastCalledWith(true);
         host.close();
         expect(processor.adconverter.setFixedValue).toHaveBeenLastCalledWith(null);
         expect(processor.sysvia.holdFireButtons).toHaveBeenLastCalledWith(false);
+        expect(processor.amxMouse.hold).toHaveBeenLastCalledWith(false);
         expect(context.loop.setLockstep).toHaveBeenLastCalledWith(null);
         expect(context.keyboard.setInput).toHaveBeenLastCalledWith(null);
         expect(processor.sysvia.cmos.bbcDateTime()).toBeInstanceOf(Date);
@@ -1533,13 +1535,15 @@ describe("SessionGuest", () => {
         expect(context.keyboard.setInput).toHaveBeenLastCalledWith(null);
     });
 
-    it("holds the analogue inputs at the centre and the fire buttons released while it is in the session", async () => {
+    it("holds the analogue inputs at the centre, and the fire buttons and AMX mouse released, while it is in the session", async () => {
         const { context, channel } = await joining();
         expect(context.processor.adconverter.setFixedValue).toHaveBeenLastCalledWith(AdcCentreValue);
         expect(context.processor.sysvia.holdFireButtons).toHaveBeenLastCalledWith(true);
+        expect(context.processor.amxMouse.hold).toHaveBeenLastCalledWith(true);
         channel.emit("close");
         expect(context.processor.adconverter.setFixedValue).toHaveBeenLastCalledWith(null);
         expect(context.processor.sysvia.holdFireButtons).toHaveBeenLastCalledWith(false);
+        expect(context.processor.amxMouse.hold).toHaveBeenLastCalledWith(false);
     });
 
     it("puts a snapshot back together from its chunks", async () => {
@@ -1866,6 +1870,12 @@ describe("startSessionFromUrl", () => {
             { processor: Object.assign(fakeProcessor(), { hasTube: true }) },
             ["unsupported_machine"],
         ],
+        [
+            "a folder served as VDFS",
+            { server: "here" },
+            { processor: Object.assign(fakeProcessor(), { vdfs: {} }) },
+            ["unsupported_machine"],
+        ],
     ])("starts nothing for %s", async (_, params, contextOptions, failures) => {
         const sent = sentEvents();
         const { createRoom, join } = await started(params, contextOptions);
@@ -1968,6 +1978,7 @@ describe("joinLink", () => {
             "gp.fire1": "SPACE",
             FIRE: "SPACE",
             fire: "SPACE",
+            vdfs: true,
         };
         expect(joinLink("brave-owls-sing", "matt", params)).toBe(
             `${window.location.origin}/?client=brave-owls-sing&name=matt&audioLatencyMs=80&embed` +

@@ -3,6 +3,7 @@ import { toast } from "./toast.js";
 import { note } from "./analytics.js";
 import { mediaLabel } from "./analytics-filters.js";
 import { StartupActionParams } from "./parameters.js";
+import { sessionStore } from "./browser-storage.js";
 
 const PendingSwitchKey = "jsbeeb-pending-switch";
 
@@ -18,15 +19,15 @@ export function reloadAsMachine(urlState, params, { replace = false } = {}) {
     else window.location.href = url;
 }
 
-/** Leaves `value` under `key` for the page a reload brings up. */
+/** Leaves `value` under `key` for the page a reload brings up; throws if the browser refuses session storage. */
 export function leaveForNextPage(key, value) {
     sessionStorage.setItem(key, value);
 }
 
 /** Takes what the last page left under `key`, once; null when it left nothing. */
 export function takeFromLastPage(key) {
-    const value = sessionStorage.getItem(key);
-    if (value !== null) sessionStorage.removeItem(key);
+    const value = sessionStore().getItem(key);
+    if (value !== null) sessionStore().removeItem(key);
     return value;
 }
 
@@ -68,7 +69,7 @@ export class MachineSwitch {
             if (!wanted) return false;
         }
         note("media", { type: "switchMachine", label: mediaLabel(d.ref) });
-        if (boot) leaveForNextPage(PendingSwitchKey, `Switched to a ${needed} for ${d.title}`);
+        if (boot) sessionStore().setItem(PendingSwitchKey, `Switched to a ${needed} for ${d.title}`);
         reloadAsMachine(
             this.urlState,
             {

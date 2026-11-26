@@ -20,6 +20,8 @@ const SpecDefaults = {
     tube: null,
     hasMusic5000: false,
     hasTeletextAdaptor: false,
+    hasAmxMouse: false,
+    vdfsStore: null,
     hasMidiInterface: false,
     midiAddress: 0xfc00,
     midiInterrupt: "none",

@@ -1,6 +1,8 @@
 import { AnalogueSource } from "../analogue-source.js";
 import { createAudioContext } from "./audio-utils.js";
 
+const SilentLevel = 0;
+
 /**
  * Provides microphone input as an analogue source for the BBC Micro's ADC
  * Used for software like MicroMike that uses the analogue port for sound input
@@ -18,6 +20,7 @@ export class MicrophoneInput extends AnalogueSource {
         this.microphoneDataArray = null;
         this.errorCallback = null;
         this.errorMessage = null;
+        this.initialisePromise = null;
     }
 
     /**
@@ -30,12 +33,23 @@ export class MicrophoneInput extends AnalogueSource {
 
     /**
      * Initialise microphone access
-     * @returns {Promise<boolean>} True if initialiation was successful
+     * @returns {Promise<boolean>} True if initialisation was successful, or it was already running
      */
-    async initialise() {
+    initialise() {
+        if (this.microphoneAnalyser) return Promise.resolve(true);
+
+        if (!this.initialisePromise) {
+            this.initialisePromise = this._initialise().finally(() => {
+                this.initialisePromise = null;
+            });
+        }
+
+        return this.initialisePromise;
+    }
+
+    async _initialise() {
         console.log("MicrophoneInput: Initialising microphone input");
 
-        // Create audio context if needed
         if (!this.audioContext) {
             try {
                 console.log("MicrophoneInput: Creating audio context");
@@ -57,28 +71,22 @@ export class MicrophoneInput extends AnalogueSource {
 
         try {
             console.log("MicrophoneInput: Requesting microphone access");
-            // Request microphone access
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             console.log("MicrophoneInput: Microphone access granted");
 
-            // Store the stream so we can stop it if needed
             this.microphoneStream = stream;
 
-            // Create analyser node
             console.log("MicrophoneInput: Creating audio analyser");
             this.microphoneAnalyser = this.audioContext.createAnalyser();
-            this.microphoneAnalyser.fftSize = 1024; // Larger FFT size for better resolution
-            this.microphoneAnalyser.smoothingTimeConstant = 0.2; // Less smoothing for more responsive input
+            this.microphoneAnalyser.fftSize = 1024;
+            this.microphoneAnalyser.smoothingTimeConstant = 0.2;
 
-            // Create buffer for analyser data
             this.microphoneDataArray = new Uint8Array(this.microphoneAnalyser.frequencyBinCount);
             console.log("MicrophoneInput: Created data buffer with", this.microphoneDataArray.length, "samples");
 
-            // Create media stream source from microphone
             console.log("MicrophoneInput: Creating media stream source");
             this.microphoneSource = this.audioContext.createMediaStreamSource(stream);
 
-            // Connect microphone to analyser
             console.log("MicrophoneInput: Connecting microphone to analyser");
             this.microphoneSource.connect(this.microphoneAnalyser);
 
@@ -107,9 +115,8 @@ export class MicrophoneInput extends AnalogueSource {
      * @returns {number} A value between 0 and 0xffff
      */
     getValue(_channel) {
-        if (!this.microphoneAnalyser || !this.microphoneDataArray) {
-            throw new Error("MicrophoneInput: getValue called but analyser not initialised");
-        }
+        // The ADC is routed here as soon as the channel is chosen, before access is granted.
+        if (!this.microphoneAnalyser) return SilentLevel;
 
         // Get time domain data (waveform)
         this.microphoneAnalyser.getByteTimeDomainData(this.microphoneDataArray);

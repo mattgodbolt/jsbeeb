@@ -1,5 +1,112 @@
 # Changelog
 
+## [2.27.0](https://github.com/mattgodbolt/jsbeeb/compare/v2.26.1...v2.27.0) (2026-11-26)
+
+
+### Features
+
+* decay DRAM rows that neither the video nor the CPU refreshes ([#1882](https://github.com/mattgodbolt/jsbeeb/issues/1882)) ([949c2b5](https://github.com/mattgodbolt/jsbeeb/commit/949c2b50732326f52affc9bace6c35e1371f66a9))
+
+
+### Bug Fixes
+
+* make VideoNuLA colours' PAL chroma from each channel on or off ([#1881](https://github.com/mattgodbolt/jsbeeb/issues/1881)) ([26c561c](https://github.com/mattgodbolt/jsbeeb/commit/26c561cd28da174d0e3a82643e50a230821c3c41))
+
+## [2.26.1](https://github.com/mattgodbolt/jsbeeb/compare/v2.26.0...v2.26.1) (2026-11-26)
+
+
+### Bug Fixes
+
+* a drive or relay sound that fails to load leaves that sound silent instead of stopping jsbeeb starting ([#1921](https://github.com/mattgodbolt/jsbeeb/issues/1921)) ([23fc715](https://github.com/mattgodbolt/jsbeeb/commit/23fc7154aa4ce391c9e8ff875212fee2247154cf))
+* count jsbeeb framed by another site, with a cookie partitioned by that site ([#1907](https://github.com/mattgodbolt/jsbeeb/issues/1907)) ([fbaedf4](https://github.com/mattgodbolt/jsbeeb/commit/fbaedf4f554ca66b47505f4361c04409f8b3a345))
+* fall back to a 2D canvas on a fresh element when WebGL fails to set up ([#1920](https://github.com/mattgodbolt/jsbeeb/issues/1920)) ([ffccee6](https://github.com/mattgodbolt/jsbeeb/commit/ffccee6fbef03c73d3662fa77662cb60984e0396))
+* give a framed jsbeeb the keyboard when its screen is clicked ([#1905](https://github.com/mattgodbolt/jsbeeb/issues/1905)) ([b5bf70d](https://github.com/mattgodbolt/jsbeeb/commit/b5bf70d6814affce35b1f543719793d539cea8fc))
+* handle case-insensitive URL schemes ([#1929](https://github.com/mattgodbolt/jsbeeb/issues/1929)) ([df2b0c8](https://github.com/mattgodbolt/jsbeeb/commit/df2b0c8b5d2eae84932de0a828ed42af197e9e3d))
+* keep a microphone channel from stopping the machine before access is granted ([#1919](https://github.com/mattgodbolt/jsbeeb/issues/1919)) ([23cf535](https://github.com/mattgodbolt/jsbeeb/commit/23cf53548d57ed92171c73c6a8223ed3f73ec7e3))
+* prevent duplicate microphone permission requests ([#1931](https://github.com/mattgodbolt/jsbeeb/issues/1931)) ([74eaad6](https://github.com/mattgodbolt/jsbeeb/commit/74eaad690aad7b5ea4a40636b4c5479662236cf3)), closes [#1926](https://github.com/mattgodbolt/jsbeeb/issues/1926)
+* remove obsolete keyboard layout storage lookup ([#1930](https://github.com/mattgodbolt/jsbeeb/issues/1930)) ([a1e4a1e](https://github.com/mattgodbolt/jsbeeb/commit/a1e4a1e84d197e368750f333bae6ba43993a82dc)), closes [#1925](https://github.com/mattgodbolt/jsbeeb/issues/1925)
+* send media_load's source as media_source, not GA's reserved source ([#1903](https://github.com/mattgodbolt/jsbeeb/issues/1903)) ([689fcd8](https://github.com/mattgodbolt/jsbeeb/commit/689fcd8b605d7e6ab93127f47cc2de9e187df028))
+* start when the browser refuses the page its storage ([#1922](https://github.com/mattgodbolt/jsbeeb/issues/1922)) ([0fc23ea](https://github.com/mattgodbolt/jsbeeb/commit/0fc23ea8f6d2a5496c02b72c809fa3c49b198eef))
+
+## [2.26.0](https://github.com/mattgodbolt/jsbeeb/compare/v2.25.0...v2.26.0) (2026-11-19)
+
+
+### Features
+
+* serve a folder as VDFS in Chromium browsers ([#1875](https://github.com/mattgodbolt/jsbeeb/issues/1875)) ([bec529e](https://github.com/mattgodbolt/jsbeeb/commit/bec529e0d6638040e106f1a3b7beacae79c180b1))
+* serve a folder as VDFS in the desktop app ([#1874](https://github.com/mattgodbolt/jsbeeb/issues/1874)) ([534b1e0](https://github.com/mattgodbolt/jsbeeb/commit/534b1e0b913b790fcee1a4cbffb74591e931a5aa))
+* VDFS, a filing system whose files are a host folder's, for Node ([#1873](https://github.com/mattgodbolt/jsbeeb/issues/1873)) ([b59866b](https://github.com/mattgodbolt/jsbeeb/commit/b59866b1d6e43959131b2819c16075beed268751))
+
+
+### Bug Fixes
+
+* raise a held IRQ while the Master's ACCCON IRR bit is set ([#1889](https://github.com/mattgodbolt/jsbeeb/issues/1889)) ([20101a0](https://github.com/mattgodbolt/jsbeeb/commit/20101a02fe635fc09e35127d34f334df4e9cfbd0))
+* read the video's byte from an empty sideways socket on the Master ([#1894](https://github.com/mattgodbolt/jsbeeb/issues/1894)) ([1f7b9e5](https://github.com/mattgodbolt/jsbeeb/commit/1f7b9e58c1e1f2f155c849677a7fb043565ae8eb))
+* stretch the Master's 1 MHz accesses by its own address map ([#1891](https://github.com/mattgodbolt/jsbeeb/issues/1891)) ([2e94ce5](https://github.com/mattgodbolt/jsbeeb/commit/2e94ce5d3a9d38c3246c88605bcfcded5c6d4bd3))
+
+## [2.25.0](https://github.com/mattgodbolt/jsbeeb/compare/v2.24.0...v2.25.0) (2026-11-18)
+
+
+### Features
+
+* read every emulated device's state without side effects ([#1893](https://github.com/mattgodbolt/jsbeeb/issues/1893)) ([a540506](https://github.com/mattgodbolt/jsbeeb/commit/a540506020bd88a364990bbd4b974488014ce213))
+
+## [2.24.0](https://github.com/mattgodbolt/jsbeeb/compare/v2.23.0...v2.24.0) (2026-11-18)
+
+
+### Features
+
+* read where a BASIC program can be waiting, in basic-state ([#1884](https://github.com/mattgodbolt/jsbeeb/issues/1884)) ([d3740c2](https://github.com/mattgodbolt/jsbeeb/commit/d3740c2256a4466cc613e38ca1294583d431977c))
+
+
+### Bug Fixes
+
+* offer an update only when the waiting worker is a different build from the page ([#1879](https://github.com/mattgodbolt/jsbeeb/issues/1879)) ([7644663](https://github.com/mattgodbolt/jsbeeb/commit/7644663f52e470a3a0719d6717ff43230075be88))
+
+## [2.23.0](https://github.com/mattgodbolt/jsbeeb/compare/v2.22.1...v2.23.0) (2026-11-17)
+
+
+### Features
+
+* read the error BASIC reported, its expression pointer and statement read from basic-state ([#1876](https://github.com/mattgodbolt/jsbeeb/issues/1876)) ([578d878](https://github.com/mattgodbolt/jsbeeb/commit/578d878fa2d02d7e610c366ff867716177c3a099))
+
+## [2.22.1](https://github.com/mattgodbolt/jsbeeb/compare/v2.22.0...v2.22.1) (2026-11-16)
+
+
+### Bug Fixes
+
+* count the TV's fields, not R6 hits, for the phosphor decay, frame skip and rewind preview ([#1854](https://github.com/mattgodbolt/jsbeeb/issues/1854)) ([caf6b63](https://github.com/mattgodbolt/jsbeeb/commit/caf6b635a56c069c98a92e4bdf92701105abbc75))
+* end the 1770's READ ADDRESS 32 µs after its last ID byte ([#1853](https://github.com/mattgodbolt/jsbeeb/issues/1853)) ([94d724e](https://github.com/mattgodbolt/jsbeeb/commit/94d724ed0cd88371b5ae846bb986755e2373a795))
+* end the 1770's READ ADDRESS, READ SECTOR and WRITE SECTOR the measured byte-times after their last DRQ ([#1860](https://github.com/mattgodbolt/jsbeeb/issues/1860)) ([dc30786](https://github.com/mattgodbolt/jsbeeb/commit/dc307869effc85b5956bb8a679a80cbaf4f47ac7))
+* flip MA6, and MA7 on a Master's odd RA, for MA13 fetches with a 2 MHz bitmap ULA ([#1859](https://github.com/mattgodbolt/jsbeeb/issues/1859)) ([3296d3a](https://github.com/mattgodbolt/jsbeeb/commit/3296d3a32e289c2e674109fdd310996b6ea3d0d0))
+* show ULA and R8 writes where a Master does, gate the SAA5050 on MA13, and count the clock-switch tick ([#1868](https://github.com/mattgodbolt/jsbeeb/issues/1868)) ([1440563](https://github.com/mattgodbolt/jsbeeb/commit/144056320e74c6638c63d82e07e9a6c5bfcedd06))
+* show ULA palette and mode writes half a 2MHz cycle before the character written, in the 2MHz modes ([#1855](https://github.com/mattgodbolt/jsbeeb/issues/1855)) ([e2b5166](https://github.com/mattgodbolt/jsbeeb/commit/e2b5166b6517e9e9631eaa59ed706579743120a8))
+
+## [2.22.0](https://github.com/mattgodbolt/jsbeeb/compare/v2.21.1...v2.22.0) (2026-11-15)
+
+
+### Features
+
+* a Call stack panel in the debugger, found by replaying the history ([#1822](https://github.com/mattgodbolt/jsbeeb/issues/1822)) ([7840da9](https://github.com/mattgodbolt/jsbeeb/commit/7840da9d2125b5017d855f7193a756f2ad8b0fe9))
+* a Trace panel of the instructions run before a stop, from a forward replay of the history ([#1818](https://github.com/mattgodbolt/jsbeeb/issues/1818)) ([e7ba986](https://github.com/mattgodbolt/jsbeeb/commit/e7ba98613977b87d1601edd0793e947cb2fc2322))
+* emulate the AMX mouse on the user port ([#1844](https://github.com/mattgodbolt/jsbeeb/issues/1844)) ([0506adb](https://github.com/mattgodbolt/jsbeeb/commit/0506adbe2824917d0971805b9dbde005215abb9e))
+* list games and works in progress by Matt, Rich, Kieran, Eben and the Bitshifters among the GitHub discs ([#1830](https://github.com/mattgodbolt/jsbeeb/issues/1830)) ([6491bb4](https://github.com/mattgodbolt/jsbeeb/commit/6491bb46a467706ef526a96bf87fa307a0f00f48))
+* offer the on-screen keyboard, closed, where a touch screen sits beside a trackpad ([#1834](https://github.com/mattgodbolt/jsbeeb/issues/1834)) ([7bc75a1](https://github.com/mattgodbolt/jsbeeb/commit/7bc75a1bd4225de948b9eb9ecc3462a50c9346fe))
+* rewind is a floating window, raised over the others, with its keys in Help ([#1820](https://github.com/mattgodbolt/jsbeeb/issues/1820)) ([7f19df6](https://github.com/mattgodbolt/jsbeeb/commit/7f19df6393a62fd39fa0c800dfbc5c9bf768de67))
+* right-click the stopped screen to find who wrote the byte drawn there ([#1817](https://github.com/mattgodbolt/jsbeeb/issues/1817)) ([0540da6](https://github.com/mattgodbolt/jsbeeb/commit/0540da66060fe8beb74ea728bf90900b0a49b131))
+
+
+### Bug Fixes
+
+* a "Go back here" button commits rewind, so it works without a keyboard ([#1815](https://github.com/mattgodbolt/jsbeeb/issues/1815)) ([836f36f](https://github.com/mattgodbolt/jsbeeb/commit/836f36fc4355d244843fc310cd22d604f3d04e17))
+* emulate the 6522 VIA shift register ([#1841](https://github.com/mattgodbolt/jsbeeb/issues/1841)) ([1b5cb8e](https://github.com/mattgodbolt/jsbeeb/commit/1b5cb8e6ae8e02184c19f94e30b6694ba2cbd69a))
+* map the serial ULA's rate fields to the baud rates the OS sets ([#1851](https://github.com/mattgodbolt/jsbeeb/issues/1851)) ([a7c536c](https://github.com/mattgodbolt/jsbeeb/commit/a7c536c42243bdce11bfaf7ad9fc435419a58a0f))
+* replays send the host none of the sound they re-run ([#1814](https://github.com/mattgodbolt/jsbeeb/issues/1814)) ([3046bf1](https://github.com/mattgodbolt/jsbeeb/commit/3046bf1d90398990ada2f33db0058970a0227021))
+* rewind keeps step back's history, and going back forgets the seconds after it ([#1819](https://github.com/mattgodbolt/jsbeeb/issues/1819)) ([1435057](https://github.com/mattgodbolt/jsbeeb/commit/14350571695e2f7f33a642bf1537ad1aa2934552))
+* Soundspace's touchscreen, with the Touchtech 501's multiple mode ([#1843](https://github.com/mattgodbolt/jsbeeb/issues/1843)) ([4098a08](https://github.com/mattgodbolt/jsbeeb/commit/4098a0804a5c56b81275fe41a6b764fffb156a44))
+* the Music 5000's registers read as the empty bus, as the real card's do ([#1842](https://github.com/mattgodbolt/jsbeeb/issues/1842)) ([9a7b4a9](https://github.com/mattgodbolt/jsbeeb/commit/9a7b4a9f4ab89a9b380a005ec90b9e1fa50fc880))
+* who wrote searches the byte the memory or disassembly panel's view shows ([#1826](https://github.com/mattgodbolt/jsbeeb/issues/1826)) ([b7b09c0](https://github.com/mattgodbolt/jsbeeb/commit/b7b09c06e0a33914ed6edfd99947b0ecc31d1863))
+
 ## [2.21.1](https://github.com/mattgodbolt/jsbeeb/compare/v2.21.0...v2.21.1) (2026-11-10)
 
 

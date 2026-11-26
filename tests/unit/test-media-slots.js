@@ -276,8 +276,8 @@ describe("MediaSlots", () => {
             loader.loadTapeImage.mockResolvedValue(null);
             await slots.load(slots.deck, chuckie, { entry: "url" });
             expect(sent("media_load")).toEqual([
-                { source: "sth", kind: "disc", slot: "drive1", entry: "list", ref: elite.ref, result: "loaded" },
-                { source: "sth", kind: "tape", slot: "deck", entry: "url", ref: chuckie.ref, result: "nothing" },
+                { media_source: "sth", kind: "disc", slot: "drive1", entry: "list", ref: elite.ref, result: "loaded" },
+                { media_source: "sth", kind: "tape", slot: "deck", entry: "url", ref: chuckie.ref, result: "nothing" },
             ]);
             expect(sent("load_failed")).toEqual([]);
         });
@@ -295,8 +295,15 @@ describe("MediaSlots", () => {
                 },
             });
             expect(sent("media_load")).toEqual([
-                { source: "gdrive", kind: "disc", slot: "drive0", entry: "create", ref: "gdrive", result: "loaded" },
-                { source: "gdrive", kind: "disc", slot: "drive0", entry: "create", result: "failed" },
+                {
+                    media_source: "gdrive",
+                    kind: "disc",
+                    slot: "drive0",
+                    entry: "create",
+                    ref: "gdrive",
+                    result: "loaded",
+                },
+                { media_source: "gdrive", kind: "disc", slot: "drive0", entry: "create", result: "failed" },
             ]);
         });
 
@@ -307,8 +314,8 @@ describe("MediaSlots", () => {
             await slots.load(slots.deck, chuckie, { entry: "list" });
             expect(sent("media_load").map(({ result }) => result)).toEqual(["failed", "failed"]);
             expect(sent("load_failed")).toEqual([
-                { source: "sth", kind: "disc", reason: "not_found" },
-                { source: "sth", kind: "tape", reason: "other" },
+                { media_source: "sth", kind: "disc", reason: "not_found" },
+                { media_source: "sth", kind: "tape", reason: "other" },
             ]);
         });
 
@@ -327,7 +334,14 @@ describe("MediaSlots", () => {
             slots.put(slots.drive(1), ssd("mine.ssd"), "session:1/mine.ssd", { entry: "drop" });
             slots.put(slots.drive(0), ssd("saved.ssd"), undefined, { entry: "restore" });
             expect(sent("media_load")).toEqual([
-                { source: "session", kind: "disc", slot: "drive1", entry: "drop", ref: "session", result: "loaded" },
+                {
+                    media_source: "session",
+                    kind: "disc",
+                    slot: "drive1",
+                    entry: "drop",
+                    ref: "session",
+                    result: "loaded",
+                },
                 { kind: "disc", slot: "drive0", entry: "restore", result: "loaded" },
             ]);
         });

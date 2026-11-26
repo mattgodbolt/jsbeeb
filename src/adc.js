@@ -48,14 +48,22 @@ export class Adc {
     }
 
     /**
-     * Set the source for a specific channel, disposing of the one it replaces.
+     * Set the source for a specific channel, disposing of the one it replaces if no other channel has it.
      * @param {number} channel - The channel number (0-3)
      * @param {AnalogueSource} source - The source to assign to the channel
      */
     setChannelSource(channel, source) {
-        const oldSource = this.channelSources[channel];
-        if (oldSource && oldSource !== source) oldSource.dispose();
-        this.channelSources[channel] = source;
+        this.setChannelSources(this.channelSources.map((old, ch) => (ch === channel ? source : old)));
+    }
+
+    /**
+     * Set the sources of all four channels at once, disposing of each one that is left on no channel.
+     * @param {(AnalogueSource|null)[]} sources
+     */
+    setChannelSources(sources) {
+        const leaving = new Set(this.channelSources.filter((old) => old && !sources.includes(old)));
+        sources.forEach((source, ch) => (this.channelSources[ch] = source));
+        for (const old of leaving) old.dispose();
     }
 
     snapshotState() {
@@ -104,6 +112,16 @@ export class Adc {
                 break;
         }
         return 0x40;
+    }
+
+    /** The uPD7002's status and data bytes, and whether a conversion is under way. */
+    inspect() {
+        return {
+            status: this.status,
+            dataHigh: this.high,
+            dataLow: this.low,
+            converting: this.task.scheduled(),
+        };
     }
 
     /**

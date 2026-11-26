@@ -293,6 +293,20 @@ export const Parameters = {
             hint: "Maps mouse position on BBC display to channels 0 (X) and 1 (Y)",
         },
     },
+    hasAmxMouse: {
+        type: ParamTypes.BOOL,
+        takenFromHost: true,
+        default: false,
+        field: {
+            type: "check",
+            section: "mouse",
+            heading: "AMX mouse",
+            label: "Fit an AMX mouse to the user port",
+            hint: "In place of the switch interface. Click the screen to capture the pointer",
+            restart: true,
+            enabledWhen: ({ model }) => !findModel(model).isAtom,
+        },
+    },
     speechOutput: {
         type: ParamTypes.BOOL,
         localToPage: true,
@@ -344,6 +358,7 @@ export const Parameters = {
     touchkeys: { type: ParamTypes.BOOL, localToPage: true },
     fasttape: { type: ParamTypes.BOOL },
     noseek: { type: ParamTypes.BOOL },
+    vdfs: { type: ParamTypes.BOOL },
     glEnabled: { type: ParamTypes.BOOL_DEFAULT_TRUE, localToPage: true },
     lowLatency: { type: ParamTypes.BOOL_DEFAULT_TRUE, localToPage: true },
     fakeVideo: { type: ParamTypes.BOOL, takenFromHost: true },
