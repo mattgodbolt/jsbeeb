@@ -22,6 +22,7 @@ export function buildEmulationConfig({
     userPort,
     printer,
     vdfsStore,
+    midiOutput,
 }) {
     return machineSpec({
         keyLayout,
@@ -33,6 +34,10 @@ export function buildEmulationConfig({
         hasTeletextAdaptor: settings.hasTeletextAdaptor,
         hasAmxMouse: settings.hasAmxMouse,
         vdfsStore,
+        hasMidiInterface: settings.hasMidiInterface && !settings.model.isAtom,
+        midiAddress: settings.midiAddress,
+        midiInterrupt: settings.midiInterrupt,
+        midiOutput,
         fittedRoms: settings.fittedRoms,
         bankRoms,
         extraRoms,
@@ -60,6 +65,7 @@ export class Machine {
         printer,
         vdfsStore = null,
         speechOutput,
+        midiOutput,
         video,
         audioHandler,
         dbgr,
@@ -100,6 +106,7 @@ export class Machine {
             userPort,
             printer,
             vdfsStore,
+            midiOutput,
         });
 
         this.processor = build(model, {

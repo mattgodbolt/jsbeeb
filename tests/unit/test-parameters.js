@@ -90,6 +90,8 @@ describe("Parameters", () => {
             "audioOutput",
             "displayMode",
             "keyLayout",
+            "midiAddress",
+            "midiInterrupt",
             "palPersistenceMs",
             "rgbPersistenceMs",
             "speakerAmount",
@@ -117,8 +119,11 @@ describe("Parameters", () => {
                     "hasTeletextAdaptor",
                     "hasEconet",
                     "hasVideoNula",
+                    "hasMidiInterface",
                 ],
             },
+            "midiAddress",
+            "midiInterrupt",
             ["audioOutput", "speakerAmount"],
             ["microphoneChannel"],
             ["mouseJoystickEnabled", "hasAmxMouse"],
@@ -308,6 +313,9 @@ describe("the settings a session guest takes from its host", () => {
             "hasTeletextAdaptor",
             "hasEconet",
             "hasVideoNula",
+            "hasMidiInterface",
+            "midiAddress",
+            "midiInterrupt",
             "hasAmxMouse",
             "fakeVideo",
             "stationId",
@@ -316,10 +324,9 @@ describe("the settings a session guest takes from its host", () => {
         ]);
     });
 
-    it("are neither local to the page nor kept in storage, which a reload to match would not override", () => {
+    it("are not local to the page", () => {
         for (const name of takenNames) {
             expect(Parameters[name].localToPage, name).toBeFalsy();
-            expect(Parameters[name].stored, name).toBeFalsy();
         }
     });
 
@@ -327,8 +334,13 @@ describe("the settings a session guest takes from its host", () => {
         for (const name of takenNames) expect(Parameters[name].default, name).not.toBe(true);
     });
 
-    const otherValue = (name) =>
-        ({ [ParamTypes.BOOL]: true, [ParamTypes.INT]: 7, [ParamTypes.FLOAT]: 2.5 })[Parameters[name].type];
+    const otherValue = (name) => {
+        const parameter = Parameters[name];
+        return (
+            parameter.field?.options?.find(({ value }) => value !== parameter.default)?.value ??
+            { [ParamTypes.BOOL]: true, [ParamTypes.INT]: 7, [ParamTypes.FLOAT]: 2.5 }[parameter.type]
+        );
+    };
 
     it.each(takenNames)("brings a page reloaded with the host's %s to the host's", (name) => {
         const host = takenFromHostValues(new Settings({ urlState: fakeUrlState(`?${name}=${otherValue(name)}`) }), {
@@ -339,6 +351,14 @@ describe("the settings a session guest takes from its host", () => {
         const settings = new Settings({ urlState: reloaded });
         expect(takenFromHostValues(settings, reloaded.params)).toEqual(host);
         expect(matchesHost(readTakenFromHost(host), takenFromHostValues(settings, reloaded.params))).toBe(true);
+    });
+
+    it("uses the host's MIDI address even when a different address is stored", () => {
+        window.localStorage.midiAddress = "64520";
+        const host = readTakenFromHost({ midiAddress: 0xfc80 });
+        const reloaded = fakeUrlState(new URL(fakeUrlState("").urlWith(host)).search);
+
+        expect(new Settings({ urlState: reloaded }).midiAddress).toBe(0xfc80);
     });
 
     it("takes a setting the host left out as its default, and any other as absent", () => {

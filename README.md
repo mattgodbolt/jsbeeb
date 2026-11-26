@@ -22,6 +22,7 @@ jsbeeb supports the browser versions listed under `browserslist` in [package.jso
 - [Save State and Rewind](#save-state-and-rewind)
 - [Joystick Support](#joystick-support)
 - [Touch Screen](#touch-screen)
+- [MIDI Output](#midi-output)
 - [Getting Set Up to Run Locally](#getting-set-up-to-run-locally)
 - [Installing as an App and Working Offline](#installing-as-an-app-and-working-offline)
 - [Running as a Desktop Application](#running-as-a-desktop-application)
@@ -375,6 +376,20 @@ self.addEventListener("activate", (event) =>
 
 The deploy serves `service-worker.js` with `Cache-Control: max-age=30`, as it does every file outside `assets/`, so a
 browser asks for a new worker within half a minute of a deploy.
+
+## MIDI Output
+
+jsbeeb can send MIDI to a host output in browsers that support Web MIDI and in the Electron app. In **Settings**, enable
+**6850 MIDI interface** under Additional peripherals, choose the address of the interface your software expects
+(`&FC08` for port 1 of Hybrid's Music 2000, `&FC80` or `&FC00` for the UMI 4M, `&FCF0` for the EMR, ETI and
+J.G. Harston interfaces; the default is `&FC00`) and which line its interrupt drives (**None**, the default, **IRQ** or
+**NMI**), then restart the emulator. In Settings, focus the **Host MIDI output**
+dropdown below the peripheral options to connect to MIDI devices and choose an output. The browser may ask for MIDI
+access when you focus the dropdown.
+
+The interface transmits standard MIDI at 31.25 kbit/s, including system-exclusive messages. MIDI input is not
+implemented. MIDI output selection is unavailable unless the interface is fitted, and Web MIDI must be available in
+the browser runtime.
 
 ## Running as a Desktop Application
 

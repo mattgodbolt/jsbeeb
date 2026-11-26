@@ -41,6 +41,7 @@ import { Modals } from "./web/modals.js";
 import { Settings } from "./web/settings.js";
 import { Config } from "./web/config.js";
 import { SpeechOutput } from "./web/speech-output.js";
+import { MidiOutput } from "./web/midi-output.js";
 import { Printer } from "./printer.js";
 import { DefaultStationId } from "./econet.js";
 import { RewindUI } from "./web/rewind-ui.js";
@@ -92,6 +93,10 @@ installIcons();
 fillHelp();
 labelPageShortcuts();
 const { settings: driveTracks, warnings: driveTrackWarnings } = processDriveTrackParams(parsedQuery);
+const midiOutput = new MidiOutput({
+    select: document.getElementById("midi-output-select"),
+    status: document.getElementById("midi-output-status"),
+});
 
 const extraRoms = (parsedQuery.rom ?? []).filter(Boolean);
 
@@ -137,7 +142,7 @@ const { model, hasVideoNula } = settings;
 const plan = startupPlan(parsedQuery, model);
 const gamepad = new GamePad(model);
 const takenFromHost = takenFromHostValues(settings, parsedQuery);
-const config = new Config(settings);
+const config = new Config(settings, midiOutput);
 
 const speechOutput = new SpeechOutput();
 const speak = (enabled) => {
@@ -240,12 +245,14 @@ const machine = new Machine({
     printer,
     vdfsStore: model.takesServiceRoms ? (desktopVdfsStore(parsedQuery) ?? browserVdfsStore(parsedQuery)) : null,
     speechOutput,
+    midiOutput,
     video,
     audioHandler,
     dbgr,
     gamepad,
 });
 const processor = machine.processor;
+midiOutput.setInterfaceEnabled(processor.hasMidiInterface);
 const notifyVdfs = (message, options = {}) => toast(message, { title: "VDFS", ...options });
 if (processor.vdfs) {
     if (isDesktopApp()) {
@@ -273,6 +280,9 @@ const loop = new EmulationLoop({
     fastTape: !!parsedQuery.fasttape,
     audioStatsNode,
 });
+loop.addEventListener("tick", () =>
+    midiOutput.beginBatch(processor.scheduler.epoch, performance.now(), cpuSpeed, loop.isSpeedy()),
+);
 dbgr.attachLoop(loop);
 
 new RunControls({ loop });

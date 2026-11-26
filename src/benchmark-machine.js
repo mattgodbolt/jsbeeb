@@ -15,8 +15,8 @@ const FixedClockMs = Date.UTC(2026, 0, 1);
  * A machine fitted as `fittings` says, with the real Video (or FakeVideo) and the main thread's SoundChip, its sound
  * events going to `onSoundEvent` (dropped by default) where the page would hand them to the audio worklet.
  * @param {string} model
- * @param {{coProcessor: boolean, hasMusic5000: boolean, hasTeletextAdaptor: boolean, hasEconet: boolean,
- *     hasVideoNula: boolean}} fittings a workload's, named as the page's settings name them
+ * @param {{coProcessor: boolean, hasMusic5000: boolean, hasTeletextAdaptor: boolean, hasMidiInterface: boolean,
+ *     hasEconet: boolean, hasVideoNula: boolean}} fittings a workload's, named as the page's settings name them
  * @param {{fakeVideo?: boolean, onSoundEvent?: function(object): void, drainKind?: "wasm"|"js"}} [options]
  *     drainKind is the video drain to run, PreferredDrain when absent
  * @returns {Promise<TestMachine>}
@@ -26,7 +26,7 @@ export async function newBenchmarkMachine(
     fittings,
     { fakeVideo = false, onSoundEvent = () => {}, drainKind } = {},
 ) {
-    const { coProcessor, hasMusic5000, hasTeletextAdaptor, hasEconet, hasVideoNula } = fittings;
+    const { coProcessor, hasMusic5000, hasTeletextAdaptor, hasMidiInterface, hasEconet, hasVideoNula } = fittings;
     const { isMaster } = findModel(model);
     const video = fakeVideo
         ? new FakeVideo()
@@ -38,6 +38,7 @@ export async function newBenchmarkMachine(
         tube: coProcessor,
         hasMusic5000,
         hasTeletextAdaptor,
+        hasMidiInterface,
         econet: hasEconet,
     });
     await machine.initialise();

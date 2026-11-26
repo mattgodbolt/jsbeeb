@@ -18,6 +18,7 @@ const FittedOn = {
     coProcessor: (cpu) => cpu.hasTube,
     hasMusic5000: (cpu) => cpu.hasMusic5000,
     hasTeletextAdaptor: (cpu) => cpu.hasTeletextAdaptor,
+    hasMidiInterface: (cpu) => !!cpu.midiAcia,
     hasEconet: (cpu) => !!cpu.econet,
     hasVideoNula: (cpu) => cpu.video.ula.hasVideoNula,
 };

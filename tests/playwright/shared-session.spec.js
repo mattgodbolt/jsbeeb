@@ -61,6 +61,8 @@ test("a paused machine hosts from the More menu, and a guest joins by the pasted
             model: "BBC B with 8271 (DFS 1.2)",
             tubeCpuMultiplier: "1",
             hasVideoNula: "",
+            midiAddress: "64512",
+            midiInterrupt: "none",
         });
         await expect(guest.page.locator("#session-pane .session-you")).toHaveText("You are tom", {
             timeout: JoinTimeoutMs,
