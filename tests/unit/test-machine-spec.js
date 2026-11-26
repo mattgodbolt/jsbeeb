@@ -47,6 +47,7 @@ describe("a CPU fitted from a spec", () => {
         const restored = build(fitted);
         restored.restoreState(inFlight);
         expect(restored.peekDevice(0xfc00) & 0x02).toBe(0);
+        expect(restored.peekDevice(0xfc01)).toBe(0x90);
         expect(restored.interrupt & IrqSource.midi).toBe(0);
         restored.scheduler.polltime(540);
         expect(restored.peekDevice(0xfc00) & 0x02).toBe(0x02);
