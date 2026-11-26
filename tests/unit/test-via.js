@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
+import { IrqSource } from "../../src/6502.js";
 import { SysVia, UserVia } from "../../src/via.js";
 import { Scheduler } from "../../src/scheduler.js";
 import { BBC, keyCodes } from "../../src/keymap.js";
@@ -20,7 +21,6 @@ const PcrCa2RisingEdge = 0x04;
 const PcrCa2OutputLow = 0x0c;
 const Ca1Int = 0x02;
 const Cb1Int = 0x10;
-const UserViaIrq = 0x02;
 const TicksPerMicrosecond = 2;
 const ScanPassTicks = 16 * TicksPerMicrosecond;
 
@@ -110,13 +110,13 @@ describe("Via snapshotState / restoreState", () => {
         via.write(T1CL, 2);
         via.write(T1CH, 0);
         scheduler.polltime(10);
-        expect(cpu.interrupt & UserViaIrq).toBe(UserViaIrq);
+        expect(cpu.interrupt & IrqSource.userVia).toBe(IrqSource.userVia);
 
         const snapshot = via.snapshotState();
         cpu.interrupt = 0;
         makeUserVia().restoreState(snapshot);
 
-        expect(cpu.interrupt & UserViaIrq).toBe(UserViaIrq);
+        expect(cpu.interrupt & IrqSource.userVia).toBe(IrqSource.userVia);
     });
 
     describe("SysVia keyboard", () => {

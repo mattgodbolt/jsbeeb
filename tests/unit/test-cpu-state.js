@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { fake6502 } from "../../src/fake6502.js";
-import { NmiSource, NoReplayHooks } from "../../src/6502.js";
+import { IrqSource, NmiSource, NoReplayHooks } from "../../src/6502.js";
 import { Econet } from "../../src/econet.js";
 import { FakeVideo } from "../../src/video.js";
 import { Music5000 } from "../../src/music5000.js";
@@ -85,7 +85,6 @@ const SysViaT1CounterHigh = 0xfe45;
 const SysViaIer = 0xfe4e;
 const IerSet = 0x80;
 const Timer1Interrupt = 0x40;
-const SysViaIrq = 0x01;
 const SoundWriteDisabled = 0x08;
 // SED; LDA #$42; LDX #$10; LDY #$20; PHA; STA $70; loop: DEX; JMP loop
 const LoopProgram = [0xf8, 0xa9, 0x42, 0xa2, 0x10, 0xa0, 0x20, 0x48, 0x85, 0x70, 0xca, 0x4c, 0x0a, 0x20];
@@ -161,13 +160,13 @@ describe("Cpu6502 snapshotState / restoreState", () => {
         cpu.writeDevice(SysViaT1CounterLow, 2);
         cpu.writeDevice(SysViaT1CounterHigh, 0);
         cpu.polltime(10);
-        expect(cpu.interrupt & SysViaIrq).toBe(SysViaIrq);
+        expect(cpu.interrupt & IrqSource.sysVia).toBe(IrqSource.sysVia);
 
         const snapshot = cpu.snapshotState();
         const cpu2 = machineWithRealChips(TEST_6502);
         cpu2.restoreState(snapshot);
 
-        expect(cpu2.interrupt & SysViaIrq).toBe(SysViaIrq);
+        expect(cpu2.interrupt & IrqSource.sysVia).toBe(IrqSource.sysVia);
     });
 
     it("should not include ROM data in the snapshot", () => {
@@ -188,6 +187,17 @@ describe("Cpu6502 snapshotState / restoreState", () => {
 
         expect(cpu2.ramRomOs.subarray(0, cpu2.romOffset)).toEqual(oldRam.subarray(0, 64 * 1024));
         expect(cpu2.ramRomOs.subarray(cpu2.romOffset)).toEqual(romsBefore);
+    });
+});
+
+describe("the interrupt sources", () => {
+    it.each([
+        ["IRQ", IrqSource],
+        ["NMI", NmiSource],
+    ])("give each %s source a bit of its own", (_, sources) => {
+        const bits = Object.values(sources);
+        expect(bits.every((bit) => bit > 0 && (bit & (bit - 1)) === 0)).toBe(true);
+        expect(new Set(bits).size).toBe(bits.length);
     });
 });
 
@@ -1066,7 +1076,6 @@ describe("Cpu6502 VDFS", () => {
 describe("Master ACCCON IRR", () => {
     const Acccon = 0xfe34;
     const AccconIrr = 0x80;
-    const IrrIrqSource = 0x10;
     const HandlerStart = 0x2100;
     const IrqCount = 0x70;
     const IrqsBeforeHandlerClearsIrr = 10;
@@ -1136,10 +1145,10 @@ describe("Master ACCCON IRR", () => {
 
     it("drops the IRQ on a hard reset", async () => {
         const cpu = await masterReadyToCount(AccconIrr);
-        expect(cpu.interrupt & IrrIrqSource).toBe(IrrIrqSource);
+        expect(cpu.interrupt & IrqSource.irr).toBe(IrqSource.irr);
 
         cpu.reset(true);
 
-        expect(cpu.interrupt & IrrIrqSource).toBe(0);
+        expect(cpu.interrupt & IrqSource.irr).toBe(0);
     });
 });
