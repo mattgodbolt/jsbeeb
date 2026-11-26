@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { IrqSource } from "../../src/6502.js";
 import { Midi6850 } from "../../src/midi-6850.js";
 import { Scheduler } from "../../src/scheduler.js";
 
@@ -12,7 +13,7 @@ describe("Midi6850", () => {
 
         midi.write(0xfc00, 0x20);
         expect(midi.peek()).toBe(0x82);
-        expect(cpu.interrupt & 0x40).toBe(0x40);
+        expect(cpu.interrupt & IrqSource.midi).toBe(IrqSource.midi);
         expect(cpu.interrupt & 0x08).toBe(0x08);
         expect(cpu.setNmi).toHaveBeenLastCalledWith(0x08, false);
 
@@ -20,14 +21,14 @@ describe("Midi6850", () => {
         midi.write(0xfc01, 0x90);
         expect(midiOutput.sendByte).toHaveBeenCalledWith(0x90, 123);
         expect(midi.peek()).toBe(0);
-        expect(cpu.interrupt & 0x40).toBe(0);
+        expect(cpu.interrupt & IrqSource.midi).toBe(0);
         expect(cpu.interrupt & 0x08).toBe(0x08);
 
         scheduler.polltime(639);
         expect(midi.peek()).toBe(0);
         scheduler.polltime(1);
         expect(midi.peek()).toBe(0x82);
-        expect(cpu.interrupt & 0x40).toBe(0x40);
+        expect(cpu.interrupt & IrqSource.midi).toBe(IrqSource.midi);
     });
 
     it("resets the control register, transmitter and interrupt", () => {
@@ -40,7 +41,7 @@ describe("Midi6850", () => {
         midi.write(0xfc00, 0x03);
 
         expect(midi.peek()).toBe(0x02);
-        expect(cpu.interrupt & 0x40).toBe(0);
+        expect(cpu.interrupt & IrqSource.midi).toBe(0);
         expect(scheduler.headroom()).toBe(Scheduler.MaxHeadroom);
     });
 
@@ -69,14 +70,14 @@ describe("Midi6850", () => {
 
         midi.write(0xfc00, 0x20);
         expect(midi.peek()).toBe(0x82);
-        expect(cpu.interrupt & 0x40).toBe(0);
+        expect(cpu.interrupt & IrqSource.midi).toBe(0);
         expect(cpu.setNmi).toHaveBeenLastCalledWith(0x08, true);
 
         midi.write(0xfc01, 0x90);
         expect(cpu.setNmi).toHaveBeenLastCalledWith(0x08, false);
         scheduler.polltime(640);
         expect(cpu.setNmi).toHaveBeenLastCalledWith(0x08, true);
-        expect(cpu.interrupt & 0x40).toBe(0);
+        expect(cpu.interrupt & IrqSource.midi).toBe(0);
     });
 
     it("leaves the interrupt pin disconnected by default", () => {
@@ -87,7 +88,7 @@ describe("Midi6850", () => {
         midi.write(0xfc00, 0x20);
 
         expect(midi.peek()).toBe(0x82);
-        expect(cpu.interrupt & 0x40).toBe(0);
+        expect(cpu.interrupt & IrqSource.midi).toBe(0);
         expect(cpu.setNmi).toHaveBeenLastCalledWith(0x08, false);
     });
 

@@ -1,5 +1,6 @@
+import { IrqSource } from "./6502.js";
+
 const TransmitDataRegisterEmpty = 0x02;
-const Irq = 0x40;
 const MidiFrameBits = 10;
 const MidiBaudRate = 31250;
 
@@ -59,8 +60,8 @@ export class Midi6850 {
 
     updateInterrupt() {
         const asserted = this.transmitIrq();
-        if (this.interrupt === "irq" && asserted) this.cpu.interrupt |= Irq;
-        else this.cpu.interrupt &= ~Irq;
+        if (this.interrupt === "irq" && asserted) this.cpu.interrupt |= IrqSource.midi;
+        else this.cpu.interrupt &= ~IrqSource.midi;
         this.cpu.setNmi(this.nmiSource, this.interrupt === "nmi" && asserted);
     }
 

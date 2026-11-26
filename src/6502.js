@@ -105,6 +105,7 @@ export const IrqSource = Object.freeze({
     tube: 0x08,
     irr: 0x10,
     teletext: 0x20,
+    midi: 0x40,
 });
 
 /** One bit per device that can drive the NMI line; the CPU takes the OR of them all. */
