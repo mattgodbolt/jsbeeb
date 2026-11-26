@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.27.0](https://github.com/mattgodbolt/jsbeeb/compare/v2.26.1...v2.27.0) (2026-11-26)
+
+
+### Features
+
+* decay DRAM rows that neither the video nor the CPU refreshes ([#1882](https://github.com/mattgodbolt/jsbeeb/issues/1882)) ([949c2b5](https://github.com/mattgodbolt/jsbeeb/commit/949c2b50732326f52affc9bace6c35e1371f66a9))
+
+
+### Bug Fixes
+
+* make VideoNuLA colours' PAL chroma from each channel on or off ([#1881](https://github.com/mattgodbolt/jsbeeb/issues/1881)) ([26c561c](https://github.com/mattgodbolt/jsbeeb/commit/26c561cd28da174d0e3a82643e50a230821c3c41))
+
 ## [2.26.1](https://github.com/mattgodbolt/jsbeeb/compare/v2.26.0...v2.26.1) (2026-11-26)
 
 
