@@ -346,6 +346,27 @@ describe("AudioHandler", () => {
             expect(handler.failure).toBe(null);
             await expect(handler.ready).resolves.toBe("muted");
         });
+
+        it("keeps the real sound chip, so a muted page's saved state restores on a page with sound", () => {
+            const muted = makeHandler({ muted: true });
+            const heard = makeHandler();
+            for (const handler of [muted, heard]) handler.soundChip.setScheduler(new Scheduler());
+            muted.soundChip.poke(0x8d);
+
+            heard.soundChip.restoreState(muted.soundChip.snapshotState());
+
+            expect(heard.soundChip.snapshotState()).toEqual(muted.soundChip.snapshotState());
+        });
+
+        it("drops the chip's events, as nothing will ever take them", () => {
+            const handler = makeHandler({ muted: true });
+            handler.soundChip.setScheduler(new Scheduler());
+
+            handler.soundChip.poke(0x8d);
+            handler.flushChipEvents();
+
+            expect(handler._chipEvents).toEqual([]);
+        });
     });
 
     describe("when a worklet module fails to load", () => {

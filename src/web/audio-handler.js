@@ -22,8 +22,7 @@ export class AudioHandler {
      * @param {object} options
      * @param {HTMLElement} [options.warningNode] where to say that the audio is suspended or could not start; without
      * one the handler says nothing, and `failure` is the only report of a failure
-     * @param {boolean} [options.muted] make no sound at all: no audio context is made, so the browser never suspends one
-     * and the warning never shows
+     * @param {boolean} [options.muted] make no sound: no audio context is made
      */
     constructor({
         warningNode,
@@ -63,15 +62,17 @@ export class AudioHandler {
         this.audioContext = muted ? null : createAudioContext();
         this._jsAudioNode = null;
         let setup = Promise.resolve();
-        if (this.audioContext && this.audioContext.audioWorklet) {
-            this.audioContext.onstatechange = () => this.checkStatus();
-            const onEvent = (event) => {
-                if (event.kind === "progress") this.flushChipEvents();
-                else this._chipEvents.push(event);
-            };
-            this.soundChip = this.isAtom
+        const onEvent = (event) => {
+            if (event.kind === "progress") this.flushChipEvents();
+            else this._chipEvents.push(event);
+        };
+        const realChip = () =>
+            this.isAtom
                 ? new AtomSoundChip(null, { cpuSpeed: this.cpuSpeed, onEvent })
                 : new SoundChip(null, { onEvent });
+        if (this.audioContext && this.audioContext.audioWorklet) {
+            this.audioContext.onstatechange = () => this.checkStatus();
+            this.soundChip = realChip();
             // Master gain node for all sample-based audio (disc, relay, etc.).
             this.masterGain = this.audioContext.createGain();
             this.masterGain.connect(this.audioContext.destination);
@@ -88,7 +89,9 @@ export class AudioHandler {
                 console.log("Unable to initialise audio: no audio worklet API");
                 this._warnNoWorklet();
             }
-            this.soundChip = new FakeSoundChip();
+            // Muted keeps the real chip, whose events are dropped unheard, so its saved state restores where there is sound.
+            this.noAudio ||= muted;
+            this.soundChip = muted ? realChip() : new FakeSoundChip();
             this.ddNoise = new FakeDdNoise();
             this.relayNoise = new FakeRelayNoise();
         }
