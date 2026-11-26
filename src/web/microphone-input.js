@@ -40,9 +40,10 @@ export class MicrophoneInput extends AnalogueSource {
         if (this.microphoneAnalyser) return Promise.resolve(true);
 
         if (!this.initialisePromise) {
-            this.initialisePromise = this._initialise().finally(() => {
-                this.initialisePromise = null;
+            const promise = this._initialise().finally(() => {
+                if (this.initialisePromise === promise) this.initialisePromise = null;
             });
+            this.initialisePromise = promise;
         }
 
         return this.initialisePromise;
@@ -149,6 +150,7 @@ export class MicrophoneInput extends AnalogueSource {
      */
     dispose() {
         this.disposeCount++;
+        this.initialisePromise = null;
         if (this.microphoneStream) {
             this.microphoneStream.getTracks().forEach((track) => track.stop());
             this.microphoneStream = null;
