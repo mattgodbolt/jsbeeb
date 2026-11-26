@@ -89,7 +89,8 @@ export class AudioHandler {
                 console.log("Unable to initialise audio: no audio worklet API");
                 this._warnNoWorklet();
             }
-            // Muted keeps the real chip, whose events are dropped unheard, so its saved state restores where there is sound.
+            // Muted keeps the real chip, whose events are dropped unheard, so its saved state restores where there
+            // is sound.
             this.noAudio ||= muted;
             this.soundChip = muted ? realChip() : new FakeSoundChip();
             this.ddNoise = new FakeDdNoise();
