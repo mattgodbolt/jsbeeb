@@ -1,5 +1,21 @@
 # Changelog
 
+## [2.26.1](https://github.com/mattgodbolt/jsbeeb/compare/v2.26.0...v2.26.1) (2026-11-26)
+
+
+### Bug Fixes
+
+* a drive or relay sound that fails to load leaves that sound silent instead of stopping jsbeeb starting ([#1921](https://github.com/mattgodbolt/jsbeeb/issues/1921)) ([23fc715](https://github.com/mattgodbolt/jsbeeb/commit/23fc7154aa4ce391c9e8ff875212fee2247154cf))
+* count jsbeeb framed by another site, with a cookie partitioned by that site ([#1907](https://github.com/mattgodbolt/jsbeeb/issues/1907)) ([fbaedf4](https://github.com/mattgodbolt/jsbeeb/commit/fbaedf4f554ca66b47505f4361c04409f8b3a345))
+* fall back to a 2D canvas on a fresh element when WebGL fails to set up ([#1920](https://github.com/mattgodbolt/jsbeeb/issues/1920)) ([ffccee6](https://github.com/mattgodbolt/jsbeeb/commit/ffccee6fbef03c73d3662fa77662cb60984e0396))
+* give a framed jsbeeb the keyboard when its screen is clicked ([#1905](https://github.com/mattgodbolt/jsbeeb/issues/1905)) ([b5bf70d](https://github.com/mattgodbolt/jsbeeb/commit/b5bf70d6814affce35b1f543719793d539cea8fc))
+* handle case-insensitive URL schemes ([#1929](https://github.com/mattgodbolt/jsbeeb/issues/1929)) ([df2b0c8](https://github.com/mattgodbolt/jsbeeb/commit/df2b0c8b5d2eae84932de0a828ed42af197e9e3d))
+* keep a microphone channel from stopping the machine before access is granted ([#1919](https://github.com/mattgodbolt/jsbeeb/issues/1919)) ([23cf535](https://github.com/mattgodbolt/jsbeeb/commit/23cf53548d57ed92171c73c6a8223ed3f73ec7e3))
+* prevent duplicate microphone permission requests ([#1931](https://github.com/mattgodbolt/jsbeeb/issues/1931)) ([74eaad6](https://github.com/mattgodbolt/jsbeeb/commit/74eaad690aad7b5ea4a40636b4c5479662236cf3)), closes [#1926](https://github.com/mattgodbolt/jsbeeb/issues/1926)
+* remove obsolete keyboard layout storage lookup ([#1930](https://github.com/mattgodbolt/jsbeeb/issues/1930)) ([a1e4a1e](https://github.com/mattgodbolt/jsbeeb/commit/a1e4a1e84d197e368750f333bae6ba43993a82dc)), closes [#1925](https://github.com/mattgodbolt/jsbeeb/issues/1925)
+* send media_load's source as media_source, not GA's reserved source ([#1903](https://github.com/mattgodbolt/jsbeeb/issues/1903)) ([689fcd8](https://github.com/mattgodbolt/jsbeeb/commit/689fcd8b605d7e6ab93127f47cc2de9e187df028))
+* start when the browser refuses the page its storage ([#1922](https://github.com/mattgodbolt/jsbeeb/issues/1922)) ([0fc23ea](https://github.com/mattgodbolt/jsbeeb/commit/0fc23ea8f6d2a5496c02b72c809fa3c49b198eef))
+
 ## [2.26.0](https://github.com/mattgodbolt/jsbeeb/compare/v2.25.0...v2.26.0) (2026-11-19)
 
 
