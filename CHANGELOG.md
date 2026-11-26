@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.28.0](https://github.com/mattgodbolt/jsbeeb/compare/v2.27.0...v2.28.0) (2026-11-26)
+
+
+### Features
+
+* add a mute parameter for pages that show jsbeeb without sound ([#1934](https://github.com/mattgodbolt/jsbeeb/issues/1934)) ([9b71a42](https://github.com/mattgodbolt/jsbeeb/commit/9b71a42720d43c4bb08dd4b2b7b6a4cf89af4ab2))
+
 ## [2.27.0](https://github.com/mattgodbolt/jsbeeb/compare/v2.26.1...v2.27.0) (2026-11-26)
 
 
