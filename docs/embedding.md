@@ -1,0 +1,89 @@
+# Embedding jsbeeb
+
+Three ways in: link, frame, library.
+
+## Design
+
+### Link
+
+A URL to `bbc.xania.org`, query or fragment, bare flag or `=true`.
+
+- Stable parameters: `disc`/`disc1`, `disc2`, `tape`, `model`, `autoboot`, `autochain`, `autorun`, `loadBasic`, `embedBasic`, `autotype`, `coProcessor`, `rom`, `rom.N`, `KEY.x`, `GP.x`, `noseek`, `displayMode`, `keyLayout`, `embed`, `mmc`. Marked `stable: true` in `Parameters`; the table here is generated from that.
+- Media: `https:`, `github:`, `sth:`, `bitshifters:`, `hfe:`, `data:`, `b64data:`.
+- `rom.N` may replace a model's own ROMs.
+
+### Frame: `/player/`
+
+```html
+<iframe
+  src="https://bbc.xania.org/player/?disc=https://example.org/game.ssd&autoboot"
+  allow="autoplay; fullscreen; gamepad"
+></iframe>
+```
+
+- The screen only. One click starts sound and takes the keys; `start=auto` skips it.
+- Never opens a dialog or reloads. No storage, no service worker. Analytics: a count of starts per embedding site.
+- Reports unknown or refused parameters.
+- Shows a corner link back to the full site; `attribution=off` hides it.
+- `?embed` on the full site redirects here client-side, keeping the query and fragment.
+- `postMessage`, `api: 1`:
+  - Methods: `loadDisc`, `ejectDisc`, `loadTape`, `loadBasic`, `type`, `reset`, `start`, `pause`, `focus`, `snapshot`, `restore`.
+  - Events: `ready`, `notice`, `error`, `audiostate`.
+  - `connectPlayer(iframe)` from `jsbeeb/player-client` wraps the messages.
+
+### Library: `jsbeeb/web`
+
+```js
+const beeb = await createBeeb({ canvas, model: "Master", media: { disc0: url }, boot: "disc" });
+await beeb.media.loadDisc(1, bytes);
+await beeb.keyboard.type("RUN\r");
+beeb.destroy();
+```
+
+- `beeb`: `start`, `pause`, `reset`, `snapshot`, `restore`, `screenshot`, `focus`, `destroy`.
+- Facets:
+  - `beeb.keyboard`
+  - `beeb.media`
+  - later `beeb.memory`, `beeb.debug` and `beeb.hardware`, as asked for.
+- Events: `notice`, `error`, `audiostate`, `lights`.
+- `MachineSession` drives the same facets.
+- Touches no storage, URL, service worker or analytics. Listens only on the element it is given.
+- Several machines per page; `destroy()` leaves nothing behind.
+- Assets resolve via `import.meta.url`; `assets` overrides.
+- Ships types and a prebuilt bundle (no bundler needed). The on-screen keyboard is a separate reusable part.
+- `beeb.processor` is an escape hatch with no promise.
+
+### Guarantees
+
+- Kept, with tests:
+  - the stable parameters and media schemes;
+  - the `bbc.godbolt.org` redirect;
+  - the exports of `jsbeeb` and `jsbeeb/web`, and their types;
+  - messages at `api: 1`;
+  - every documented snapshot version.
+- Not kept:
+  - `jsbeeb/src/*` and `beeb.processor`;
+  - tuning and debug parameters;
+  - cycle-exact replay across versions;
+  - the full site's look.
+- One npm package. A break is `feat(embed)!:` and a major. Something deprecated warns and lasts until the next major.
+- Bundling jsbeeb brings the GPL; framing it does not.
+
+## Steps
+
+- [x] This doc
+- [ ] `stable: true` in `Parameters`, and the table here checked against it
+- [ ] URL contract test: real embedders' link shapes boot to a known screen
+- [ ] `createBeeb` tier 1: lifecycle, `keyboard`, `media`, events, `assets`, nothing Node-only in the browser path
+- [ ] Types, plus a test that snapshots the public API
+- [ ] Consumer test: `npm pack` into `examples/embed-vite`, build, boot two machines, destroy one
+- [ ] Leak test: create and destroy many times
+- [ ] Replacing a model's own ROMs, in config and URL
+- [ ] Prebuilt bundle in the npm package
+- [ ] Owlet imports nothing from `jsbeeb/src`
+- [ ] `/player/` and `examples/embed.html`
+- [ ] Messages, `connectPlayer`, cross-origin test
+- [ ] `?embed` redirects to `/player/`
+- [ ] Reusable on-screen keyboard
+- [ ] Pinned "Embedding: changes" issue; tell bbcmicro.co.uk
+- [ ] Remove this section; retitle "How to embed jsbeeb"
