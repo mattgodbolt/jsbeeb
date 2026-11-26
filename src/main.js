@@ -213,6 +213,7 @@ const audioHandler = new AudioHandler({
     cpuSpeed,
     isAtom: model.isAtom,
     hasMusic5000: settings.hasMusic5000,
+    muted: !!parsedQuery.mute,
 });
 // Firefox will report that audio is suspended even when it will
 // start playing without user interaction, so we need to delay a

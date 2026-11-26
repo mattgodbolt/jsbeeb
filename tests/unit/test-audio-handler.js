@@ -334,6 +334,20 @@ describe("AudioHandler", () => {
         });
     });
 
+    describe("when muted", () => {
+        beforeEach(() => stubAudio());
+
+        it("makes no audio context, not even for a Music 5000, never warns, and is ready as muted", async () => {
+            const handler = makeHandler({ muted: true, hasMusic5000: true });
+            handler.checkStatus();
+
+            expect(contexts).toHaveLength(0);
+            expect(warningShown()).toBe(false);
+            expect(handler.failure).toBe(null);
+            await expect(handler.ready).resolves.toBe("muted");
+        });
+    });
+
     describe("when a worklet module fails to load", () => {
         const rejectModule = (name) => async (url) => {
             if (url.includes(name)) throw new Error("Blocked by an extension");

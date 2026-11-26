@@ -22,6 +22,8 @@ export class AudioHandler {
      * @param {object} options
      * @param {HTMLElement} [options.warningNode] where to say that the audio is suspended or could not start; without
      * one the handler says nothing, and `failure` is the only report of a failure
+     * @param {boolean} [options.muted] make no sound at all: no audio context is made, so the browser never suspends one
+     * and the warning never shows
      */
     constructor({
         warningNode,
@@ -35,6 +37,7 @@ export class AudioHandler {
         cpuSpeed,
         isAtom,
         hasMusic5000,
+        muted = false,
     }) {
         this.cpuSpeed = cpuSpeed;
         this.isAtom = isAtom;
@@ -57,7 +60,7 @@ export class AudioHandler {
                 toggle(statsNode, false);
             });
         }
-        this.audioContext = createAudioContext();
+        this.audioContext = muted ? null : createAudioContext();
         this._jsAudioNode = null;
         let setup = Promise.resolve();
         if (this.audioContext && this.audioContext.audioWorklet) {
@@ -78,7 +81,7 @@ export class AudioHandler {
                 this._audioUnavailable(error),
             );
         } else {
-            if (!this.audioContext) this.failure = "This browser has no Web Audio";
+            if (!this.audioContext && !muted) this.failure = "This browser has no Web Audio";
             if (this.audioContext && !this.audioContext.audioWorklet) {
                 this.audioContext = null;
                 this.noAudio = true;
@@ -90,8 +93,11 @@ export class AudioHandler {
             this.relayNoise = new FakeRelayNoise();
         }
 
-        /** How the sound came up, `ok` or `unavailable`, once its output is set up or known never to be. */
-        this.ready = setup.then(() => (this.noAudio || !this.audioContext ? "unavailable" : "ok"));
+        /** How the sound came up, `ok`, `unavailable` or `muted`, once its output is set up or known never to be. */
+        this.ready = setup.then(() => {
+            if (muted) return "muted";
+            return this.noAudio || !this.audioContext ? "unavailable" : "ok";
+        });
 
         this.warningNode?.addEventListener("mousedown", () => this.tryResume());
 
