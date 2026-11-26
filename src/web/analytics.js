@@ -8,8 +8,9 @@ const StackFrame = /(?:^\s*at |@).*?([^\s(@]+):(\d+):(\d+)\)?\s*$/;
 const measurementId = () => import.meta.env.GA_MEASUREMENT_ID;
 
 /**
- * `href` with each parameter put through its `analyticsFilter`, read and written as the page reads and writes its own
- * URL; with no parameters at all when they cannot be decoded.
+ * `href` with only the parameters the page declares, each put through its `analyticsFilter`, and campaign `utm_`
+ * tags, read and written as the page reads and writes its own URL; with no parameters at all when they cannot be
+ * decoded.
  */
 export function analyticsLocation(href) {
     if (!href) return href;
@@ -18,8 +19,10 @@ export function analyticsLocation(href) {
     try {
         const params = parseLocationParams(url, urlParamType);
         for (const [key, value] of Object.entries(params)) {
-            const filter = parameterFor(key)?.parameter.analyticsFilter;
-            if (filter && value !== null) params[key] = Array.isArray(value) ? value.map(filter) : filter(value);
+            const declared = parameterFor(key);
+            const filter = declared?.parameter.analyticsFilter;
+            if (!declared && !key.startsWith("utm_")) delete params[key];
+            else if (filter && value !== null) params[key] = Array.isArray(value) ? value.map(filter) : filter(value);
         }
         return buildUrlFromParams(page, params, urlParamType);
     } catch {
@@ -35,9 +38,11 @@ export function silenceAnalytics() {
 }
 
 /*global gtag*/
-const injectedGtag = () => (!silenced && measurementId() && typeof gtag === "function" ? gtag : undefined);
+const injectedGtag = () =>
+    !silenced && measurementId() && typeof gtag === "function" && !navigator.webdriver ? gtag : undefined;
 
-const InstalledDisplayModes = ["standalone", "window-controls-overlay", "minimal-ui", "fullscreen"];
+// Not "fullscreen", which a tab in fullscreen matches as well; the manifest asks for standalone.
+const InstalledDisplayModes = ["standalone", "window-controls-overlay", "minimal-ui"];
 
 /** How the page is shown: the installed app's display mode, or "browser" for a tab. */
 export const displayMode = () =>

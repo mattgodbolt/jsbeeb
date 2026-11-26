@@ -25,7 +25,7 @@ function browserFloor(config) {
         function reveal() {
             document.getElementById("browser-floor-text").textContent = text;
             document.getElementById("browser-floor").hidden = false;
-            if (!config.measurementId || typeof window.gtag !== "function") return;
+            if (!config.measurementId || typeof window.gtag !== "function" || navigator.webdriver) return;
             var configured = window.dataLayer.some(function (call) {
                 return call[0] === "config";
             });

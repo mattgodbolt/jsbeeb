@@ -51,9 +51,9 @@ describe("analytics", () => {
         it("names each ROM on its own, whichever bank it goes in", () => {
             expect(
                 analyticsLocation(
-                    `${base}?rom=https%3A%2F%2Fexample.com%2Fa.rom&rom=file:mine.rom&rom.7=github:o/r/x.rom&ROM.8=file:b.rom`,
+                    `${base}?rom=https%3A%2F%2Fu:p@example.com%2Fa%20b.rom%3Ftoken%3D1&rom=file:mine.rom&rom.7=github:o/r/x.rom&ROM.8=file:b.rom`,
                 ),
-            ).toBe(`${base}?rom=https://example.com/a.rom&rom=file&rom.7=github:o/r/x.rom&ROM.8=file`);
+            ).toBe(`${base}?rom=https://example.com/a%20b.rom&rom=file&rom.7=github:o/r/x.rom&ROM.8=file`);
         });
 
         it("redacts what the URL would have typed or run", () => {
@@ -82,9 +82,15 @@ describe("analytics", () => {
             expect(analyticsLocation(href)).toBe(href);
         });
 
-        it("leaves a parameter the page does not know as it is", () => {
-            const href = `${base}?utm_source=somewhere&constructor=gd:1AbC/Mine.ssd`;
-            expect(analyticsLocation(href)).toBe(href);
+        it.each([
+            ["an unknown key", "fbclid=IwAR0abc&v=3"],
+            ["a misspelling", "autoType=my%20secret"],
+            ["an HTML-escaped key", "amp;loadBasic=http://192.168.1.2/mine.bas"],
+            ["an inherited property's name", "constructor=gd:1AbC/Mine.ssd"],
+        ])("drops %s", (_, query) => {
+            expect(analyticsLocation(`${base}?model=B&${query}&utm_source=somewhere`)).toBe(
+                `${base}?model=B&utm_source=somewhere`,
+            );
         });
 
         it("keeps no parameters at all from a URL whose parameters cannot be decoded", () => {
@@ -164,6 +170,19 @@ describe("analytics", () => {
                 expect(gtag).not.toHaveBeenCalled();
             });
 
+            it("sends nothing from an automated browser", async () => {
+                const { configureAnalytics, noteLocation, note } = await loadWithMeasurementId(measurementId);
+                Object.defineProperty(window.navigator, "webdriver", { value: true, configurable: true });
+                try {
+                    configureAnalytics(new EventTarget());
+                    noteLocation();
+                    note("event", { type: "type" });
+                } finally {
+                    delete window.navigator.webdriver;
+                }
+                expect(gtag).not.toHaveBeenCalled();
+            });
+
             it("configures the page_view with the location and referrer analyticsLocation gives", async () => {
                 const { configureAnalytics } = await loadWithMeasurementId(measurementId);
                 window.history.replaceState(null, "", "/?disc1=local:Mine&model=B");
@@ -175,19 +194,22 @@ describe("analytics", () => {
                 });
             });
 
-            it.each(["standalone", "window-controls-overlay", "minimal-ui", "fullscreen"])(
-                "tells the page_view the page is an installed app in %s display mode",
-                async (mode) => {
-                    const { configureAnalytics } = await loadWithMeasurementId(measurementId);
-                    showAs(mode);
-                    configureAnalytics(new EventTarget());
-                    expect(gtag).toHaveBeenCalledWith(
-                        "config",
-                        measurementId,
-                        expect.objectContaining({ display_mode: mode }),
-                    );
-                },
-            );
+            it.each([
+                ["standalone", "standalone"],
+                ["window-controls-overlay", "window-controls-overlay"],
+                ["minimal-ui", "minimal-ui"],
+                ["fullscreen", "browser"],
+                ["browser", "browser"],
+            ])("tells the page_view a page in %s display mode is shown as %s", async (mode, reported) => {
+                const { configureAnalytics } = await loadWithMeasurementId(measurementId);
+                showAs(mode);
+                configureAnalytics(new EventTarget());
+                expect(gtag).toHaveBeenCalledWith(
+                    "config",
+                    measurementId,
+                    expect.objectContaining({ display_mode: reported }),
+                );
+            });
 
             it("tells the page_view about a home screen app on iOS, which has no display-mode query", async () => {
                 const { configureAnalytics } = await loadWithMeasurementId(measurementId);
@@ -223,14 +245,16 @@ describe("analytics", () => {
                 });
             });
 
-            it("moves the location each time the page pushes its URL", async () => {
+            it("moves the location once, without a page_view, each time the page pushes its URL", async () => {
                 const { UrlState } = await loadWithMeasurementId(measurementId);
                 new UrlState(window.location, window.history).set({ disc1: "local:Mine" });
-                expect(gtag).toHaveBeenLastCalledWith(
-                    "config",
-                    measurementId,
-                    expect.objectContaining({ page_location: `${origin()}/?disc1=browser` }),
-                );
+                expect(gtag.mock.calls).toEqual([
+                    [
+                        "config",
+                        measurementId,
+                        expect.objectContaining({ page_location: `${origin()}/?disc1=browser`, send_page_view: false }),
+                    ],
+                ]);
             });
 
             it("asks for a partitioned SameSite=None cookie in both configs when framed, and only then", async () => {

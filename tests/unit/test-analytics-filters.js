@@ -16,8 +16,29 @@ describe("analytics filters", () => {
             "https://example.com/game.ssd",
             "http://example.com/game.ssd",
             "unknown:thing.ssd",
+            "http://8.8.8.8/game.ssd",
+            "http://172.32.0.1/game.ssd",
+            "http://[2001:db8::1]/game.ssd",
+            "https://local.example.com/game.ssd",
+            "http://[fc0::1]/game.ssd",
+            "http://[fe8::1]/game.ssd",
+            "http://100.128.0.1/game.ssd",
         ])("keeps %s whole", (ref) => {
             expect(mediaLabel(ref)).toBe(ref);
+        });
+
+        it.each([
+            ["https://user:secret@example.com/game.ssd", "https://example.com/game.ssd"],
+            ["https://a@b:c@example.com/game.ssd", "https://example.com/game.ssd"],
+            [
+                "https://bucket.s3.amazonaws.com/game.ssd?X-Amz-Signature=abc&X-Amz-Expires=60",
+                "https://bucket.s3.amazonaws.com/game.ssd",
+            ],
+            ["https://example.com/game.ssd?token=abc#frag", "https://example.com/game.ssd"],
+            ["HTTPS://Example.COM:8443/My Disc.ssd?dl=1", "HTTPS://Example.COM:8443/My Disc.ssd"],
+            ["https://example.com/a@b/game.ssd?x=1", "https://example.com/a@b/game.ssd"],
+        ])("names the public URL %s by its host and path", (ref, label) => {
+            expect(mediaLabel(ref)).toBe(label);
         });
 
         it.each([
@@ -28,6 +49,28 @@ describe("analytics filters", () => {
             ["data:application/binary;base64,AAAA", "data"],
             ["b64data:AAAA", "b64data"],
             ["file:///home/someone/mine.ssd", "file"],
+            ["http://localhost:8000/mine.ssd", "http"],
+            ["http://nas/mine.ssd", "http"],
+            ["http://127.0.0.1/mine.ssd", "http"],
+            ["http://0x7f.1/mine.ssd", "http"],
+            ["http://0.0.0.0/mine.ssd", "http"],
+            ["http://10.1.2.3/mine.ssd", "http"],
+            ["http://172.16.0.1/mine.ssd", "http"],
+            ["http://172.31.255.1/mine.ssd", "http"],
+            ["http://192.168.1.20/mine.ssd", "http"],
+            ["http://169.254.0.5/mine.ssd", "http"],
+            ["http://[::1]/mine.ssd", "http"],
+            ["http://[::ffff:192.168.1.2]/mine.ssd", "http"],
+            ["http://[fd12:3456::1]/mine.ssd", "http"],
+            ["http://[fe80::1]/mine.ssd", "http"],
+            ["HTTP://127.0.0.1/mine.ssd", "http"],
+            ["http://[::]/mine.ssd", "http"],
+            ["http://100.101.102.103/mine.ssd", "http"],
+            ["https://beeb.tail1234.ts.net/mine.ssd", "https"],
+            ["http://beeb.local/mine.ssd", "http"],
+            ["http://beeb.local./mine.ssd", "http"],
+            ["http://dev.localhost/mine.ssd", "http"],
+            ["http://router.home.arpa/mine.ssd", "http"],
         ])("names %s only by its source", (ref, label) => {
             expect(mediaLabel(ref)).toBe(label);
         });
