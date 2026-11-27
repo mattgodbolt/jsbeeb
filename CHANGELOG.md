@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.28.1](https://github.com/mattgodbolt/jsbeeb/compare/v2.28.0...v2.28.1) (2026-11-27)
+
+
+### Bug Fixes
+
+* stop the microphone stream granted after the channel was turned off ([#1937](https://github.com/mattgodbolt/jsbeeb/issues/1937)) ([76796e6](https://github.com/mattgodbolt/jsbeeb/commit/76796e64079e64d9bc2fff4eb156b16997d74993))
+
 ## [2.28.0](https://github.com/mattgodbolt/jsbeeb/compare/v2.27.0...v2.28.0) (2026-11-26)
 
 
