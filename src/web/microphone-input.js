@@ -21,6 +21,7 @@ export class MicrophoneInput extends AnalogueSource {
         this.errorCallback = null;
         this.errorMessage = null;
         this.initialisePromise = null;
+        this.disposeCount = 0;
     }
 
     /**
@@ -39,9 +40,10 @@ export class MicrophoneInput extends AnalogueSource {
         if (this.microphoneAnalyser) return Promise.resolve(true);
 
         if (!this.initialisePromise) {
-            this.initialisePromise = this._initialise().finally(() => {
-                this.initialisePromise = null;
+            const promise = this._initialise().finally(() => {
+                if (this.initialisePromise === promise) this.initialisePromise = null;
             });
+            this.initialisePromise = promise;
         }
 
         return this.initialisePromise;
@@ -69,9 +71,14 @@ export class MicrophoneInput extends AnalogueSource {
             }
         }
 
+        const disposeCountBeforePrompt = this.disposeCount;
         try {
             console.log("MicrophoneInput: Requesting microphone access");
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            if (this.disposeCount !== disposeCountBeforePrompt) {
+                stream.getTracks().forEach((track) => track.stop());
+                return false;
+            }
             console.log("MicrophoneInput: Microphone access granted");
 
             this.microphoneStream = stream;
@@ -94,6 +101,7 @@ export class MicrophoneInput extends AnalogueSource {
             console.log("MicrophoneInput: Initialisation complete");
             return true;
         } catch (error) {
+            if (this.disposeCount !== disposeCountBeforePrompt) return false;
             console.error("MicrophoneInput: Error accessing microphone:", error);
             this.errorMessage = `Error accessing microphone: ${error.message}`;
             if (this.errorCallback) this.errorCallback(this.errorMessage);
@@ -142,6 +150,8 @@ export class MicrophoneInput extends AnalogueSource {
      * Clean up resources when no longer needed
      */
     dispose() {
+        this.disposeCount++;
+        this.initialisePromise = null;
         if (this.microphoneStream) {
             this.microphoneStream.getTracks().forEach((track) => track.stop());
             this.microphoneStream = null;

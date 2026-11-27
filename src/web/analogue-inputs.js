@@ -125,7 +125,10 @@ export class AnalogueInputs {
         micPermissionStatus.textContent = "Requesting microphone access...";
 
         // Try to initialise the microphone
+        const { disposeCount } = this.microphoneInput;
         const success = await this.microphoneInput.initialise();
+        // Turned off while waiting; any later setup owns the status and the setting.
+        if (this.microphoneInput.disposeCount !== disposeCount) return;
         if (success) {
             // Note: Channel assignment is handled by updateAdcSources()
             micPermissionStatus.textContent = "Microphone connected successfully";

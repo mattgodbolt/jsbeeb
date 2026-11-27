@@ -336,6 +336,63 @@ describe("AnalogueInputs", () => {
             expect(stopped).toHaveLength(1);
             expect(stopped[0]).toHaveBeenCalledOnce();
         });
+
+        describe("turned off during the permission prompt", () => {
+            const grants = [];
+            const denials = [];
+            const stops = [];
+            const status = () => document.getElementById("micPermissionStatus").textContent;
+
+            beforeEach(() => {
+                grants.length = denials.length = stops.length = 0;
+                getUserMedia.mockImplementation(
+                    () =>
+                        new Promise((resolve, reject) => {
+                            const stop = vi.fn();
+                            stops.push(stop);
+                            grants.push(() => resolve({ getTracks: () => [{ stop }] }));
+                            denials.push(() => reject(new Error("Permission denied")));
+                        }),
+                );
+            });
+
+            const turnOn = (inputs, channel) => {
+                deps.settings.microphoneChannel = channel;
+                inputs.updateAdcSources(false, channel);
+                return channel === undefined ? Promise.resolve() : inputs.setupMicrophone();
+            };
+
+            it.each([
+                ["granted", grants, 1],
+                ["denied", denials, 0],
+            ])("reports no error when the prompt is then %s, and stops any stream", async (_, answers, stopCount) => {
+                const inputs = make();
+                const setup = turnOn(inputs, 2);
+                turnOn(inputs, undefined);
+                answers.forEach((answer) => answer());
+                await setup;
+
+                expect(stops[0]).toHaveBeenCalledTimes(stopCount);
+                expect(toasts()).toEqual([]);
+                expect(status()).not.toMatch(/Error/);
+            });
+
+            it("starts afresh when turned back on before the first prompt is answered", async () => {
+                const inputs = make();
+                const firstSetup = turnOn(inputs, 2);
+                turnOn(inputs, undefined);
+                const secondSetup = turnOn(inputs, 3);
+                grants.forEach((grant) => grant());
+                await Promise.all([firstSetup, secondSetup]);
+
+                expect(stops).toHaveLength(2);
+                expect(stops[0]).toHaveBeenCalledOnce();
+                expect(stops[1]).not.toHaveBeenCalled();
+                expect(deps.settings.microphoneChannel).toBe(3);
+                expect(status()).toBe("Microphone connected successfully");
+                expect(toasts()).toEqual([]);
+            });
+        });
     });
 
     describe("a microphone whose channel was turned off", () => {
